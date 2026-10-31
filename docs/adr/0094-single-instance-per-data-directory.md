@@ -91,11 +91,14 @@ The alternatives below still stand: the lock is not scoped to
 What changed is that a development build is no longer the same installation as
 the packaged app. It takes `PI-Desktop Dev` in the OS application-data root and
 `~/.pi-desktop-dev`, so `pnpm dev` starts while the packaged app holds its lock
-and the two never share `pi.sqlite`, the outbox, or the log tree. An explicit
-`--user-data-dir` still wins, because the E2E harnesses point a build at a
-throwaway profile with it. Only the development side moved: a shipped
-installation keeps `PI-Desktop` and `~/.pi-desktop`, so no existing profile is
-relocated. See D599.
+and normal launches do not share `pi.sqlite`, the outbox, or the log tree.
+The development launcher clears inherited `PI_DESKTOP_DATA_DIR` by default;
+only `pnpm dev --inherit-data-dir` permits explicit data-dependent debugging.
+That opt-in is read/write and requires stopping the previous owner and backing
+up its complete profile; it does not provide concurrent-writer protection.
+An explicit `--user-data-dir` still wins for isolated Electron/E2E fixtures.
+Only the development side moved: a shipped installation keeps `PI-Desktop`
+and `~/.pi-desktop`, so no existing profile is relocated. See D599.
 
 ## Amendment: explicit storage relocation (2026-10-01)
 

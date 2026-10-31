@@ -33,7 +33,7 @@
 - [ ] 已独立判断**根因门槛**（真实且在范围内的问题；改动真正从根上消掉该失败路径；diff 是最小一致修复；方案与基线、安全和架构兼容）。
 - [ ] 未把完整性缺口（规格、额外测试、i18n、e2e 文档、风格、命名）当作合入阻塞项，**除非**它们是证明根因修复所必需的。
 - [ ] 若根因门槛成立：已先合入该 pull request 并保留贡献者提交；落地阻塞仅在作者工作之上追加了最小提交。
-- [ ] 仅在该 pull request 进入 `main` 之后，才用新的 R4 请求分支和工作树开始后续完善。
+- [ ] Authorized follow-up preserves contributor work; a separate branch/worktree is optional.
 - [ ] 若根因门槛不成立或存在危害阻塞：未合入该 pull request，未以「方向没问题」通过，并已用评论记录证据。未悄悄重做该想法。
 - [ ] 除非用户明确要求，否则未合入草稿 pull request。
 - [ ] 评论使用该 pull request 的原文语言。
@@ -49,13 +49,10 @@
 在为新请求编辑任何文件之前：
 
 - [ ] 识别并保留现有的未提交工作。
-- [ ] 获取 `origin/main`，并且本地 `main` 快进
-  工作树是干净的。
-- [ ] 专用的 `<type>/<short-description>` 请求分支和工作树是
-  从更新的 `main` 提交创建。
-- [ ] 请求工作树在安全的情况下复用主工作区的宿主工具链、兼容依赖树、包存储、缓存和忽略的本地配置；不为 E2E 安装单独环境。
-- [ ] 只有可变、不兼容或并发敏感的环境状态保留在工作树本地并被忽略。
-- [ ] 在执行开始之前，当前分支不是 `main`。
+- [ ] Develop in the current checkout, including local `main`; branches/worktrees are optional.
+- [ ] Do not impose upstream refresh or a PR on local development.
+- [ ] Reuse the existing compatible toolchain and dependencies.
+- [ ] Keep temporary profiles/data separate from the running daily application.
 
 ---
 
@@ -98,7 +95,7 @@
   跨组件回归风险使它们成为必要。
 - [ ] 通过的最小必要目标本地检查或本地验证
   被评估为不必要，无需单独批准或豁免。
-- [ ] 相关 E2E 套件在包含最新 `origin/main` 的候选上选择并通过，并记录实际结果。
+- [ ] Relevant checks validate the actual candidate; upstream-base gates apply only to requested remote delivery.
 - [ ] task-candidate E2E 使用主工作区已经准备好的宿主开发环境；没有为 E2E 单独运行 `pnpm install`/`npm install` 或创建第二套依赖/运行时环境。
 - [ ] 只有宿主依赖缺失或不兼容时才安装或重建，并记录原因；临时 profile、数据、socket、端口、日志和工件保持隔离。
 - [ ] 自动触发的远程 E2E 作业被观察并报告；只有当落地的可执行内容变化时才重新运行受影响套件。
@@ -118,17 +115,13 @@
 
 ## 6. Pull/Merge 请求清单
 
-在将请求标记为完成之前：
+Apply only when remote publishing or a PR/MR was requested. Local development
+does not require upstream integration or a separate branch/worktree.
 
-- [ ] 请求分支被推送到远程。
-- [ ] 打开或更新 PR 前，`origin/main` 已是请求 head 的祖先（`pnpm check:pr-base`）。不得打开落后于 `origin/main` 的 PR。
-- [ ] PR/MR 以 `main` 为目标，并且仅包含请求的逻辑更改。
-- [ ] PR 描述列出了受影响的规格和 e2e 场景。
-- [ ] 公关自我审查清单已完成。
-- [ ] 要求远程检查（含 PR-base 门）和审查通过。
-- [ ] 请求工作树在合并后被删除。
-- [ ] 合并请求分支在本地删除 (`git branch -d`)。
-- [ ] 合并后删除远程请求分支。
+- [ ] Applicable target base and integration candidate verified for the requested PR.
+- [ ] Relevant checks passed or unavailable checks reported with limitations.
+- [ ] No remote publishing or daily-app restart inferred from source development.
+- [ ] Optional cleanup retains all changes and removes only authorized resources.
 - [ ] 包括适用时的问题参考（例如 `Refs #12` 或
   `Closes #12`）。
 
@@ -136,18 +129,12 @@
 
 ## 6. 1 合并清理清单
 
-请求分支集成到`main`后立即运行，是否
-合并通过 PR/MR 远程发生或在主结帐中本地发生：
+Apply only when cleanup of an optional worktree/branch is requested:
 
-- [ ] 预期的合并提交已验证是否存在于 `main` 中。
-- [ ] 请求工作树是干净的 - 没有未提交或未跟踪的请求文件
-  留下来。
-- [ ] `git worktree remove <worktree-path>` 成功，无需强制。
-- [ ] `git branch -d <type>/<short-description>` 成功（没有 `-D` 后备）
-  未合并的分支）。
-- [ ] `git worktree prune` 使 `git worktree list` 不再有陈旧条目
-  这个请求。
-- [ ] 没有删除其他代理的工作树或分支。
+- [ ] All changes retained in verified commits or the destination checkout.
+- [ ] Migrated files checked for completeness before source removal.
+- [ ] Only the authorized worktree/branch removed; no unrelated work deleted.
+- [ ] `git worktree list` confirms removal.
 
 ---
 
@@ -181,16 +168,16 @@
 
 | # | 门 | 来源 |
 |---|---|---|
-| 1 | 请求从最新的 `main` 创建的分支和工作树；在安全的情况下重复使用主要环境 | [R4 — 请求分支 + 工作树 + 合并门](/zh-CN/spec/06-delivery/03-ai-development-workflow#r4-—-请求分支-工作树-合并门) |
+| 1 | Current checkout inspected; unrelated changes preserved; isolation optional | [R4](03-ai-development-workflow.md#r4--local-checkout-and-optional-isolation) |
 | 2 | Code/doc 实施计划的变更 | [开发循环]的第 4 步(03-ai-development-workflow.md#2-development-loop) |
 | 3 | 所有受影响的规格均已更新 | [R1 — 规格同步](/zh-CN/spec/06-delivery/03-ai-development-workflow#r1-—-规格优先-规格同步) |
 | 4 | 记录 E2E 场景（或确认不需要） | [R3 — E2E 覆盖文档](/zh-CN/spec/06-delivery/03-ai-development-workflow#r3-—-e2e-覆盖文档) |
 | 5 | 通过必要的针对性本地验证，或被评估为不必要；自动触发远程闸门通过；仅当明确请求时，代理才会运行或调度 E2E | 开发循环的步骤 7 和 11 |
-| 6 | 通过常规消息提交的更改 | [R2 — 每次更改提交](/zh-CN/spec/06-delivery/03-ai-development-workflow#r2-—-每次更改提交) |
+| 6 | Commit only when requested; otherwise retain local changes | `AGENTS.md` §17 |
 | 7 | 如果里程碑交付完成，则更新董事会 | 开发循环的第 9 步 |
 | 8 | 提交中没有秘密或本地数据 | [§4.4 永不提交](/zh-CN/spec/06-delivery/03-ai-development-workflow#_4-4-永不提交) |
-| 9 | PR/MR 合并为 `main`；请求删除工作树和分支 | [R4 — 请求分支 + 工作树 + 合并门](/zh-CN/spec/06-delivery/03-ai-development-workflow#r4-—-请求分支-工作树-合并门) |
-| 10 | 磁盘上没有留下合并的工作树； `git worktree list` 没有该请求的过时条目 | [§6.1 合并清理清单](#_6-1-合并清理清单) |
+| 9 | Only requested local/remote delivery performed | [R4](03-ai-development-workflow.md#r4--local-checkout-and-optional-isolation) |
+| 10 | Authorized optional cleanup retains all changes | Cleanup checklist |
 | 11 | 若链接了 GitHub issue：实现前已核实；以其原文语言评论；结论明确时已关闭 | [R5 — 先核实链接的 GitHub issue](/zh-CN/spec/06-delivery/03-ai-development-workflow#r5-—-先核实链接的-github-issue-再回复并关闭) |
 | 12 | 若链接了 GitHub pull request：已审查根因门槛；仅在真正修好且改动最小时合入；后续完善在合入之后；未因细枝末节丢掉贡献者工作 | [R6 — 链接 PR 必须根治问题且改动最小才可合入](/zh-CN/spec/06-delivery/03-ai-development-workflow#r6-—-链接-pr-必须根治问题且改动最小才可合入) |
 

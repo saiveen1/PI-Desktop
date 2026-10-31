@@ -38,9 +38,13 @@ PI-Desktop.app
 
 开发构建本身就是独立安装，而不是同一安装的第二个进程：它运行在操作系统应用
 数据根目录下的 `PI-Desktop Dev`，数据目录为 `~/.pi-desktop-dev`。因此正式打包版
-持有锁时 `pnpm dev` 仍可启动，两者不会共享数据库、outbox 或日志树（D599、
-ADR 0094）。显式 `--user-data-dir` 仍然优先，E2E 装置正是用它把构建指向临时
-profile。
+Normal `pnpm dev` launches can run beside Release with separate application
+data and Chromium profiles (D599, ADR 0094). The launcher clears inherited
+`PI_DESKTOP_DATA_DIR` unless `--inherit-data-dir` is explicitly supplied with a
+nonempty environment value. This opt-in is read/write debugging, not safe
+concurrent sharing: stop all owners and back up the profile first, preferably
+using an offline copy. Dev's Chromium profile stays separate. Direct isolated
+Electron/E2E data and `--user-data-dir` overrides are unchanged.
 
 1. Electron 主启动
 2. 加载英文语言环境默认值

@@ -376,3 +376,25 @@ test("update cache relocation and cleanup preserve the delta-update path", async
   assert.match(updateCacheSource, /UPDATE_BLOCKMAP_BASELINE_NAME/);
   assert.match(updateCacheSource, /UPDATE_DOWNLOAD_DIR_NAME/);
 });
+
+test("personal release build is opt-in, isolated from official artifacts, and preserves installation identity", async () => {
+  const rootPackage = JSON.parse(await read("../../../package.json"));
+  const desktopPackage = JSON.parse(pkgSource);
+  assert.equal(rootPackage.scripts["dist:personal"], "pnpm --filter @pi-desktop/desktop run dist:personal");
+  assert.equal(
+    desktopPackage.scripts["dist:personal"],
+    desktopPackage.scripts.dist + " --config electron-builder.personal.cjs",
+  );
+  const { default: personalConfig } = await import("../electron-builder.personal.cjs");
+  assert.deepEqual(personalConfig, {
+    ...desktopPackage.build,
+    directories: { ...desktopPackage.build.directories, output: "release/personal" },
+    extraMetadata: { ...desktopPackage.build.extraMetadata, piSelfManaged: true },
+  });
+  assert.equal(personalConfig.extraMetadata.piSelfManaged, true);
+  assert.equal(desktopPackage.build.extraMetadata.piSelfManaged, undefined);
+  assert.equal(desktopPackage.build.appId, "net.aiuo.pi-desktop");
+  assert.equal(desktopPackage.build.productName, "PI-Desktop");
+  assert.equal(desktopPackage.build.directories.output, "release");
+  assert.doesNotMatch(desktopPackage.scripts["dist:personal"], /PI_DESKTOP_DEV|PI_DESKTOP_DATA_DIR|user-data-dir|appId|productName/);
+});

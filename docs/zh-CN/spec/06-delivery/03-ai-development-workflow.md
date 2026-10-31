@@ -38,22 +38,15 @@
 - 在 `06-delivery/04-e2e-test-plan.md` 中记录场景——甚至在自动化测试存在之前。
 - 仅内部更改（日志记录格式、内部变量重命名）不需要 e2e 文档更新。
 
-### R4 — 请求分支+工作树+合并门
+### R4 — Local checkout and optional isolation
 
-> **每个开发请求都必须从当前 `origin/main` 的专用分支和工作树开始。打开或更新 PR 时，该 head 必须包含最新的 `origin/main`。**
-
-- 编辑前保留未提交工作，获取 `origin/main`，工作树干净时快进本地 `main`，并从该提交创建请求分支和工作树。不得为了开新请求而移动、藏匿或覆盖主工作区里的现有工作。
-- 每个请求使用一个短期分支，命名为 `<type>/<short-description>`。
-- 每个请求使用一个专用工作树。不要在主工作区或别人的工作树里实现新请求。
-- 在安全的情况下复用主工作区的宿主开发环境：工具链、兼容的
-  `node_modules`、Electron、Rust/Cargo 目标、包存储、缓存和忽略的本地配置。
-  必要时通过引用或链接使用，不要为 E2E 单独安装第二套环境。
-- 禁止在 `main` 上开发或直接推送。
-- 仅请求提交并不授权远程发布。未获远程授权时，停在任务分支提交；不要为了跑 E2E 把任务合进本地 `main`。
-- 打开或更新 PR/MR 之前，获取 `origin/main` 并确认它是请求 head 的祖先（`git merge-base --is-ancestor origin/main HEAD` 或 `pnpm check:pr-base`）。私有分支用 rebase；已共享且不宜改写历史时用非破坏性合并。不得打开或更新落后于 `origin/main` 的 PR。
-- 获准远程交付后，按 `AGENTS.md` 的固定顺序：相对最新 `origin/main` 刷新，在工作树跑 task-candidate E2E，推送请求分支，打开面向 `main` 的 PR/MR，通过远程检查（含 PR-base 门）和审查后合并，再同步本地 `main`。
-- 合入 `main` 后立即删除自己的工作树和已合并分支。
-- 若用户要求启动应用，从已集成的 `main` 构建并启动。
+Develop in the current checkout by default, including on local `main`.
+Branches and worktrees are optional, not prerequisites for development.
+Preserve unrelated changes and reuse the existing compatible environment.
+Do not automatically switch branches, fetch/rebase upstream, or require a PR
+for local development. Remote contribution checks apply only when requested.
+Retire optional worktrees only after changes are committed or safely migrated.
+Never touch the running daily Release or its data without explicit permission.
 
 ### R5 — 先核实链接的 GitHub issue，再回复并关闭
 
@@ -142,7 +135,7 @@
 ```
 0. If a GitHub issue is linked: verify the claim (R5) before any implementation
 0b. If a GitHub pull request is linked: review root cause and minimality (R6); merge only when it actually fixes the problem; start follow-up only after it is in `main`
-1. Sync main + create a request branch and worktree
+1. Inspect the current checkout and preserve existing changes; isolation is optional
 2. Read baseline + relevant specs
 3. Plan change + list impacted specs and necessary validation
 4. Implement
@@ -150,11 +143,11 @@
 6. Update or add e2e scenarios when R3 applies
 7. Run targeted local checks necessary for the change's risk and the relevant
    E2E suites required for code-bearing main integration
-8. Commit with conventional message
+8. Commit only when requested, using a conventional subject and body
 9. Update BOARD if milestone-related
 10. If remote delivery is authorized: push branch + open PR/MR to main
-11. Complete requested main integration after applicable gates; verify and clean up
-12. If launch was requested: build and start from integrated main
+11. Complete only the requested delivery and authorized optional cleanup
+12. Launch only when requested, using the validated build and isolated profile
 ```
 
 ### 一步一步
@@ -163,7 +156,7 @@
 |---|---|---|
 | **0. Issue 核实** | 当链接了 GitHub issue 时，先获取并独立核实所报告的问题是否存在。若不存在则停止实现（评论，并仅在结论明确时关闭）。 | 已核实的 issue，或评论以及关闭/保持打开的决定。 |
 | **0b. PR 审查** | 当链接了 GitHub pull request 时，先获取并独立核实它是否从根上修好所报告的问题、且改动最小。成立才合入；仅在它进入 `main` 之后开始后续完善。不成立则停止（评论，不重写）。 | 已合入的贡献者 PR 加后续计划，或评论且不合入。 |
-| **1.分支+工作树** | 保留现有工作，从 `origin/main` 进行更新，并在专用工作树中创建专用请求分支。在安全的情况下重复使用主要结账环境。 | 当前 `main` 上的独立任务文件具有一致的开发环境。 |
+| **1. Local checkout** | Inspect the current checkout and preserve unrelated changes; branches/worktrees are optional. | Safe in-place development. |
 | **2.阅读** | 阅读 `00-baseline.md` 以及与变更区域相关的任何规范。 | 约束的心理模型。 |
 | **3. Plan** | 描述预期的改变。列出需要更新的每个规范、ADR 和 e2e 场景，并评估是否需要本地验证。 | 变更计划+影响和验证列表。 |
 | **4.实施** | 编写代码、配置或资产。 | 更改了文件。 |
@@ -173,8 +166,8 @@
 | **8.提交** | 使用常规消息进行 Git 提交（请参阅第 4 节）。 | 一项或多项提交。 |
 | **9.董事会** | 如果更改完成了里程碑交付，请更新 `docs/project/BOARD.md`。 | 更新了董事会。 |
 | **10.远程交付** | 仅在获得远程发布授权时，推送请求分支并创建面向 `main` 的 PR/MR。 | 可审查的远程变更，列出了受影响的规格和验证；或明确的本地交付路径。 |
-| **11.集成** | 完成 R4 要求的集成，满足验证和适用的远程门禁；确认本地 `main`（远程交付时还包括远程 `main`）包含预期提交，并清理工作树和分支。 | 请求已完成集成，或记录明确的阻塞原因/用户限定的交付范围。 |
-| **12.启动** | 用户要求时，从已集成的 `main` 工作树和开发环境构建并启动。 | 运行中的应用包含已交付的变更。 |
+| **11. Delivery** | Complete only the user's authorized local/remote actions; preserve all changes before optional cleanup. | Verified delivery or explicit limitations. |
+| **12. Launch** | Launch only when requested; never restart the daily Release merely to validate source edits. | Authorized validated build. |
 
 ### 本地验证和 E2E 执行策略
 
@@ -189,7 +182,7 @@
 - E2E 场景文档和 E2E 执行是不同的问题。 R3依然
   需要场景更新以实现用户可见或协议可见的行为。
 - 每个代码 PR 或本地 `main` 集成都必须运行至少一个相关 E2E 套件，并运行受影响回归面所需套件的并集。可用命令由根目录 `package.json` 和 `04-e2e-test-plan.md` 中的选择说明定义。
-- task-candidate E2E 可以使用请求工作树中的源码，但必须使用 R4 所述的宿主依赖/运行时环境。不要每次运行都重新安装仓库环境；仅当宿主依赖缺失或不兼容时才安装或重建，并记录原因。临时 profile、数据、socket、端口、日志和工件仍须与宿主可变运行时状态隔离。
+- Run task-candidate E2E from the current checkout, reusing its compatible environment. Worktrees are optional; temporary profiles/data remain isolated from the daily installation.
 - 开发迭代仍然基于风险：小改动不需要每次都运行全部套件，但合入前所有相关 E2E 必须通过。
 - 如果本地环境无法运行必需套件，必须记录套件、原因、替代验证和剩余风险。在具备条件且可信的环境中通过前，分支不具备合入条件。
 - 托管平台在运行后自动启动所需的 E2E 作业
@@ -281,88 +274,28 @@
 
 ---
 
-## 5. 分支模型
+## 5. Branching Model
 
-存储库使用强制请求分支和工作树工作流程：
-
-- **`main`** 始终可部署，并且是受保护的集成目标。做
-  不开发、提交或直接推动它。
-- **请求分支和工作树**对于每个新请求都是强制性的，
-  包括文档、杂务和小修复。创建每个分支和工作树
-  最新的 `main`，然后在合并分支后立即删除两者
-  进入 `main`。
-- **分支名称** 使用 `<type>/<short-description>` 和小写字母，
-  烤肉串案例描述。允许的类型前缀镜像§4.1。
-- **不存在长期的开发分支**。每个请求都会得到一个新的分支；
-  旧的请求分支不得重复用于不相关的工作。
-- **主结账拥有默认开发环境。** 请求
-  工作树重用其工具链、包管理器存储、缓存并忽略
-  安全的本地配置。请求可能会创建隔离的本地状态
-  当共享不安全或不兼容时，但该状态仍被忽略
-并且不得泄漏到提交中。
-- **交付遵循 R4 的授权边界及其固定顺序。** 仅提交的交付停在工作树里的请求分支提交。获准远程交付时，先相对最新 `origin/main` 刷新（`pnpm check:pr-base`），在工作树跑 task-candidate E2E，再推送并打开 PR/MR，合入远程 `main` 后同步本地。明确要求仅分支或草稿时，以较窄的范围为准。不得打开或更新落后于 `origin/main` 的 PR。
-
-典型请求开始（从主结帐运行；选择其外部的路径）：
+The current checkout, including local `main`, is the default development
+workspace. Branches and worktrees are optional, not prerequisites.
 
 ```bash
 git status --short
-git fetch origin main
-git worktree add -b <type>/<short-description> <worktree-path> origin/main
+git branch --show-current
 ```
 
-如果在干净的主工作树中签出 `main`，则 `git switch main` 加上
-`git pull --ff-only origin main` 应在 `git worktree add` 之前运行。如果
-主工作树不干净或者位于另一个分支上，保持其不变并且
-直接从获取的 `origin/main` 创建请求工作树。从来没有
-仅仅为了满足这一点而丢弃、隐藏、移动或覆盖不相关的工作
-序列。
+Do not automatically create a worktree, switch branches, or update upstream
+for a local request. Preserve unrelated user/agent changes and reuse the
+existing compatible toolchain and dependencies. Keep mutable test profiles
+and data isolated from the running daily application.
 
-环境重用是特定于资源的。包管理器存储和语言
-工具链通常会自动共享。忽略本地配置或
-兼容的依赖树可以从主引用或链接
-当任务需要时结账。构建可以竞争、可变运行时的输出
-数据和不兼容的依赖树必须保持工作树本地。
+For explicitly requested upstream delivery, follow its applicable PR/base and
+integration validation gates without discarding local work or force-pushing
+shared history. Local development does not require an upstream PR.
 
-典型的已授权 GitHub 交付（需要时使用托管平台的等效平台；合并后从干净的主结账同步
-并清理）：
-
-```bash
-# from the request worktree
-git fetch origin main
-git rebase origin/main   # private branch; do not force-push a shared branch
-pnpm check:pr-base
-# run the required task-candidate E2E suites for this change (R7)
-git push -u origin <type>/<short-description>
-gh pr create --base main --head <type>/<short-description>
-gh pr checks --watch
-gh pr merge --merge
-git fetch origin main
-# from a clean primary checkout
-git switch main
-git merge --ff-only origin/main
-git worktree remove <worktree-path>
-git branch -d <type>/<short-description>
-git worktree prune
-git push origin --delete <type>/<short-description>
-```
-
-远程合并后，尽可能快进同步本地 `main`。确认请求提交已在远程 `main` 且没有仅本地提交后，才把本地 `main` 重置到 `origin/main`。
-
-如果主工作区无法做这次同步，另开一个短命的 `main` 工作树，不要打扰无关工作。
-
-不要为了跑 E2E 或开 PR 把请求分支合进本地 `main`。无远程 PR/MR 的本地交付留在请求分支上，直到用户明确要求集成。
-
-拆卸前工作树必须清洁；提交或丢弃请求自己的
-首先进行剩余的更改。使用 `git branch -d` 而不是 `-D` 因此未合并
-分支拒绝删除。如果 `git worktree remove` 报告工作树为脏
-或锁定，解决该状态而不是强制删除，并且永远不要删除
-另一个请求的工作树。
-
-拆卸前工作树必须清洁；提交或丢弃请求自己的
-首先进行剩余的更改。使用 `git branch -d` 而不是 `-D` 因此未合并
-分支拒绝删除。如果 `git worktree remove` 报告工作树为脏
-或锁定，解决该状态而不是强制删除，并且永远不要删除
-另一个请求的工作树。
+Before removing an optional worktree, verify its changes are committed or
+safely retained in the destination checkout. Delete only the authorized
+worktree/branch; never discard unique changes.
 
 ---
 
@@ -370,17 +303,17 @@ git push origin --delete <type>/<short-description>
 
 在遵守明确的“仅分支”或“草稿”范围限制的前提下，满足所有适用条件时，更改才算**完成**：
 
-1. 根据最新的请求创建专用请求分支和工作树
-   `main`。
+1. The current checkout was inspected and unrelated work preserved; branches
+   and worktrees are optional.
 2. 代码（或文档）实施计划的变更。
 3. 所有受影响的规格均已更新。
 4. 记录 E2E 场景（或根据第 3 节确认不需要）。
 5. 必要的有针对性的本地验证和代码变更所需的 E2E 通过；若环境受限则记录限制并在 E2E 通过前保持不可合入；自动触发的远程闸门也通过。
-6. 改变是通过传统的信息来实现的。
+6. Commit only when requested; otherwise retain local changes in place.
 7. 如果里程碑交付完成，则更新董事会。
 8. 提交中不存在任何机密或本地数据。
-9. 按用户要求的提交/推送交付已集成到本地 `main`；获得远程交付授权时，PR/MR 已审核并合入远程 `main`，且本地 `main` 包含已落地的变更。
-10. 集成后已在 `main` 中确认预期提交，且请求工作树已移除、合并的请求分支已删除。
+9. Only requested remote delivery uses upstream PR/base and integration gates.
+10. Any authorized optional cleanup retained all changes before deletion.
 11. 若链接了 GitHub issue：在实现前已核实该主张；issue 收到以其原文语言撰写的评论；结论明确时已关闭该 issue。
 12. 若链接了 GitHub pull request：已审查根因门槛；仅在真正修好且改动最小时合入；后续完善在合入之后落地；未因细枝末节丢掉贡献者的工作。
 
@@ -403,17 +336,14 @@ D164 与 D260。 GitHub 发行说明并不能替代。
 | 练习 | 为什么 |
 |---|---|
 | 犯下秘密 | 违反安全规定 |
-| 未提交的较大差异 | 违反 R2；粒度损失 |
+| Discarding local work to satisfy a workflow step | Loses user changes |
 | 无需更新规范即可更改行为 | 违反 R1；规格变得不可靠 |
 | 跳过 e2e 文档以进行用户可见的更改 | 违反 R3；可追溯性差距 |
 | 代码变更未成功通过相关 E2E 就集成到本地或远程 `main` | 违反 R7，跨进程行为未经验证 |
 | 将完整的本地 test/check 套件视为自动预推送要求 | 忽略基于风险的验证并在没有必要证据的情况下延迟交付 |
-| 直接在 `main` 上开发、提交或推送 | 违反 R4；绕过隔离和审查门 |
-| 在主结帐或另一个请求的工作树中开发新请求 | 违反 R4；混合任务文件和本地状态 |
-| 重用请求分支来完成不相关的工作 | 混合请求范围并削弱可追溯性 |
-| 打开或更新 head 落后于 `origin/main` 的 PR/MR | 违反 R4；审查会从过期基线开始 |
-| 用户要求提交/推送交付时停在任务分支提交或推送 | 违反 R4，除非用户明确限定为分支或草稿交付 |
-| 将合并的请求工作树保留在磁盘上 | 违反 R4；陈旧的工作树积累并导致交叉请求污染 |
+| Automatically requiring a branch/worktree for local development | Violates the current-checkout default |
+| Overwriting another task's work or deleting unique changes | Violates data safety |
+| Installing or restarting the daily Release without authorization | Source edits do not authorize production operations |
 | 修改基线冻结决策，无需 ADR + 版本升级 | 基线被冻结；变更需要正式流程 |
 | 提交 CI 应重建的生成工件 | 回购膨胀、合并冲突 |
 | 在一次提交中混合多个逻辑更改而没有明确的消息 | 历史粒度的损失 |
@@ -438,14 +368,11 @@ D164 与 D260。 GitHub 发行说明并不能替代。
 - [ ] 开发循环由 `AGENTS.md` 记录和引用。
 - [ ] 规范更新矩阵涵盖基线中的所有变更类型。
 - [ ] Git 提交规则与现有存储库提交样式匹配（`docs:`、`chore:`）。
-- [ ] 每个请求都需要使用创建的专用分支和工作树
-      从当前的 `main` 开始。
-- [ ] 请求工作树在安全的情况下重用主要结账环境
-      无需提交本地环境状态。
-- [ ] 用户请求提交/推送时，无需再次确认即可完成本地 `main` 集成；明确的仅分支或草稿范围优先。
+- [ ] Local development defaults to the current checkout, including local `main`.
+- [ ] Branches/worktrees are optional; unrelated changes are preserved.
+- [ ] Existing compatible environment reused; mutable test state isolated.
 - [ ] 远程发布需要授权，并且在远程 `main` 集成和同步本地之前通过 PR/MR 门禁。
-- [ ] 工作树删除和分支删除需要在执行完之后立即进行。
-      请求分支合并到 `main` 中，包括本地合并传递。
+- [ ] Optional cleanup verifies all changes are retained before removal.
 - [ ] 代码 PR 和本地 `main` 集成都必须执行相关 E2E，R3 中的 E2E 场景文档仍然是强制性的。
 - [ ] 本地验证是基于风险的；不必要的检查可以被跳过而无需
       阻止提交、推送或 PR/MR 创建。

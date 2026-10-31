@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Policy-Sync: 2026-09-26.1
+Policy-Sync: 2026-10-26.local.2
 
 Instructions for Claude Code CLI and Claude Cowork on PI-Desktop.
 
@@ -30,61 +30,47 @@ Reply to the user in the language they used (Chinese request → Chinese answer,
 
 ## Hard rules (do not negotiate)
 
-### Worktree isolation
+### Local development and optional isolation
 
-Every request uses:
+Develop in the current checkout by default, including on local `main`.
+Branches and worktrees are optional, not prerequisites for development.
+Use them only when requested or concurrent work needs isolation.
 
-```text
-1 request = 1 branch + 1 dedicated worktree
-```
+- Run `git status --short` first and preserve unrelated user/agent changes.
+- Do not automatically switch branches, create worktrees, fetch/rebase
+  upstream, or require a PR for local development.
+- Never modify or delete another agent's branch or worktree.
+- Inspect, implement, run relevant checks, and review the diff in place.
+- Commit only when the user requests it; remote publishing is also opt-in.
+- Do not install builds, restart the running desktop, or touch its profile
+  merely to validate source changes.
 
-- Never develop on `main` or in the primary checkout.
-- Never merge unvalidated task code into local `main`.
-- Never reuse, modify, or delete another agent's branch or worktree.
-- Never discard unrelated work in the primary checkout.
-- Resolve conflicts only inside your own task worktree.
+### Development data-directory safety
 
-Create the worktree from current remote `main`:
+Dev launches must isolate inherited data by default.
+`pnpm dev` clears inherited `PI_DESKTOP_DATA_DIR`; only the explicit
+`pnpm dev --inherit-data-dir` flag preserves a nonempty value for that launch.
+Do not opt into a daily Release profile without explicit permission for that
+run. Prefer an offline copy; using the real directory requires stopping its
+owners and backing up the complete profile first. Never run concurrent writers.
+This is read/write access: migrations, recovery, plugins, and scheduled jobs
+may modify data or trigger effects. Chromium userData stays Dev's own.
+Direct Electron/E2E overrides are for isolated fixtures, not live profiles.
 
-```bash
-git fetch origin main
-git worktree add \
-  -b <type>/<short-description> \
-  <worktree-path> \
-  origin/main
-cd <worktree-path>
-```
+### Optional remote delivery
 
-Suggested worktree path: `../PI-Desktop-worktrees/<short-description>`.
+Only requested upstream contributions use upstream refresh, PR, and merge
+gates. Do not open or update a PR that is behind `origin/main`; run
+`pnpm check:pr-base` for that target. Do not force-push shared history or use
+`merge task → local main` as an artificial prerequisite for E2E.
+Remove an optional worktree only after its changes are committed or safely
+migrated and its removal is authorized.
 
-Branch names: `feat/...`, `fix/...`, `docs/...`, `refactor/...`, `chore/...`.
-
-### Delivery order (code-bearing changes)
-
-```text
-1. branch + worktree from origin/main
-2. implement in the worktree
-3. targeted static/unit/integration checks
-4. review the full diff
-5. commit
-6. fetch + rebase/refresh against latest origin/main (private branch)
-7. resolve conflicts in the worktree
-8. task-candidate E2E in the same worktree
-9. push branch
-10. open/update PR
-11. PR integration validation
-12. merge into remote main through repository gates
-13. synchronize local main
-14. remove your worktree and merged local branch
-```
-
-Do **not** insert `merge task → local main` between refresh and task-candidate E2E. The task branch itself is the local integration candidate after incorporating latest `origin/main`. Do not open or update a PR that is behind `origin/main`. Run `pnpm check:pr-base` before opening or updating a PR.
-
-Record E2E evidence:
+Record task-candidate E2E evidence for the source actually tested:
 
 ```text
-Task candidate:
-Base main:
+Task candidate (including uncommitted changes):
+Base revision:
 E2E suites:
 Result:
 Environment:
@@ -94,10 +80,10 @@ If a required suite cannot run, report `NOT RUN` with reason, alternative valida
 
 ### E2E environment reuse
 
-Task-candidate E2E uses the host development environment already provisioned
-in the primary checkout. Reuse its Node/pnpm toolchain, compatible
-`node_modules`, Electron, Rust/Cargo targets, stores, caches, and ignored
-configuration by reference or link when needed.
+Task-candidate E2E uses the existing environment in the current checkout.
+Reuse its Node/pnpm toolchain, compatible `node_modules`, Electron,
+Rust/Cargo targets, stores, caches, and ignored configuration. When a worktree
+is explicitly used, reference compatible resources where safe.
 
 Never run `pnpm install` or `npm install`, or create a second dependency or
 runtime environment, solely for E2E. Keep temporary profiles, data, sockets,
@@ -270,7 +256,7 @@ Run only checks that match the affected surface. Prefer the narrower authoritati
 | Architecture budgets | see `scripts/check-architecture.mjs` |
 | E2E | `pnpm test:e2e` and targeted `pnpm test:e2e:*` scripts |
 
-E2E exists to validate **executable integration state** (latest applicable `main` + task changes), not merely the branch name `main`. Run required E2E on the task candidate after refreshing against latest `origin/main`.
+E2E validates the actual executable source, not a branch name. Run relevant checks in the current checkout; upstream-base refresh applies only to requested remote integration.
 
 Docs-only changes: review rendered Markdown and `git diff --check`; no runtime tests required.
 
@@ -280,7 +266,7 @@ Docs-only changes: review rendered Markdown and `git diff --check`; no runtime t
 
 Before editing:
 
-1. Confirm you are (or will create) a dedicated worktree — not the primary checkout, not `main`.
+1. Inspect `git status --short` in the current checkout; local `main` is allowed and branch/worktree isolation is optional.
 2. Identify observable behavior, persistence, protocol, security, and architecture impact.
 3. Read the relevant spec/ADR and list the validation you will run.
 4. For a linked issue, verify the claim against current code first. For a linked PR, preserve a sound direction; do not force-push contributor branches.
@@ -298,7 +284,7 @@ Before finishing:
 
 1. Run the targeted validation set for the change.
 2. Review the complete diff (`git diff`). No secrets, no unrelated files.
-3. Commit with Conventional Commits, English, one logical commit when practical:
+3. Commit only if requested, with Conventional Commits and an English subject/body:
 
 ```text
 feat(composer): add model selection shortcut

@@ -8,6 +8,62 @@
 
 ## 1. Goals
 
+### E2E-DEV-explicit-data-directory-inheritance
+
+- **Preconditions:** Current source checkout, temporary fixture profiles, no
+  daily data or real providers. Electron/Vite packages are replaced only at
+  the external boundary; the production development-launch script is used.
+- **Steps:** Launch plain Dev from a parent with `PI_DESKTOP_DATA_DIR` set to
+  a temporary root; then launch with `--inherit-data-dir`. Repeat plain launch.
+  Check empty/conflicting values and `--inherit-data-dir=<value>` rejection;
+  pass unrelated Vite arguments and verify they survive. Verify relative paths
+  before the child's cwd change and Windows environment-name case handling.
+- **Expected:** Default and later plain launches remove the inherited data
+  override without changing the parent. Explicit opt-in consumes the flag,
+  preserves an absolute root for this launch, and emits a read/write warning
+  without printing the path. Invalid opt-in fails before package discovery or
+  child startup. Chromium profile and packaged/direct-Electron override semantics
+  are unchanged. There is no claim of concurrent-writer safety or read-only access.
+- **Coverage:** `development-launch.test.mjs` runs policy tests and the real
+  CLI against temporary external package fixtures on Windows/Linux;
+  `development-profile.test.mjs` retains Main's profile contract;
+  `development-branding.test.mjs` retains the platform branding checks;
+  `agent-policy-sync.test.mjs` covers the mirrored agent-safety requirement.
+- **Specs:** [Process model](../03-runtime/07-process-model.md),
+  [explicit debugging](06-release-runbook.md#explicit-data-dependent-debugging).
+- **Acceptance:** Offline launcher journey; no installed app, live profile,
+  or provider is used. Actual Electron/Vite smoke needs a provisioned toolchain.
+- **Milestone:** Maintenance.
+- **Status:** Offline launcher coverage automated; real desktop launch not
+  authorized by a source-only change.
+
+### E2E-RELEASE-self-managed-daily-build
+
+- **Preconditions:** Current source checkout; no use of the running daily
+  application, live profile, credentials, or real update feed. Worktrees are optional.
+- **Steps:** Select `pnpm dist:personal` and verify it adds only the boolean
+  self-managed metadata marker and isolated output directory to the normal build.
+  Load marked package metadata through Main's real updater controller, restore an
+  Automatic preference, start scheduled checks, try explicit check/download/install,
+  then attempt to select Automatic again. Repeat for each desktop platform and
+  repeat with ordinary or non-boolean metadata. Run the development-profile suite.
+- **Expected:** Marked packages remain disabled, with no updater traffic,
+  download, install-on-quit, or release-page action; ordinary packages retain
+  their existing behavior. Application identity and data/bootstrap paths do not
+  change. Dev still has its own userData and application-data root.
+- **Coverage:** `updater-controller.test.mjs`,
+  `auto-update.test.mjs`, `update-preference.test.mjs`,
+  `development-profile.test.mjs`. Controller tests mock only Electron and
+  electron-updater; package metadata is read from temporary files.
+- **Specs:** [Release runbook](06-release-runbook.md#self-maintained-daily-release-and-isolated-development).
+- **Acceptance:** Offline controller journey and packaging contracts; actual
+  packaged smoke additionally requires two isolated temporary profiles. The real
+  daily installation may be replaced only after its tasks settle, full shutdown,
+  offline backup, version/schema checks, and explicit operator approval.
+- **Milestone:** Maintenance.
+- **Status:** Offline coverage automated; packaged upgrade smoke is required
+  before first adoption and must not attach to the user's running application.
+
 ### E2E-PI-130-kernel-upgrade
 
 - **Preconditions:** Exact Pi 1.3.0 pins and migrated patches in a dedicated
@@ -878,28 +934,22 @@ Each scenario is documented in this format:
 
 ## E2E Main Integration Validation
 
-Every code-bearing change must pass the E2E suites relevant to its regression
-surface on a candidate that already contains the latest `origin/main`, before
-the request branch is pushed and the pull request is opened. Code-bearing
-changes include Renderer, Electron Main, Preload, Agent Runtime, Rust
-host-core, sessions, transcripts, plans, plugins, MCP, permissions,
-provider/model runtime, persistence, process lifecycle, packaging/runtime
-startup, and build or CI behavior that affects application execution.
-Documentation-only changes are exempt when they do not alter executable
-behavior.
+Run relevant E2E against the actual executable source under test, from the
+current checkout or an optional worktree. Local development and validation do
+not require upstream refresh, a dedicated branch, or a PR. Keep test state
+separate from the running daily application and record the tested revision
+and uncommitted changes. Documentation-only changes need no runtime tests.
 
-Run the selected suites from the request worktree after `pnpm check:pr-base`
-passes. An E2E run on a branch that is behind `origin/main` is exploratory and
-does not satisfy this gate. Do not merge the task into local `main` to create
-the candidate.
+When remote integration is requested, prepare and validate its applicable
+target-base candidate before publishing and its actual integration candidate
+before landing. Run `pnpm check:pr-base` for a PR targeting `origin/main`.
 
 ### E2E environment reuse
 
-Task-candidate E2E runs from the request worktree after the candidate is
-prepared, but uses the host development environment already provisioned in the
-primary checkout. Reuse the compatible Node/pnpm toolchain, `node_modules`,
-Electron, Rust/Cargo targets, package-manager stores, build caches, and ignored
-configuration by reference or link when needed.
+Task-candidate E2E uses the current checkout's existing compatible Node/pnpm
+toolchain, `node_modules`, Electron, Rust/Cargo targets, package-manager stores,
+build caches, and ignored configuration. If an optional worktree is used,
+reference compatible resources where safe; do not impose a second checkout.
 
 Do not run `pnpm install`, `npm install`, or create a second dependency/runtime
 environment solely for E2E. Isolate only mutable test state: temporary
@@ -10336,6 +10386,8 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
 
 | Acceptance | Scenarios |
 |---|---|
+| A / F / Quality — Self-managed daily release and isolated Dev | E2E-RELEASE-self-managed-daily-build |
+| A / F / Security — Explicit Dev data-directory inheritance | E2E-DEV-explicit-data-directory-inheritance |
 | C / E / Security / Quality — Gemini work setup | E2E-LIVE-VOICE-gemini-work-schema |
 | B / Security / Quality — Optional provider client certificate requests | E2E-PROVIDER-optional-client-certificate |
 | C / E / F / Quality / Security — Session Todo checklist | E2E-CHAT-session-todo-checklist |

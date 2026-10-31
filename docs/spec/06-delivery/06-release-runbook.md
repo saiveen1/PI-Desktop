@@ -12,6 +12,7 @@
 | Dev | `pnpm dev` | none | daily development |
 | Local package | `pnpm --filter @pi-desktop/desktop pack` | unsigned without a configured certificate | packaging smoke (`--dir` output) |
 | Local DMG | `pnpm --filter @pi-desktop/desktop dist` | unsigned without a configured certificate | local install test |
+| Personal release | `pnpm dist:personal` | local signing configuration | self-maintained daily installation; no upstream update delivery |
 | Release | `scripts/release-macos.sh` | Developer ID + mandatory notarization | distributable artifact |
 
 The static electron-builder config does not embed a certificate identity, so
@@ -42,6 +43,115 @@ renderer imports the same PNG through `BrandLogo`. The PNG is canonical;
 Windows/Linux package PNG, the
 transparent monochrome `build/tray-icon-mac.png` template, and the iconset/ICNS
 when macOS `iconutil` is available, without overwriting the canonical source.
+
+### Self-maintained daily release and isolated development
+
+A personal release is a replacement for the daily installed application, not
+another development profile. Run `pnpm dist:personal` from the current source
+checkout after its toolchain and dependencies are provisioned. It uses the
+normal native-platform build pipeline with `electron-builder.personal.cjs`, which
+retains the complete base build configuration and adds these typed overrides:
+
+- `extraMetadata.piSelfManaged=true` marks only this artifact as self-managed.
+- `directories.output=release/personal` keeps its installers and update
+  manifests separate from ordinary release output under `apps/desktop/release/`.
+
+The marker must be the boolean `true` in the packaged `package.json`. Main
+reads it before initializing update delivery. Self-managed builds expose the
+existing disabled update mode: no feed listeners, background checks, download,
+install-on-quit, upstream release-page action, or cache adoption. Saved Automatic
+preferences and later preference changes cannot re-enable upstream updates.
+Ordinary `dist` and tag builds do not set the marker and retain their current
+update behavior. `--publish never` alone only prevents artifact publishing;
+it does not disable runtime updates.
+
+The personal lane deliberately retains the application ID, product name,
+installer identity, installation lock, packaged-build status, and storage
+bootstrap. It therefore reuses the existing daily installation's actual profile,
+including an explicitly relocated storage root. It does not set
+`PI_DESKTOP_DEV`, reset settings, migrate files, or create a fresh daily profile.
+This is profile continuity, not a guarantee that an arbitrary older/newer binary
+can read another version's schema.
+
+`pnpm dev` remains the second lane: `PI-Desktop Dev` Electron userData and
+`~/.pi-desktop-dev` application data by default. The launcher discards inherited
+`PI_DESKTOP_DATA_DIR` in its child environment, including launches from an agent
+inside the daily Release. The parent process/environment is unchanged. There
+is no longer a need for a manual `env -u` prefix for this variable.
+
+Optional source worktrees are not required for Release/Dev profile separation.
+Global shortcuts, user-level skills, project files, and external services are
+not sandboxed. No production `--user-data-dir` should be passed to Dev.
+
+#### Explicit data-dependent debugging
+
+Use `pnpm dev --inherit-data-dir` only when intentionally reusing the environment's
+nonempty `PI_DESKTOP_DATA_DIR`. The launcher consumes this bare boolean flag,
+rejects `--inherit-data-dir=<value>`, and resolves relative data paths against
+its working directory before changing the child's cwd. It never guesses the
+Release's path. The flag is not persisted or inherited by future Dev launches.
+Without it, even an explicitly set environment data directory is discarded.
+
+Prefer an offline copy of the complete profile for reproduction. For example,
+in Git Bash, after preparing a private offline backup copy:
+
+```bash
+PI_DESKTOP_DATA_DIR="D:/Repro/pi-profile-copy" pnpm dev --inherit-data-dir
+```
+
+This is read/write debugging, not a read-only snapshot. Before using a real
+Release directory, obtain explicit authorization, stop every owner, and back
+up the complete actual profile. Never run Release and Dev as concurrent writers.
+Dev startup can migrate data, interrupt recovered tasks, load plugins, or run
+scheduled jobs. The flag does not implement a cross-profile lock or sandbox,
+and does not select/copy the Release's Chromium profile or storage bootstrap.
+It follows the supplied application-data directory only; Dev's Chromium userData
+stays independent. Pointing at real data is a maintenance operation and cannot
+be launched inside the still-running daily app as a supposedly harmless test.
+
+Direct Electron/E2E harnesses retain their existing explicit data and Chromium
+temporary-root overrides; this guard is enforced by the `pnpm dev` launcher.
+
+#### Safe first handover (manual; never part of the build command)
+
+1. While the official app has running tasks, leave its process, installed files,
+   shortcuts, update settings, profiles, and storage-location bootstrap untouched.
+   Preparing source changes does not require running a second desktop. Defer
+   expensive builds if they would compete with those tasks for resources.
+2. Before adoption, verify the installed version, candidate version/schema,
+   installation format/path, and actual application and Chromium storage roots.
+   Do not assume the profile is still in its default home directory. Do not bump
+   version fields in just one file; version surfaces must remain synchronized.
+3. Build with `pnpm dist:personal`. On Windows, choose the generated NSIS
+   `PI-Desktop-Setup-<version>.exe` under `apps/desktop/release/personal/` for
+   an existing installed NSIS copy. ZIP and portable artifacts are not silently
+   interchangeable with an installed copy. Verify the packaged boolean marker.
+4. Smoke-test the candidate separately with both `PI_DESKTOP_DATA_DIR` and
+   Electron `--user-data-dir` pointing to distinct empty temporary directories.
+   Do not use the default profile, copy live databases, import live credentials,
+   or run copied scheduled jobs. Keep test state and network services isolated.
+5. Wait for daily tasks to settle, then explicitly quit the official application
+   (including its tray/background process). This is a planned restart: running
+   agent turns cannot transfer live into a different executable.
+6. With all writers stopped, back up the complete actual application data,
+   Electron/Chromium profile, and storage-location bootstrap, including any
+   redirected roots. Keep the previous installer and backup private and outside
+   build output. Copying only `pi.sqlite` is not a complete backup.
+7. Install the personal candidate over the existing matching installation, using
+   its existing install directory and profile; do not uninstall/delete user data
+   first. Launch it normally without test-profile overrides or a development
+   flag. Verify conversations, providers, plugins, selected storage location,
+   disabled update state, and one small explicitly authorized task.
+8. Resume daily work in the personal release. Develop and validate changes in Dev,
+   then build and manually install the next personal release. Never run two daily
+   binaries over the same writable profile. If rollback is needed after a schema
+   upgrade, stop all writers and restore the pre-upgrade profile with the matching
+   previous binary; do not merely launch an older executable over migrated data.
+
+These steps are an operator checklist, not automated installation, backup, or
+live-task migration. A successful unit/contract test is not proof of installer
+upgrade compatibility; isolated packaged smoke and a maintenance window remain
+required before taking over the real daily profile.
 
 ## 2. Prerequisites (release lane)
 

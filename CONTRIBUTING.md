@@ -28,54 +28,31 @@ For a suspected security vulnerability, do not open a public issue. Follow
 
 ## Collaboration Rules
 
-- `main` is the protected integration branch. Do not develop on it or push to
-  it directly.
-- Every request uses one short-lived branch and one dedicated worktree,
-  including documentation, chores, and small fixes.
-- Create the branch from an up-to-date `origin/main` and use a name such as
-  `feat/provider-import`, `fix/session-refresh`, or
-  `docs/contributing-guide`.
-- Before opening or updating a pull request, `origin/main` must be an ancestor
-  of the request head. Run `pnpm check:pr-base`. Do not open or update a PR
-  that is behind `origin/main`.
-- Preserve uncommitted work in the primary checkout. Do not reset, stash, move,
-  or overwrite another contributor's work.
-- Do not reuse another request's branch or worktree. Remove only your own
-  worktree and branch after the change has been integrated.
+- Develop in the current checkout by default, including local `main`.
+- Branches and worktrees are optional, used when requested or concurrency needs
+  isolation; they are not prerequisites for local work.
+- Preserve unrelated user/contributor changes. Do not automatically switch
+  branches, fetch/rebase upstream, or impose a PR on local development.
+- Remote publishing is opt-in. For a requested upstream PR, incorporate its
+  applicable target base and run `pnpm check:pr-base` for `origin/main`.
+- Retire optional worktrees only after changes are committed or safely migrated,
+  and remove only the authorized worktree/branch.
 - Use English for code, identifiers, comments, commits, repository
   documentation, and specifications. GitHub discussions may use the language
   of the original author.
 
-## Start an Isolated Request
+## Start a Local Request
 
-From the primary checkout, first inspect local work and fetch the current
-integration branch:
+Inspect the current checkout before editing:
 
 ```bash
 git status --short
-git fetch origin main
+git branch --show-current
 ```
 
-If the primary `main` worktree is clean, synchronize it before creating the
-request worktree:
-
-```bash
-git switch main
-git fetch origin main
-git merge --ff-only origin/main
-git worktree add -b <type>/<short-description> \
-  ../PI-Desktop-worktrees/<short-description> origin/main
-cd ../PI-Desktop-worktrees/<short-description>
-```
-
-That fast-forward fails once local `main` carries its own integration merge of
-a delivered request; synchronize with `git merge origin/main` instead, and
-resolve the divergence before starting new work without discarding commits.
-
-If the primary checkout has uncommitted work or is being used for another
-branch, leave it untouched and create the request worktree directly from the
-fetched `origin/main` instead. Never discard unrelated work to satisfy this
-sequence.
+Continue here unless the user requests another workflow or concurrency needs
+isolation. Do not discard, stash, move, or overwrite unrelated work. Local
+development does not require a new branch, worktree, or upstream integration.
 
 ## Plan and Implement
 
@@ -125,11 +102,10 @@ Run only the relevant subset when the change is low risk. Documentation-only
 changes normally need no runtime tests; at minimum, review the rendered
 Markdown and run `git diff --check`.
 
-Code-bearing changes require the relevant E2E suite on a candidate that
-contains latest `origin/main` before the request branch is pushed and the pull
-request is opened. A run on a stale request branch is useful for debugging but
-does not replace that gate. Record any unavailable required suite as `NOT RUN`
-with its reason, alternative validation, and remaining risk.
+Validate the actual candidate source with relevant checks/E2E. Local tests do
+not require upstream refresh or another checkout. For requested remote delivery,
+also validate the applicable PR integration candidate. Record unavailable
+required suites as `NOT RUN` with reason, alternative evidence, and remaining risk.
 
 ## Pull Request Acceptance Scope (temporary)
 
@@ -189,9 +165,9 @@ Outside contributions are limited to `fix` and `perf` pull requests while the
 temporary Pull Request Acceptance Scope above is in force; maintainer-planned
 work keeps every change type.
 
-Refresh against latest `origin/main` (`pnpm check:pr-base`) and run the
-required E2E suite from the request worktree first; then open a pull request
-against `main` with:
+Only when an upstream PR is requested, refresh its applicable target base,
+run the relevant checks and `pnpm check:pr-base` for `origin/main`, then open
+the authorized pull request with:
 
 - a concise summary and rationale;
 - affected specs, ADRs, and E2E scenarios;
@@ -203,27 +179,15 @@ Do not force-push contributor branches, bypass required checks, or merge a
 failing change. Keep review feedback and follow-up commits focused on the
 request.
 
-## After Merge
+## Optional Cleanup
 
-From a clean primary checkout:
+Local work needs no upstream merge. When cleanup of an optional branch/worktree
+is requested, first verify all changes are committed or retained in the destination
+checkout, then remove only that worktree/branch. Never delete unique work.
 
-```bash
-git fetch origin main
-git switch main
-git merge origin/main
-git worktree remove ../PI-Desktop-worktrees/<short-description>
-git branch -d <type>/<short-description>
-git worktree prune
-```
-
-After a remote merge, local `main` is synchronized with `git merge --ff-only
-origin/main` (or `git merge origin/main` if it has diverged). Do not merge the
-request branch into local `main` merely to open a PR.
-
-For code-bearing changes, record the required E2E result from a candidate that
-contains latest `origin/main` before the pull request is opened, and rerun the
-affected suites when the remote merge lands executable content that differs
-from that commit.
+For requested remote delivery, verify the integration result and rerun affected
+checks when its executable content differs from the tested source. Do not restart
+or replace the user's daily Release merely because source changes are complete.
 
 ## Issue and Security Reports
 

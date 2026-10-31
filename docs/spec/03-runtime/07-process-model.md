@@ -40,9 +40,19 @@ installation and stays launchable while one is running (D236, ADR 0094).
 A development build is its own installation rather than a second process of
 the same one: it runs under `PI-Desktop Dev` in the OS application-data root
 and reads `~/.pi-desktop-dev`. `pnpm dev` therefore starts while a packaged app
-holds its lock, and the two never share a database, an outbox, or a log tree
-(D599, ADR 0094). An explicit `--user-data-dir` is honored instead, because the
-E2E harnesses point a build at a throwaway profile with it.
+holds its lock, and normal launches do not share a database, an outbox, or a log
+tree (D599, ADR 0094). The `pnpm dev` launcher clears inherited
+`PI_DESKTOP_DATA_DIR` before starting Vite/Electron. Only the explicit
+`pnpm dev --inherit-data-dir` flag permits that launch to retain a nonempty
+value for data-dependent debugging; no Release path is inferred. It warns of
+read/write access and requires the operator to stop the other owner and back
+up the profile first. Concurrent Release/Dev writes are not safe. The flag does
+not share Chromium userData or copy the storage-location bootstrap.
+
+Main's direct `PI_DESKTOP_DATA_DIR` override remains unchanged for isolated
+Electron/E2E harnesses. An explicit `--user-data-dir` is also honored so those
+harnesses can select a throwaway Chromium profile. The development-launch guard
+is at the launcher boundary, not a change to packaged storage semantics.
 
 1. Electron main starts
 2. Load English locale defaults

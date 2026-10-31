@@ -12,6 +12,7 @@
  *    NSIS installer must not replace a no-install run.
  *  - Linux deb (no $APPIMAGE in env) → notify + link.
  *  - Unpackaged dev runs → disabled (no app-update.yml in resources).
+ *  - Self-managed packages (`piSelfManaged = true`) → disabled.
  *
  * The installer download cache lives in the user cache directory rather than
  * beside the installation; `PI_DESKTOP_UPDATE_CACHE_DIR` relocates it, and
@@ -119,6 +120,7 @@ export class AppUpdaterController {
   private readonly getLocale: () => string | null | undefined;
   private readonly platform: NodeJS.Platform;
   private readonly isPackaged: boolean;
+  private readonly selfManaged: boolean;
   private readonly env: NodeJS.ProcessEnv;
   private readonly distribution?: WindowsDistribution;
   private readonly defaultPreference: UpdatePreference;
@@ -157,30 +159,34 @@ export class AppUpdaterController {
   private readonly autoUpdater: AppUpdater;
   private readonly cacheMaintenance: UpdateCacheMaintenance;
 
-  private readPackagedDistribution(
+  private readPackagedUpdateMetadata(
     isPackaged: boolean,
-  ): WindowsDistribution | undefined {
-    if (!isPackaged) return undefined;
+  ): { distribution?: WindowsDistribution; selfManaged: boolean } {
+    if (!isPackaged) return { selfManaged: false };
     try {
       const packageJson = JSON.parse(
         readFileSync(join(app.getAppPath(), "package.json"), "utf8"),
       ) as unknown;
-      if (typeof packageJson !== "object" || packageJson === null) {
-        return undefined;
+      if (typeof packageJson !== "object" || packageJson === null || Array.isArray(packageJson)) {
+        return { selfManaged: false };
       }
-      const distribution = (packageJson as Record<string, unknown>)
-        .piDistribution;
-      return distribution === "installed" || distribution === "zip" || distribution === "portable"
-        ? distribution
-        : undefined;
+      const metadata = packageJson as Record<string, unknown>;
+      const distribution = metadata.piDistribution;
+      return {
+        selfManaged: metadata.piSelfManaged === true,
+        distribution:
+          distribution === "installed" || distribution === "zip" || distribution === "portable"
+            ? distribution
+            : undefined,
+      };
     } catch (error) {
       this.logger.app(
         "updater",
         "warn",
-        "packaged distribution metadata unavailable",
+        "packaged update metadata unavailable",
         { data: { detail: String(error) } },
       );
-      return undefined;
+      return { selfManaged: false };
     }
   }
 
@@ -190,37 +196,24 @@ export class AppUpdaterController {
     this.getLocale = options.getLocale ?? (() => "en");
     const platform = options.platform ?? process.platform;
     const isPackaged = options.isPackaged ?? app.isPackaged;
+    const metadata = this.readPackagedUpdateMetadata(isPackaged);
     const distribution =
-      options.distribution ??
-      (platform === "win32"
-        ? this.readPackagedDistribution(isPackaged)
-        : undefined);
+      options.distribution ?? (platform === "win32" ? metadata.distribution : undefined);
+    this.selfManaged = metadata.selfManaged;
     this.platform = platform;
     this.isPackaged = isPackaged;
     this.env = process.env;
     this.distribution = distribution;
-    this.defaultPreference = resolveDefaultUpdatePreference(
-      platform,
-      isPackaged,
-      this.env,
-      distribution,
-    );
+    this.defaultPreference = this.selfManaged
+      ? "manual"
+      : resolveDefaultUpdatePreference(platform, isPackaged, this.env, distribution);
     this.preference = this.defaultPreference;
-    this.automaticSupported = supportsAutomaticUpdates(
-      platform,
-      isPackaged,
-      this.env,
-    );
+    this.automaticSupported =
+      !this.selfManaged && supportsAutomaticUpdates(platform, isPackaged, this.env);
     this.readUpdateSettings = options.readUpdateSettings;
     this.persistLastNotifiedVersion = options.persistLastNotifiedVersion;
     this.persistDismissedVersion = options.persistDismissedVersion;
-    const mode = resolveUpdateModePolicy(
-      platform,
-      isPackaged,
-      this.env,
-      distribution,
-      this.preference,
-    );
+    const mode = this.resolveMode(this.preference);
     const defaultCacheBasePath = defaultUpdateCacheBasePath({
       platform,
       env: process.env,
@@ -263,7 +256,12 @@ export class AppUpdaterController {
       currentVersion: options.currentVersion,
       releasesUrl: RELEASES_URL,
     };
-    if (mode !== "disabled") this.attachListeners();
+    if (this.selfManaged) {
+      this.autoUpdater.autoDownload = false;
+      this.autoUpdater.autoInstallOnAppQuit = false;
+    } else if (mode !== "disabled") {
+      this.attachListeners();
+    }
   }
 
   /** Localized product notes for a discovered version, if catalogued. */
@@ -333,6 +331,18 @@ export class AppUpdaterController {
     return decision.show;
   }
 
+  private resolveMode(preference: UpdatePreference) {
+    return this.selfManaged
+      ? "disabled"
+      : resolveUpdateModePolicy(
+          this.platform,
+          this.isPackaged,
+          this.env,
+          this.distribution,
+          preference,
+        );
+  }
+
   private applyPreference(
     preference: UpdatePreference,
     checkImmediately: boolean,
@@ -342,13 +352,7 @@ export class AppUpdaterController {
       preference,
       this.automaticSupported,
     );
-    const mode = resolveUpdateModePolicy(
-      this.platform,
-      this.isPackaged,
-      this.env,
-      this.distribution,
-      effectivePreference,
-    );
+    const mode = this.resolveMode(effectivePreference);
     const preferenceChanged =
       effectivePreference !== this.preference || mode !== previousMode;
     this.preference = effectivePreference;
@@ -597,7 +601,7 @@ export class AppUpdaterController {
   async check(options: { manual?: boolean } = {}): Promise<UpdateState> {
     await this.ensureSettingsLoaded();
     if (this.state.mode === "disabled") {
-      throw new Error("updates are disabled in development builds");
+      throw new Error("updates are disabled in this build");
     }
     if (
       this.state.status === "checking" ||
@@ -686,6 +690,7 @@ export class AppUpdaterController {
   }
 
   async openReleases(): Promise<void> {
+    if (this.selfManaged) throw new Error("updates are disabled in self-managed builds");
     const url = parseAllowedExternalUrl(RELEASES_URL);
     if (!url) throw new Error("DISALLOWED_EXTERNAL_URL");
     await shell.openExternal(url);

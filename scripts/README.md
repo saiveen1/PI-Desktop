@@ -41,10 +41,21 @@ disagrees, so a green `check:release-docs` is a precondition, not a substitute.
 |---|---|---|
 | `dev-electron.mjs` | `pnpm dev`, through `predev` | Launch Electron against the dev server. On macOS it builds and reuses the fingerprinted branded host bundle under `.cache/electron-dev/` |
 
+`pnpm dev` strips inherited `PI_DESKTOP_DATA_DIR` before starting Vite/Electron,
+even when launched by an agent inside a daily Release. The parent environment
+is not changed. Explicit reuse requires `pnpm dev --inherit-data-dir` and a
+nonempty variable; the flag is consumed by the launcher, not forwarded.
+Relative values are resolved against the launcher's working directory before
+the child changes directory. Empty values or conflicting case variants fail
+before Electron package discovery. This flag grants read/write access, not
+safe concurrent sharing: prefer an offline copy, or stop the Release/other
+owner and back up the complete profile first. Dev's Chromium userData remains
+separate. Direct Electron/E2E temporary-profile overrides are unchanged.
+
 ## End-to-end
 
-Run relevant task-candidate E2E from the dedicated request worktree, reusing
-the provisioned host environment as required by `AGENTS.md`. `verify:ui:*`,
+Run relevant task-candidate E2E from the current checkout, reusing
+the provisioned host environment as required by `AGENTS.md`. Worktrees are optional. `verify:ui:*`,
 live providers, paid APIs, and the user's running desktop require explicit
 request authorization. Use isolated profiles and deterministic local fixtures.
 The scenarios are specified in

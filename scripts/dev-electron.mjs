@@ -150,8 +150,54 @@ export function prepareMacDevelopmentBundle({
   }
 }
 
+/** Prepare only this launch; never mutate the running desktop's environment. */
+export function prepareDevelopmentLaunch(
+  args = process.argv.slice(2),
+  parentEnv = process.env,
+  cwd = process.cwd(),
+) {
+  const inheritFlag = "--inherit-data-dir";
+  if (args.some((arg) => arg.startsWith(`${inheritFlag}=`))) {
+    throw new Error(`${inheritFlag} does not accept a value; set PI_DESKTOP_DATA_DIR explicitly instead.`);
+  }
+  const inheritsDataDir = args.includes(inheritFlag);
+  const env = { ...parentEnv, PI_DESKTOP_DEV: "1" };
+  // Windows environment names are case-insensitive, even if a copied JS object is not.
+  const dataKeys = Object.keys(env).filter((key) => key.toUpperCase() === "PI_DESKTOP_DATA_DIR");
+  const values = [...new Set(dataKeys.map((key) => env[key]?.trim()).filter(Boolean))];
+  for (const key of dataKeys) delete env[key];
+
+  if (inheritsDataDir) {
+    if (values.length === 0) {
+      throw new Error(`${inheritFlag} requires a nonempty PI_DESKTOP_DATA_DIR; no Release path is assumed.`);
+    }
+    if (values.length !== 1) {
+      throw new Error(`${inheritFlag} found conflicting case variants of PI_DESKTOP_DATA_DIR.`);
+    }
+    // electron-vite starts from DESKTOP_ROOT; pin the caller's path before that cwd change.
+    env.PI_DESKTOP_DATA_DIR = resolve(cwd, values[0]);
+  }
+
+  return {
+    env,
+    args: args.filter((arg) => arg !== inheritFlag),
+    inheritsDataDir,
+    clearedDataDir: !inheritsDataDir && dataKeys.length > 0,
+  };
+}
+
 function run() {
-  const env = { ...process.env, PI_DESKTOP_DEV: "1" };
+  const launch = prepareDevelopmentLaunch();
+  const { env } = launch;
+  if (launch.inheritsDataDir) {
+    console.warn(
+      "WARNING: --inherit-data-dir grants Dev read/write access to PI_DESKTOP_DATA_DIR. " +
+      "Stop the Release/other owner and back up the complete profile first; prefer an offline copy. " +
+      "Dev's Chromium profile remains separate. This is not read-only access or safe concurrent sharing.",
+    );
+  } else if (launch.clearedDataDir) {
+    console.warn("Ignoring inherited PI_DESKTOP_DATA_DIR for isolated Dev. Explicit reuse requires --inherit-data-dir.");
+  }
   // Electron 43+ downloads its platform binary when its package is resolved.
   // electron-vite requires the resulting path.txt marker on every platform.
   const electron = resolveElectronInstallation();
@@ -174,7 +220,7 @@ function run() {
   );
   const child = spawn(
     process.execPath,
-    [electronViteCli, "dev", ...process.argv.slice(2)],
+    [electronViteCli, "dev", ...launch.args],
     {
       cwd: DESKTOP_ROOT,
       env,

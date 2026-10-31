@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Policy-Sync: 2026-09-26.1
+Policy-Sync: 2026-10-26.local.2
 
 Mandatory rules for AI coding agents working in PI-Desktop.
 
@@ -85,8 +85,8 @@ If a delivery document conflicts with the branch / worktree / integration
 4. update the conflicting document as part of the same change when
    authorized
 
-In particular, do not merge task code into local `main` merely because
-an older document describes local-main E2E integration.
+Local development does not require an upstream PR, remote-main refresh,
+branch change, or worktree creation. See § 5 for this checkout's workflow.
 
 ---
 
@@ -193,124 +193,74 @@ or security boundary requires an ADR.
 
 ---
 
-## 5. Multi-Agent Isolation Is Mandatory
+## 5. Local Development and Optional Isolation
 
-Assume multiple agents work concurrently.
+Develop in the current checkout by default, including on local `main`.
+Branches and worktrees are optional, not prerequisites for development.
+Use them only when the user requests them or concurrent work needs isolation.
 
-Every development request uses:
+Before editing, run `git status --short`, identify existing changes, and
+preserve unrelated user or agent work. Do not automatically switch branches,
+fetch/rebase upstream, create a worktree, or require an upstream PR for a
+local task. Do not modify or delete another agent's branch or worktree.
 
-```text
-1 request = 1 branch + 1 dedicated worktree
-```
+### Local delivery
 
-The primary checkout and local `main` are coordination surfaces, not
-development workspaces.
+1. Inspect the current checkout and relevant source/specs.
+2. Implement the smallest coherent change in this checkout.
+3. Run relevant checks and review the diff.
+4. Commit only when the user requests it (§ 17).
+5. Report the result and any validation limitations.
 
-### Never
+Do not push, open a PR, merge remotely, install a build, or restart the
+user's running desktop unless that action is authorized. Editing source
+does not authorize touching a daily Release's installed files or profile.
 
-* develop directly on `main`
-* develop in the primary checkout
-* merge unvalidated task code into local `main`
-* use local `main` as a temporary integration branch
-* reuse another task's worktree
-* modify another agent's branch
-* delete another agent's branch or worktree
-* reset or discard unrelated work
-* include unrelated changes in your task
-* depend on uncommitted work from another worktree
+### Development data-directory safety
 
-### Start from current `main`
+Dev launches must isolate inherited data by default.
+`pnpm dev` clears inherited `PI_DESKTOP_DATA_DIR` in its child environment.
+Only `pnpm dev --inherit-data-dir` opts into that variable for a particular
+launch; it must be nonempty. The launcher never guesses a Release data path.
 
-```bash
-git fetch origin main
+Do not use the inheritance flag or point Dev/tests at a daily Release profile
+without explicit user authorization for that run. Prefer an offline backup
+copy when reproducing data-dependent bugs. Before using the real directory,
+stop every owner and back up the complete actual profile; never run Release
+and Dev as concurrent writers. This is read/write access, not a read-only
+diagnostic mode: migrations, startup recovery, plugins, and scheduled jobs
+can change data or trigger effects. Chromium userData remains Dev's own;
+the flag does not authorize sharing the daily browser profile.
 
-git worktree add \
-  -b <type>/<short-description> \
-  <worktree-path> \
-  origin/main
-
-cd <worktree-path>
-```
-
-All implementation, targeted validation, conflict resolution, and
-task-candidate E2E happen inside the task's dedicated worktree.
+Direct Electron/E2E fixture overrides remain available for isolated test roots.
+They are not permission to bypass these rules or touch the running daily app.
 
 ### E2E environment reuse
 
-Task-candidate E2E runs from the dedicated request worktree but reuses the
-host development environment already provisioned in the primary checkout.
-Reuse the host Node/pnpm toolchain, compatible `node_modules`, Electron,
-Rust/Cargo targets, package-manager stores, build caches, and ignored local
-configuration by reference or link when needed.
+Run task-candidate E2E from the current checkout, using its existing host
+Node/pnpm toolchain, compatible `node_modules`, Electron, Rust/Cargo targets,
+package-manager stores, build caches, and ignored local configuration.
+If a worktree is explicitly used, reference compatible resources where safe.
 
 Do not run `pnpm install`, `npm install`, or create a second dependency or
-runtime environment solely to execute E2E. Keep only mutable test state
+runtime environment solely to execute E2E. Isolate mutable test state
 (temporary profiles, data directories, sockets, ports, logs, and artifacts)
-isolated to the request worktree or its scratch directory. Install or rebuild
-dependencies only when the host environment is missing or incompatible, and
-record that reason. Clean CI and release runners may install from lockfiles.
+from the user's live state. Install or rebuild only for missing/incompatible
+dependencies, and record why. Clean CI/release runners may use lockfiles.
 
-### Before candidate validation
+### Optional remote delivery
 
-Refresh the task against the latest remote `main`.
+Upstream contribution rules apply only when remote delivery is requested.
+Before opening or updating a PR, refresh its base without discarding local
+work, verify that the intended target base is incorporated, run
+`pnpm check:pr-base` when targeting `origin/main`, and validate the actual
+integration candidate. Do not open or update a PR that is behind `origin/main`.
+Do not force-push shared history or use `merge task → local main` as an
+artificial precondition for E2E.
 
-For a private branch that has not been pushed or shared:
-
-```bash
-git fetch origin main
-git rebase origin/main
-```
-
-If the branch has already been shared and rewriting history would be
-unsafe, do not force-push merely to rebase. Use a non-destructive
-integration strategy or rely on the PR integration candidate per § 16.
-
-Resolve conflicts inside your own worktree. Never resolve task conflicts
-by modifying the primary checkout.
-
-### Before opening or updating a PR
-
-The request head must contain the latest `origin/main`. `origin/main`
-must be an ancestor of that head:
-
-```bash
-git fetch origin main
-git merge-base --is-ancestor origin/main HEAD
-pnpm check:pr-base
-```
-
-If that fails, refresh in the task worktree (`git rebase origin/main` on
-a private branch; a non-destructive merge when rewriting history would
-be unsafe), then re-run the check. Do not open or update a PR that is
-behind `origin/main`.
-
-### Fixed delivery order
-
-```text
-1. create dedicated branch + worktree from current origin/main
-2. implement in the request worktree
-3. run targeted static/unit/integration checks
-4. review the task diff
-5. commit the task
-6. refresh the task branch against latest origin/main (`pnpm check:pr-base`)
-7. resolve conflicts inside the task worktree
-8. run required task-candidate E2E in the task worktree
-9. push the request branch
-10. open/update the PR/MR
-11. validate the PR integration candidate
-12. merge into remote main through repository gates
-13. synchronize local main
-14. remove the worktree and merged local branch
-```
-
-Do not insert `merge task → local main` between steps 6 and 8. The task
-branch itself becomes the local integration candidate by incorporating
-the latest `origin/main`. Do not open or update a PR that is behind
-`origin/main`.
-
-A task-candidate E2E result is valid only when its tested commit and
-base revision are known. The PR integration gate then protects against
-`main` changing between local candidate validation and final merge.
+If an optional worktree is retired, verify its changes are committed or
+safely migrated before removing it. Remove only the user-authorized worktree
+and branch; never discard unique changes.
 
 ---
 
@@ -819,8 +769,9 @@ Task Candidate Validation
 PR Integration Validation
 ```
 
-Task Candidate Validation runs in the request worktree after the
-request branch incorporates the latest available `origin/main`.
+Task Candidate Validation runs against the actual source being delivered.
+For a requested upstream PR, include its latest applicable target base;
+local development does not require a request branch or separate worktree.
 
 PR Integration Validation verifies the actual code that is about to
 land, using:
@@ -860,39 +811,26 @@ current branch name == main
 
 ### 16.1 Task-candidate E2E
 
-Every code-bearing change runs relevant E2E suites against a candidate
-that contains:
-
-1. the request's commits
-2. the latest `origin/main` incorporated at candidate preparation
-3. all conflict resolutions required to combine them
-
-Normally:
-
-```bash
-git fetch origin main
-git rebase origin/main
-```
-
-then E2E from the same task worktree.
-
-Record:
+Run relevant E2E against the executable source being delivered, from the
+current checkout or an optional worktree. Record the tested revision, dirty
+changes when applicable, suites, results, and environment. Local development
+does not require fetching or rebasing onto upstream `main` just to run tests.
 
 ```text
-Task candidate:
-Base main:
+Task candidate (including uncommitted changes):
+Base revision:
 E2E suites:
 Result:
 Environment:
 ```
 
-An E2E result applies only to the commit that actually ran. Do not
-modify local `main` to create this candidate.
+An E2E result applies only to the source that actually ran, not a branch
+name. Keep all test profiles separate from the running daily installation.
 
-### 16.2 PR integration E2E
+### 16.2 Optional PR integration E2E
 
-The final landing decision uses PR integration E2E, run against the
-integration candidate defined above.
+For requested remote integration, validate the actual PR integration
+candidate defined above against its latest applicable target base.
 
 ---
 

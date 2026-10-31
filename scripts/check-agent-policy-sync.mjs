@@ -57,16 +57,16 @@ const claude = claudeRaw ? normalize(claudeRaw) : "";
 /** @type {{ id: string, anyOf: string[] }[]} */
 const REQUIRED_ANCHORS = [
   {
-    id: "worktree-isolation",
-    anyOf: ["1 request = 1 branch + 1 dedicated worktree"],
+    id: "local-checkout-development",
+    anyOf: ["Develop in the current checkout by default, including on local `main`."],
   },
   {
-    id: "never-develop-on-main",
-    anyOf: [
-      "never develop on `main`",
-      "never develop directly on `main`",
-      "develop directly on `main`",
-    ],
+    id: "optional-worktree-isolation",
+    anyOf: ["Branches and worktrees are optional, not prerequisites for development."],
+  },
+  {
+    id: "development-data-safety",
+    anyOf: ["Dev launches must isolate inherited data by default."],
   },
   {
     id: "process-model",

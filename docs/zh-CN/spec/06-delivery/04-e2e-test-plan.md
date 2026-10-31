@@ -256,7 +256,7 @@ unit/integration 测试；代码 pull request 使用有选择且高价值的 E2E
 
 ### E2E 环境复用
 
-task-candidate E2E 从请求工作树运行，但使用主工作区已经准备好的宿主开发环境。必要时通过引用或链接复用兼容的 Node/pnpm 工具链、`node_modules`、Electron、Rust/Cargo 目标、包存储、构建缓存和忽略的配置。
+Run task-candidate E2E from the current checkout using its existing compatible Node/pnpm, dependencies, Electron, Rust targets, caches, and configuration. A separate branch/worktree is optional, not a prerequisite. Local validation does not require upstream refresh; isolate temporary profiles and data from the running daily application.
 
 不得为了 E2E 单独运行 `pnpm install`、`npm install`，或创建第二套依赖/运行时环境。只隔离可变测试状态：临时 profile、数据目录、socket、端口、日志和工件。仅当宿主环境缺失或不兼容时才安装或重建依赖，并记录原因；干净的 CI 和发布 runner 可以按 lockfile 安装。
 
