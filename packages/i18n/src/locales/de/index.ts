@@ -1,6 +1,10 @@
 import { en, type EnglishCatalog } from "../en/index.js";
 
 export const de = {
+  delegationApproval: {
+    label: "Delegationsfreigabe", title: "Delegiertes Modell freigeben", reason: "Auswahlgrund",
+    allowOnce: "Einmal erlauben", useOther: "Anderes Modell verwenden", cancel: "Delegation abbrechen",
+  },
   "worktree": {
     "menu": { "group": "Git" },
     "newIsolatedSession": "Neue isolierte Sitzung",
@@ -805,6 +809,36 @@ export const de = {
     "dismiss": "Verwerfen"
   },
   "settings": {
+    delegationRoles: "Rollen",
+    delegationScheduling: "Modellzuweisung",
+    delegationOpenScheduling: "Modellzuweisung für Subagenten konfigurieren",
+    delegationScopeHelp: "Rollen definieren Aufgaben, Werkzeuge und Anweisungen. Die Modellzuweisung steuert unabhängig davon, welche Modelle die KI über Task, Worker-Sitzungen und Plugin-Agenten einsetzen darf.",
+    delegationLegacyHelp: "Bis zum Speichern gilt das bisherige Verhalten. Bereits freigegebene Modelle werden unten angezeigt. Das erste Speichern aktiviert diese Richtlinie für alle Delegationswege; auch festgelegte Rollenmodelle und Standardmodelle müssen in dieser Liste aktiviert sein.",
+    delegationActiveHelp: "Diese Richtlinie gilt für alle Delegationswege. Auch festgelegte Rollenmodelle und Standardmodelle benötigen hier einen aktivierten Eintrag. Das Entfernen oder Deaktivieren aller Modelle stoppt die automatische Delegation.",
+    delegationSelectionHelp: "Ihre Modellwahl wird innerhalb dieser Richtlinie weiterhin unterstützt. Ein angefordertes Modell umgeht niemals die Genehmigung. Ist diese nicht verfügbar, werden genehmigungspflichtige Modelle niemals automatisch verwendet; eine freigegebene Alternative kann einspringen.",
+    delegationWait: "Wartezeit auf Genehmigung (Sekunden)",
+    delegationWaitHelp: "0–300 Sekunden auf Genehmigung warten. Bei 0 werden genehmigungspflichtige Modelle im unbeaufsichtigten Betrieb übersprungen. Eine abgelaufene oder nicht verfügbare Genehmigung erteilt keine Erlaubnis.",
+    delegationAddModel: "Modell hinzufügen",
+    delegationChooseModel: "Konfiguriertes Modell auswählen",
+    delegationEmpty: "Keine Modelle für die Zuweisung. Fügen Sie vor dem Speichern konfigurierte Modelle hinzu, um automatische Delegation zu ermöglichen.",
+    delegationRemoveModel: "{{name}} aus der Modellzuweisung entfernen",
+    delegationEnabled: "Für Modellzuweisung verfügbar",
+    delegationEnableModel: "Modellzuweisung für {{name}} aktivieren",
+    delegationPriority: "Priorität",
+    delegationPriorityHelp: "Werte von 1–100; kleinere Zahlen werden bevorzugt. Modelle gleicher Priorität bilden eine Stufe. Die KI kann innerhalb dieser Stufe das passendste Modell wählen.",
+    delegationModelPriority: "Priorität für {{name}}",
+    delegationApproval: "Genehmigung",
+    delegationApprovalHelp: "Für teure oder sensible Modelle eine Genehmigung verlangen. Neue Einträge benötigen standardmäßig eine Genehmigung. Automatische Nutzung nur für Modelle wählen, die Sie ohne Rückfrage freigeben.",
+    delegationModelApproval: "Genehmigung für {{name}}",
+    delegationAsk: "Jedes Mal fragen",
+    delegationAuto: "Automatisch erlauben",
+    delegationDescription: "Hinweise zur Modellwahl",
+    delegationDescriptionHelp: "Bis zu 1.000 Zeichen zu Stärken, Kosten oder geeigneten Aufgaben. Diese Hinweise werden bei jedem Task getrennt von Rollenbeschreibungen mitgegeben. Der Text erteilt keine Berechtigung.",
+    delegationModelDescription: "Hinweise zur Modellwahl für {{name}}",
+    delegationUnavailable: "Dieser Anbieter oder dieses Modell ist nicht verfügbar. Die gespeicherte Referenz bleibt erhalten. Konfigurieren Sie den Anbieter erneut oder entfernen Sie den Eintrag.",
+    delegationInvalid: "Ganzzahlige Prioritäten von 1 bis 100, ganze Wartezeiten von 0 bis 300 Sekunden und Beschreibungen mit höchstens 1.000 Zeichen verwenden.",
+    delegationSaved: "Modellzuweisung gespeichert.",
+    delegationSaveFailed: "Modellzuweisung konnte nicht gespeichert werden. Ihre Änderungen bleiben erhalten. {{error}}",
     storage: {
       unavailableHint: "Das Speicherverzeichnis ist derzeit nicht verfügbar. Verbinden Sie das Laufwerk vor dem Start erneut. Die App erstellt keine leeren Daten und wechselt nicht in ein anderes Verzeichnis.",
       browserSource: "Quelle der Browserdaten",

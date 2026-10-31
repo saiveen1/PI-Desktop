@@ -48,7 +48,7 @@ import { NetworkProxySection } from "../../components/settings/NetworkProxySecti
 import { ProjectsPage } from "../../pages/ProjectsPage";
 import { AgentSkillsPage } from "../../components/settings/AgentSkillsPage";
 import { AgentMcpPage } from "../../components/settings/AgentMcpPage";
-import { AgentSubagentsPage } from "../../components/settings/AgentSubagentsPage";
+import { SubagentSettingsPage } from "../../components/settings/SubagentSettingsPage";
 import { RemoteHostsPage } from "../../components/settings/RemoteHostsPage";
 import { VoiceSettingsSection } from "./voice/VoiceSettingsSection";
 import {
@@ -635,7 +635,7 @@ export function SettingsPage() {
 
           {tab === "mcp" && <AgentMcpPage />}
 
-          {tab === "subagents" && <AgentSubagentsPage />}
+          {tab === "subagents" && <SubagentSettingsPage saveSettings={saveSettings} />}
 
           {tab === "instructions" && <AgentInstructionsSection />}
 

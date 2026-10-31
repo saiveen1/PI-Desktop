@@ -773,3 +773,7 @@ pub(crate) fn recover_import_journal(
         .unwrap_or_else(empty_manifest);
     apply_bundle_locked(st, config, key, base.as_ref(), &local_before, bundle)
 }
+
+#[cfg(test)]
+#[path = "delegation_settings_tests.rs"]
+mod delegation_settings_tests;

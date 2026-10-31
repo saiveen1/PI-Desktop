@@ -115,6 +115,7 @@ export type StartupDependencies = {
   getSidecar?: () => unknown;
   invokeSessionCollaboration?: (input: McpControlInvokeInput) => Promise<unknown>;
   onSessionQueueChange?: () => void;
+  authorizeCollaborationDispatch?: (sessionId: string, messageId: string, content: string) => Promise<void>;
 };
 
 /**
@@ -269,6 +270,7 @@ export function registerApplicationStartup(deps: StartupDependencies): void {
       channels: IPC.invoke,
       getHost,
       isSessionBusy,
+      authorizeCollaborationDispatch: deps.authorizeCollaborationDispatch,
       onQueueChange: (event) => {
         sendToRenderer(IPC.event.agentQueueChanged, event);
         deps.onSessionQueueChange?.();

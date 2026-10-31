@@ -82,6 +82,31 @@ async function fixture(options: {
 describe("subagent model fallback over real transport", () => {
   const chain = ["primary", "secondary", "third", "fourth", "unused"];
 
+  it("skips an unapproved fallback without sending it a provider request or replaying work", async () => {
+    const f = await fixture({ editFirst: true });
+    const approved: string[] = [];
+    const result = await f.run({
+      fallbackModels: ["expensive", "cheap"].map((id) => ({ key: `${id}/${id}`, provider: f.provider(id) })),
+      authorizeModel: async (provider) => { approved.push(provider.modelId); return provider.modelId === "cheap"; },
+    });
+    expect(result.status).toBe("completed");
+    expect(approved).toEqual(["expensive", "cheap"]);
+    expect(f.requests.map((request) => request.model)).toEqual(["primary", "primary", "cheap"]);
+    expect(f.edits()).toBe(1);
+    expect(result.modelFailures).toContainEqual(expect.objectContaining({ model: "expensive/expensive", code: "MODEL_NOT_AUTHORIZED" }));
+  });
+
+  it("does not send a fallback request after cancellation during approval", async () => {
+    const f = await fixture();
+    const controller = new AbortController();
+    const result = await f.run({ signal: controller.signal, authorizeModel: async () => {
+      controller.abort();
+      return true;
+    } });
+    expect(result.status).not.toBe("completed");
+    expect(f.requests.map((request) => request.model)).toEqual(["primary"]);
+  });
+
   it("retains both real executions when a provider repeats the same tool id", async () => {
     const f = await fixture({ fail: [], repeatToolRounds: 2 });
     const result = await f.run();

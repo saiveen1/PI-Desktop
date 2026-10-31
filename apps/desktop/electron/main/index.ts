@@ -75,6 +75,7 @@ import { createPluginServices } from "./services/plugin-services";
 import type { ComposerSuggestionAnswer } from "./services/composer-suggestion";
 import { wirePluginThemeRuntimeServices } from "./plugin-theme-services";
 import { createSessionCollaborationService } from "./services/session-collaboration";
+import { createDelegationApprovalService } from "./services/delegation-approval";
 import {
   createApplicationLifecycle,
 } from "./bootstrap/app-lifecycle";
@@ -683,6 +684,11 @@ const planUiProbe = createPlanUiProbe({
 
 let emitAgentEvent: (envelope: AgentEventEnvelope) => void = () => undefined;
 
+const delegationApproval = createDelegationApprovalService({
+  getHost,
+  requestUi: (request) => agentExtensions.requestUi(request),
+});
+
 const sessionCollaboration = createSessionCollaborationService({
   getHost,
   getSidecar,
@@ -696,6 +702,12 @@ const sessionCollaboration = createSessionCollaborationService({
   isQuitting: () => mainState.quitting,
   onChanged: () => sendToRenderer(IPC.event.sessionsChanged, { reason: "session.collaboration" }),
   log: (message, data) => logger.app("runtime", "warn", message, { data }),
+  authorizeDelegation: delegationApproval.authorize,
+  cancelDelegationApproval: delegationApproval.cancel,
+});
+app.once("will-quit", () => {
+  sessionCollaboration.dispose();
+  delegationApproval.dispose();
 });
 
 const planRuntime = createPlanRuntime({
@@ -785,6 +797,8 @@ const sidecarRuntime = createSidecarRuntime({
   disabledBuiltinSkills: runtimeDisabledBuiltinSkills,
   pluginActiveInProject,
   currentNetworkProxy,
+  authorizeDelegation: delegationApproval.authorize,
+  cancelDelegationApproval: delegationApproval.cancel,
 });
 emitAgentEvent = sidecarRuntime.emitAgentEvent;
 const { startSidecar } = sidecarRuntime;
@@ -1068,6 +1082,7 @@ registerApplicationStartup({
   bootHostStatus,
   flushPendingApplicationMenuCommands,
   invokeSessionCollaboration: sessionCollaboration.invoke,
+  authorizeCollaborationDispatch: sessionCollaboration.authorizeDispatch,
   onSessionQueueChange: () => {
     void sessionCollaboration.drain().catch((error: unknown) => {
       logger.app("runtime", "warn", "session callback drain failed", { data: String(error) });

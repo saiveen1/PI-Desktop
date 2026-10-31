@@ -36,6 +36,7 @@ import {
 } from "../../lib/model-limit-presets";
 import { api } from "../../lib/api";
 import { Button, Field, HelpIcon, Input, Tooltip, TooltipButton, cx } from "../ui";
+import { useAppStore } from "../../stores/app-store";
 import { IconClose, IconGripVertical, IconHelp, IconPlus, IconRefresh, IconSearch } from "../icons";
 import { ReasoningEffortSelect } from "./ReasoningEffortSelect";
 import { SettingsMenuSelect } from "./SettingsMenuSelect";
@@ -254,6 +255,7 @@ export function ModelSelectionPanes({
   autoPicked = false,
 }: ModelSelectionPanesProps) {
   const { t } = useTranslation();
+  const unifiedDelegation = useAppStore((state) => state.settings?.delegation !== undefined);
   const { rows, models, publishedLevelsById, setModels } = selection;
   const [modelQuery, setModelQuery] = useState("");
   const [chosenQuery, setChosenQuery] = useState("");
@@ -998,6 +1000,16 @@ export function ModelSelectionPanes({
                           </label>
                         ) : null}
                         <span className="provider-chosen-delegation">
+                          {unifiedDelegation ? (
+                            <Button onClick={() => {
+                              const state = useAppStore.getState();
+                              state.setSettingsAnchor("settings.delegationScheduling");
+                              state.setSettingsTab("subagents");
+                            }}>
+                              {t("settings.delegationOpenScheduling")}
+                            </Button>
+                          ) : (
+                            <>
                           <label className="provider-chosen-capability">
                             <input
                               type="checkbox"
@@ -1018,6 +1030,8 @@ export function ModelSelectionPanes({
                           >
                             <IconHelp size={13} />
                           </Tooltip>
+                            </>
+                          )}
                         </span>
                         <span className="provider-chosen-delegation">
                           <label className="provider-chosen-capability">

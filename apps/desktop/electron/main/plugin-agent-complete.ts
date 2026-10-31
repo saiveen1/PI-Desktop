@@ -15,7 +15,7 @@ import type {
   PluginModelInfo,
 } from "@pi-desktop/plugin-sdk";
 import type { AppSettings, ContextCompactionRecord, ThinkingLevel, UiMessage } from "@pi-desktop/shared";
-import { THINKING_LEVELS } from "@pi-desktop/shared";
+import { THINKING_LEVELS, isDelegationSettings } from "@pi-desktop/shared";
 
 export function parsePluginModelKey(modelKey: string): { providerId: string; modelId: string } | null {
   const slash = modelKey.indexOf("/");
@@ -50,7 +50,7 @@ type ListedProvider = {
 
 export function listReadyPluginModels(
   providers: ListedProvider[],
-  settings: Pick<AppSettings, "defaultProviderId" | "defaultModelId"> = {},
+  settings: Pick<AppSettings, "defaultProviderId" | "defaultModelId" | "delegation"> = {},
 ): PluginModelInfo[] {
   const models: PluginModelInfo[] = [];
   const enabled = providers.filter((provider) => provider.enabled !== false);
@@ -88,7 +88,10 @@ export function listReadyPluginModels(
         modelId,
         label: `${modelId} (${provider.name})`,
         ...(binding.alias?.trim() ? { alias: binding.alias.trim() } : {}),
-        availableForSubagents: binding.availableForSubagents === true,
+        availableForSubagents: settings.delegation === undefined
+          ? binding.availableForSubagents === true
+          : isDelegationSettings(settings.delegation) && settings.delegation.models.some((row) =>
+              row.enabled && row.providerId === provider.id && row.modelId === modelId),
         isDefault,
         supportsReasoning:
           thinkingLevels.some((level) => level !== "off") ||

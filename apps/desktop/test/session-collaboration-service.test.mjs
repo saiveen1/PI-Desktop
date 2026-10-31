@@ -20,18 +20,20 @@ function load(relative, imports) {
   return module.exports;
 }
 
+const shared = { ...await import("@pi-desktop/shared"), ...load("../../../packages/shared/src/delegation-policy.ts", {}) };
 // The real model helpers, not a stub: the opt-in flag has to survive the whole
 // way from `providers.list` through the plugin model list into the spawn
 // decision, and a hand-written stub would prove only the last step.
 const pluginAgentComplete = load("../electron/main/plugin-agent-complete.ts", {
   "@pi-desktop/agent-runtime": await import("@pi-desktop/agent-runtime"),
-  "@pi-desktop/shared": await import("@pi-desktop/shared"),
+  "@pi-desktop/shared": shared,
 });
 
 const { createSessionCollaborationService } = load("../electron/main/services/session-collaboration.ts", {
   "node:crypto": crypto,
   "../agent-host-bridge": { DESKTOP_PRINCIPAL: { kind: "desktop" } },
   "../plugin-agent-complete": pluginAgentComplete,
+  "@pi-desktop/shared": shared,
 });
 
 function createHost(name, respond = () => ({})) {
@@ -76,6 +78,8 @@ function createService(overrides = {}) {
     isQuitting: () => overrides.quitting ?? false,
     onChanged: () => changes.push({}),
     log: (message, data) => logs.push({ message, data }),
+    authorizeDelegation: overrides.authorizeDelegation,
+    cancelDelegationApproval: overrides.cancelDelegationApproval,
   };
   return { service: createSessionCollaborationService(deps), logs, changes };
 }
@@ -359,4 +363,73 @@ test("spawn without a model key never selects an un opted-in default model (#118
     { code: "MODEL_NOT_CONFIGURED" },
   );
   assert.deepEqual(methodCalls(host, "session.collaboration.spawn"), []);
+});
+
+function delegationPolicy() {
+  return { version: 1, approvalTimeoutSeconds: 60, models: [
+    { providerId: "p", modelId: "first", enabled: true, priority: 1, approval: "ask", description: "" },
+    { providerId: "p", modelId: "second", enabled: true, priority: 2, approval: "auto", description: "" },
+  ] };
+}
+
+test("unified plugin spawn falls back after skip and never uses aliases", async () => {
+  const settings = { delegation: delegationPolicy() };
+  const requested = [];
+  const message = sessionMessage({ content: "Review" });
+  const host = createHost("host", (method) => {
+    if (method === "settings.get") return settings;
+    if (method === "providers.list") return { providers: [{ id: "p", name: "Alias", authKind: "none", models: [{ id: "first" }, { id: "second" }] }] };
+    if (method === "session.collaboration.spawn" || method === "session.collaboration.message") return { message };
+    if (method === "session.get") return { session: { providerId: "p", modelId: "second" } };
+    return {};
+  });
+  let service;
+  ({ service } = createService({ host, activeTurns: { "source-session": "turn-1" },
+    bridge: { queue: { list: () => [] }, agentHost: { async startTurn(_principal, input) {
+      await service.authorizeDispatch(input.sessionId, input.input.sessionMessageId, input.input.text);
+    } } },
+    authorizeDelegation: async (request) => {
+      requested.push(`${request.providerId}/${request.modelId}`);
+      return { decision: request.modelId === "first" ? "skip" : "allow", reason: "test" };
+    },
+  }));
+  await service.invoke({ operation: "session/collaboration/spawn", source: "plugin", args: [{ task: "Review" }],
+    pluginContext: { pluginId: "demo-plugin", sessionId: "source-session", turnId: "turn-1", invocationId: "i" } });
+  assert.deepEqual(requested, ["p/first", "p/second"]);
+  assert.equal(methodCalls(host, "session.collaboration.spawn")[0].params.modelId, "second");
+});
+
+test("plugin sends gate the actual existing model and reject changes during approval", async () => {
+  const settings = { delegation: delegationPolicy() };
+  let modelId = "second";
+  const requested = [];
+  const host = createHost("host", (method) => {
+    if (method === "settings.get") return settings;
+    if (method === "session.get") return { session: { providerId: "p", modelId } };
+    if (method === "providers.list") return { providers: [{ id: "p", name: "P", authKind: "none", models: [{ id: "first" }, { id: "second" }] }] };
+    return {};
+  });
+  const { service } = createService({ host, authorizeDelegation: async (request) => {
+    requested.push(request.modelId);
+    modelId = "first";
+    return { decision: "allow", reason: "test" };
+  } });
+  await assert.rejects(service.authorizeDispatch("target", "message", "Review"), /Target model changed/);
+  assert.deepEqual(requested, ["second"]);
+  assert.equal(methodCalls(host, "session.configure").length, 0);
+});
+
+test("queued dispatch re-reads pool membership and absent settings preserve legacy delivery", async () => {
+  const settings = {};
+  const host = createHost("host", (method) => {
+    if (method === "settings.get") return settings;
+    if (method === "session.get") return { session: { providerId: "p", modelId: "second" } };
+    if (method === "providers.list") return { providers: [{ id: "p", name: "P", authKind: "none", models: [{ id: "second" }] }] };
+    return {};
+  });
+  const { service } = createService({ host });
+  await service.authorizeDispatch("target", "message", "Review");
+  settings.delegation = delegationPolicy();
+  settings.delegation.models[1].enabled = false;
+  await assert.rejects(service.authorizeDispatch("target", "message", "Review"), /not enabled/);
 });

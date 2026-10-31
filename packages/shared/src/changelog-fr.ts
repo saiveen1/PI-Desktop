@@ -5,6 +5,7 @@ export const frEntries: ChangelogEntry[] = [
     version: "0.21.0",
     date: "2026-10-24",
     highlights: [
+      "Configurez un groupe de modèles pour les sous-agents avec priorités égales, descriptions d’usage, approbation obligatoire et alternatives autorisées pour les tâches sans surveillance.",
       "Les plugins peuvent lister les projets enregistrés et leurs dossiers sans changer de session active.",
       "Le moteur Pi 1.3.0 améliore la validation des appels d’outils et la relecture sécurisée de l’historique.",
       "Activez les visualisations intégrées facultatives dans Paramètres → IA pour afficher des cartes interactives isolées dans les conversations.",

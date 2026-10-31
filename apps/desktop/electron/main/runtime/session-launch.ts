@@ -8,6 +8,8 @@ import {
   imageGenerationBindings,
   isImageGenerationModel,
   normalizeMode,
+  isDelegationSettings,
+  orderDelegationModels,
   trustedExtensionAgentKeyFromProviderId,
   type CommandShellCatalog,
   type McpServerRecord,
@@ -603,19 +605,20 @@ export function createSessionLaunchRuntime({
             };
       },
     });
-    // Delegation model catalog: every model binding flagged
-    // `availableForSubagents` is pre-resolved so the system prompt can list
-    // them and the parent agent can pass them to `Task.model` without an
-    // extra RPC round-trip. Statically pinned entries from definitions take
-    // precedence — they were resolved above with stricter diagnostics.
+    const delegation = settings.delegation;
+    if (delegation !== undefined && !isDelegationSettings(delegation)) throw new Error("Invalid delegation policy");
     const subagentModelKeys: string[] = [];
-    for (const row of providers.providers) {
-      if (!row.enabled) continue;
-      for (const binding of row.models ?? []) {
-        if (!binding.availableForSubagents) continue;
-        let key = `${row.vendorKey ?? row.name}/${binding.id}`;
-        // Two provider rows can share a vendor alias. Opting in one row must
-        // not authorize the credential-bearing pin resolved from another row.
+    const candidates = delegation !== undefined
+      ? orderDelegationModels(delegation).flatMap((model) => {
+          const row = providers.providers.find((provider) => provider.id === model.providerId && provider.enabled);
+          const binding = row?.models?.find((binding) => binding.id === model.modelId)
+            ?? (!row?.models?.length && row?.defaultModelId === model.modelId ? { id: model.modelId } : undefined);
+          return row && binding ? [{ row, binding }] : [];
+        })
+      : providers.providers.filter((row) => row.enabled).flatMap((row) =>
+          (row.models ?? []).filter((binding) => binding.availableForSubagents).map((binding) => ({ row, binding })));
+    for (const { row, binding } of candidates) {
+        let key = `${delegation !== undefined ? row.id : row.vendorKey ?? row.name}/${binding.id}`;
         if (subagentBindings.providers[key]?.id && subagentBindings.providers[key].id !== row.id) {
           key = `${row.id}/${binding.id}`;
         }
@@ -681,7 +684,6 @@ export function createSessionLaunchRuntime({
           ...(mc ? { modelConfig: mc } : {}),
         };
         subagentModelKeys.push(key);
-      }
     }
 
     const subagentDiagnostics = [
@@ -738,6 +740,8 @@ export function createSessionLaunchRuntime({
       sidecarParams: {
         sessionId,
         mode,
+        delegationSettings: settings.delegation,
+        delegationAuthorization: true,
         ...(overrides.turnId ? { turnId: overrides.turnId } : {}),
         thinkingLevel,
         infiniteProviderRetry: settings.infiniteProviderRetry === true,

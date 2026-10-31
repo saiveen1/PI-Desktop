@@ -6,6 +6,7 @@ import type {
   SessionCollaborationMessage,
   SessionCollaborationSummary,
 } from "@pi-desktop/shared";
+import { isDelegationSettings, orderDelegationModels, delegationModelKey, type DelegationApprovalRequest, type DelegationApprovalDecision } from "@pi-desktop/shared";
 import { DESKTOP_PRINCIPAL, type AgentHostBridge } from "../agent-host-bridge";
 import { listReadyPluginModels, parsePluginModelKey } from "../plugin-agent-complete";
 import type { McpControlInvokeInput } from "../mcp-control";
@@ -43,6 +44,8 @@ export type SessionCollaborationDependencies = {
   isQuitting: () => boolean;
   onChanged: () => void;
   log: (message: string, data: Record<string, unknown>) => void;
+  authorizeDelegation?: (request: DelegationApprovalRequest) => Promise<DelegationApprovalDecision>;
+  cancelDelegationApproval?: (request: Pick<DelegationApprovalRequest, "sessionId" | "requestId">) => void;
 };
 
 function fail(code: string, message: string): never {
@@ -92,6 +95,67 @@ export function createSessionCollaborationService(deps: SessionCollaborationDepe
   let draining: Promise<void> | undefined;
   let dirty = false;
 
+  const spawnApprovals = new Map<string, { providerId: string; modelId: string; policy: string; task: string }>();
+  const dispatchApprovals = new Map<string, DelegationApprovalRequest>();
+  const dispatchSignals = new Map<string, AbortSignal>();
+
+  async function authorize(request: DelegationApprovalRequest, signal?: AbortSignal) {
+    if (!deps.authorizeDelegation) fail("PERMISSION_DENIED", "Delegation approval unavailable");
+    const abort = () => deps.cancelDelegationApproval?.(request);
+    if (signal?.aborted) fail("ABORTED", "Delegation cancelled");
+    signal?.addEventListener("abort", abort, { once: true });
+    try {
+      const result = await deps.authorizeDelegation(request);
+      if (signal?.aborted || result.decision === "cancel") fail("ABORTED", "Delegation cancelled");
+      return result.decision === "allow";
+    } finally { signal?.removeEventListener("abort", abort); }
+  }
+
+  async function authorizeDispatch(sessionId: string, messageId: string, content: string): Promise<void> {
+    const host = requireHost();
+    const settings = await host.call<AppSettings>("settings.get");
+    checkCurrent(host);
+    if (settings?.delegation === undefined) return;
+    if (!isDelegationSettings(settings.delegation)) fail("PERMISSION_DENIED", "Invalid delegation policy");
+    const result = await host.call<{ session?: { providerId?: string; modelId?: string } }>("session.get", { id: sessionId });
+    checkCurrent(host);
+    const target = result.session;
+    if (!target?.providerId || !target.modelId) fail("MODEL_NOT_CONFIGURED", "Target session has no configured model");
+    const approved = spawnApprovals.get(messageId);
+    spawnApprovals.delete(messageId);
+    const listed = await host.call<{ providers: Parameters<typeof listReadyPluginModels>[0] }>("providers.list", { includeDisabled: false });
+    checkCurrent(host);
+    const enabled = listReadyPluginModels(listed.providers, settings).some((model) =>
+      model.providerId === target.providerId && model.modelId === target.modelId && model.availableForSubagents);
+    if (!enabled) fail("PERMISSION_DENIED", "Target model is not enabled for delegation");
+    if (!(approved?.providerId === target.providerId && approved.modelId === target.modelId && approved.task === content
+      && approved.policy === JSON.stringify(settings.delegation))) {
+      const request = { sessionId, requestId: `session-message:${messageId}:${randomUUID()}`,
+        providerId: target.providerId, modelId: target.modelId, task: content };
+      dispatchApprovals.set(messageId, request);
+      try {
+        if (!await authorize(request, dispatchSignals.get(messageId))) fail("PERMISSION_DENIED", "Target model delegation was skipped");
+      } finally { if (dispatchApprovals.get(messageId) === request) dispatchApprovals.delete(messageId); }
+    }
+    const latest = await host.call<{ session?: { providerId?: string; modelId?: string } }>("session.get", { id: sessionId });
+    checkCurrent(host);
+    if (latest.session?.providerId !== target.providerId || latest.session?.modelId !== target.modelId) {
+      fail("PERMISSION_DENIED", "Target model changed while awaiting delegation approval");
+    }
+    const [latestSettings, latestProviders, message] = await Promise.all([
+      host.call<AppSettings>("settings.get"),
+      host.call<{ providers: Parameters<typeof listReadyPluginModels>[0] }>("providers.list", { includeDisabled: false }),
+      host.call<{ message?: SessionCollaborationMessage }>("session.collaboration.message", { messageId }),
+    ]);
+    checkCurrent(host);
+    if (JSON.stringify(latestSettings.delegation) !== JSON.stringify(settings.delegation)
+      || !listReadyPluginModels(latestProviders.providers, latestSettings).some((model) =>
+        model.providerId === target.providerId && model.modelId === target.modelId && model.availableForSubagents)) {
+      fail("PERMISSION_DENIED", "Delegation policy or provider changed before dispatch");
+    }
+    if (!message.message || message.message.status !== "queued" || message.message.targetSessionId !== sessionId || message.message.content !== content
+      || !deps.isPluginLoaded(message.message.pluginId)) fail("ABORTED", "Session delivery was cancelled before dispatch");
+  }
   function requireHost(): Host {
     if (deps.isQuitting()) fail("ABORTED", "The application is shutting down");
     const host = deps.getHost();
@@ -132,8 +196,8 @@ export function createSessionCollaborationService(deps: SessionCollaborationDepe
           return delivery(current);
         }
         if (!deps.isPluginLoaded(current.pluginId)) fail("ABORTED", "The sending plugin is no longer enabled");
-        // beginTurn rechecks the persisted authorization ceiling at execution,
-        // including when a queued turn resumes after settings have changed.
+        // The Agent Host callback rechecks delegation at execution, including durable queue replay.
+        if (signal) dispatchSignals.set(current.id, signal);
         await bridge.agentHost.startTurn(DESKTOP_PRINCIPAL, {
           sessionId: current.targetSessionId,
           input: { text: current.content, sessionMessageId: current.id },
@@ -163,7 +227,7 @@ export function createSessionCollaborationService(deps: SessionCollaborationDepe
           }));
         }
         throw error;
-      }
+      } finally { dispatchSignals.delete(message.id); }
     })();
     dispatching.set(message.id, operation);
     try { return await operation; }
@@ -174,6 +238,11 @@ export function createSessionCollaborationService(deps: SessionCollaborationDepe
     const result = await host.call<{
       sessionId: string; cancelled: true; sessionRetained: true; messageIds: string[]; runningTurnIds: string[];
     }>("session.collaboration.cancel", args);
+    for (const messageId of result.messageIds) {
+      const request = dispatchApprovals.get(messageId);
+      if (request) deps.cancelDelegationApproval?.(request);
+      spawnApprovals.delete(messageId);
+    }
     checkCurrent(host);
     const bridge = deps.getBridge();
     if (bridge) {
@@ -276,6 +345,7 @@ export function createSessionCollaborationService(deps: SessionCollaborationDepe
           const notify = data.notifyOnCompletion;
           if (notify !== undefined && typeof notify !== "boolean") fail("INVALID_ARGUMENT", "notifyOnCompletion must be a boolean");
           let model: { providerId: string; modelId: string } | null = null;
+          let approvedPolicy: string | undefined;
           if (spawn) {
             const [listed, settings] = await Promise.all([
               host.call<{ providers: Parameters<typeof listReadyPluginModels>[0] }>("providers.list", { includeDisabled: false }),
@@ -288,16 +358,33 @@ export function createSessionCollaborationService(deps: SessionCollaborationDepe
             // opted into delegation would spend a model the Task gate
             // refuses (issue #1183). Omitting modelKey must fall back to the
             // spawn path's own inheritance, not to an un opted-in default.
-            const chosen = requested
+            let chosen = requested
               ? models.find((item) => item.key === requested)
               : models.find((item) => item.availableForSubagents);
+            if (settings.delegation !== undefined) {
+              if (!isDelegationSettings(settings.delegation)) fail("PERMISSION_DENIED", "Invalid delegation policy");
+              chosen = undefined;
+              const candidates = orderDelegationModels(settings.delegation, { preferredKey: requested });
+              for (const candidate of candidates) {
+                const ready = models.find((item) => item.key === delegationModelKey(candidate) && item.availableForSubagents);
+                if (!ready) continue;
+                if (await authorize({ sessionId: source.sourceSessionId, requestId: randomUUID(),
+                  providerId: ready.providerId, modelId: ready.modelId, task: content! }, input.signal)) {
+                  chosen = ready;
+                  approvedPolicy = JSON.stringify(settings.delegation);
+                  break;
+                }
+                checkCurrent(host, input.signal);
+                sender(input);
+              }
+            }
             if (!chosen) fail("MODEL_NOT_CONFIGURED", "No matching configured model is available");
             // A worker the agent starts is AI-driven delegation, so naming a model here
             // needs that model's own `availableForSubagents` opt-in — the gate `Task.model`
             // already applies (ADR subagent-model-opt-in; #386). Inheriting stays open, and
             // naming the default is that inheritance spelled out, the way repeating a
             // definition's own pin is on the Task path.
-            if (requested && !chosen.availableForSubagents && !chosen.isDefault) {
+            if (requested && !chosen.availableForSubagents && (settings.delegation !== undefined || !chosen.isDefault)) {
               fail("PERMISSION_DENIED", `Model "${requested}" is not enabled for AI delegation. Turn on "Available for AI delegation" for it in model settings, or omit modelKey to inherit.`);
             }
             model = parsePluginModelKey(chosen.key);
@@ -311,6 +398,7 @@ export function createSessionCollaborationService(deps: SessionCollaborationDepe
             ...(spawn ? { ...model, title: text(data, "title", false) }
               : { sessionId: text(data, "sessionId"), kind: messageKind(data.kind) }),
           });
+          if (spawn && model && approvedPolicy) spawnApprovals.set(response.message.id, { ...model, policy: approvedPolicy, task: content! });
           return dispatch(response.message, input.signal);
         }
         default: fail("NOT_FOUND", "Unknown session collaboration operation");
@@ -328,5 +416,12 @@ export function createSessionCollaborationService(deps: SessionCollaborationDepe
       deps.onChanged();
     },
     drain,
+    authorizeDispatch,
+    dispose() {
+      for (const request of dispatchApprovals.values()) deps.cancelDelegationApproval?.(request);
+      dispatchApprovals.clear();
+      spawnApprovals.clear();
+      dispatchSignals.clear();
+    },
   };
 }

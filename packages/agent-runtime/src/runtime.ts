@@ -1,3 +1,6 @@
+import { DelegationScheduler, type DelegationDecisionRecord } from "./delegation-scheduler.js";
+import { subagentTaskDeclaration } from "./delegation-tool.js";
+import { describeDelegationModels, type DelegationSettings, type DelegationApprovalDecision } from "@pi-desktop/shared";
 import {
   MAX_MUTATION_RECOVERY_FAILURES, BASH_PATCH_FAILURE_KEY,
   RECOVERABLE_MUTATION_ERROR_CODES, mutationFailureKey, isPatchCommand,
@@ -125,7 +128,6 @@ import {
   resolveSubagentToolNames,
   splitInlineContent,
   subagentModelKey,
-  subagentToolsLabel,
   type ProposalKind,
   type SubagentPermission,
   GEN_UI_SKILL_ID,
@@ -582,6 +584,7 @@ export type DelegationRecord = {
   /** Model the run kept before the resume could not re-resolve it (ADR 0279
    * §4): recorded so the parent can see that the delegate's binding moved. */
   modelChangedFrom?: string;
+  scheduling?: { requestedModel?: string; decisions: DelegationDecisionRecord[] };
   /** `toolCallId`s of this run's calls that have not ended yet: dropped when the
    * run settles, so an aborted call cannot pin its captured arguments. */
   pendingToolCallIds?: Set<string>;
@@ -601,6 +604,7 @@ function delegationSummary(record: DelegationRecord): Record<string, unknown> {
     ...(record.lastToolName ? { lastToolName: record.lastToolName } : {}),
     ...(record.completedAt ? { completedAt: record.completedAt } : {}),
     ...(record.result?.modelFailures ? { modelFailures: record.result.modelFailures } : {}),
+    ...(record.scheduling ? { scheduling: record.scheduling } : {}),
     ...(record.result?.error ? { error: record.result.error } : {}),
     // A delegate that compacted or lost history says so in its lifecycle
     // details, not only in the report text (ADR 0299, decision 4).
@@ -1072,6 +1076,9 @@ export type AgentRuntimeOptions = {
   subagentProviders?: Record<string, RuntimeProviderConfig>;
   /** Resolved keys explicitly opted into Task.model selection; pins alone grant no override. */
   subagentModelKeys?: string[];
+  delegationSettings?: DelegationSettings;
+  /** Embedding host exposes an independent mandatory model-approval service. */
+  delegationAuthorization?: boolean;
 };
 
 export type AgentRuntimeDiagnostic = {
@@ -1102,6 +1109,8 @@ export type RuntimeMatchConfig = {
   subagentProviders?: Record<string, RuntimeProviderConfig>;
   /** Resolved keys explicitly opted into Task.model selection; pins alone grant no override. */
   subagentModelKeys?: string[];
+  delegationSettings?: DelegationSettings;
+  delegationAuthorization?: boolean;
 };
 
 /** Tool calls ride in the assistant content array as `type: "toolCall"`. A
@@ -1896,6 +1905,8 @@ export class DesktopAgentRuntime {
   private subagents: SubagentDefinition[];
   private subagentProviders: Record<string, RuntimeProviderConfig>;
   private subagentModelKeys: Set<string>;
+  private readonly delegationSettings?: DelegationSettings;
+  private readonly delegationAuthorization: boolean;
   /** On-demand Task.model grants; never mixed into launch opt-in matching. */
   private subagentOverrideProviders: Record<string, RuntimeProviderConfig>;
   /**
@@ -2137,6 +2148,8 @@ export class DesktopAgentRuntime {
     this.subagents = opts.subagents ?? [];
     this.subagentProviders = opts.subagentProviders ?? {};
     this.subagentModelKeys = new Set(opts.subagentModelKeys ?? []);
+    this.delegationSettings = opts.delegationSettings;
+    this.delegationAuthorization = opts.delegationAuthorization === true;
     this.subagentOverrideProviders = {};
     if (!isCommandShellOption(opts.commandShell) || !opts.commandShell.available) {
       throw Object.assign(new Error("active command shell is invalid or unavailable"), {
@@ -2826,6 +2839,8 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       safeJson(this.subagentProviders) === safeJson(config.subagentProviders ?? {}) &&
       safeJson([...this.subagentModelKeys].sort()) ===
         safeJson([...new Set(config.subagentModelKeys ?? [])].sort()) &&
+      safeJson(this.delegationSettings) === safeJson(config.delegationSettings) &&
+      this.delegationAuthorization === (config.delegationAuthorization === true) &&
       // Enabling or disabling a trusted extension retires the runtime so the
       // next prompt reloads the set (spec 16 §4.3).
       trustedExtensionIds(this.trustedExtensionSpecs) ===
@@ -4566,6 +4581,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
    * agent can make informed model choices for Task.model overrides.
    */
   private subagentModelSummary(): string | undefined {
+    if (this.delegationSettings) return describeDelegationModels(this.delegationSettings);
     const keys = this.availableSubagentModelKeys();
     if (keys.length === 0) {
       return [
@@ -4813,59 +4829,13 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
    */
   private buildSubagentTool(): AgentTool {
     const names = this.subagents.map((definition) => definition.name);
-    const catalog = this.subagents
-      .map((definition) => {
-        const defaultModel = definition.model
-          ? `${subagentModelKey(definition.model)}; omit model or repeat this key to keep this default.`
-          : "inherits the session.";
-        return `- ${definition.name} (tools: ${subagentToolsLabel(definition)}): ${definition.description} Default model: ${defaultModel}`;
-      })
-      .join("\n");
     return {
-      name: SUBAGENT_TOOL_NAME,
-      label: "Task",
-      description: [
-        "Start one subagent in the background and return immediately; you keep working while it runs, then converge with TaskWait when you need its report.\n\nPrefer doing the work yourself. Only delegate when it saves significant context or enables genuine parallelism — not for tasks you can finish in a few tool calls.",
-        "Use it only when the work is genuinely separable and substantial: parallel exploration of independent directions that each need many tool calls (one Task per direction in the same assistant message), a large multi-file implementation with a complete spec (fixer), an adversarial read-only review of a non-trivial change you already finished (code-reviewer), or a wide search whose raw output would fill this context (explorer, test-runner). A single file lookup or a small edit does not warrant delegation.",
-        "Do not delegate what you can finish in a couple of tool calls, and do not delegate anything that needs the user — a subagent cannot ask a question or propose a plan on your behalf.",
-        ...(this.availableSubagentModelKeys().length
-          ? [
-              "Only pass `model` when deliberately overriding the definition default with a listed delegation model; otherwise omit it. Repeating the definition's own Default model key, or the exact parent provider/model, is the same as omitting `model`.",
-            ]
-          : [
-              `No delegation model overrides are configured. ${DELEGATION_DEFAULT_MODEL_GUIDANCE} ${DELEGATION_MODEL_OPT_IN_GUIDANCE}`,
-            ]),
-        "`task` is the delegate's only instruction. It cannot see this conversation, and you cannot correct it while it runs, so state the goal, the paths and facts it cannot infer, and exactly what to report back.",
-        "To run delegates concurrently, emit several Task calls in one assistant message. A message that mixes Task with any other tool runs one call at a time. You may keep working or talk to the user while they run; the runtime delivers their reports when they finish. Call TaskStop only to cancel.",
-        "To continue a previous subagent, pass its `resume` id (the `delegationId` returned by Task). Saying \"reuse\" in prose is not enough. Do not pass `model` when resuming; start a new delegation to change models.",
-        `Available subagents:\n${catalog}`,
-      ].join("\n\n"),
-      parameters: Type.Object({
-        agent: Type.String({
-          description: `Name of the subagent to run: ${names.join(", ")}.`,
-        }),
-        task: Type.String({
-          description:
-            "The complete brief: goal, context the delegate cannot infer, and the exact report you want back.",
-        }),
-        description: Type.Optional(
-          Type.String({
-            description:
-              "Short label for this delegation (3-6 words), shown to the user.",
-          }),
-        ),
-        model: Type.Optional(
-          Type.String({
-            description:
-              "Override the delegate's model for this run, e.g. 'anthropic/claude-sonnet-4-20250514'. Omit to use the subagent's default. Repeating the definition's own Default model key is the same as omitting this parameter. Only choose a different override from the available delegation model catalog. Forbidden when `resume` is set.",
-          }),
-        ),
-        resume: Type.Optional(
-          Type.String({
-            description:
-              "delegationId of a settled subagent in this conversation to continue. Omit to start a new session.",
-          }),
-        ),
+      ...subagentTaskDeclaration({
+        definitions: this.subagents,
+        hasOverrides: this.availableSubagentModelKeys().length > 0,
+        defaultGuidance: DELEGATION_DEFAULT_MODEL_GUIDANCE,
+        optInGuidance: DELEGATION_MODEL_OPT_IN_GUIDANCE,
+        settings: this.delegationSettings,
       }),
       // Set in `rebuildToolCatalog`, which owns every execution mode; repeated
       // here so the intent survives a tool built outside that path.
@@ -4908,7 +4878,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           );
         }
         let provider: RuntimeProviderConfig | undefined;
-        if (modelOverride) {
+        if (!this.delegationSettings && modelOverride) {
           if (this.isDefinitionPinOverride(definition, modelOverride)) {
             provider = this.subagentProvider(definition);
             if (!provider) {
@@ -4941,7 +4911,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
               `Model "${modelOverride}" is not available for delegation.${hint}`,
             );
           }
-        } else {
+        } else if (!this.delegationSettings) {
           provider = this.subagentProvider(definition);
           if (!provider) {
             return this.subagentToolError(
@@ -4982,6 +4952,35 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
         const resumedProvider = resumedChain
           ? await this.resumedChainProvider(resumedChain, definition)
           : undefined;
+        const modelReason = isRecord(params) && typeof params.modelReason === "string" ? params.modelReason : undefined;
+        const selection = isRecord(params) && params.modelSelection === "require" ? "require" : "prefer";
+        const requestedBinding = modelOverride ? this.subagentProviders[modelOverride] : undefined;
+        const scheduler = new DelegationScheduler({
+          settings: this.delegationSettings,
+          sessionId: this.sessionId, task, reason: modelReason, selection,
+          preferredKey: requestedBinding ? `${requestedBinding.id}/${requestedBinding.modelId}` : modelOverride || undefined,
+          preferredProvider: resumedProvider ?? (this.delegationSettings
+            ? definition.model && (!modelOverride || modelOverride === subagentModelKey(definition.model)) ? this.subagentProvider(definition) : undefined
+            : provider),
+          legacyFallbacks: (definition.fallbackModels ?? []).map((pin) => ({ key: subagentModelKey(pin), provider: this.subagentProviders[subagentModelKey(pin)] })),
+          resolve: async (key) => this.subagentProviders[key] ?? await this.resolveSubagentModel(key),
+          ...(this.delegationAuthorization ? {
+            authorize: (request) => this.host.call<DelegationApprovalDecision>("provider.authorizeDelegation", request),
+            cancelApproval: (requestId: string) => this.host.call("provider.cancelDelegationApproval", { sessionId: this.sessionId, requestId }),
+          } : {}),
+          compatible: (candidate) => {
+            if (isRecord(params) && params.requiresImages === true && !visionFromModelConfig(candidate.modelConfig)) return "Task requires image input support";
+            const minimum = isRecord(params) && typeof params.minContextWindow === "number" ? params.minContextWindow : 0;
+            return minimum > (candidate.modelConfig?.contextWindow ?? 128_000) ? "Task requires a larger context window" : undefined;
+          },
+        });
+        let scheduled: Awaited<ReturnType<DelegationScheduler["select"]>>;
+        try {
+          scheduled = await scheduler.select(signal);
+          provider = scheduled.provider;
+        } catch (error) {
+          return this.subagentToolError(toolCallId, error instanceof Error ? error.message : "Delegation scheduling failed; no task started.");
+        }
         if (this.disposed || this.runCancelled || this.turnHadError || resumeEpoch !== this.turnEpoch) {
           return this.subagentToolError(toolCallId, "The parent turn ended before delegation could resume.");
         }
@@ -4996,11 +4995,8 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
             `${MAX_SUBAGENT_CONCURRENCY} subagents are already running for this session. Wait for some with TaskWait or stop them with TaskStop before delegating more.`,
           );
         }
-        if (resumedProvider) provider = resumedProvider;
-        const modelChangedFrom =
-          resumedChain?.latestModelId && !resumedProvider
-            ? resumedChain.latestModelId
-            : undefined;
+        const modelChangedFrom = resumedChain?.latestModelId && resumedChain.latestModelId !== provider.modelId
+          ? resumedChain.latestModelId : undefined;
         const initialMessages = resumedChain
           ? this.seedResumedDelegate(resumedChain, provider)
           : undefined;
@@ -5096,6 +5092,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           ...(worktreeKey ? { worktreeKey } : {}),
           ...(resumedChain ? { resumedFrom: resume } : {}),
           ...(modelChangedFrom ? { modelChangedFrom } : {}),
+          ...(this.delegationSettings ? { scheduling: { requestedModel: scheduler.requestedModel, decisions: scheduler.decisions } } : {}),
         };
         this.delegations.set(delegationId, record);
         let subagentRun: SubagentRun;
@@ -5121,10 +5118,8 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
             provider,
             infiniteProviderRetry: this.infiniteProviderRetry,
             thinkingLevel,
-            fallbackModels: (definition.fallbackModels ?? []).map((pin) => ({
-              key: subagentModelKey(pin),
-              provider: this.subagentProviders[subagentModelKey(pin)],
-            })),
+            fallbackModels: scheduled.fallbacks,
+            authorizeModel: (candidate, candidateSignal) => scheduler.authorize(candidate, candidateSignal),
             inheritedThinkingLevel: this.thinkingLevel,
             onModelChange: (next, level) => {
               record.modelId = next.modelId;
@@ -5216,7 +5211,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           content: [
             {
               type: "text",
-              text: `Delegation ${delegationId} started: the ${definition.name} subagent is working in the background${label ? ` (${label})` : ""}. Continue your own independent work, then call TaskWait with this delegationId to converge, or TaskStop to stop it.`,
+              text: `Delegation ${delegationId} started: the ${definition.name} subagent is working in the background${label ? ` (${label})` : ""}.${this.delegationSettings ? ` Model: ${provider.modelId}. ${scheduler.decisions.filter((row) => row.decision === "skipped").map((row) => `${row.model}: ${row.reason}.`).join(" ")}` : ""} Continue your own independent work, then call TaskWait with this delegationId to converge, or TaskStop to stop it.`,
             },
           ],
           details: {
@@ -5226,6 +5221,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
             startedAt,
             modelId: provider.modelId,
             thinkingLevel,
+            ...(record.scheduling ? { scheduling: record.scheduling } : {}),
             ...(resumedChain ? { resumedFrom: resume } : {}),
           },
         };

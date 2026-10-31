@@ -916,6 +916,41 @@ transient and never restored into durable UI messages or transcript records.
 The session Agent can hand separable pieces of work to delegates that run in
 their own context, in the background, and report back on demand.
 
+**Unified scheduling policy.** Settings → Subagents → Scheduling stores optional
+`AppSettings.delegation` version 1. Its model rows identify exact provider/model
+pairs, enabled state, priority 1–100 (lower first; ties allowed), `auto | ask`
+approval, and selection guidance up to 1000 characters. The pool contains at most
+128 unique pairs. `approvalTimeoutSeconds` is an integer 0–300; zero skips
+approval-required candidates for unattended work. Invalid settings are rejected
+by Host without overwriting the saved policy. Until the first save, the legacy
+opt-ins and definition defaults described below remain unchanged. After save,
+the enabled pool governs defaults, explicit choices, pins, resume and fallback;
+the legacy model checkbox becomes a link to this single source of policy.
+
+Task's tool declaration carries both role and model selection guidance on every
+provider request. `modelReason` explains specialist selection ahead of a preferred
+tier. `modelSelection: prefer | require` defaults to prefer; require never
+substitutes another model. Optional `minContextWindow` and `requiresImages` filter
+candidates before approval. These model-authored fields do not grant permission.
+Natural-language model choices continue through `Task.model`; when the chosen
+model requires approval, only the host's human UI decision grants it.
+
+The independent host model gate applies even in Auto mode and rereads policy
+before use and after waiting. Approval is scoped to this invocation and model;
+resume needs fresh authorization. Expiry/unavailable UI skips the candidate and
+permits an authorized alternative within the same Task. Explicit cancellation
+and Stop do not authorize fallback; stale approvals never revive work. Provider
+fallback keeps successful tool history and checks the next model before any
+request. `Task` results and settlement snapshots record requested model and
+selection/skip reasons in additive `scheduling` details. Main conversation model
+selection and ordinary tool permissions are unchanged. Plugin collaboration
+uses the same model gate; an existing target session is not silently rebound.
+See [the scheduling ADR](../../adr/delegation-scheduling-and-approval.md).
+
+The remaining legacy selection/fallback rules below apply when no unified
+policy has been saved; under a saved policy, its membership and approval rules
+take precedence.
+
 **Catalog.** Definitions are Markdown documents from two sources: the five
 builtins shipped inline in `agent-runtime` (`explorer`, `code-reviewer`,
 `test-runner`, `fixer`, `ui-designer`) and the global user documents under

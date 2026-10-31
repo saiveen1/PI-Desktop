@@ -1,6 +1,10 @@
 import { en, type EnglishCatalog } from "../en/index.js";
 
 export const zhCN = {
+  delegationApproval: {
+    label: "子代理模型审批", title: "批准本次使用的模型", reason: "选择理由",
+    allowOnce: "仅允许本次", useOther: "改用其他模型", cancel: "取消本次委派",
+  },
   worktree: {
     menu: { group: "Git" },
     newIsolatedSession: "新建隔离会话",
@@ -810,6 +814,36 @@ export const zhCN = {
     dismiss: "关闭",
   },
   settings: {
+    delegationRoles: "角色",
+    delegationScheduling: "调度",
+    delegationOpenScheduling: "配置子智能体调度",
+    delegationScopeHelp: "角色定义任务、工具和指令。调度独立控制 AI 通过 Task、工作会话和插件智能体可委派使用的模型。",
+    delegationLegacyHelp: "保存前仍沿用旧行为，下方已带入原有模型授权。首次保存将为所有委派入口启用此策略；角色固定模型和默认模型也必须在此列表中启用。",
+    delegationActiveHelp: "此策略适用于所有委派入口，角色固定模型和默认模型也须在此启用。移除或禁用全部模型会停止自动委派。",
+    delegationSelectionHelp: "仍支持在策略范围内指定模型。指定模型不能绕过审批；无法审批时绝不自动使用需审批模型，可改用已获授权的替代模型。",
+    delegationWait: "审批等待时间（秒）",
+    delegationWaitHelp: "等待审批 0–300 秒。设为 0 可在无人值守时跳过需审批的模型。审批超时或不可用均不代表授权。",
+    delegationAddModel: "添加模型",
+    delegationChooseModel: "选择已配置的模型",
+    delegationEmpty: "尚无调度模型。如需自动委派，请先添加已配置的模型再保存。",
+    delegationRemoveModel: "从调度中移除 {{name}}",
+    delegationEnabled: "可参与调度",
+    delegationEnableModel: "启用 {{name}} 的调度",
+    delegationPriority: "优先级",
+    delegationPriorityHelp: "范围 1–100，数字越小越优先。相同优先级构成同一梯队，AI 可按任务匹配度选择。",
+    delegationModelPriority: "{{name}} 的优先级",
+    delegationApproval: "审批",
+    delegationApprovalHelp: "昂贵或敏感模型建议每次审批。新添加模型默认需要审批；仅对已授权无需询问的模型选择自动使用。",
+    delegationModelApproval: "{{name}} 的审批方式",
+    delegationAsk: "每次询问",
+    delegationAuto: "允许自动使用",
+    delegationDescription: "模型选择说明",
+    delegationDescriptionHelp: "最多 1,000 字符，描述优势、成本或适合的任务。每次 Task 都会附带此模型选择说明，与角色描述分开；此文本不授予权限。",
+    delegationModelDescription: "{{name}} 的模型选择说明",
+    delegationUnavailable: "此提供商或模型不可用，已保留引用。请重新配置提供商或移除此项。",
+    delegationInvalid: "优先级须为 1–100 的整数，等待时间须为 0–300 的整数秒，说明最多 1,000 字符。",
+    delegationSaved: "调度设置已保存。",
+    delegationSaveFailed: "无法保存调度设置，编辑内容已保留。{{error}}",
     storage: {
       unavailableHint: "保存目录暂时不可用。请重新连接磁盘后启动；应用不会创建空白数据或切换到其他目录。",
       browserSource: "浏览器数据来源",

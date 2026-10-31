@@ -1,6 +1,10 @@
 import { en, type EnglishCatalog } from "../en/index.js";
 
 export const fr = {
+  delegationApproval: {
+    label: "Approbation de délégation", title: "Approuver le modèle délégué", reason: "Motif de sélection",
+    allowOnce: "Autoriser une fois", useOther: "Utiliser un autre modèle", cancel: "Annuler la délégation",
+  },
   "worktree": {
     "menu": { "group": "Git" },
     "newIsolatedSession": "Nouvelle session isolée",
@@ -805,6 +809,36 @@ export const fr = {
     "dismiss": "Ignorer"
   },
   "settings": {
+    delegationRoles: "Rôles",
+    delegationScheduling: "Ordonnancement",
+    delegationOpenScheduling: "Configurer l’ordonnancement des sous-agents",
+    delegationScopeHelp: "Les rôles définissent les tâches, les outils et les instructions. L’ordonnancement contrôle séparément les modèles que l’IA peut utiliser via Task, les sessions de travail et les agents de plugins.",
+    delegationLegacyHelp: "Le comportement précédent reste actif jusqu’à l’enregistrement. Les modèles déjà autorisés figurent ci-dessous. Le premier enregistrement active cette politique pour toutes les voies de délégation ; même les modèles épinglés aux rôles et les modèles par défaut doivent être activés dans cette liste.",
+    delegationActiveHelp: "Cette politique s’applique à toutes les voies de délégation. Les modèles épinglés aux rôles et les modèles par défaut doivent aussi avoir une entrée activée ici. Supprimer ou désactiver tous les modèles arrête la délégation automatique.",
+    delegationSelectionHelp: "Vos choix de modèles restent possibles dans le cadre de cette politique. Demander un modèle ne contourne jamais l’approbation. Si elle est indisponible, les modèles exigeant une approbation ne sont jamais utilisés automatiquement ; une alternative autorisée peut être utilisée.",
+    delegationWait: "Attente d’approbation (secondes)",
+    delegationWaitHelp: "Attendre l’approbation pendant 0 à 300 secondes. Avec 0, les modèles exigeant une approbation sont ignorés sans surveillance. Une approbation expirée ou indisponible n’autorise jamais le modèle.",
+    delegationAddModel: "Ajouter un modèle",
+    delegationChooseModel: "Choisir un modèle configuré",
+    delegationEmpty: "Aucun modèle d’ordonnancement. Ajoutez des modèles configurés avant d’enregistrer pour permettre la délégation automatique.",
+    delegationRemoveModel: "Retirer {{name}} de l’ordonnancement",
+    delegationEnabled: "Disponible pour l’ordonnancement",
+    delegationEnableModel: "Activer l’ordonnancement pour {{name}}",
+    delegationPriority: "Priorité",
+    delegationPriorityHelp: "De 1 à 100 ; les petits nombres sont prioritaires. Les modèles de même priorité forment un niveau. L’IA peut choisir le plus adapté à la tâche dans ce niveau.",
+    delegationModelPriority: "Priorité de {{name}}",
+    delegationApproval: "Approbation",
+    delegationApprovalHelp: "Exigez une approbation pour les modèles coûteux ou sensibles. Les nouvelles entrées l’exigent par défaut. N’autorisez l’usage automatique que pour les modèles utilisables sans vous consulter.",
+    delegationModelApproval: "Approbation pour {{name}}",
+    delegationAsk: "Demander à chaque fois",
+    delegationAuto: "Autoriser automatiquement",
+    delegationDescription: "Conseils de sélection du modèle",
+    delegationDescriptionHelp: "Jusqu’à 1 000 caractères sur les points forts, le coût ou les tâches adaptées. Ces conseils accompagnent chaque Task, séparément des descriptions de rôles. Ce texte n’accorde aucune permission.",
+    delegationModelDescription: "Conseils de sélection pour {{name}}",
+    delegationUnavailable: "Ce fournisseur ou modèle est indisponible. La référence enregistrée est conservée ; reconfigurez le fournisseur ou supprimez cette entrée.",
+    delegationInvalid: "Utilisez des priorités entières de 1 à 100, une attente entière de 0 à 300 secondes et des descriptions de 1 000 caractères maximum.",
+    delegationSaved: "Paramètres d’ordonnancement enregistrés.",
+    delegationSaveFailed: "Impossible d’enregistrer l’ordonnancement. Vos modifications sont conservées. {{error}}",
     storage: {
       unavailableHint: "Le dossier de stockage est actuellement indisponible. Reconnectez le disque avant de démarrer ; l’application ne créera pas de données vides et ne changera pas de dossier.",
       browserSource: "Source des données du navigateur",

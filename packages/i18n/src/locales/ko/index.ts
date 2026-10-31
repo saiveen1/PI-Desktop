@@ -1,6 +1,10 @@
 import { en, type EnglishCatalog } from "../en/index.js";
 
 export const ko = {
+  delegationApproval: {
+    label: "위임 승인", title: "위임 모델 승인", reason: "선택 이유",
+    allowOnce: "이번만 허용", useOther: "다른 모델 사용", cancel: "위임 취소",
+  },
   worktree: {
     menu: { group: "Git" },
     newIsolatedSession: "새 격리 세션",
@@ -814,6 +818,36 @@ export const ko = {
     dismiss: "닫기",
   },
   settings: {
+    delegationRoles: "역할",
+    delegationScheduling: "스케줄링",
+    delegationOpenScheduling: "하위 에이전트 스케줄링 설정",
+    delegationScopeHelp: "역할은 작업, 도구, 지침을 정의합니다. 스케줄링은 AI가 Task, 작업자 세션, 플러그인 에이전트를 통해 위임할 수 있는 모델을 별도로 제어합니다.",
+    delegationLegacyHelp: "저장하기 전까지 기존 동작이 유지되며, 기존에 허용한 모델이 아래에 표시됩니다. 처음 저장하면 모든 위임 경로에 이 정책이 적용됩니다. 역할에 고정된 모델과 기본 모델도 이 목록에서 활성화되어야 합니다.",
+    delegationActiveHelp: "이 정책은 모든 위임 경로에 적용됩니다. 역할에 고정된 모델과 기본 모델도 여기에 활성 항목이 필요합니다. 모든 모델을 제거하거나 비활성화하면 자동 위임이 중지됩니다.",
+    delegationSelectionHelp: "정책 범위 안에서 사용자가 지정한 모델을 계속 사용할 수 있습니다. 모델 지정으로 승인을 우회할 수 없습니다. 승인이 불가능하면 승인 전용 모델을 자동 사용하지 않고 허용된 대체 모델을 사용할 수 있습니다.",
+    delegationWait: "승인 대기 시간(초)",
+    delegationWaitHelp: "승인을 0~300초 기다립니다. 무인 작업에서 승인 전용 모델을 건너뛰려면 0으로 설정하세요. 시간 초과나 승인 불가는 사용 허가가 아닙니다.",
+    delegationAddModel: "모델 추가",
+    delegationChooseModel: "설정된 모델 선택",
+    delegationEmpty: "스케줄링 모델이 없습니다. 자동 위임을 사용하려면 저장 전에 설정된 모델을 추가하세요.",
+    delegationRemoveModel: "스케줄링에서 {{name}} 제거",
+    delegationEnabled: "스케줄링에 사용",
+    delegationEnableModel: "{{name}} 스케줄링 활성화",
+    delegationPriority: "우선순위",
+    delegationPriorityHelp: "1~100 사이에서 작은 숫자가 우선입니다. 같은 우선순위의 모델은 동일한 그룹을 이루며 AI가 작업에 가장 적합한 모델을 선택합니다.",
+    delegationModelPriority: "{{name}} 우선순위",
+    delegationApproval: "승인",
+    delegationApprovalHelp: "비용이 크거나 민감한 모델에는 승인을 요구하세요. 새 항목은 기본적으로 승인이 필요합니다. 묻지 않고 사용하도록 허용한 모델만 자동 사용을 선택하세요.",
+    delegationModelApproval: "{{name}} 승인 방식",
+    delegationAsk: "매번 묻기",
+    delegationAuto: "자동 사용 허용",
+    delegationDescription: "모델 선택 안내",
+    delegationDescriptionHelp: "강점, 비용, 적합한 작업을 최대 1,000자로 설명하세요. 역할 설명과 별도로 모든 Task에 모델 선택 안내로 제공됩니다. 이 텍스트는 권한을 부여하지 않습니다.",
+    delegationModelDescription: "{{name}} 모델 선택 안내",
+    delegationUnavailable: "이 제공자 또는 모델을 사용할 수 없습니다. 저장된 참조는 유지됩니다. 제공자를 다시 설정하거나 이 항목을 제거하세요.",
+    delegationInvalid: "우선순위는 1~100의 정수, 대기 시간은 0~300의 정수 초, 설명은 최대 1,000자를 사용하세요.",
+    delegationSaved: "스케줄링 설정을 저장했습니다.",
+    delegationSaveFailed: "스케줄링 설정을 저장하지 못했습니다. 편집 내용은 유지됩니다. {{error}}",
     storage: {
       unavailableHint: "저장 폴더를 현재 사용할 수 없습니다. 드라이브를 다시 연결한 후 시작하세요. 앱은 빈 데이터를 생성하거나 다른 폴더로 전환하지 않습니다.",
       browserSource: "브라우저 데이터 원본",

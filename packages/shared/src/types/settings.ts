@@ -40,6 +40,8 @@ export type CloseBehavior = "ask" | "tray" | "quit";
 export type TranscriptDisplayMode = "flat" | "command-first" | "fully-folded";
 
 export type AppSettings = {
+  /** Unified AI delegation policy. Absent preserves legacy model opt-ins and pins. */
+  delegation?: import("../delegation-policy.js").DelegationSettings;
   imageGeneration?: import("../image-generation.js").ImageGenerationBinding | null;
   /** All models marked for image generation; absent falls back to imageGeneration. */
   imageGenerationModels?: import("../image-generation.js").ImageGenerationBinding[] | null;

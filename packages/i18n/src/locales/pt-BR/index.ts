@@ -1,6 +1,10 @@
 import { en, type EnglishCatalog } from "../en/index.js";
 
 export const ptBR = {
+  delegationApproval: {
+    label: "Aprovação de delegação", title: "Aprovar modelo delegado", reason: "Motivo da seleção",
+    allowOnce: "Permitir uma vez", useOther: "Usar outro modelo", cancel: "Cancelar delegação",
+  },
   worktree: {
     menu: { group: "Git" },
     newIsolatedSession: "Nova sessão isolada",
@@ -804,6 +808,36 @@ export const ptBR = {
     dismiss: "Dispensar"
   },
   settings: {
+    delegationRoles: "Funções",
+    delegationScheduling: "Escalonamento",
+    delegationOpenScheduling: "Configurar escalonamento de subagentes",
+    delegationScopeHelp: "As funções definem tarefas, ferramentas e instruções. O escalonamento controla separadamente quais modelos a IA pode usar para delegar por Task, sessões de trabalho e agentes de plugins.",
+    delegationLegacyHelp: "O comportamento anterior permanece até você salvar. Os modelos já autorizados aparecem abaixo. O primeiro salvamento ativa esta política em todas as rotas de delegação; até os modelos fixados nas funções e os modelos padrão precisam estar habilitados nesta lista.",
+    delegationActiveHelp: "Esta política vale para todas as rotas de delegação. Modelos fixados nas funções e modelos padrão também precisam de uma entrada habilitada aqui. Remover ou desabilitar todos os modelos interrompe a delegação automática.",
+    delegationSelectionHelp: "Suas escolhas de modelo continuam disponíveis dentro desta política. Solicitar um modelo nunca dispensa aprovação. Se não for possível aprovar, modelos que exigem aprovação nunca são usados automaticamente; uma alternativa autorizada pode ser usada.",
+    delegationWait: "Espera por aprovação (segundos)",
+    delegationWaitHelp: "Aguarde de 0 a 300 segundos pela aprovação. Use 0 para ignorar modelos que exigem aprovação durante trabalho sem supervisão. Aprovação indisponível ou expirada nunca autoriza o modelo.",
+    delegationAddModel: "Adicionar modelo",
+    delegationChooseModel: "Escolher um modelo configurado",
+    delegationEmpty: "Nenhum modelo para escalonamento. Adicione modelos configurados antes de salvar para permitir delegação automática.",
+    delegationRemoveModel: "Remover {{name}} do escalonamento",
+    delegationEnabled: "Disponível para escalonamento",
+    delegationEnableModel: "Habilitar escalonamento para {{name}}",
+    delegationPriority: "Prioridade",
+    delegationPriorityHelp: "Use de 1 a 100; números menores têm preferência. Modelos com a mesma prioridade formam um nível. A IA pode escolher o mais adequado à tarefa dentro desse nível.",
+    delegationModelPriority: "Prioridade de {{name}}",
+    delegationApproval: "Aprovação",
+    delegationApprovalHelp: "Exija aprovação para modelos caros ou sensíveis. Novas entradas exigem aprovação por padrão. Permita uso automático apenas para modelos autorizados sem consulta.",
+    delegationModelApproval: "Aprovação de {{name}}",
+    delegationAsk: "Perguntar sempre",
+    delegationAuto: "Permitir automaticamente",
+    delegationDescription: "Orientação para escolha do modelo",
+    delegationDescriptionHelp: "Até 1.000 caracteres sobre pontos fortes, custo ou tarefas adequadas. Fornecida em cada Task como orientação para escolha do modelo, separada das descrições de função. Este texto não concede permissão.",
+    delegationModelDescription: "Orientação para escolha de {{name}}",
+    delegationUnavailable: "Este provedor ou modelo está indisponível. A referência salva é mantida; configure o provedor novamente ou remova esta entrada.",
+    delegationInvalid: "Use prioridades inteiras de 1 a 100, uma espera inteira de 0 a 300 segundos e descrições de até 1.000 caracteres.",
+    delegationSaved: "Configurações de escalonamento salvas.",
+    delegationSaveFailed: "Não foi possível salvar o escalonamento. Suas alterações foram preservadas. {{error}}",
     storage: {
       unavailableHint: "O diretório de armazenamento está indisponível no momento. Reconecte a unidade antes de iniciar; o aplicativo não criará dados vazios nem mudará para outro diretório.",
       browserSource: "Origem dos dados do navegador",

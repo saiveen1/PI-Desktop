@@ -22,11 +22,12 @@ function load(relative, imports, globals = {}) {
   return module.exports;
 }
 
-const shared = { ErrorCodes, IPC, IPC_WHITELIST };
+const shared = { ErrorCodes, IPC, IPC_WHITELIST, ...load("../../../packages/shared/src/delegation-policy.ts", {}) };
 const collaboration = load("../electron/main/services/session-collaboration.ts", {
   "node:crypto": crypto,
   "../agent-host-bridge": {},
   "../plugin-agent-complete": {},
+  "@pi-desktop/shared": shared,
 });
 const { registerSessionIpc } = load("../electron/main/ipc/session-ipc.ts", {
   electron: { shell: {} },

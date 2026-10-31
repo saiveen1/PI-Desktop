@@ -62,6 +62,7 @@ export type AgentHostBridgeOptions = {
   /** Renderer fan-out for queue changes (`agent/event/queueChanged`). */
   onQueueChange?: (event: AgentQueueChangedEvent) => void;
   log: (level: "info" | "warn", message: string, data?: Record<string, unknown>) => void;
+  authorizeCollaborationDispatch?: (sessionId: string, messageId: string, content: string) => Promise<void>;
 };
 
 /** The local desktop: the SSH-paired owner device of its own Host. */
@@ -101,9 +102,16 @@ export function createAgentHostBridge(options: AgentHostBridgeOptions) {
     return host;
   };
 
+  const authorizeCollaboration = async (request: Pick<TurnStartRequest, "sessionId" | "sessionMessageId" | "content">) => {
+    if (!request.sessionMessageId) return;
+    if (!options.authorizeCollaborationDispatch) throw new RacpError("FORBIDDEN", "Delegation authorization unavailable");
+    await options.authorizeCollaborationDispatch(request.sessionId, request.sessionMessageId, request.content);
+  };
+
   const runtime: RuntimePort = {
     async prompt(request: TurnStartRequest) {
       try {
+        await authorizeCollaboration(request);
         const summary = await sessions.get(request.sessionId);
         // A per-turn ceiling that would WIDEN the session's stored mode is a
         // real escalation attempt — e.g. a remote viewer whose principal is
@@ -174,6 +182,7 @@ export function createAgentHostBridge(options: AgentHostBridgeOptions) {
      */
     async steer(request: TurnSteerRequest) {
       try {
+        await authorizeCollaboration(request);
         const result = (await options.invoke(options.channels.agentSteer, [
           {
             sessionId: request.sessionId,

@@ -1,4 +1,4 @@
-import { IPC, type AgentEventEnvelope, type UiMessage } from "@pi-desktop/shared";
+import { IPC, isDelegationSettings, type AppSettings, type DelegationApprovalRequest, type DelegationApprovalDecision, type AgentEventEnvelope, type UiMessage } from "@pi-desktop/shared";
 import {
   findSubagentProviderSource,
   modelConfigWithBinding,
@@ -66,6 +66,8 @@ export type SidecarRuntimeDependencies = {
   disabledBuiltinSkills: () => Promise<string[]>;
   pluginActiveInProject: (pluginId: string, projectPath: string | null | undefined) => boolean;
   currentNetworkProxy: () => any;
+  authorizeDelegation: (request: DelegationApprovalRequest) => Promise<DelegationApprovalDecision>;
+  cancelDelegationApproval: (request: Pick<DelegationApprovalRequest, "sessionId" | "requestId">) => void;
 };
 
 export function createSidecarRuntime({
@@ -97,6 +99,8 @@ export function createSidecarRuntime({
   disabledBuiltinSkills,
   pluginActiveInProject,
   currentNetworkProxy,
+  authorizeDelegation,
+  cancelDelegationApproval,
 }: SidecarRuntimeDependencies): {
   emitAgentEvent: (envelope: AgentEventEnvelope) => void;
   wireSidecar: (sidecar: AgentSidecar) => void;
@@ -185,6 +189,7 @@ export function createSidecarRuntime({
     }
   };
   const wireSidecar = (s: AgentSidecar) => {
+  s.setDelegationAuthorizer(authorizeDelegation, cancelDelegationApproval);
 
   s.onNotification((method, params) => {
     if (method === "native.agent.event") {
@@ -486,17 +491,29 @@ export function createSidecarRuntime({
     const modelId = key.slice(slash + 1);
     if (!modelId) throw new Error("empty model id");
 
-    const allProviders = await listRuntimeProviders(false);
-    const provider = findSubagentProviderSource(providerPart, allProviders);
+    const [allProviders, settings] = await Promise.all([
+      listRuntimeProviders(false),
+      runtimeState.host!.call<AppSettings>("settings.get"),
+    ]);
+    if (settings.delegation !== undefined && !isDelegationSettings(settings.delegation)) {
+      throw new Error("Invalid delegation policy");
+    }
+    const provider = settings.delegation !== undefined
+      ? allProviders.find((row) => row.id === providerPart && row.enabled !== false)
+      : findSubagentProviderSource(providerPart, allProviders);
     if (!provider) {
       throw new Error(subagentProviderLookupError(providerPart, allProviders));
     }
 
-    // Check if the model has availableForSubagents enabled
+    // Unified policy uses exact configured identities, including an unbound default model.
     const binding = provider.models?.find(
-      (m: any) => m.id === modelId || m.id.toLowerCase() === modelId.toLowerCase(),
-    );
-    if (!binding?.availableForSubagents) {
+      (m: { id: string }) => m.id === modelId || (settings.delegation === undefined && m.id.toLowerCase() === modelId.toLowerCase()),
+    ) ?? (settings.delegation !== undefined && !provider.models?.length && provider.defaultModelId === modelId
+      ? { id: modelId } : undefined);
+    const allowed = settings.delegation !== undefined
+      ? settings.delegation.models.some((row) => row.enabled && row.providerId === provider.id && row.modelId === modelId)
+      : binding?.availableForSubagents;
+    if (!binding || !allowed) {
       throw new Error(
         `model "${modelId}" on provider "${provider.name}" is not enabled for delegation`,
       );

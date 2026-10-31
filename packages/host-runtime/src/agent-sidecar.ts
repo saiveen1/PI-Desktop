@@ -2,6 +2,10 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { DEFAULT_RPC_TIMEOUT_MS, IMAGE_BATCH_TIMEOUT_MS, imageGenerationPrompts, readNdjsonLines, rpcTimeoutMs, rpcErrorFromWire, rpcErrorToWire } from "@pi-desktop/shared";
 import type { ProcessExitHandler, StderrHandler } from "./host-process.js";
+import type { DelegationApprovalRequest, DelegationApprovalDecision } from "@pi-desktop/shared";
+
+export type DelegationAuthorizer = (request: DelegationApprovalRequest) => Promise<DelegationApprovalDecision>;
+export type DelegationApprovalCanceller = (request: Pick<DelegationApprovalRequest, "sessionId" | "requestId">) => void;
 
 // stderr lines kept per sidecar so an unexpected exit can be reported with the
 // process's last words instead of a bare "agent sidecar exited".
@@ -69,6 +73,8 @@ const HOST_PROXY_ALLOWED = new Set([
   "project.instructions.resolve",
   "provider.resolveAuth",
   "provider.resolveSubagentModel",
+  "provider.authorizeDelegation",
+  "provider.cancelDelegationApproval",
   "app.health",
   // Trusted extensions (D387): answered by the embedding host, plus the
   // session methods the ExtensionAPI reaches (spec 16 §10.1).
@@ -158,6 +164,9 @@ export class AgentSidecar {
   private projectInstructionRoots = new Map<string, string>();
   private vendorAuthResolver: VendorAuthResolver | null = null;
   private trustedExtensionBridge: TrustedExtensionSidecarBridge | null = null;
+  private delegationAuthorizer: DelegationAuthorizer | null = null;
+  private delegationApprovalCanceller: DelegationApprovalCanceller | null = null;
+  private delegationApprovals = new Map<string, Pick<DelegationApprovalRequest, "sessionId" | "requestId">>();
   // Vendor-account rows this session was launched with. The sidecar can only
   // ask for auth it is already using, and a session that never bound an OAuth
   // row can ask for nothing at all.
@@ -219,6 +228,8 @@ export class AgentSidecar {
     this.localToolTimers.clear();
     for (const controller of this.localToolControllers.values()) controller.abort();
     this.localToolControllers.clear();
+    for (const request of this.delegationApprovals.values()) this.delegationApprovalCanceller?.(request);
+    this.delegationApprovals.clear();
     this.handlers.clear();
     this.stdoutReader?.close();
     this.stdoutReader = undefined;
@@ -416,6 +427,24 @@ export class AgentSidecar {
     return this.vendorAuthResolver({ sessionId, providerId });
   }
 
+  setDelegationAuthorizer(authorize: DelegationAuthorizer, cancel: DelegationApprovalCanceller): void {
+    this.delegationAuthorizer = authorize;
+    this.delegationApprovalCanceller = cancel;
+  }
+
+  private async authorizeDelegation(params: Record<string, unknown>): Promise<DelegationApprovalDecision> {
+    const valid = [params.sessionId, params.requestId, params.providerId, params.modelId, params.task]
+      .every((value) => typeof value === "string" && value.trim().length > 0)
+      && (params.reason === undefined || typeof params.reason === "string");
+    if (!valid || !this.delegationAuthorizer) return { decision: "skip", reason: "Delegation authorization unavailable" };
+    const request = params as DelegationApprovalRequest;
+    const key = JSON.stringify([request.sessionId, request.requestId]);
+    if (this.delegationApprovals.has(key)) return { decision: "skip", reason: "Duplicate delegation approval" };
+    this.delegationApprovals.set(key, request);
+    try { return await this.delegationAuthorizer(request); }
+    finally { if (this.delegationApprovals.get(key) === request) this.delegationApprovals.delete(key); }
+  }
+
   /**
    * On-demand subagent model resolution. The runtime calls this when the
    * parent agent passes a `model` override on Task that was not statically
@@ -506,6 +535,17 @@ export class AgentSidecar {
           this.writeToChild(
             JSON.stringify({ jsonrpc: "2.0", id: msg.id, result }) + "\n",
           );
+          return;
+        }
+        if (method === "provider.authorizeDelegation" || method === "provider.cancelDelegationApproval") {
+          let result: unknown;
+          if (method === "provider.authorizeDelegation") result = await this.authorizeDelegation(params);
+          else {
+            if (typeof params.sessionId !== "string" || typeof params.requestId !== "string") throw new Error("Invalid delegation cancellation");
+            this.delegationApprovalCanceller?.({ sessionId: params.sessionId, requestId: params.requestId });
+            result = { ok: true };
+          }
+          this.writeToChild(JSON.stringify({ jsonrpc: "2.0", id: msg.id, result }) + "\n");
           return;
         }
         if (method === "provider.resolveAuth") {
@@ -611,6 +651,11 @@ export class AgentSidecar {
 
   async call<T = unknown>(method: string, params: unknown = {}): Promise<T> {
     if (this.closed) throw new Error("agent sidecar is unavailable");
+    if ((method === "agent.abort" || method === "agent.stop") && params && typeof params === "object" && "sessionId" in params) {
+      for (const request of this.delegationApprovals.values()) {
+        if (request.sessionId === params.sessionId) this.delegationApprovalCanceller?.(request);
+      }
+    }
     const id = randomUUID();
     const timeoutMs = rpcTimeoutMs(method, params);
     const payload = JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n";

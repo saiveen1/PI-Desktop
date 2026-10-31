@@ -1,6 +1,10 @@
 import { en, type EnglishCatalog } from "../en/index.js";
 
 export const es = {
+  delegationApproval: {
+    label: "Aprobación de delegación", title: "Aprobar modelo delegado", reason: "Motivo de selección",
+    allowOnce: "Permitir una vez", useOther: "Usar otro modelo", cancel: "Cancelar delegación",
+  },
   "worktree": {
     "menu": { "group": "Git" },
     "newIsolatedSession": "Nueva sesión aislada",
@@ -805,6 +809,36 @@ export const es = {
     "dismiss": "Descartar"
   },
   "settings": {
+    delegationRoles: "Roles",
+    delegationScheduling: "Planificación",
+    delegationOpenScheduling: "Configurar la planificación de subagentes",
+    delegationScopeHelp: "Los roles definen tareas, herramientas e instrucciones. La planificación controla por separado qué modelos puede usar la IA para delegar mediante Task, sesiones de trabajo y agentes de complementos.",
+    delegationLegacyHelp: "El comportamiento anterior sigue activo hasta que guardes. Los modelos ya autorizados aparecen abajo. El primer guardado activa esta política en todas las rutas de delegación; incluso los modelos fijados en roles y los predeterminados deben estar habilitados en esta lista.",
+    delegationActiveHelp: "Esta política se aplica a todas las rutas de delegación. Los modelos fijados en roles y los predeterminados también necesitan una entrada habilitada aquí. Eliminar o deshabilitar todos los modelos detiene la delegación automática.",
+    delegationSelectionHelp: "Tus elecciones de modelo siguen disponibles dentro de esta política. Solicitar un modelo nunca evita la aprobación. Si no se puede obtener, los modelos que la exigen nunca se usan automáticamente; se puede usar una alternativa autorizada.",
+    delegationWait: "Espera de aprobación (segundos)",
+    delegationWaitHelp: "Espera entre 0 y 300 segundos para la aprobación. Usa 0 para omitir los modelos que la exigen durante el trabajo desatendido. Una aprobación caducada o no disponible nunca autoriza el modelo.",
+    delegationAddModel: "Añadir modelo",
+    delegationChooseModel: "Elegir un modelo configurado",
+    delegationEmpty: "No hay modelos de planificación. Añade modelos configurados antes de guardar para permitir la delegación automática.",
+    delegationRemoveModel: "Quitar {{name}} de la planificación",
+    delegationEnabled: "Disponible para planificación",
+    delegationEnableModel: "Habilitar planificación para {{name}}",
+    delegationPriority: "Prioridad",
+    delegationPriorityHelp: "De 1 a 100; los números menores tienen preferencia. Los modelos con la misma prioridad forman un nivel. La IA puede elegir el más adecuado para la tarea dentro de ese nivel.",
+    delegationModelPriority: "Prioridad de {{name}}",
+    delegationApproval: "Aprobación",
+    delegationApprovalHelp: "Exige aprobación para modelos caros o sensibles. Las nuevas entradas la requieren por defecto. Permite el uso automático solo para modelos autorizados sin consulta.",
+    delegationModelApproval: "Aprobación de {{name}}",
+    delegationAsk: "Preguntar siempre",
+    delegationAuto: "Permitir automáticamente",
+    delegationDescription: "Guía de selección del modelo",
+    delegationDescriptionHelp: "Hasta 1.000 caracteres sobre fortalezas, coste o tareas adecuadas. Se incluye en cada Task como guía de selección, separada de las descripciones de roles. Este texto no concede permisos.",
+    delegationModelDescription: "Guía de selección de {{name}}",
+    delegationUnavailable: "Este proveedor o modelo no está disponible. Se conserva la referencia guardada; configura el proveedor de nuevo o elimina esta entrada.",
+    delegationInvalid: "Usa prioridades enteras de 1 a 100, una espera entera de 0 a 300 segundos y descripciones de hasta 1.000 caracteres.",
+    delegationSaved: "Configuración de planificación guardada.",
+    delegationSaveFailed: "No se pudo guardar la planificación. Se conservan tus cambios. {{error}}",
     storage: {
       unavailableHint: "El directorio de almacenamiento no está disponible. Vuelve a conectar la unidad antes de iniciar; la aplicación no creará datos vacíos ni cambiará a otro directorio.",
       browserSource: "Origen de los datos del navegador",

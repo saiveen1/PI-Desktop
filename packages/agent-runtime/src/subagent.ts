@@ -159,6 +159,8 @@ export type SubagentRunOptions = {
   thinkingLevel: SubagentThinkingLevel;
   /** User-owned definition pins only, in configured order. Missing bindings fail visibly. */
   fallbackModels?: Array<{ key: string; provider?: RuntimeProviderConfig }>;
+  /** Mandatory per-model authorization before a fallback sends any request. */
+  authorizeModel?: (provider: RuntimeProviderConfig, signal: AbortSignal) => Promise<boolean>;
   /** Original parent thinking selection, before primary-model clamping. */
   inheritedThinkingLevel?: SubagentThinkingLevel;
   onModelChange?: (provider: RuntimeProviderConfig, thinkingLevel: SubagentThinkingLevel) => void;
@@ -396,7 +398,7 @@ export class SubagentRun {
       while (!signal?.aborted) {
         if (this.pendingProviderRetry) {
           await this.retryPendingProviderFailure();
-        } else if (this.streamError && this.useNextModel()) {
+        } else if (this.streamError && await this.useNextModel()) {
           await this.agent.continue();
           await this.agent.waitForIdle();
         } else {
@@ -555,7 +557,7 @@ export class SubagentRun {
   }
 
   /** Continue the same agent at the failed request; never replay completed tools. */
-  private useNextModel(): boolean {
+  private async useNextModel(): Promise<boolean> {
     // An aborted turn never continues, whether the signal flipped yet or the
     // cancel was only visible on the settled message.
     if (this.runSignal().aborted || this.turnAborted || !this.streamError || this.streamError.code === "TURN_ABORTED") return false;
@@ -596,6 +598,11 @@ export class SubagentRun {
         });
         continue;
       }
+      if (this.opts.authorizeModel && !await this.opts.authorizeModel(next.provider, this.runSignal())) {
+        this.recordModelFailure(identity, { code: "MODEL_NOT_AUTHORIZED", message: "The alternative model was not authorized for this delegation." });
+        continue;
+      }
+      if (this.runSignal().aborted) return false;
       this.provider = next.provider;
       this.thinkingLevel = thinking;
       this.agent.state.model = binding.model;

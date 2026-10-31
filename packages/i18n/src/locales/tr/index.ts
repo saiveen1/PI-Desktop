@@ -1,6 +1,10 @@
 import { en, type EnglishCatalog } from "../en/index.js";
 
 export const tr = {
+  delegationApproval: {
+    label: "Yetkilendirme onayı", title: "Görevlendirilen modeli onayla", reason: "Seçim nedeni",
+    allowOnce: "Bir kez izin ver", useOther: "Başka model kullan", cancel: "Görevlendirmeyi iptal et",
+  },
   worktree: {
     menu: { group: "Git" },
     newIsolatedSession: "Yeni yalıtılmış oturum",
@@ -814,6 +818,36 @@ export const tr = {
     dismiss: "Kapat",
   },
   settings: {
+    delegationRoles: "Roller",
+    delegationScheduling: "Zamanlama",
+    delegationOpenScheduling: "Alt ajan zamanlamasını yapılandır",
+    delegationScopeHelp: "Roller görevleri, araçları ve talimatları tanımlar. Zamanlama, yapay zekânın Task, çalışan oturumları ve eklenti ajanları üzerinden kullanabileceği modelleri ayrı olarak denetler.",
+    delegationLegacyHelp: "Kaydedene kadar eski davranış geçerlidir. Önceden izin verilen modeller aşağıda gösterilir. İlk kayıt bu ilkeyi tüm görevlendirme yollarında etkinleştirir; role sabitlenmiş modeller ve varsayılan modeller de bu listede etkin olmalıdır.",
+    delegationActiveHelp: "Bu ilke tüm görevlendirme yollarında geçerlidir. Role sabitlenmiş ve varsayılan modeller için de etkin bir kayıt gerekir. Tüm modelleri kaldırmak veya devre dışı bırakmak otomatik görevlendirmeyi durdurur.",
+    delegationSelectionHelp: "Model tercihleriniz bu ilke kapsamında desteklenir. Model belirtmek onayı atlatmaz. Onay alınamıyorsa onay gerektiren model otomatik kullanılmaz; izinli bir alternatif kullanılabilir.",
+    delegationWait: "Onay bekleme süresi (saniye)",
+    delegationWaitHelp: "Onay için 0–300 saniye bekleyin. Gözetimsiz çalışmada onay gerektiren modelleri atlamak için 0 seçin. Sürenin dolması veya onayın alınamaması kullanım izni vermez.",
+    delegationAddModel: "Model ekle",
+    delegationChooseModel: "Yapılandırılmış bir model seçin",
+    delegationEmpty: "Zamanlama modeli yok. Otomatik görevlendirme için kaydetmeden önce yapılandırılmış modeller ekleyin.",
+    delegationRemoveModel: "{{name}} modelini zamanlamadan kaldır",
+    delegationEnabled: "Zamanlamada kullanılabilir",
+    delegationEnableModel: "{{name}} için zamanlamayı etkinleştir",
+    delegationPriority: "Öncelik",
+    delegationPriorityHelp: "1–100 arasında bir değer kullanın; küçük sayılar önceliklidir. Aynı öncelikli modeller aynı gruptadır. Yapay zekâ grup içinde göreve en uygun modeli seçebilir.",
+    delegationModelPriority: "{{name}} için öncelik",
+    delegationApproval: "Onay",
+    delegationApprovalHelp: "Pahalı veya hassas modeller için onay isteyin. Yeni kayıtlar varsayılan olarak onay gerektirir. Otomatik kullanımı yalnızca sormadan kullanılmasına izin verdiğiniz modeller için seçin.",
+    delegationModelApproval: "{{name}} için onay",
+    delegationAsk: "Her seferinde sor",
+    delegationAuto: "Otomatik kullanıma izin ver",
+    delegationDescription: "Model seçimi rehberi",
+    delegationDescriptionHelp: "Güçlü yönleri, maliyeti veya uygun görevleri en fazla 1.000 karakterle açıklayın. Rol açıklamalarından ayrı olarak her Task ile model seçimi rehberi olarak iletilir. Bu metin yetki vermez.",
+    delegationModelDescription: "{{name}} için model seçimi rehberi",
+    delegationUnavailable: "Bu sağlayıcı veya model kullanılamıyor. Kayıtlı başvuru korunur; sağlayıcıyı yeniden yapılandırın veya bu kaydı kaldırın.",
+    delegationInvalid: "Öncelik için 1–100, bekleme süresi için 0–300 arasında tam sayı ve en fazla 1.000 karakterlik açıklama kullanın.",
+    delegationSaved: "Zamanlama ayarları kaydedildi.",
+    delegationSaveFailed: "Zamanlama ayarları kaydedilemedi. Düzenlemeleriniz korundu. {{error}}",
     storage: {
       unavailableHint: "Depolama dizini şu anda kullanılamıyor. Başlatmadan önce sürücüyü yeniden bağlayın; uygulama boş veri oluşturmaz veya başka bir dizine geçmez.",
       browserSource: "Tarayıcı verisi kaynağı",

@@ -1,6 +1,10 @@
 import { en, type EnglishCatalog } from "../en/index.js";
 
 export const zhTW = {
+  delegationApproval: {
+    label: "子代理模型核准", title: "核准本次使用的模型", reason: "選擇理由",
+    allowOnce: "僅允許本次", useOther: "改用其他模型", cancel: "取消本次委派",
+  },
   worktree: {
     menu: { group: "Git" },
     newIsolatedSession: "新增隔離工作階段",
@@ -810,6 +814,36 @@ export const zhTW = {
     dismiss: "關閉",
   },
   settings: {
+    delegationRoles: "角色",
+    delegationScheduling: "排程",
+    delegationOpenScheduling: "設定子智慧體排程",
+    delegationScopeHelp: "角色定義任務、工具和指令。排程獨立控制 AI 透過 Task、工作階段和外掛智慧體可委派使用的模型。",
+    delegationLegacyHelp: "儲存前仍沿用舊行為，下方已帶入原有模型授權。首次儲存將為所有委派入口啟用此原則；角色固定模型和預設模型也必須在此清單中啟用。",
+    delegationActiveHelp: "此原則適用於所有委派入口，角色固定模型和預設模型也須在此啟用。移除或停用全部模型會停止自動委派。",
+    delegationSelectionHelp: "仍支援在原則範圍內指定模型。指定模型不能略過核准；無法核准時絕不自動使用需核准模型，可改用已獲授權的替代模型。",
+    delegationWait: "核准等待時間（秒）",
+    delegationWaitHelp: "等待核准 0–300 秒。設為 0 可在無人值守時略過需核准的模型。核准逾時或無法使用均不代表授權。",
+    delegationAddModel: "新增模型",
+    delegationChooseModel: "選擇已設定的模型",
+    delegationEmpty: "尚無排程模型。如需自動委派，請先新增已設定的模型再儲存。",
+    delegationRemoveModel: "從排程中移除 {{name}}",
+    delegationEnabled: "可參與排程",
+    delegationEnableModel: "啟用 {{name}} 的排程",
+    delegationPriority: "優先順序",
+    delegationPriorityHelp: "範圍 1–100，數字越小越優先。相同優先順序構成同一梯隊，AI 可依任務適合度選擇。",
+    delegationModelPriority: "{{name}} 的優先順序",
+    delegationApproval: "核准",
+    delegationApprovalHelp: "昂貴或敏感模型建議每次核准。新增模型預設需要核准；僅對已授權無需詢問的模型選擇自動使用。",
+    delegationModelApproval: "{{name}} 的核准方式",
+    delegationAsk: "每次詢問",
+    delegationAuto: "允許自動使用",
+    delegationDescription: "模型選擇說明",
+    delegationDescriptionHelp: "最多 1,000 字元，描述優勢、成本或適合的任務。每次 Task 都會附帶此模型選擇說明，與角色描述分開；此文字不授予權限。",
+    delegationModelDescription: "{{name}} 的模型選擇說明",
+    delegationUnavailable: "此提供者或模型無法使用，已保留參照。請重新設定提供者或移除此項。",
+    delegationInvalid: "優先順序須為 1–100 的整數，等待時間須為 0–300 的整數秒，說明最多 1,000 字元。",
+    delegationSaved: "排程設定已儲存。",
+    delegationSaveFailed: "無法儲存排程設定，編輯內容已保留。{{error}}",
     storage: {
       unavailableHint: "儲存目錄暫時無法使用。請重新連接磁碟後啟動；應用程式不會建立空白資料或切換到其他目錄。",
       browserSource: "瀏覽器資料來源",

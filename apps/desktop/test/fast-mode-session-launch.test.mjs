@@ -66,7 +66,7 @@ test("session launch sends Fast mode only for a model the user allowed it on (AD
       pluginActiveInProject: () => true,
       bindingForModel: (_provider, modelId) =>
         allowed.has(modelId) ? { id: modelId, fastModeAllowed: true } : { id: modelId },
-      effectiveSubagentModelConfig: () => ({ modelConfig: undefined, capabilities: {} }),
+      effectiveSubagentModelConfig: () => ({ modelConfig: undefined, capabilities: { supportedThinkingLevels: ["off"] } }),
       normalizeThinkingLevel: () => "off",
     });
     const launch = async (modelId, fastMode) => {
@@ -82,6 +82,23 @@ test("session launch sends Fast mode only for a model the user allowed it on (AD
     assert.equal(await launch("allowed-model", false), false);
     assert.equal(await launch("allowed-model", undefined), false);
     assert.equal(await launch("other-model", true), false);
+    provider.models = [{ id: "allowed-model", alias: "friendly", availableForSubagents: false },
+      { id: "legacy-only", availableForSubagents: true }];
+    const delegation = { version: 1, approvalTimeoutSeconds: 0, models: [
+      { providerId: provider.id, modelId: "allowed-model", enabled: true, priority: 1, approval: "ask", description: "" },
+      { providerId: provider.id, modelId: "legacy-only", enabled: false, priority: 2, approval: "auto", description: "" },
+    ] };
+    const unified = await launchRuntime.resolveAgentRuntimeLaunch("session-fixture", {
+      providerId: provider.id, modelId: "allowed-model",
+    }, { delegation });
+    assert.equal(unified.sidecarParams.delegationAuthorization, true);
+    assert.deepEqual(unified.sidecarParams.delegationSettings, delegation);
+    assert.deepEqual(unified.sidecarParams.subagentModelKeys, [`${provider.id}/allowed-model`]);
+    const legacy = await launchRuntime.resolveAgentRuntimeLaunch("session-fixture", {
+      providerId: provider.id, modelId: "allowed-model",
+    }, {});
+    assert.equal(legacy.sidecarParams.delegationSettings, undefined);
+    assert.deepEqual(legacy.sidecarParams.subagentModelKeys, ["OpenAI/legacy-only"]);
   } finally {
     process.env.HOME = priorHome;
     await rm(temp, { recursive: true, force: true });

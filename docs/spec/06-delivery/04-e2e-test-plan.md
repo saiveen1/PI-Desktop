@@ -6,6 +6,33 @@
 
 ---
 
+### E2E-DELEGATION-scheduling-and-model-approval
+
+- Preconditions: Isolated settings, synthetic providers and a local HTTP/SSE
+  model fixture; no paid provider or daily profile. Include two peers and a
+  lower-priority specialist requiring approval.
+- Steps: Open Settings → Subagents → Scheduling, import old opt-ins, add models,
+  save equal priorities, descriptions and approval wait. Reload and verify the
+  settings. Delegate by default, explicit model, pinned role and resume. Approve
+  once; then expire another request, cancel one, Stop while waiting and deliver
+  its stale answer. Exercise `modelSelection=require`, a provider failure after
+  one successful edit, and plugin collaboration spawn/send, including Send now
+  promotion of queued collaboration input into a running turn.
+- Expected: Guidance remains in Task declarations; only enabled candidates are
+  eligible. No approved-model HTTP request occurs before consent, including
+  Auto mode. Timeout uses a compatible authorized alternate inside the same
+  Task. Cancellation/Stop never starts an alternate; late answers are inert.
+  Exact selection never silently changes model. Resume requires fresh consent.
+  Fallback does not repeat the successful edit. Saved policies replace legacy
+  opt-in authority without changing main-session model selection.
+- Traceability: runtime spec §5f; ADR `delegation-scheduling-and-approval`;
+  Shared policy contract and Host settings validation.
+- Coverage: `delegation-policy.test.ts`, `delegation-scheduler.test.ts`,
+  `delegation-user-path.test.ts`, `subagent-fallback.test.ts`, targeted Desktop
+  settings/approval/collaboration tests, and Host settings round trips.
+- Milestone: Product maintenance. Status: deterministic lower-layer and
+  component/transport automation; installed-Desktop manual acceptance separate.
+
 
 ### E2E-TRANSCRIPT-lossless-tool-images
 
@@ -10835,6 +10862,7 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
 
 | Acceptance | Scenarios |
 |---|---|
+| C / E / Security / Quality — Unified delegation scheduling and model consent | E2E-DELEGATION-scheduling-and-model-approval |
 | A / F / Quality — Self-managed daily release and isolated Dev | E2E-RELEASE-self-managed-daily-build |
 | A / F / Security — Explicit Dev data-directory inheritance | E2E-DEV-explicit-data-directory-inheritance |
 | C / E / Security / Quality — Gemini work setup | E2E-LIVE-VOICE-gemini-work-schema |
