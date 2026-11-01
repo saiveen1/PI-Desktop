@@ -839,6 +839,8 @@ export const es = {
     delegationInvalid: "Usa prioridades enteras de 1 a 100, una espera entera de 0 a 300 segundos y descripciones de hasta 1.000 caracteres.",
     delegationSaved: "Configuración de planificación guardada.",
     delegationSaveFailed: "No se pudo guardar la planificación. Se conservan tus cambios. {{error}}",
+    scheduledTasks: "Tareas programadas",
+    scheduledTasksDesc: "Al desactivar, se ocultan las tareas programadas y se detienen las nuevas ejecuciones. Se conservan las tareas existentes y el historial.",
     storage: {
       unavailableHint: "El directorio de almacenamiento no está disponible. Vuelve a conectar la unidad antes de iniciar; la aplicación no creará datos vacíos ni cambiará a otro directorio.",
       browserSource: "Origen de los datos del navegador",

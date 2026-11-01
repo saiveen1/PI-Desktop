@@ -839,6 +839,8 @@ export const de = {
     delegationInvalid: "Ganzzahlige Prioritäten von 1 bis 100, ganze Wartezeiten von 0 bis 300 Sekunden und Beschreibungen mit höchstens 1.000 Zeichen verwenden.",
     delegationSaved: "Modellzuweisung gespeichert.",
     delegationSaveFailed: "Modellzuweisung konnte nicht gespeichert werden. Ihre Änderungen bleiben erhalten. {{error}}",
+    scheduledTasks: "Geplante Aufgaben",
+    scheduledTasksDesc: "Wenn deaktiviert, werden geplante Aufgaben ausgeblendet und keine neuen Ausführungen gestartet. Vorhandene Aufgaben und der Verlauf bleiben erhalten.",
     storage: {
       unavailableHint: "Das Speicherverzeichnis ist derzeit nicht verfügbar. Verbinden Sie das Laufwerk vor dem Start erneut. Die App erstellt keine leeren Daten und wechselt nicht in ein anderes Verzeichnis.",
       browserSource: "Quelle der Browserdaten",

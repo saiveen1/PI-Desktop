@@ -5,6 +5,7 @@ mod gen_ui;
 mod plugin_reviews_rpc;
 mod remote_tools;
 mod scheduled_rpc;
+mod scheduled_settings;
 mod scheduled_tools;
 mod todos;
 mod window_corner_rpc;
@@ -1017,6 +1018,16 @@ fn validate_settings_value(value: &Value) -> Result<(), JsonRpcError> {
     let Some(object) = value.as_object() else {
         return Ok(());
     };
+    if object
+        .get("scheduledTasksEnabled")
+        .is_some_and(|enabled| !enabled.is_boolean())
+    {
+        return Err(rpc_err(
+            1002,
+            "scheduledTasksEnabled must be a boolean",
+            "INVALID_PARAMS",
+        ));
+    }
     if let Some(policy) = object.get("networkPolicy").filter(|v| !v.is_null()) {
         let Some(policy) = policy.as_object() else {
             return Err(rpc_err(
@@ -4038,8 +4049,11 @@ async fn handle_request(
 
         "tools.list" => {
             let mut definitions = tools::builtin_tool_defs();
-            if let Some(items) = definitions.as_array_mut() {
-                items.extend(scheduled_tools::definitions());
+            let st = state.lock().await;
+            if scheduled_settings::enabled(&st)? {
+                if let Some(items) = definitions.as_array_mut() {
+                    items.extend(scheduled_tools::definitions());
+                }
             }
             Ok(json!({ "tools": definitions }))
         }

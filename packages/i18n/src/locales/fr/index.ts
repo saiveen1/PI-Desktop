@@ -839,6 +839,8 @@ export const fr = {
     delegationInvalid: "Utilisez des priorités entières de 1 à 100, une attente entière de 0 à 300 secondes et des descriptions de 1 000 caractères maximum.",
     delegationSaved: "Paramètres d’ordonnancement enregistrés.",
     delegationSaveFailed: "Impossible d’enregistrer l’ordonnancement. Vos modifications sont conservées. {{error}}",
+    scheduledTasks: "Tâches planifiées",
+    scheduledTasksDesc: "Désactiver masque les tâches planifiées et empêche de nouvelles exécutions. Les tâches existantes et leur historique sont conservés.",
     storage: {
       unavailableHint: "Le dossier de stockage est actuellement indisponible. Reconnectez le disque avant de démarrer ; l’application ne créera pas de données vides et ne changera pas de dossier.",
       browserSource: "Source des données du navigateur",
