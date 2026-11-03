@@ -62,3 +62,6 @@ electron.vite.config.*.mjs
 .playwright-cli
 worktrees
 /.agents/skills/.skill-learning
+
+# Test artifacts (scratch dirs, screenshots, synthetic profiles)
+.artifacts/
