@@ -7,6 +7,7 @@ export const esEntries: ChangelogEntry[] = [
     highlights: [
       "Configure un grupo de modelos para subagentes con prioridades iguales, descripciones de uso, aprobación obligatoria y alternativas autorizadas para tareas sin supervisión.",
       "El agente continúa una vez si termina con tareas pendientes en la lista actual; esta protección, activada por defecto, se controla en Ajustes → IA.",
+      "Usa tu propio vídeo como animación de inicio: coloca uno en la carpeta «startup» y la interfaz aparece con un fundido al terminar.",
       "Los plugins pueden listar los proyectos guardados y sus carpetas sin cambiar la sesión activa.",
       "El motor Pi 1.3.0 mejora la validación de llamadas a herramientas y la reproducción segura del historial.",
       "Activa las visualizaciones en línea opcionales en Ajustes → IA para ver tarjetas interactivas aisladas dentro de las conversaciones.",

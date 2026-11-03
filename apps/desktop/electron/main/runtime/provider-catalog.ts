@@ -209,6 +209,7 @@ export function createProviderCatalogRuntime({
       lastNotifiedUpdateVersion?: unknown;
       networkProxy?: unknown;
       macosWindowTranslucency?: unknown;
+      startupAnimation?: unknown;
       transcriptDisplayMode?: unknown;
       radialMenu?: unknown;
     };
@@ -277,6 +278,23 @@ export function createProviderCatalogRuntime({
       throw Object.assign(new Error("macosWindowTranslucency is invalid"), {
         errorCode: ErrorCodes.INVALID_PARAMS,
       });
+    }
+    if (Object.prototype.hasOwnProperty.call(value, "startupAnimation")) {
+      const startupAnimation = value.startupAnimation;
+      if (
+        !startupAnimation ||
+        typeof startupAnimation !== "object" ||
+        Array.isArray(startupAnimation) ||
+        Object.entries(startupAnimation).some(
+          ([key, field]) =>
+            (key !== "enabled" && key !== "skipWhenReady") ||
+            typeof field !== "boolean",
+        )
+      ) {
+        throw Object.assign(new Error("startupAnimation is invalid"), {
+          errorCode: ErrorCodes.INVALID_PARAMS,
+        });
+      }
     }
     const radialMenuProblem = radialMenuWriteError(value.radialMenu);
     if (radialMenuProblem) {

@@ -7,6 +7,7 @@ export const deEntries: ChangelogEntry[] = [
     highlights: [
       "Konfigurieren Sie einen gemeinsamen Modellpool für Unteragenten mit gleichen Prioritäten, Einsatzbeschreibungen, verbindlicher Freigabe und autorisierten Alternativen für unbeaufsichtigte Aufgaben.",
       "Ein Agent wird einmal fortgesetzt, wenn seine aktuelle Aufgabenliste noch offene Punkte enthält; der standardmäßig aktive Schutz lässt sich unter Einstellungen → KI ausschalten.",
+      "Eigenes Video als Startanimation verwenden: einfach eines in den Ordner „startup“ legen; danach wird die Oberfläche eingeblendet.",
       "Plugins können gespeicherte Projekte und ihre Ordner auflisten, ohne die aktive Sitzung zu wechseln.",
       "Die Pi-1.3.0-Engine verbessert die Validierung von Tool-Aufrufen und die sichere Wiedergabe des Verlaufs.",
       "Optionale Inline-Visualisierungen unter Einstellungen → KI zeigen interaktive, isolierte Karten direkt im Gespräch.",
