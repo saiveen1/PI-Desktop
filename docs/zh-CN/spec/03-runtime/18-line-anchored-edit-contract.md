@@ -460,6 +460,16 @@ turn 与一个选择什么都不说的模型无法区分。
 `TOOL_FAILED` 语义不变；`Edit` 不再把版本或来源问题报告为通用的 `TOOL_FAILED`，因为两者
 都能以一个具体的下一步动作恢复。
 
+仅带 `old_string` / `new_string` 而不带 `ops` 的调用是兼容输入，不是第二种契约。已经
+迁移一半的模型仍会照抄 schema 的必填项 `tag` 与旧版参数并用；这种形状同样被接受，且带上
+的 `tag` 仍是来源闸门——tag 与在线文件不符时依然返回 `EDIT_TAG_MISMATCH` /
+`EDIT_TAG_UNKNOWN`，不会盲写。只有在没有 `tag` 时，才使用在线 tag。`old_string` 必须在
+规范化后的文件中恰好匹配一次（否则 `EDIT_LEGACY_MATCH_FAILED`），并且只替换匹配到的文本：
+首行匹配前、末行匹配后的文本保留。替换后只在发生变化的行上下降为一条行锚操作，并按在线
+tag 应用，因此行尾与 BOM 保留、来源检查的行为与其它 `Edit` 一致。只带 `tag`、既没有
+`ops` 也没有旧版参数时是 `INVALID_ARGUMENT`，消息会同时给出两种可接受形状，而不只是
+`ops required`。
+
 `MUTATION_RETRY_BUDGET_EXHAUSTED` 不在这张表里，因为它不是一个 `Edit` 结果：工具调用已经
 以上面某个代码失败了，而 runtime 在重复保护终止本轮时，把该代码加到它写出的 assistant 行上
 （§9.3、[08-error-codes](/zh-CN/spec/03-runtime/08-error-codes) §3.3）。

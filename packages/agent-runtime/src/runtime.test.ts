@@ -1633,6 +1633,9 @@ describe("DesktopAgentRuntime configuration matching", () => {
     expect(edit.description).toContain("PUT 48.=48:");
     expect(edit.description).toContain("followed by + rows is invalid");
     expect(edit.description).toContain("classify the error");
+    expect(edit.description).toContain(
+      "A plain old_string/new_string replacement is still accepted when ops is omitted",
+    );
     expect(edit.parameters.properties.ops.description).toContain(
       "PUT 48.=48:",
     );

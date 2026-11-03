@@ -576,8 +576,13 @@ All of these are `Edit`-scoped and additive to
 unchanged; `Edit` no longer reports version or provenance problems as the generic
 `TOOL_FAILED`, because both are recoverable with a specific next action.
 
-A legacy `old_string` / `new_string` call without `tag` and `ops` is a
-compatibility input, not a second contract. Host core requires `old_string` to
+A legacy `old_string` / `new_string` call without `ops` is a compatibility
+input, not a second contract. A model that half-migrated still echoes the
+schema's required `tag` alongside the legacy pair; that shape is accepted too,
+and the supplied `tag` remains the provenance gate, so a tag that does not hash
+the live file still fails with `EDIT_TAG_MISMATCH` / `EDIT_TAG_UNKNOWN` instead
+of applying blind. Only when no `tag` came along is the live tag used. Host core
+requires `old_string` to
 match exactly once in the normalized file (`EDIT_LEGACY_MATCH_FAILED`
 otherwise) and replaces exactly the matched text: text before the match on its
 first line and after the match on its last line is kept. The substring result
@@ -586,7 +591,10 @@ against the live tag, so line-ending and BOM preservation and the provenance
 check behave as for any other `Edit`. A replacement identical to `old_string`
 fails with `EDIT_NO_CHANGE`. A replacement whose only effect would be toggling
 the file's terminal newline also fails with `EDIT_NO_CHANGE`, because line-
-anchored operations preserve that newline state.
+anchored operations preserve that newline state. A payload that carries `tag`
+and neither `ops` nor the legacy pair is `INVALID_ARGUMENT`, and its message
+names both accepted shapes rather than just `ops required`.
+
 
 `MUTATION_RETRY_BUDGET_EXHAUSTED` is not in this table because it is not an
 `Edit` result: the tool call already failed with one of the codes above, and the

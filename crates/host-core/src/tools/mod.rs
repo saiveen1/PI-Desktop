@@ -1795,16 +1795,23 @@ fn tool_edit(
     })?;
     let legacy_old = args.get("old_string").and_then(Value::as_str);
     let legacy_new = args.get("new_string").and_then(Value::as_str);
+    let tag_arg = args.get("tag").and_then(Value::as_str);
     let (tag, ops) = match (
-        args.get("tag").and_then(Value::as_str),
+        tag_arg,
         args.get("ops").and_then(Value::as_str),
         legacy_old,
         legacy_new,
     ) {
         (Some(tag), Some(ops), _, _) => (tag.to_string(), ops.to_string()),
-        (None, None, Some(old), Some(new)) => {
+        (supplied_tag, None, Some(old), Some(new)) => {
             let file = hashline::normalize_file(&live);
-            let tag = hashline::tag_of_lf_text(&file.text);
+            // A model that half-migrated keeps the legacy pair but also echoes
+            // the schema's required `tag`. Honour that tag as the provenance
+            // gate instead of demanding `ops` it was never going to send; the
+            // live tag applies when no tag came along (#1217 follow-up).
+            let tag = supplied_tag
+                .map(|tag| tag.to_uppercase())
+                .unwrap_or_else(|| hashline::tag_of_lf_text(&file.text));
             let matches: Vec<_> = file
                 .text
                 .match_indices(old)
@@ -1841,8 +1848,13 @@ fn tool_edit(
                 "tag required; pass the 4-hex tag from the latest Read, Grep, Write, or Edit",
             ));
         }
-        (_, None, _, _) => {
-            return Err(hashline::ToolError::new("INVALID_ARGUMENT", "ops required"));
+        (Some(tag), None, _, _) => {
+            return Err(hashline::ToolError::new(
+                "INVALID_ARGUMENT",
+                format!(
+                    "ops required in addition to tag {tag}; send tag and ops for a line-anchored edit, or old_string and new_string for a plain text replacement"
+                ),
+            ));
         }
     };
     let display = display_tool_path(root_kind, root, &resolved);
@@ -3321,7 +3333,7 @@ pub fn builtin_tool_defs() -> Value {
         },
         {
             "name": "Edit",
-            "description": "Replace, insert, or delete lines in an existing file. Names positions and supplies new content only — never old_string. Required args: path, tag (4 hex from the latest Read/Grep/Write/Edit), ops. \
+            "description": "Replace, insert, or delete lines in an existing file. Names positions and supplies new content only — never old_string. Required args: path, tag (4 hex from the latest Read/Grep/Write/Edit), ops. A plain old_string/new_string replacement is still accepted when ops is omitted, with or without tag. \
     Ops: `PUT N.=M:` replace inclusive lines N–M (body rows required); `PUT <N:` insert before N; `PUT >N:` insert after N; `PUT >$:` append; `CUT N.=M` delete; `REM` delete the file; `MV DEST` rename after other ops. \
     Body rows are `+` plus the final line text; a bare `+` is an empty line. Every PUT with body rows must include the trailing colon, for example `PUT 48.=48:` followed by a `+replacement` row; `PUT 48.=48` followed by `+` rows is invalid. A colonless PUT is only for a register paste such as `PUT <1 @name`. No `-old` or context rows. Ranges name only the lines being changed — a pure insert uses a gap locator, not a widened PUT that restates survivors. \
     All line numbers refer to the tagged snapshot and are 1-indexed. Re-ground on the tag returned by every successful write. After one failed Edit, classify the error: Read the live file for a stale tag or unseen lines (or retry unchanged on a complete EDIT_LINES_UNSEEN reveal), but correct syntax or range errors directly; do not guess.",
@@ -5632,6 +5644,67 @@ mod tests {
 
         let written = std::fs::read_to_string(&target).unwrap();
         assert_eq!(written, "line one\r\nline TWO replaced\r\nline three\r\n");
+    }
+
+    #[tokio::test]
+    async fn edit_accepts_legacy_shape_when_the_model_also_sends_a_tag() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("legacy_with_tag.txt");
+        std::fs::write(&target, "a\nb\nc\n").unwrap();
+
+        let read = execute_tool(
+            Some(dir.path()),
+            None,
+            "Read",
+            &serde_json::json!({ "path": "legacy_with_tag.txt" }),
+            5_000,
+        )
+        .await;
+        assert!(read.ok, "read failed: {:?}", read.content);
+        let live_tag = read.content["tag"].as_str().unwrap().to_string();
+
+        // Models that half-migrate keep the legacy pair and also echo the
+        // required `tag` field from the schema. That shape is still a legacy
+        // replacement, not a malformed op list (#1217 follow-up).
+        let result = execute_tool(
+            Some(dir.path()),
+            None,
+            "Edit",
+            &serde_json::json!({
+                "path": "legacy_with_tag.txt",
+                "tag": live_tag,
+                "old_string": "b",
+                "new_string": "B"
+            }),
+            5_000,
+        )
+        .await;
+        assert!(
+            result.ok,
+            "legacy shape with a tag should succeed: {:?}",
+            result.content
+        );
+        assert_eq!(result.content["tag"].as_str().unwrap().len(), 4);
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), "a\nB\nc\n");
+
+        // The tag still gates the write: a tag that does not hash the live
+        // file must report the provenance error, not apply blind.
+        let stale = execute_tool(
+            Some(dir.path()),
+            None,
+            "Edit",
+            &serde_json::json!({
+                "path": "legacy_with_tag.txt",
+                "tag": "0000",
+                "old_string": "B",
+                "new_string": "BB"
+            }),
+            5_000,
+        )
+        .await;
+        assert!(!stale.ok);
+        assert_eq!(stale.error_code.as_deref(), Some("EDIT_TAG_MISMATCH"));
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), "a\nB\nc\n");
     }
 
     #[tokio::test]
