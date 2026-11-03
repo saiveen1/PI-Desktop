@@ -6,6 +6,7 @@ export const trEntries: ChangelogEntry[] = [
     date: "2026-10-24",
     highlights: [
       "Alt ajanlar için eşit öncelikleri, kullanım açıklamalarını, zorunlu onayı ve gözetimsiz görevlerde yetkili alternatifleri destekleyen ortak bir model havuzu yapılandırın.",
+      "Ajan, mevcut görev listesindeki işler bitmeden durursa bir kez otomatik devam eder; varsayılan olarak açık olan bu koruma Ayarlar → AI bölümünden kapatılabilir.",
       "Eklentiler, etkin oturumu değiştirmeden kayıtlı projeleri ve klasörlerini listeleyebilir.",
       "Daha güvenli araç çağrısı doğrulaması ve geçmiş yeniden oynatımı için Pi 1.3.0 motoruna geçin.",
       "Konuşmalarda etkileşimli, korumalı kartlar görmek için Ayarlar → AI bölümünde isteğe bağlı satır içi görselleştirmeleri açın.",

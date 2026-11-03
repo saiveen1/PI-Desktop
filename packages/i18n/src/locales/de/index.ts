@@ -1531,6 +1531,8 @@ sklm: {
     "enterToSendDesc": "Aus: Zum Senden ⌘/Strg+Eingabe drücken.",
     "infiniteProviderRetry": "Bis zum Erfolg wiederholen",
     "infiniteProviderRetryDesc": "Netzwerk- und vorübergehende Anbieterfehler werden bis zum Erfolg wiederholt. Du kannst den Lauf weiterhin stoppen; der API-Verbrauch kann fortlaufen.",
+    "autoContinueUnfinishedTodos": "Unfertige Aufgaben automatisch fortsetzen",
+    "autoContinueUnfinishedTodosDesc": "Endet eine Antwort, während die TodoWrite-Liste dieses Laufs noch offene Punkte hat, wird automatisch genau eine Fortsetzung gesendet, damit die Aufgabe zu Ende kommt. Das geschieht einmal pro Nutzerlauf und wiederholt sich nicht; Stopp beendet den Lauf weiterhin, und eine Änderung gilt ab dem nächsten Lauf. Fortsetzungen können zusätzliche Modellanfragen verursachen.",
     "smoothStreaming": "Sanftes Streaming",
     "smoothStreamingDesc": "Gibt gestreamten Text zeichenweise aus, um einen Schreibmaschineneffekt zu erzeugen. Wird automatisch deaktiviert, wenn das System reduzierte Bewegung bevorzugt.",
     "inlineVisualizations": "Inline-Visualisierungen",

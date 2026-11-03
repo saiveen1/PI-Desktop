@@ -293,7 +293,7 @@ Settings is a **full-window page** that replaces the app sidebar + main chrome (
   command shell selection, Link open destination, context usage display
   (remaining or used), the Show thinking toggle, the Transcript display
   segmented control, Enter-to-send control, the infinite provider retry switch,
-  and the large text paste threshold. The
+  the unfinished-task continuation switch, and the large text paste threshold. The
   retry switch is off by default and explains that network/transient provider
   failures keep retrying until success; Stop still cancels the turn and the
   setting may continue API usage while enabled. Link open destination uses the Work panel browser by default
@@ -308,6 +308,13 @@ Settings is a **full-window page** that replaces the app sidebar + main chrome (
   is remaining. The threshold controls when a text-only paste becomes a
   temporary session-scratch file; it defaults to 600 characters and accepts
   integer values from 1 through 1,000,000.
+  Unfinished-task continuation (`autoContinueUnfinishedTodos`) is on by default.
+  Its explanation states that an Agent which ends with unfinished checklist
+  items written in the current task is continued automatically once per user
+  turn. It may add model requests and cost; Stop still works. The preference is
+  saved immediately and applies to the next user turn, including a reused
+  runtime. Turning it off preserves ordinary completion behavior. Settings
+  search routes both its label and explanation to AI.
 - Composer text actions are contributed by explicitly installed plugins and
   appear only while their plugin is enabled and its `composer.transform`
   permission is granted. The host does not include a prompt-enhancement card or

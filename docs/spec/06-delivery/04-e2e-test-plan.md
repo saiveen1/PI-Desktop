@@ -10936,6 +10936,36 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
   desktop and host. Host-core and targeted renderer tests are companion checks,
   not substitutes for the Electron journey.
 
+### E2E-RUNTIME-unfinished-todo-continuation
+
+- **Title:** A premature final report continues an unfinished current-task checklist once.
+- **Preconditions:** Isolated deterministic provider and Host fixtures; no live
+  account, provider charges, or daily profile. Desktop Agent mode.
+- **Steps:** Open Settings → AI → Defaults and verify unfinished-task
+  continuation defaults to on. Toggle off, save/reload, then on again. Start
+  a task that discovers TodoWrite, commits pending steps, and returns a normal
+  text-only "next round" report. Let the next response complete the checklist.
+  Repeat with the preference off, with another premature report after the
+  first reminder, with an in-progress item, completed/cancelled/empty lists,
+  failed writes, truncated output, and a failed Host read. Send a new unrelated
+  prompt while old pending items remain. Stop or gracefully stop while the
+  snapshot read is held, then release it.
+- **Expected:** The switch round-trips explicit booleans and rejects invalid
+  values; new and reused runtimes receive it. An eligible current-turn list
+  causes exactly one continuation in the same turn, with a temporary system
+  reminder and no synthetic user message. Already completed tools are not
+  replayed. There is one final `agent_end`; a second premature report stops.
+  Stale lists, finished lists, failures, or Stop do not trigger extra requests.
+  The reminder is absent from the following request and later user prompts.
+- **Specs:** `03-runtime/02-agent-runtime.md` §5e.2;
+  `04-ux/06-settings-ia.md` AI Defaults.
+- **Acceptance:** C / E / Quality.
+- **Milestone:** M6+.
+- **Status:** Runtime integration coverage in
+  `packages/agent-runtime/src/unfinished-todo-continuation.test.ts`; companion
+  settings interaction, persistence, and launch contract tests. Electron
+  end-to-end execution is not claimed by these isolated tests.
+
 ## 8. Traceability Matrix
 
 | Acceptance | Scenarios |
@@ -10947,6 +10977,7 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
 | C / Quality — Continue after malformed tool output | E2E-RUNTIME-malformed-tool-call-continue-recovery |
 | B / Security / Quality — Optional provider client certificate requests | E2E-PROVIDER-optional-client-certificate |
 | C / E / F / Quality / Security — Session Todo checklist | E2E-CHAT-session-todo-checklist |
+| C / E / Quality — Bounded unfinished-task continuation | E2E-RUNTIME-unfinished-todo-continuation |
 | C / E / Security / Quality — Live Voice four-stage interaction | E2E-LIVE-VOICE-four-stage-ui |
 | C / F — Hourly task updates | E2E-SCHEDULED-manual-to-hourly |
 | C / F / Quality — Saved project isolation | E2E-SCHEDULED-manual-workspace-binding |

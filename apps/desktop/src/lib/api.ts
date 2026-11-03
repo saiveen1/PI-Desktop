@@ -442,6 +442,9 @@ export function normalizeSettings(settings: AppSettings): AppSettings {
     defaultMode: normalizeMode((settings as { defaultMode?: unknown }).defaultMode),
     infiniteProviderRetry:
       (settings as { infiniteProviderRetry?: unknown }).infiniteProviderRetry === true,
+    autoContinueUnfinishedTodos:
+      (settings as { autoContinueUnfinishedTodos?: unknown })
+        .autoContinueUnfinishedTodos !== false,
     jevEnabled: (settings as { jevEnabled?: unknown }).jevEnabled === true,
     defaultCommandShell: isCommandShellId(
       (settings as { defaultCommandShell?: unknown }).defaultCommandShell,
@@ -503,6 +506,7 @@ export function validateSettingsWrite(settings: AppSettings): AppSettings {
     infiniteProviderRetry?: unknown;
     jevEnabled?: unknown;
     smoothStreaming?: unknown;
+    autoContinueUnfinishedTodos?: unknown;
     sidebarRunningIndicators?: unknown;
     sidebarRunningBadge?: unknown;
     sidebarRunningRail?: unknown;
@@ -592,6 +596,7 @@ export function validateSettingsWrite(settings: AppSettings): AppSettings {
     "sidebarSessionTime",
     "macosWindowTranslucency",
     "keepCommandsExpanded",
+    "autoContinueUnfinishedTodos",
   ] as const) {
     if (
       Object.prototype.hasOwnProperty.call(value, key) &&

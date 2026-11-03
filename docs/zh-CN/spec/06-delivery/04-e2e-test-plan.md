@@ -5938,6 +5938,22 @@ eleven-tool-round desktop paths are verified by
 - **自动化：** `pnpm test:e2e:todos` 从生产 Agent 的 ToolSearch/TodoWrite 路径进入，使用生产渲染器、真实 Host/SQLite 和隔离 Electron 配置验证清单旅程；仅替换外部模型流和 preload 传输，不使用真实 Provider 或用户配置。覆盖 Unicode 截断及警告重放、单一活动项归一化、全量清单渲染与 dock 内滚动、首次读取失败后不切换会话的主机恢复、已缓存快照重新同步及旧事件拒绝。运行时 `runtime-todos.test.ts` 使用确定性 Provider 验证 Agent 工具校验、超长内容归一化和续跑。
 - **状态：** 构建 Desktop 和 Host 后，在确切的请求候选中执行。Host-core 和渲染器定向测试是辅助检查，不能替代 Electron 用户旅程。
 
+### E2E-RUNTIME-unfinished-todo-continuation：未完成任务自动续跑
+
+- **前置条件**：隔离的模拟模型与 Host；Agent 模式，不使用真实账号或日常数据。
+- **步骤**：在设置 → 全局 AI → 默认设置中确认开关默认开启，关闭并重新读取，
+  再开启。让 Agent 在当前用户轮次写入未完成清单后输出纯文本收尾，随后完成清单。
+  分别覆盖开关关闭、再次提前收尾、执行中事项、完成/取消/空清单、写入失败、
+  输出截断、读取失败、旧清单，以及清单读取期间手动停止的情况。
+- **预期**：每个用户轮次最多自动提醒并继续一次；保持同一轮次，不伪造用户消息，
+  不重放已完成工具；提醒不进入后续请求。停止、失败或旧清单不触发额外请求。
+  开关保存布尔值，在下一轮生效，新建和复用运行时都收到设置值。
+- **规格**：英文 `03-runtime/02-agent-runtime.md` §5e.2；
+  `04-ux/06-settings-ia.md` 的全局 AI 默认设置。
+- **验收**：C / E / Quality；**里程碑**：M6+。
+- **状态**：运行时集成测试及设置保存/启动契约测试覆盖；设置开关另有隔离 Electron
+  真实点击测试。未宣称执行完整 Desktop/Host/真实模型的端到端流程。
+
 ## 8. 可追溯性矩阵
 | 验收 | 应用场景 |
 |---|---|
@@ -5945,6 +5961,7 @@ eleven-tool-round desktop paths are verified by
 | C / Quality — Continue after malformed tool output | E2E-RUNTIME-malformed-tool-call-continue-recovery |
 | B / Security / Quality — Optional provider client certificate requests | E2E-PROVIDER-optional-client-certificate |
 | C / E / F / Quality / Security — Session Todo checklist | E2E-CHAT-session-todo-checklist |
+| C / E / Quality — Bounded unfinished-task continuation | E2E-RUNTIME-unfinished-todo-continuation |
 | C / E / Security / Quality — Live Voice 四阶段交互 | E2E-LIVE-VOICE-four-stage-ui |
 | C / F — Hourly task updates | E2E-SCHEDULED-manual-to-hourly |
 | C / F / Quality — Saved project isolation | E2E-SCHEDULED-manual-workspace-binding |

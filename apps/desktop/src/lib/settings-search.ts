@@ -127,6 +127,8 @@ export const SETTINGS_NAV: SettingsNavEntry[] = [
       "settings.enterToSend",
       "settings.infiniteProviderRetry",
       "settings.infiniteProviderRetryDesc",
+      "settings.autoContinueUnfinishedTodos",
+      "settings.autoContinueUnfinishedTodosDesc",
       "settings.smoothStreaming",
       "settings.inlineVisualizations",
       "settings.inlineVisualizationsDesc",

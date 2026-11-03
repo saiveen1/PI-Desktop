@@ -22,6 +22,7 @@ import { readLocalRequestErrorDetails } from "./local-request-errors.js";
 import { isValidToolCall, recoverMalformedToolCalls } from "./tool-call-recovery.js";
 import { imageGenerationDescription, imageGenerationParameters } from "./image-generation/tool.js";
 import { todoWriteDescription, todoWriteParameters } from "./todo-tool.js";
+import { UnfinishedTodoContinuation } from "./unfinished-todo-continuation.js";
 import { createJevClassifierTool } from "./jev-classifier-tool.js";
 import { scheduledToolParameters, scheduledToolDescriptions } from "./scheduled-tools.js";
 import { withPiFileOpToolNames } from "./pi-file-ops.js";
@@ -1012,6 +1013,8 @@ export type AgentRuntimeOptions = {
   thinkingLevel: SessionThinkingLevel;
   /** Persisted opt-in for retrying transient provider failures until success. */
   infiniteProviderRetry?: boolean;
+  /** Continue once when this task's committed checklist remains unfinished. On unless false. */
+  autoContinueUnfinishedTodos?: boolean;
   /**
    * Fast mode for main turns, already resolved by the launcher from the
    * session `/fast` switch and the model binding's opt-in (ADR 0334).
@@ -1938,6 +1941,7 @@ export class DesktopAgentRuntime {
   private providerRateLimitRetryAttempt = 0;
   /** Opt-in mode removes only the retry-count ceiling; abort and backoff stay intact. */
   private infiniteProviderRetry = false;
+  private readonly unfinishedTodoContinuation: UnfinishedTodoContinuation;
   private fastMode = false;
   private jevApiKey?: string;
   private activeProviderRetryAttempt = 0;
@@ -2053,6 +2057,9 @@ export class DesktopAgentRuntime {
     this.jevApiKey = opts.jevApiKey;
     this.host = opts.host;
     this.batchPlanner = new BatchPlanner(this.host, this.sessionId);
+    this.unfinishedTodoContinuation = new UnfinishedTodoContinuation(
+      this.host, this.sessionId, opts.autoContinueUnfinishedTodos !== false,
+    );
     this.onDiagnostic = opts.onDiagnostic ?? (() => undefined);
     this.hostCloseUnsubscribe = this.host.onClose?.(() => {
       this.cleanupActiveToolProgress();
@@ -2312,7 +2319,10 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           convertToLlm(this.dropDuplicateToolCalls(messages)), this.reasoningReplayIdentity(),
         );
       },
-      prepareRequest: ({ context }) => this.prepareToolDeclarations(context),
+      prepareRequest: ({ context }) => {
+        const prepared = this.prepareToolDeclarations(context);
+        return { ...prepared, context: this.unfinishedTodoContinuation.prepareRequest(prepared.context ?? context) };
+      },
       // Extensions see every provider request, including the first one of a
       // run, which `prepareNextTurn` never reaches (spec 16 §6, issue #1838).
       transformContext: (messages) => this.extensionContext(messages),
@@ -2336,11 +2346,16 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       // pi-agent-core 0.87 replaces shouldStopAfterTurn with finishTurn. A
       // queued renderer prompt ends a completed turn at the next boundary,
       // without treating an error or abort as a graceful stop.
-      finishTurn: async ({ message }) => {
-        if (!this.gracefulStopRequested) return;
-        if (message.stopReason === "error" || message.stopReason === "aborted") return;
-        this.gracefulStopRequested = false;
-        return { action: "end" };
+      finishTurn: async (turn, signal) => {
+        if (turn.message.stopReason === "error" || turn.message.stopReason === "aborted") return;
+        if (this.gracefulStopRequested) {
+          this.gracefulStopRequested = false;
+          return { action: "end" };
+        }
+        return this.unfinishedTodoContinuation.finishTurn(turn, () =>
+          this.mode === "agent" && !this.disposed && !this.runCancelled && !this.turnHadError &&
+          !this.gracefulStopRequested && this.acceptingSteering && !this.pendingSteering.size &&
+          !this.pendingProgressTurnRerun && !this.pendingSilentTurnRerun && !this.keepTurnOpenForDelegates(), signal);
       },
     });
 
@@ -2372,6 +2387,11 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
   setInfiniteProviderRetry(enabled: boolean): void {
     if (this.disposed) throw new Error("runtime disposed");
     this.infiniteProviderRetry = enabled;
+  }
+
+  setAutoContinueUnfinishedTodos(enabled: boolean): void {
+    if (this.disposed) throw new Error("runtime disposed");
+    this.unfinishedTodoContinuation.setEnabled(enabled);
   }
 
   /** Apply the session `/fast` switch to the next turn of a reused runtime. */
@@ -6667,6 +6687,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
    * following turn ends invisibly even though nothing went wrong in it.
    */
   private resetRunRecoveryState(): void {
+    this.unfinishedTodoContinuation.reset();
     this.pendingOverflow = false;
     this.overflowRecoveryAttempted = false;
     this.overflowRecoveryInProgress = false;
@@ -7181,6 +7202,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     }
 
     const retentionMode: CompactionRetentionMode =
+      this.unfinishedTodoContinuation.pending ||
       (turn.toolResults?.length ?? 0) > 0 ||
       turn.message?.stopReason === "toolUse"
         ? "active_turn"

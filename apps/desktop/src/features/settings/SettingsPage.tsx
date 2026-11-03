@@ -42,6 +42,7 @@ import { RadialMenuSettings } from "../../components/settings/RadialMenuSettings
 import { FontSizeRow } from "../../components/settings/FontSizeRow";
 import { LanguageRow } from "../../components/settings/LanguageRow";
 import { SettingsMenuSelect } from "../../components/settings/SettingsMenuSelect";
+import { AutoContinueUnfinishedTodosRow } from "../../components/settings/AutoContinueUnfinishedTodosRow";
 import { ThemeRow } from "../../components/settings/ThemeRow";
 import { MacosWindowTranslucencyRow } from "../../components/settings/MacosWindowTranslucencyRow";
 import { NetworkProxySection } from "../../components/settings/NetworkProxySection";
@@ -583,6 +584,7 @@ export function SettingsPage() {
                     onChange={() => void saveSettings({ enterToSend: !settings.enterToSend })}
                   />
                 </SettingsRow>
+                <AutoContinueUnfinishedTodosRow settings={settings} saveSettings={saveSettings} />
                 <SettingsRow
                   title={t("settings.infiniteProviderRetry")}
                   description={t("settings.infiniteProviderRetryDesc")}

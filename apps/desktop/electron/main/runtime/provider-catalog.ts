@@ -175,6 +175,9 @@ export function createProviderCatalogRuntime({
         .infiniteProviderRetry === true,
       keepAwakeWhileRunning: (value as T & { keepAwakeWhileRunning?: unknown })
         .keepAwakeWhileRunning === true,
+      autoContinueUnfinishedTodos:
+        (value as T & { autoContinueUnfinishedTodos?: unknown })
+          .autoContinueUnfinishedTodos !== false,
       scheduledTasksEnabled: (value as T & { scheduledTasksEnabled?: unknown })
         .scheduledTasksEnabled !== false,
       jevEnabled: (value as T & { jevEnabled?: unknown }).jevEnabled === true,
@@ -201,6 +204,7 @@ export function createProviderCatalogRuntime({
       keepAwakeWhileRunning?: unknown;
       scheduledTasksEnabled?: unknown;
       jevEnabled?: unknown;
+      autoContinueUnfinishedTodos?: unknown;
       updatePreference?: unknown;
       lastNotifiedUpdateVersion?: unknown;
       networkProxy?: unknown;
@@ -221,6 +225,14 @@ export function createProviderCatalogRuntime({
       typeof value.infiniteProviderRetry !== "boolean"
     ) {
       throw Object.assign(new Error("infiniteProviderRetry is invalid"), {
+        errorCode: ErrorCodes.INVALID_PARAMS,
+      });
+    }
+    if (
+      Object.prototype.hasOwnProperty.call(value, "autoContinueUnfinishedTodos") &&
+      typeof value.autoContinueUnfinishedTodos !== "boolean"
+    ) {
+      throw Object.assign(new Error("autoContinueUnfinishedTodos is invalid"), {
         errorCode: ErrorCodes.INVALID_PARAMS,
       });
     }

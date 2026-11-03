@@ -6,6 +6,7 @@ export const enEntries: ChangelogEntry[] = [
     date: "2026-10-24",
     highlights: [
       "Configure a shared subagent model pool with equal priorities, usage descriptions, mandatory approval, and authorized alternatives for unattended tasks.",
+      "Continue an Agent once when it ends with unfinished current-task checklist items; control the default-on safeguard in Settings → AI.",
       "Let plugins list saved projects and their folders without switching the active session.",
       "Use the Pi 1.3.0 agent engine with safer tool-call validation and replay.",
       "Enable optional inline visualizations in Settings → AI to view interactive, sandboxed cards inside conversations.",

@@ -61,6 +61,15 @@ export type AppSettings = {
    * Absent and false use the bounded ten-retry policy.
    */
   infiniteProviderRetry?: boolean;
+  /**
+   * Keep the current task going once per user turn when the model finishes its
+   * reply while the TodoWrite checklist for that turn still has unfinished
+   * items. One automatic continuation is sent; it is never an endless loop and
+   * Stop still ends the turn. Absent and `true` both mean enabled, so the
+   * safeguard is on until the user turns it off. A change applies from the next
+   * turn. Continuations can cost extra model requests.
+   */
+  autoContinueUnfinishedTodos?: boolean;
   /** Allow Agent mode to call TypeSafe Jev for explicit structured classifications. */
   jevEnabled?: boolean;
   /** Prevent idle system sleep while this desktop app runs; off when absent. */

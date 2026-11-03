@@ -436,6 +436,40 @@ final report from being misclassified as progress.
 
 See E2E-146a.
 
+### 5e.2. Continue an unfinished current-task checklist
+
+Settings → AI → Defaults exposes `autoContinueUnfinishedTodos`, enabled when
+absent and disabled only by an explicit `false`. Main passes the resolved
+preference to both new and reused Desktop runtimes on the next user turn.
+Native Pi sessions and delegated agents do not use this guard.
+
+After a successful main-Agent `TodoWrite` in the current user turn, a normal
+visible assistant response with no tool call may end before the work does.
+At the loop's `finishTurn` boundary, the runtime reads `todos.get` for that
+session. If its committed snapshot still contains `pending` or `in_progress`
+items, the runtime requests one continuation in the same durable user turn.
+The prior response remains in the transcript and model context; no synthetic
+user message is added. A replaceable system reminder asks the model to advance
+the existing task within its original scope and permissions, keep checklist
+states truthful, and ask for user input or explain a concrete blocker when
+necessary. The reminder expires on the following provider request.
+
+There is at most one checklist continuation per user turn, even if further
+tool calls update the list. A new user turn resets this allowance and requires
+its own successful checklist write; a stale persisted list alone cannot trigger
+execution. Empty, completed, and cancelled lists do not trigger it. Failed or
+aborted responses, truncated output, a failed latest tool batch, explicit Stop,
+pending steering, pending recovery, and running delegates keep their existing
+lifecycle. The runtime rechecks cancellation and turn ownership after the Host
+read; a failed read logs a diagnostic and preserves normal completion. If
+context compaction is needed before the continuation, it retains the active
+user task. No completed tool batch is replayed and only the final loop exit
+emits `agent_end`.
+
+This can add model requests and cost. It does not guarantee task completion
+when the model stops again, and it cannot infer unfinished work without a
+checklist written in that turn. See E2E-RUNTIME-unfinished-todo-continuation.
+
 ### 5.1 Context checkpoint protection (D158/D203, ADR 0030/0049/0061/0064)
 
 The complete visible transcript and the model context are separate views of

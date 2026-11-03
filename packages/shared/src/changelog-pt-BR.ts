@@ -6,6 +6,7 @@ export const ptBREntries: ChangelogEntry[] = [
     date: "2026-10-24",
     highlights: [
       "Configure um conjunto de modelos para subagentes com prioridades iguais, descrições de uso, aprovação obrigatória e alternativas autorizadas para tarefas sem supervisão.",
+      "O agente continua uma vez se encerrar com itens pendentes na lista da tarefa atual; essa proteção vem ativada e pode ser controlada em Configurações → IA.",
       "Plugins podem listar projetos salvos e suas pastas sem trocar a sessão ativa.",
       "O motor Pi 1.3.0 melhora a validação de chamadas de ferramentas e a reprodução segura do histórico.",
       "Ative as visualizações inline opcionais em Configurações → IA para ver cartões interativos isolados nas conversas.",

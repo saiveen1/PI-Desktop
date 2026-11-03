@@ -115,6 +115,11 @@ test("session launch resolves Jev credentials only for opted-in Agent mode", asy
     // — this bundle cannot resolve the packaged skill files.
     const defaultOff = await launch("agent", false);
     assert.equal("visualizationsDir" in defaultOff.sidecarParams, false);
+    assert.equal(defaultOff.sidecarParams.autoContinueUnfinishedTodos, true);
+    const continuationOff = await launch("agent", false, { autoContinueUnfinishedTodos: false });
+    assert.equal(continuationOff.sidecarParams.autoContinueUnfinishedTodos, false);
+    const continuationOn = await launch("agent", false, { autoContinueUnfinishedTodos: true });
+    assert.equal(continuationOn.sidecarParams.autoContinueUnfinishedTodos, true);
 
     // The visualization directory follows the visualize skill (D671): a
     // disabled skill must not leave the prompt pointing at it.

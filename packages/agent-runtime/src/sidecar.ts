@@ -111,6 +111,7 @@ type RuntimeParams = {
   turnId?: string;
   thinkingLevel?: SessionThinkingLevel;
   infiniteProviderRetry?: boolean;
+  autoContinueUnfinishedTodos?: boolean;
   /** Session `/fast` switch AND the model's opt-in, resolved by main (ADR 0334). */
   fastMode?: boolean;
   /** Opt-in TypeSafe classifier credential resolved by Electron main. */
@@ -271,6 +272,7 @@ async function runtimeFor(
     reusable.setPluginSkills(pluginSkills);
     reusable.setCompactionSettings(params.compactionSettings);
     reusable.setInfiniteProviderRetry(params.infiniteProviderRetry === true);
+    reusable.setAutoContinueUnfinishedTodos(params.autoContinueUnfinishedTodos !== false);
     reusable.setFastMode(params.fastMode === true);
     reusable.setMode(mode);
     return reusable;
@@ -319,6 +321,7 @@ async function runtimeFor(
     commandShell: params.commandShell,
     thinkingLevel,
     infiniteProviderRetry: params.infiniteProviderRetry === true,
+    autoContinueUnfinishedTodos: params.autoContinueUnfinishedTodos !== false,
     fastMode: params.fastMode === true,
     jevApiKey: params.jevApiKey,
     history,

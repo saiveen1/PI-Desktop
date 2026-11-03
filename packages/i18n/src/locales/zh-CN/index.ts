@@ -1523,6 +1523,8 @@ sklm: {
     enterToSendDesc: "关闭后按 ⌘/Ctrl+Enter 发送。",
     infiniteProviderRetry: "无尽重试",
     infiniteProviderRetryDesc: "网络或临时服务故障会一直重试直到成功。仍可随时停止，但开启后可能持续消耗 API 用量。",
+    autoContinueUnfinishedTodos: "未完成任务自动续跑",
+    autoContinueUnfinishedTodosDesc: "当本轮回复结束时，TodoWrite 清单里仍有未完成的事项，会自动再续跑一次，好让当前任务收尾。每个用户轮次只续跑一次，不会循环；仍可随时停止，修改从下一轮开始生效。续跑可能产生额外的模型请求。",
     smoothStreaming: "平滑流式显示",
     smoothStreamingDesc: "将流式文本逐字释放，产生打字机效果。系统开启“减少动态效果”时自动禁用。",
     inlineVisualizations: "聊天内嵌可视化",

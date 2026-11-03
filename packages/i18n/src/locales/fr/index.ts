@@ -1531,6 +1531,8 @@ sklm: {
     "enterToSendDesc": "Désactivé : appuyez sur ⌘/Ctrl+Entrée pour envoyer.",
     "infiniteProviderRetry": "Réessayer jusqu’à réussite",
     "infiniteProviderRetryDesc": "Réessaie les erreurs réseau et temporaires jusqu’à la réussite. Vous pouvez toujours arrêter le tour ; la consommation d’API peut continuer.",
+    "autoContinueUnfinishedTodos": "Reprendre les tâches inachevées",
+    "autoContinueUnfinishedTodosDesc": "Si une réponse se termine alors que la liste TodoWrite de ce tour contient encore des éléments inachevés, une seule reprise est envoyée automatiquement pour permettre à la tâche de se terminer. Cela se produit une fois par tour utilisateur et ne boucle jamais ; Arrêter met toujours fin au tour, et un changement s’applique au tour suivant. Les reprises peuvent entraîner des requêtes de modèle supplémentaires.",
     "smoothStreaming": "Streaming fluide",
     "smoothStreamingDesc": "Libère le texte diffusé caractère par caractère pour un effet machine à écrire. Automatiquement désactivé lorsque le système préfère un mouvement réduit.",
     "inlineVisualizations": "Visualisations intégrées",
