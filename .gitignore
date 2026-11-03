@@ -65,3 +65,4 @@ worktrees
 
 # Test artifacts (scratch dirs, screenshots, synthetic profiles)
 .artifacts/
+/.agents/skills
