@@ -1,0 +1,173 @@
+import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { spawnSync } from "node:child_process";
+import test from "node:test";
+import { buildEnvironment, buildPersonal, prepareBuild, runCommand } from "../../../scripts/build-personal-release.mjs";
+
+const repo = fileURLToPath(new URL("../../../", import.meta.url));
+const read = (p) => readFileSync(join(repo, p), "utf8");
+const write = (file, content) => { mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, content); };
+const version = JSON.parse(read("apps/desktop/package.json")).version;
+
+function fixture(t) {
+  const root = mkdtempSync(join(tmpdir(), "pi-personal-build-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const desktop = join(root, "apps/desktop");
+  write(join(root, "package.json"), JSON.stringify({ version }));
+  write(join(desktop, "package.json"), read("apps/desktop/package.json"));
+  write(join(desktop, "electron-builder.personal.cjs"), read("apps/desktop/electron-builder.personal.cjs"));
+  write(join(desktop, "electron/main/updater.ts"), read("apps/desktop/electron/main/updater.ts"));
+  // Reuse installed tooling, not a second dependency installation.
+  symlinkSync(join(repo, "node_modules"), join(root, "node_modules"), "junction");
+  symlinkSync(join(repo, "apps/desktop/node_modules"), join(desktop, "node_modules"), "junction");
+  const pnpm = join(root, "tools/pnpm.exe");
+  write(pnpm, "synthetic command boundary; never execute");
+  const env = { PATH: process.env.PATH || "", npm_execpath: pnpm, PI_DESKTOP_DATA_DIR: "do-not-touch-live-data", NODE_OPTIONS: "--require=do-not-load-hook" };
+  const context = prepareBuild({ root, platform: "win32", arch: "x64", env });
+  return { root, desktop, pnpm, env, context };
+}
+
+function buildInputs(context) {
+  for (const file of ["target/release/pi-desktop-host-core.exe", "packages/agent-runtime/dist-bundle/sidecar.js", "apps/desktop/out/main/index.js", "apps/desktop/out/renderer/index.html"]) write(join(context.root, file), "synthetic build output");
+  write(join(context.root, "packages/agent-runtime/dist-bundle/package.json"), '{"type":"module"}');
+}
+
+async function packageOutput(context, metadata = {}) {
+  const unpacked = join(context.staging, "win-unpacked");
+  const source = join(context.root, "synthetic-asar");
+  write(join(source, "package.json"), JSON.stringify({ version: context.version, piSelfManaged: true, piDistribution: "installed", ...metadata }));
+  mkdirSync(join(unpacked, "resources"), { recursive: true });
+  await context.asar.createPackage(source, join(unpacked, "resources/app.asar"));
+  write(join(unpacked, "PI-Desktop.exe"), "synthetic executable; never run");
+  for (const [from, to] of [
+    ["target/release/pi-desktop-host-core.exe", "bin/pi-desktop-host-core.exe"],
+    ["packages/agent-runtime/dist-bundle/sidecar.js", "agent-runtime/sidecar.js"],
+    ["packages/agent-runtime/dist-bundle/package.json", "agent-runtime/package.json"],
+  ]) {
+    const target = join(unpacked, "resources", to);
+    mkdirSync(dirname(target), { recursive: true });
+    copyFileSync(join(context.root, from), target);
+  }
+  write(join(context.staging, context.installerName), Buffer.alloc(1024 * 1024, 42));
+}
+
+test("preflight selects the current checkout, exact argv, one NSIS target, and creates no output", (t) => {
+  const { context, root } = fixture(t);
+  assert.equal(context.root, root);
+  assert.equal(context.version, version);
+  assert.equal(context.stages.length, 6);
+  assert.deepEqual(context.stages[0].args, ["--filter", "@pi-desktop/desktop^...", "--fail-if-no-match", "run", "build"]);
+  assert.ok(context.stages[1].args.includes("--locked"));
+  const packaging = context.stages.at(-1);
+  assert.deepEqual(packaging.args.slice(1, 6), ["--win", "nsis", "--x64", "--publish", "never"]);
+  assert.ok(!context.stages.some((s) => s.args.includes("zip") || s.args.includes("portable") || s.args.includes("install")));
+  assert.ok(!existsSync(context.output));
+  assert.ok(!existsSync(context.logs));
+});
+
+test("build environment drops inherited profiles/hooks without changing the parent", () => {
+  const parent = Object.freeze({ Path: "original", PI_DESKTOP_DATA_DIR: "private", pi_desktop_dev: "1", NODE_OPTIONS: "--require=hook", ELECTRON_RUN_AS_NODE: "1", CARGO_TARGET_DIR: "other", KEEP: "yes" });
+  const entry = resolve("pnpm-native/pnpm.exe");
+  const env = buildEnvironment(parent, entry);
+  assert.equal(env.PATH, `${dirname(entry)};original`);
+  assert.equal(env.KEEP, "yes");
+  assert.equal(env.PI_DESKTOP_DATA_DIR, undefined);
+  assert.equal(env.pi_desktop_dev, undefined);
+  assert.equal(env.NODE_OPTIONS, undefined);
+  assert.equal(env.CARGO_TARGET_DIR, undefined);
+  assert.equal(parent.PI_DESKTOP_DATA_DIR, "private");
+});
+
+test("preflight refuses unsupported platforms, missing pnpm, mixed versions and missing updater guards", (t) => {
+  const { root, desktop, env } = fixture(t);
+  assert.throws(() => prepareBuild({ root, platform: "linux", env }), /Windows x64/);
+  assert.throws(() => prepareBuild({ root, platform: "win32", arch: "x64", env: {} }), /Run pnpm/);
+  write(join(root, "package.json"), '{"version":"99.0.0"}');
+  assert.throws(() => prepareBuild({ root, platform: "win32", arch: "x64", env }), /versions differ/);
+  write(join(root, "package.json"), JSON.stringify({ version }));
+  write(join(desktop, "electron/main/updater.ts"), "// missing guard");
+  assert.throws(() => prepareBuild({ root, platform: "win32", arch: "x64", env }), /updater guard/);
+});
+
+test("representative build journey publishes only verified installer and checksums, never runs it", async (t) => {
+  const { context } = fixture(t);
+  const invoked = [];
+  const result = await buildPersonal(context, { run: async (stage, options) => {
+    invoked.push(stage);
+    assert.equal(options.env.PI_DESKTOP_DATA_DIR, undefined);
+    if (stage.name === "Desktop production build") buildInputs(context);
+    if (stage.name === "NSIS installer only") await packageOutput(context);
+  } });
+  assert.deepEqual(invoked, context.stages);
+  assert.equal(result.installed, false);
+  assert.equal(result.launched, false);
+  assert.equal(result.sha256, createHash("sha256").update(readFileSync(result.artifact)).digest("hex"));
+  assert.equal(readFileSync(`${result.artifact}.sha256`, "utf8"), `${result.sha256}  ${context.installerName}\n`);
+  assert.deepEqual(readdirSync(context.output).sort(), [".build", context.installerName, `${context.installerName}.sha256`, "build-info.json"].sort());
+  assert.ok(!existsSync(join(context.logs, "build.lock")));
+});
+
+test("a failed build stops immediately, keeps the previous installer and releases its lock", async (t) => {
+  const { context } = fixture(t);
+  const previous = join(context.output, context.installerName);
+  write(previous, "previous verified installer");
+  let calls = 0;
+  await assert.rejects(buildPersonal(context, { run: async () => { calls++; throw new Error("compiler failure"); } }), /compiler failure/);
+  assert.equal(calls, 1);
+  assert.equal(readFileSync(previous, "utf8"), "previous verified installer");
+  assert.ok(!existsSync(join(context.logs, "build.lock")));
+});
+
+test("missing dist-bundle stops before electron-builder, not after shipping a broken EXE", async (t) => {
+  const { context } = fixture(t);
+  const invoked = [];
+  await assert.rejects(buildPersonal(context, { run: async (stage) => {
+    invoked.push(stage.name);
+    if (stage.name === "Desktop production build") {
+      buildInputs(context);
+      rmSync(join(context.root, "packages/agent-runtime/dist-bundle/sidecar.js"));
+    }
+  } }), /Required build output missing/);
+  assert.ok(!invoked.includes("NSIS installer only"));
+  assert.ok(!existsSync(join(context.output, context.installerName)));
+});
+
+for (const metadata of [{ piSelfManaged: false }, { piDistribution: "portable" }, { version: "99.0.0" }]) {
+  test(`invalid package metadata cannot be delivered: ${JSON.stringify(metadata)}`, async (t) => {
+    const { context } = fixture(t);
+    buildInputs(context);
+    await assert.rejects(buildPersonal(context, { run: async (stage) => {
+      if (stage.name === "NSIS installer only") await packageOutput(context, metadata);
+    } }), /metadata is incorrect/);
+    assert.ok(!existsSync(join(context.output, context.installerName)));
+  });
+}
+
+test("an existing lock is preserved and no command is executed", async (t) => {
+  const { context } = fixture(t);
+  const lock = join(context.logs, "build.lock");
+  write(lock, "another build");
+  await assert.rejects(buildPersonal(context, { run: async () => assert.fail("must not run") }), /EEXIST/);
+  assert.equal(readFileSync(lock, "utf8"), "another build");
+});
+
+test("real command boundary preserves failure status and argument tokens without cmd expansion", async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), "personal-command-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const log = join(dir, "command.log");
+  await runCommand({ name: "argv probe", command: process.execPath, cwd: dir, args: ["-e", "console.log(process.argv[1])", "literal^caret & spaces"] }, { env: process.env, log });
+  assert.match(readFileSync(log, "utf8"), /literal\^caret & spaces/);
+  await assert.rejects(runCommand({ name: "failure", command: process.execPath, cwd: dir, args: ["-e", "process.exit(7)"] }, { env: process.env, log }), /failure failed \(7\)/);
+});
+
+test("CLI rejects install/launch/target overrides before creating any build state", () => {
+  for (const arg of ["--install", "--launch", "--win", "--root=other"]) {
+    const result = spawnSync(process.execPath, [join(repo, "scripts/build-personal-release.mjs"), arg], { encoding: "utf8", timeout: 10000 });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /No install, launch, target, or checkout overrides/);
+  }
+});

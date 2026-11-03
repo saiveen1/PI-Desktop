@@ -83,3 +83,17 @@ test("policy synchronization and architecture boundaries remain enforced", (t) =
   assert.equal(missingBoundary.status, 1);
   assert.match(missingBoundary.stderr, /sqlite-host-core-only/);
 });
+
+test("the gate requires fixed packaging and forbids implicit installation in both mirrors", (t) => {
+  for (const path of Object.keys(policyFiles)) {
+    for (const [phrase, anchor] of [
+      ["Personal packaging must use `pnpm dist:personal` in the current checkout.", "fixed-personal-packaging-entry"],
+      ["A packaging request never authorizes installation or application startup.", "packaging-is-not-installation"],
+    ]) {
+      assert.ok(policyFiles[path].includes(phrase));
+      const result = runGate(t, { [path]: policyFiles[path].replace(phrase, "Removed by negative fixture.") });
+      assert.equal(result.status, 1);
+      assert.ok(result.stderr.includes(anchor));
+    }
+  }
+});

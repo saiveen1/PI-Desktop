@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Policy-Sync: 2026-10-26.local.2
+Policy-Sync: 2026-11-04.personal-build.1
 
 Mandatory rules for AI coding agents working in PI-Desktop.
 
@@ -215,6 +215,25 @@ local task. Do not modify or delete another agent's branch or worktree.
 Do not push, open a PR, merge remotely, install a build, or restart the
 user's running desktop unless that action is authorized. Editing source
 does not authorize touching a daily Release's installed files or profile.
+
+### Personal release packaging (mandatory)
+
+Personal packaging must use `pnpm dist:personal` in the current checkout.
+Read `docs/spec/06-delivery/07-personal-release-runbook.md` first; the fixed
+entry is `scripts/build-personal-release.mjs`. Deliver the Windows x64 NSIS
+installer EXE only, with offline package checks and a SHA-256 checksum.
+Do not switch tags, create worktrees, map drives, copy another checkout's
+builds, inject temporary hooks, or improvise parallel packaging pipelines.
+
+A packaging request never authorizes installation or application startup.
+Do not run an installer (including silent/scratch installs), launch Desktop
+for smoke tests, stop/restart processes, touch profiles, change registry or
+shortcuts, or uninstall anything. Installation belongs to the user unless
+separately authorized. NSIS `/D` is not isolation: the shared application
+identity can replace the daily installation and its registration. Do not
+delete a scratch installation while it is running or registered as active.
+Report concrete build blockers; do not silently change versions or claim
+profile compatibility from a version label or an empty-profile smoke test.
 
 ### Development data-directory safety
 

@@ -57,6 +57,14 @@ const claude = claudeRaw ? normalize(claudeRaw) : "";
 /** @type {{ id: string, anyOf: string[] }[]} */
 const REQUIRED_ANCHORS = [
   {
+    id: "fixed-personal-packaging-entry",
+    anyOf: ["Personal packaging must use `pnpm dist:personal` in the current checkout."],
+  },
+  {
+    id: "packaging-is-not-installation",
+    anyOf: ["A packaging request never authorizes installation or application startup."],
+  },
+  {
     id: "local-checkout-development",
     anyOf: ["Develop in the current checkout by default, including on local `main`."],
   },

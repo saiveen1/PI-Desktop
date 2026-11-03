@@ -64,6 +64,16 @@ Branches and worktrees are optional, not prerequisites for development.
 - Retire optional worktrees only when authorized and after verifying their
   changes are committed or safely migrated. Delete no unique work.
 
+### R4.1 — Personal packaging is build-only
+
+Use `pnpm dist:personal` in the current checkout and follow
+[the fixed personal release runbook](07-personal-release-runbook.md).
+Deliver only the Windows x64 NSIS EXE with offline verification and SHA-256.
+Do not switch tags, create worktrees, inject hooks, or improvise build pipelines.
+A packaging request never authorizes installing, launching, stopping/restarting
+Desktop, editing installation registration/shortcuts, or copying live profiles.
+An NSIS scratch installation is not isolated: it shares the application's identity.
+
 ### R5 — Verify linked GitHub issues before work, then reply and close
 
 > **A linked GitHub issue is not a task until the reported problem is shown to exist. After the outcome is conclusive, reply on that issue and close it.**

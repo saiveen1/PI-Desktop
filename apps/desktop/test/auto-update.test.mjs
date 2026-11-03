@@ -380,16 +380,18 @@ test("update cache relocation and cleanup preserve the delta-update path", async
 test("personal release build is opt-in, isolated from official artifacts, and preserves installation identity", async () => {
   const rootPackage = JSON.parse(await read("../../../package.json"));
   const desktopPackage = JSON.parse(pkgSource);
-  assert.equal(rootPackage.scripts["dist:personal"], "pnpm --filter @pi-desktop/desktop run dist:personal");
+  assert.equal(rootPackage.scripts["dist:personal"], "node scripts/build-personal-release.mjs");
   assert.equal(
     desktopPackage.scripts["dist:personal"],
-    desktopPackage.scripts.dist + " --config electron-builder.personal.cjs",
+    "node ../../scripts/build-personal-release.mjs",
   );
   const { default: personalConfig } = await import("../electron-builder.personal.cjs");
   assert.deepEqual(personalConfig, {
     ...desktopPackage.build,
-    directories: { ...desktopPackage.build.directories, output: "release/personal" },
-    extraMetadata: { ...desktopPackage.build.extraMetadata, piSelfManaged: true },
+    directories: { ...desktopPackage.build.directories, output: "release/personal/.build" },
+    extraMetadata: { ...desktopPackage.build.extraMetadata, piSelfManaged: true, piDistribution: "installed" },
+    win: { ...desktopPackage.build.win, target: [{ target: "nsis", arch: ["x64"] }] },
+    nsis: { ...desktopPackage.build.nsis, artifactName: "PI-Desktop-Personal-Setup-${version}.${ext}", runAfterFinish: false },
   });
   assert.equal(personalConfig.extraMetadata.piSelfManaged, true);
   assert.equal(desktopPackage.build.extraMetadata.piSelfManaged, undefined);

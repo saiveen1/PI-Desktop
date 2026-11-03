@@ -75,6 +75,17 @@ Before editing any file for a new request:
 
 ---
 
+## Personal packaging checklist
+
+- [ ] Used `pnpm dist:personal` and [the fixed runbook](07-personal-release-runbook.md)
+  in the current checkout, without tag switches, worktrees or temporary hooks.
+- [ ] Delivered NSIS x64 installer EXE only, checked offline metadata/resources,
+  and recorded SHA-256 plus the actual validation limits.
+- [ ] Did not run an installer/Desktop, terminate processes, alter registration
+  or shortcuts, or access live profiles as packaging verification.
+- [ ] Installation remains the user's action; any scratch-installation pollution
+  is reported separately rather than deleting an active installation.
+
 ## 2. Impact Analysis
 
 Before starting implementation, answer these questions:

@@ -12,7 +12,7 @@
 | Dev | `pnpm dev` | none | daily development |
 | Local package | `pnpm --filter @pi-desktop/desktop pack` | unsigned without a configured certificate | packaging smoke (`--dir` output) |
 | Local DMG | `pnpm --filter @pi-desktop/desktop dist` | unsigned without a configured certificate | local install test |
-| Personal release | `pnpm dist:personal` | local signing configuration | self-maintained daily installation; no upstream update delivery |
+| Personal Windows installer | `pnpm dist:personal` | local signing configuration | Current checkout, NSIS x64 EXE only; [fixed runbook](07-personal-release-runbook.md); never installs or launches |
 | Release | `scripts/release-macos.sh` | Developer ID + mandatory notarization | distributable artifact |
 
 The static electron-builder config does not embed a certificate identity, so
@@ -46,15 +46,18 @@ when macOS `iconutil` is available, without overwriting the canonical source.
 
 ### Self-maintained daily release and isolated development
 
-A personal release is a replacement for the daily installed application, not
-another development profile. Run `pnpm dist:personal` from the current source
-checkout after its toolchain and dependencies are provisioned. It uses the
-normal native-platform build pipeline with `electron-builder.personal.cjs`, which
-retains the complete base build configuration and adds these typed overrides:
+Personal Windows builds must follow the [fixed personal release runbook](07-personal-release-runbook.md).
+Run `pnpm dist:personal` in the current checkout. Both package aliases invoke
+`scripts/build-personal-release.mjs`; do not use the ordinary multi-target
+release runner for a personal build. It emits only a Windows x64 NSIS EXE,
+its SHA-256 and a build summary under `apps/desktop/release/personal/`.
+`--check` performs read-only preflight. Intermediate files stay under `.build/`.
+No worktree creation, tag switching, temporary hooks or binary copying is needed.
 
-- `extraMetadata.piSelfManaged=true` marks only this artifact as self-managed.
-- `directories.output=release/personal` keeps its installers and update
-  manifests separate from ordinary release output under `apps/desktop/release/`.
+The personal config preserves base installation identity, limits the target to
+NSIS x64, adds boolean `piSelfManaged=true` and `piDistribution=installed`,
+and sets `runAfterFinish=false`. Packaging never runs the generated installer
+or Desktop, manages processes, edits registry/shortcuts, or touches profiles.
 
 The marker must be the boolean `true` in the packaged `package.json`. Main
 reads it before initializing update delivery. Self-managed builds expose the
@@ -122,36 +125,25 @@ temporary-root overrides; this guard is enforced by the `pnpm dev` launcher.
    installation format/path, and actual application and Chromium storage roots.
    Do not assume the profile is still in its default home directory. Do not bump
    version fields in just one file; version surfaces must remain synchronized.
-3. Build with `pnpm dist:personal`. On Windows, choose the generated NSIS
-   `PI-Desktop-Setup-<version>.exe` under `apps/desktop/release/personal/` for
-   an existing installed NSIS copy. ZIP and portable artifacts are not silently
-   interchangeable with an installed copy. Verify the packaged boolean marker.
-4. Smoke-test the candidate separately with both `PI_DESKTOP_DATA_DIR` and
-   Electron `--user-data-dir` pointing to distinct empty temporary directories.
-   Do not use the default profile, copy live databases, import live credentials,
-   or run copied scheduled jobs. Keep test state and network services isolated.
-5. Wait for daily tasks to settle, then explicitly quit the official application
-   (including its tray/background process). This is a planned restart: running
-   agent turns cannot transfer live into a different executable.
-6. With all writers stopped, back up the complete actual application data,
-   Electron/Chromium profile, and storage-location bootstrap, including any
-   redirected roots. Keep the previous installer and backup private and outside
-   build output. Copying only `pi.sqlite` is not a complete backup.
-7. Install the personal candidate over the existing matching installation, using
-   its existing install directory and profile; do not uninstall/delete user data
-   first. Launch it normally without test-profile overrides or a development
-   flag. Verify conversations, providers, plugins, selected storage location,
-   disabled update state, and one small explicitly authorized task.
-8. Resume daily work in the personal release. Develop and validate changes in Dev,
-   then build and manually install the next personal release. Never run two daily
-   binaries over the same writable profile. If rollback is needed after a schema
-   upgrade, stop all writers and restore the pre-upgrade profile with the matching
-   previous binary; do not merely launch an older executable over migrated data.
+3. Build only through `pnpm dist:personal`. Deliver the generated
+   `PI-Desktop-Personal-Setup-<version>.exe` and checksum. Stop here for a
+   build-only request; installation remains the user's separate action.
+4. Do not perform an installer smoke on the daily workstation, even under
+   scratch with `/S` or `/D`. NSIS keeps the same application identity and
+   can replace the existing installation and its Windows registration.
+   A directory override is not installation isolation.
+5. For a separately authorized manual handover, let tasks finish, fully quit
+   the daily app, back up the chosen data scope, and inspect the actual
+   installed version, schema and installation path before proceeding. Do not
+   claim a settings-only backup can restore conversation history.
+6. The user installs over the intended matching installation. If the installer
+   reports an unexpected scratch path, cancel and investigate registration;
+   do not uninstall blindly or delete the active installation.
 
-These steps are an operator checklist, not automated installation, backup, or
-live-task migration. A successful unit/contract test is not proof of installer
-upgrade compatibility; isolated packaged smoke and a maintenance window remain
-required before taking over the real daily profile.
+Offline checks establish package structure, not full-profile compatibility.
+A launch/upgrade test is a separate task needing explicit authorization and
+an environment isolated at the installation/OS level, not merely another folder.
+Never terminate the user's Desktop or an agent host as packaging cleanup.
 
 ## 2. Prerequisites (release lane)
 

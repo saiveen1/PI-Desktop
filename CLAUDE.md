@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Policy-Sync: 2026-10-26.local.2
+Policy-Sync: 2026-11-04.personal-build.1
 
 Instructions for Claude Code CLI and Claude Cowork on PI-Desktop.
 
@@ -44,6 +44,22 @@ Use them only when requested or concurrent work needs isolation.
 - Commit only when the user requests it; remote publishing is also opt-in.
 - Do not install builds, restart the running desktop, or touch its profile
   merely to validate source changes.
+
+### Personal release packaging (mandatory)
+
+Personal packaging must use `pnpm dist:personal` in the current checkout.
+Read `docs/spec/06-delivery/07-personal-release-runbook.md`; use only the fixed
+`scripts/build-personal-release.mjs` entry. Deliver Windows x64 NSIS EXE only,
+offline checks and SHA-256. No tag switching, extra worktrees, drive mappings,
+cross-checkout build copies, temporary hooks or alternate packaging pipelines.
+
+A packaging request never authorizes installation or application startup.
+Never run installers (even silent/scratch installs), launch Desktop smoke
+tests, kill/restart processes, edit registry/shortcuts, copy profiles or
+uninstall as packaging validation. The user installs separately. NSIS `/D`
+does not isolate shared installation identity; it can replace the daily app.
+Never delete an active scratch installation. Report blockers without version
+guessing, silent version changes or unsupported compatibility claims.
 
 ### Development data-directory safety
 

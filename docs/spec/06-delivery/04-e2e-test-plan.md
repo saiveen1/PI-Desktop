@@ -98,30 +98,30 @@
 
 ### E2E-RELEASE-self-managed-daily-build
 
-- **Preconditions:** Current source checkout; no use of the running daily
-  application, live profile, credentials, or real update feed. Worktrees are optional.
-- **Steps:** Select `pnpm dist:personal` and verify it adds only the boolean
-  self-managed metadata marker and isolated output directory to the normal build.
-  Load marked package metadata through Main's real updater controller, restore an
-  Automatic preference, start scheduled checks, try explicit check/download/install,
-  then attempt to select Automatic again. Repeat for each desktop platform and
-  repeat with ordinary or non-boolean metadata. Run the development-profile suite.
-- **Expected:** Marked packages remain disabled, with no updater traffic,
-  download, install-on-quit, or release-page action; ordinary packages retain
-  their existing behavior. Application identity and data/bootstrap paths do not
-  change. Dev still has its own userData and application-data root.
-- **Coverage:** `updater-controller.test.mjs`,
-  `auto-update.test.mjs`, `update-preference.test.mjs`,
-  `development-profile.test.mjs`. Controller tests mock only Electron and
-  electron-updater; package metadata is read from temporary files.
-- **Specs:** [Release runbook](06-release-runbook.md#self-maintained-daily-release-and-isolated-development).
-- **Acceptance:** Offline controller journey and packaging contracts; actual
-  packaged smoke additionally requires two isolated temporary profiles. The real
-  daily installation may be replaced only after its tasks settle, full shutdown,
-  offline backup, version/schema checks, and explicit operator approval.
+- **Preconditions:** Current checkout and installed local toolchain; no real
+  installation/profile/provider access. No new worktree or release-tag switch.
+- **Steps:** Enter through `pnpm dist:personal --check`, then exercise the fixed
+  `build-personal-release.mjs` pipeline with synthetic fixtures and external
+  build-command stubs. Verify exact dependency argv, failure propagation,
+  missing dist-bundle rejection, build-lock exclusion, real ASAR metadata
+  validation and SHA-256 delivery. Reject install/launch/target overrides.
+  Exercise self-managed updater behavior through the real controller with
+  Electron/electron-updater boundary stubs on all supported controller platforms.
+- **Expected:** One NSIS x64 installer target with publishing disabled;
+  `piSelfManaged=true`, `piDistribution=installed`, unchanged application identity,
+  no installer/Desktop execution, registry/profile access or process termination.
+  Failures do not deliver stubs or replace the prior verified installer. Marked
+  packages cannot re-enable upstream updates; ordinary packages are unchanged.
+- **Coverage:** `personal-release.test.mjs`, `auto-update.test.mjs`,
+  `updater-controller.test.mjs`, `agent-policy-sync.test.mjs`.
+- **Specs:** [Personal runbook](07-personal-release-runbook.md),
+  [Release runbook](06-release-runbook.md#self-maintained-daily-release-and-isolated-development).
+- **Acceptance:** Offline runner/controller journey and artifact contracts only.
+  An actual installation/launch is not part of a packaging request. A directory
+  override does not isolate NSIS installation identity or Windows registration.
 - **Milestone:** Maintenance.
-- **Status:** Offline coverage automated; packaged upgrade smoke is required
-  before first adoption and must not attach to the user's running application.
+- **Status:** Offline regression automated; real-profile upgrade compatibility
+  is not claimed and requires a separately authorized task.
 
 ### E2E-SCHEDULED-settings-switch
 
