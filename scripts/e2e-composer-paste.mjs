@@ -15,6 +15,7 @@ const require = createRequire(
 );
 const { build } = require("esbuild");
 const { electronBinary } = resolveElectronBinary(root);
+const directoriesOnly = process.argv.includes("--directories-only");
 const temp = await mkdtemp(join(tmpdir(), "pi-composer-paste-"));
 try {
   await build({
@@ -50,6 +51,7 @@ try {
   await build({
     entryPoints: {
       writer: join(root, "apps/desktop/electron/main/composer-paste.ts"),
+      directories: join(root, "apps/desktop/electron/main/composer-clipboard-directories.ts"),
       reader: join(root, "packages/host-runtime/src/workspace-files.ts"),
       video: join(root, "apps/desktop/electron/main/open-attachment-video.ts"),
     },
@@ -81,9 +83,11 @@ try {
     `
 const { app, BrowserWindow, ipcMain, nativeImage } = require("electron");
 const path = require("node:path");
+const { pathToFileURL } = require("node:url");
 const fs = require("node:fs/promises");
 const assert = require("node:assert/strict");
 const { saveComposerPasteFiles } = require("./writer.cjs");
+const { nativeClipboardPaths, readComposerClipboardDirectories } = require("./directories.cjs");
 const { readOpenableFile, readOpenableImage, resolveRealOpenablePath } = require("./reader.cjs");
 const { openableMp4Path } = require("./video.cjs");
 app.setPath("userData", path.join(__dirname, "profile"));
@@ -92,6 +96,20 @@ const history = [];
 const opened = [];
 let completeOpens;
 const opensDone = new Promise(resolve => { completeOpens = resolve; });
+let directoryPastePending = true;
+ipcMain.handle("pi-desktop/composer/readClipboardDirectories", async () => {
+  if (!directoryPastePending) return { ok: true, data: null };
+  directoryPastePending = false;
+  const clipboard = {
+    readBuffer: format => Buffer.from(format === "text/uri-list"
+      ? pathToFileURL(path.join(__dirname, "copied folder")).href : ""),
+  };
+  // Keep fixture paths native without reading the host clipboard.
+  const data = await readComposerClipboardDirectories(clipboard, () => {
+    throw new Error("a folder-only paste must not create an import token");
+  }, () => nativeClipboardPaths(clipboard, process.platform, () => [path.join(__dirname, "copied folder")]));
+  return { ok: true, data };
+});
 ipcMain.handle("pi-desktop/composer/pasteFiles", async (_event, input) => {
   const files = await saveComposerPasteFiles(__dirname, input.sessionId, input.files);
   for (let i = 0; i < files.length; i++) {
@@ -236,6 +254,7 @@ app.whenReady().then(async () => {
     return;
   }
   await fs.mkdir(path.join(__dirname, "attachments"));
+  await fs.mkdir(path.join(__dirname, "copied folder"));
   await fs.writeFile(path.join(__dirname, "attachments", "a".repeat(64)), Buffer.alloc(512 * 1024 + 1));
   await fs.writeFile(path.join(__dirname, "attachments", "b".repeat(64)), Buffer.from([0, 1, 2, 0]));
   const window = new BrowserWindow({ show: false, webPreferences: {
@@ -276,7 +295,18 @@ app.whenReady().then(async () => {
       await window.webContents.executeJavaScript("globalThis.composerPreviewPointerDone()");
     });
     await window.webContents.executeJavaScript('globalThis.composerPreviewPointer = input => new Promise(resolve => { globalThis.composerPreviewPointerDone = resolve; console.log("PI_PREVIEW_POINTER:" + JSON.stringify(input)); }); void 0');
-    const result = await window.webContents.executeJavaScript("globalThis.composerPasteProbe()");
+    const directoriesOnly = process.argv.includes("--directories-only");
+    const result = await window.webContents.executeJavaScript("globalThis.composerPasteProbe(" + directoriesOnly + ")");
+    assert.equal(result.ok, true, JSON.stringify(result));
+    if (directoriesOnly) {
+      assert.equal(result.scope, "directories-only");
+      assert.equal(result.nativeDirectoryMetadata, true);
+      assert.equal(saved.length, 0, "directory paste must not write attachment bytes");
+      assert.deepEqual(opened, [], "directory paste must not open attachments");
+      console.log("COMPOSER_PASTE_PROBE " + JSON.stringify(result));
+      app.quit();
+      return;
+    }
     await opensDone;
     assert.deepEqual(opened.map(path.extname), [".mp4", ".mp4", ".mp4"]);
     assert.equal(await fs.realpath(opened[0]), await fs.realpath(path.join(__dirname, "attachments", "a".repeat(64))));
@@ -342,7 +372,7 @@ app.whenReady().then(async () => {
   assert.equal(draftCases.length, 4, draftRace.output.slice(-6000));
   console.log(draftCases.join("\n"));
 
-  const firstRun = await runElectron();
+  const firstRun = await runElectron(directoriesOnly ? ["--directories-only"] : []);
   const pasteLine = firstRun.output
     .split(/\r?\n/)
     .find((line) => line.startsWith("COMPOSER_PASTE_PROBE "));
@@ -355,18 +385,20 @@ app.whenReady().then(async () => {
   assert.equal(firstRun.code, 0, firstRun.output.slice(-4000));
   assert.equal(pasteResult.ok, true);
 
-  const restartRun = await runElectron(["--history-check"]);
-  const restartLine = restartRun.output
-    .split(/\r?\n/)
-    .find((line) => line.startsWith("COMPOSER_HISTORY_RESTART "));
-  assert(
-    restartLine,
-    `renderer returned no restart result (exit=${restartRun.code}): ${restartRun.output.slice(-3000)}`,
-  );
-  const restartResult = JSON.parse(restartLine.slice("COMPOSER_HISTORY_RESTART ".length));
-  console.log("COMPOSER_HISTORY_RESTART " + JSON.stringify(restartResult));
-  assert.equal(restartRun.code, 0, restartRun.output.slice(-4000));
-  assert.equal(restartResult.ok, true);
+  if (!directoriesOnly) {
+    const restartRun = await runElectron(["--history-check"]);
+    const restartLine = restartRun.output
+      .split(/\r?\n/)
+      .find((line) => line.startsWith("COMPOSER_HISTORY_RESTART "));
+    assert(
+      restartLine,
+      `renderer returned no restart result (exit=${restartRun.code}): ${restartRun.output.slice(-3000)}`,
+    );
+    const restartResult = JSON.parse(restartLine.slice("COMPOSER_HISTORY_RESTART ".length));
+    console.log("COMPOSER_HISTORY_RESTART " + JSON.stringify(restartResult));
+    assert.equal(restartRun.code, 0, restartRun.output.slice(-4000));
+    assert.equal(restartResult.ok, true);
+  }
 } finally {
   await rm(temp, { recursive: true, force: true });
 }

@@ -42,7 +42,7 @@ declare global {
   var composerPreviewPointer: (input: { type: "mousePressed" | "mouseMoved" | "mouseReleased"; x: number; y: number }) => Promise<void>;
   var composerPreviewPressKey: (key: string) => Promise<void>;
   var composerPreviewCapture: (() => Promise<void>) | undefined;
-  var composerPasteProbe: () => Promise<unknown>;
+  var composerPasteProbe: (directoriesOnly?: boolean) => Promise<unknown>;
   var composerHistoryProbe: (phase: "prepare" | "verify") => Promise<unknown>;
 }
 const assert = (value: unknown, message: string) => {
@@ -153,7 +153,7 @@ function Mp4AttachmentChips({ scratchPath }: { scratchPath: string }) {
   );
 }
 
-globalThis.composerPasteProbe = async () => {
+globalThis.composerPasteProbe = async (directoriesOnly = false) => {
   const i18n = createInstance();
   await i18n.init({
     lng: "en",
@@ -237,6 +237,21 @@ globalThis.composerPasteProbe = async () => {
     selection.addRange(range);
   };
   try {
+    useAppStore.setState({ sessions: [{
+      id: "paste-a", title: "Folder paste fixture", source: "desktop", mode: "agent",
+      permissionMode: "inherit", thinkingLevel: "off", messageCount: 0,
+      createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z",
+    }] });
+    const directoryEditor = await paste("", [], true);
+    const directoryChip = directoryEditor.querySelector(".composer-chip");
+    assert(directoryChip?.textContent?.includes("copied folder"), "native folder metadata did not render a chip");
+    assert(controller.fileReferences[0]?.kind === "directory", "folder chip must own a directory reference");
+    flushSync(() => directoryChip?.querySelector<HTMLButtonElement>(".composer-chip-remove")?.click());
+    assert(controller.fileReferences.length === 0, "folder chip could not be removed");
+    if (directoriesOnly) {
+      return { ok: true, scope: "directories-only", nativeDirectoryMetadata: true };
+    }
+
     // Settings replaces ChatSurface, then remounts the composer in the same
     // workspace. Exercise the real draft hook and DOM across that lifecycle.
     render("paste-a", "/project-a");
@@ -983,6 +998,7 @@ globalThis.composerPasteProbe = async () => {
     await verifyComposerSubmission(imageReference.path, i18n);
     return {
       ok: true,
+      nativeDirectoryMetadata: true,
       fullComposerSubmissionAndOverflow: true,
       mixedShortText: true,
       multilineAndUndoRedo: true,
