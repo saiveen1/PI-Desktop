@@ -2997,7 +2997,7 @@ importConfirm: "İçe aktarılan uzantılar ajan sürecinde, ajanın kendi araç
     EMPTY_MODEL_RESPONSE:
       "Model iki tur üst üste hiçbir şey söylemeden bitirdi. Yeniden deneyin veya isteği başka türlü sorun.",
     MUTATION_RETRY_BUDGET_EXHAUSTED:
-      "Aynı düzenleme üç kez başarısız oldu, bu yüzden körü körüne yeniden denemek yerine tur durdu. Devam etmek için yeniden sorun.",
+      "Tekrarlanan düzenleme veya komut hataları üç denemelik sınırı tüketti. Tur durduruldu; devam etmeden önce hatayı inceleyin.",
     CONTEXT_TOO_LARGE: "Bağlam kurtarmadan sonra bu sohbet hâlâ çok uzun. İletinizi kısaltın veya yeni sohbet açın.",
     CONTEXT_COMPACTION_FAILED: "Bu sohbetin model bağlamı sıkıştırılamadı.",
     SUBAGENT_CONTEXT_OVERFLOW:

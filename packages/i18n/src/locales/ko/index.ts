@@ -3004,7 +3004,7 @@ importConfirm: "가져온 확장은 에이전트 프로세스 안에서 에이�
     EMPTY_MODEL_RESPONSE:
       "모델이 두 번 연속 아무 말 없이 턴을 완료했습니다. 다시 시도하거나 요청을 바꿔 표현하세요.",
     MUTATION_RETRY_BUDGET_EXHAUSTED:
-      "같은 편집이 세 번 실패하여 무작정 재시도하지 않고 이 턴을 중지했습니다. 계속하려면 다시 요청하세요.",
+      "반복된 편집 또는 명령 실패로 세 번의 복구 시도 한도에 도달했습니다. 이 턴을 중지했습니다. 계속하기 전에 오류를 확인하세요.",
     CONTEXT_TOO_LARGE: "컨텍스트를 복구한 후에도 이 채팅이 너무 깁니다. 메시지를 줄이거나 새 채팅을 시작하세요.",
     CONTEXT_COMPACTION_FAILED: "이 대화의 모델 컨텍스트를 압축할 수 없습니다.",
     SUBAGENT_CONTEXT_OVERFLOW:

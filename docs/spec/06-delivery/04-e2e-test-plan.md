@@ -12861,6 +12861,13 @@ This test plan spec is accepted when:
   2. Observe the transcript after the agent loop stops.
   3. Send a follow-up prompt in the same session.
   4. Repeat with three failing `apply_patch` shell commands instead of `Edit`.
+  5. Repeat with Write on one path, then with one ordinary Bash command producing
+     the same error three times. Verify that commands containing private values
+     do not copy those values into the terminal recovery error.
+  6. Fail a command twice, successfully Edit/Write a source file, then rerun the
+     same command. Repeat with changed stderr, and with two different commands.
+  7. Repeat permission refusals and TOOL_ABORTED results. Use two delegates to
+     confirm one owner's failures and successful writes do not reset another's.
 - **Expected**: The third call carries the termination hint and the loop stops,
   but the turn does not merely complete: the transcript ends on an assistant
   error row with `MUTATION_RETRY_BUDGET_EXHAUSTED`, marked retriable, naming the
@@ -12871,6 +12878,14 @@ This test plan spec is accepted when:
   malformed payload. The turn is recorded as failed rather than completed with
   no final message. Step 3 proceeds normally — the guard's counters are per
   prompt. Step 4 produces the same row with `details.kind` of `patch-command`.
+  Step 5 uses `write` or `command` and the corresponding recovery advice.
+  In step 6 successful file work or a changed diagnostic restarts the ordinary
+  command count; another command has its own budget. Reads alone never reset
+  the budget. Step 7 never counts denial/cancellation as a recovery failure and
+  keeps parent/delegate budgets separate.
+  The lower-level user-path coverage is `runtime-tool-recovery.test.ts`, which
+  enters through `runtime.prompt()` with real Agent wiring and synthetic
+  provider/Host boundaries; it does not assert Desktop UI rendering.
 - **Specs linked**: `03-runtime/18-line-anchored-edit-contract.md` §9.3,
   `03-runtime/03-tools-and-permissions.md` §4d,
   `03-runtime/08-error-codes.md` §3.3, ADR 0087

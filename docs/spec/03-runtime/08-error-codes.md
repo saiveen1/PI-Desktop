@@ -131,7 +131,7 @@ does not turn temporary thread pressure into a host process exit.
 | `TOOL_FAILED` | maybe | tool executed but failed |
 | `FILE_NOT_FOUND` | no | Read/Write/Edit target path does not exist (distinct from `TOOL_DENIED`) |
 | `TOOL_ABORTED` | no | the tool was cancelled by a user stop or a turn abort before it finished |
-| `MUTATION_RETRY_BUDGET_EXHAUSTED` | yes | the repeat guard ended the turn after same-path `Edit` or shell patch failures; carries `details.kind` (`edit` or `patch-command`), the last tool error code, and a class-specific `details.recovery` hint |
+| `MUTATION_RETRY_BUDGET_EXHAUSTED` | yes | the repeat guard ended the turn after same-path `Edit`/`Write`, shell patch, or identical ordinary Bash failures; carries `details.kind` (`edit`, `write`, `patch-command`, or `command`), the last tool error code, and a class-specific `details.recovery` hint; commands and diagnostics are retained only as digests for counting |
 | `PROCESS_RESOURCE_EXHAUSTED` | yes | shell process could not start because the OS temporarily exhausted process resources |
 | `SHELL_NOT_FOUND` | no | no effective platform shell is available after catalog fallback; message carries guidance |
 | `COMMAND_SHELL_CHANGED` | no | pinned shell ID or dialect changed before execution |

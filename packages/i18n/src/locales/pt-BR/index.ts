@@ -2933,7 +2933,7 @@ export const ptBR = {
     TIMEOUT: "A solicitação ao provedor de IA atingiu o tempo limite.",
     STREAM_FAILED: "A resposta foi interrompida.",
     EMPTY_MODEL_RESPONSE: "O modelo encerrou a rodada sem gerar resposta, duas vezes seguidas. Tente novamente ou reformule sua solicitação.",
-    MUTATION_RETRY_BUDGET_EXHAUSTED: "A mesma edição falhou três vezes seguidas. A rodada foi interrompida para evitar novas tentativas às cegas. Peça para continuar.",
+    MUTATION_RETRY_BUDGET_EXHAUSTED: "Falhas repetidas de edição ou comandos esgotaram o limite de três tentativas. A rodada foi interrompida; verifique o erro antes de continuar.",
     CONTEXT_TOO_LARGE: "Esta conversa ainda é longa demais após a recuperação de contexto. Encurte sua mensagem ou inicie uma nova conversa.",
     CONTEXT_COMPACTION_FAILED: "Não foi possível compactar o contexto do modelo desta conversa.",
     SUBAGENT_CONTEXT_OVERFLOW: "A tarefa de um subagente ultrapassou o limite de contexto do modelo. Reduza o escopo, escolha para ele um modelo com uma janela de contexto maior ou peça que leia menos conteúdo por vez.",

@@ -3106,7 +3106,7 @@ importConfirm: "Imported extensions run inside the agent process with the same a
     EMPTY_MODEL_RESPONSE:
       "The model finished its turn without saying anything, twice in a row. Try again, or rephrase your request.",
     MUTATION_RETRY_BUDGET_EXHAUSTED:
-      "The same edit failed three times, so this turn stopped instead of retrying blind. Ask again to continue.",
+      "Repeated edits or commands exhausted the three-attempt recovery budget. This turn stopped; inspect the error before continuing.",
     CONTEXT_TOO_LARGE: "This chat is still too long after context recovery. Shorten your message or start a new chat.",
     CONTEXT_COMPACTION_FAILED: "Couldn't compact this conversation's model context.",
     SUBAGENT_CONTEXT_OVERFLOW:

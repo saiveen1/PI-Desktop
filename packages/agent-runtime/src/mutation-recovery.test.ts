@@ -2,7 +2,14 @@ import { mkdtemp, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { isPatchCommand, mutationFailureKey } from "./mutation-recovery.js";
+import {
+  BASH_COMMAND_FAILURE_KEY_PREFIX,
+  bashCommandFailureKey,
+  isPatchCommand,
+  mutationFailureKey,
+  mutationTerminationAdvice,
+  mutationTerminationMessage,
+} from "./mutation-recovery.js";
 
 describe("mutationFailureKey", () => {
   it("uses a stable lexical identity when the target does not exist", async () => {
@@ -47,6 +54,46 @@ describe("mutationFailureKey", () => {
     } finally {
       await rm(root, { recursive: true, force: true });
     }
+  });
+});
+
+describe("bashCommandFailureKey", () => {
+  it("returns a stable prefixed digest without exposing command text", () => {
+    const command = "printf 'secret command payload'";
+    const key = bashCommandFailureKey(command);
+    expect(key).toBe(bashCommandFailureKey(command));
+    expect(key?.startsWith(BASH_COMMAND_FAILURE_KEY_PREFIX)).toBe(true);
+    expect(key?.slice(BASH_COMMAND_FAILURE_KEY_PREFIX.length)).toMatch(/^[0-9a-f]{16}$/);
+    expect(key).not.toContain(command);
+    expect(key).not.toContain("secret command payload");
+    expect(bashCommandFailureKey("")).toBeUndefined();
+    expect(bashCommandFailureKey("   ")).toBeUndefined();
+    expect(bashCommandFailureKey(42)).toBeUndefined();
+  });
+});
+
+describe("mutation termination messaging", () => {
+  it("gives Write recovery guidance in advice and message", () => {
+    const advice = mutationTerminationAdvice("write", "WRITE_FAILED");
+    const message = mutationTerminationMessage("write", "src/example.ts", "WRITE_FAILED");
+    expect(advice).toContain("path, content, or permissions");
+    expect(advice).toContain("retry");
+    expect(message).toContain("failed file mutations on src/example.ts");
+    expect(message).toContain("Last tool: Write.");
+    expect(message).toContain(advice);
+  });
+
+  it("gives Bash recovery guidance without echoing the command", () => {
+    const command = "echo sensitive command payload";
+    const advice = mutationTerminationAdvice("command", "TOOL_FAILED");
+    const message = mutationTerminationMessage("command", command, "TOOL_FAILED");
+    expect(advice).toContain("exit code");
+    expect(advice).toContain("stderr");
+    expect(advice).toContain("change or split the Bash command");
+    expect(advice).toContain("verbatim");
+    expect(message).toContain("the same failed Bash command");
+    expect(message).toContain(advice);
+    expect(message).not.toContain(command);
   });
 });
 
