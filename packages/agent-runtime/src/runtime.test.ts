@@ -11471,7 +11471,7 @@ describe("DesktopAgentRuntime subagents", () => {
         await cancelled;
         await vi.waitFor(() => expect(internals.delegations.get(id).status).toBe(action === "abort" ? "aborted" : "stopped"));
         expect(internals.delegationChains.resolveResume({ resume: id, agentName: "explorer",
-          runningDelegationIds: new Set() }).ok).toBe(false);
+          runningDelegationIds: new Set() }).ok).toBe(true);
       } finally {
         subagentRuns.ignoreAbort = false;
         subagentRuns.deferred = false;
@@ -11592,26 +11592,30 @@ describe("DesktopAgentRuntime subagents", () => {
       await runtime.dispose();
     });
 
-    it("refuses to resume a chain a restart rebuilt from a stopped Task row", async () => {
+    it("resumes a chain a restart rebuilt from a stopped Task row", async () => {
       const history: UiMessage[] = [
-        restartedTaskRow("task-1", "del-1", { status: "stopped" }),
+        restartedTaskRow("task-1", "del-1", {
+          status: "stopped",
+          checkpointPath: "/tmp/session-scratch/delegations/del-1/checkpoint.json",
+        }),
         delegateRow("child-1", "task-1"),
       ];
       const runtime = createRuntime({ subagents: [explorer], history });
       subagentRuns.calls.length = 0;
       subagentRuns.deferred = false;
 
+      expect((runtime as any).delegationChains.lookup("del-1")).toMatchObject({
+        latestStatus: "stopped",
+        checkpointPath: "/tmp/session-scratch/delegations/del-1/checkpoint.json",
+      });
       const result = await startTask(runtime, "task-2", {
         agent: "explorer",
         task: "Continue.",
         resume: "del-1",
       });
 
-      expect(String((result.details as any).error)).toContain(
-        'ended as "stopped"',
-      );
-      expect(String((result.details as any).error)).toContain("cannot be resumed");
-      expect(subagentRuns.calls).toHaveLength(0);
+      expect((result.details as any).resumedFrom).toBe("del-1");
+      expect(subagentRuns.calls).toHaveLength(1);
       await runtime.dispose();
     });
 

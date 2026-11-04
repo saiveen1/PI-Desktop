@@ -1,6 +1,6 @@
 import { DelegationScheduler, type DelegationDecisionRecord } from "./delegation-scheduler.js";
 import { subagentTaskDeclaration } from "./delegation-tool.js";
-import { describeDelegationModels, type DelegationSettings, type DelegationApprovalDecision } from "@pi-desktop/shared";
+import { resolveDelegationRunPolicy, describeDelegationRunPolicy, isDelegationRunPolicySnapshot, type DelegationRunPolicy, describeDelegationModels, type DelegationSettings, type DelegationApprovalDecision } from "@pi-desktop/shared";
 import {
   mutationFailureKey, mutationTerminationAdvice, mutationTerminationMessage,
 } from "./mutation-recovery.js";
@@ -214,6 +214,7 @@ import {
 } from "./context-budget.js";
 import { PathMutex } from "./path-lock.js";
 import { DelegationChainRegistry } from "./delegation-chain.js";
+import { readSubagentCheckpoint, type SubagentCheckpoint, type PersistSubagentCheckpointResult } from "./subagent-checkpoint.js";
 import {
   extractReadFiles,
   isReadOnlyToolName,
@@ -562,6 +563,8 @@ export type DelegationRecord = {
   startedAt: number;
   completedAt?: number;
   result?: SubagentRunResult;
+  checkpoint?: PersistSubagentCheckpointResult;
+  runPolicy?: Readonly<DelegationRunPolicy>;
   completion: Promise<void>;
   resolveCompletion: () => void;
   abort: () => void;
@@ -626,6 +629,12 @@ function delegationSummary(record: DelegationRecord): Record<string, unknown> {
     ...(record.result?.scratchReportPath
       ? { scratchReportPath: record.result.scratchReportPath }
       : {}),
+    ...((record.result?.checkpointPath ?? record.checkpoint?.checkpointPath)
+      ? { checkpointPath: record.result?.checkpointPath ?? record.checkpoint?.checkpointPath } : {}),
+    ...((record.result?.checkpointError ?? record.checkpoint?.error)
+      ? { checkpointError: record.result?.checkpointError ?? record.checkpoint?.error } : {}),
+    ...(record.result ? { report: record.result.report, partial: record.result.status !== "completed" } : {}),
+    ...(record.runPolicy ? { runPolicy: record.runPolicy } : {}),
     ...(record.resumedFrom ? { resumedFrom: record.resumedFrom } : {}),
     ...(record.modelChangedFrom
       ? { modelChangedFrom: record.modelChangedFrom }
@@ -4595,21 +4604,14 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       case "not-resumable":
         return {
           ok: false,
-          message:
-            error.status === "interrupted"
-              ? `Delegation ${resume} was interrupted — the app closed while it worked — so there is nothing to continue. Start a new delegation instead.`
-              : `Delegation ${resume} ended as "${error.status}" and cannot be resumed. Only completed or failed delegations continue; start a new delegation instead.`,
+          message: `Delegation ${resume} ended as "${error.status}" and cannot be resumed. Start a new delegation instead.`,
         };
       case "agent-mismatch":
         return {
           ok: false,
           message: `Delegation ${resume} belongs to the ${error.expected} subagent, not ${error.actual}. Resume it with the matching agent name, or start a new delegation.`,
         };
-      case "over-budget":
-        return {
-          ok: false,
-          message: `Delegation ${resume} has read too much to resume cheaply. Start a new delegation and point it at the specific files it should re-read.`,
-        };
+
     }
   }
 
@@ -4684,6 +4686,40 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     return undefined;
   }
 
+  private readDelegateCheckpoint(chain: DelegationChain): SubagentCheckpoint | undefined {
+    const restored = readSubagentCheckpoint({
+      scratchDir: this.scratchDir, delegateSessionId: chain.delegateSessionId,
+      parentToolCallId: chain.toolCallIds[0], sessionId: this.sessionId, agentName: chain.agentName,
+    });
+    if (restored.error) process.stderr.write(`[agent-runtime] delegate checkpoint unavailable: ${restored.error}\n`);
+    // A stale file cannot replace a newer transcript run or a different branch.
+    return restored.checkpoint && restored.checkpoint.delegationId === chain.latestDelegationId
+      ? restored.checkpoint : undefined;
+  }
+
+  private restoredDelegationResults(ids: string[]) {
+    return ids.flatMap((delegationId) => {
+      if (this.delegations.has(delegationId)) return [];
+      const chain = this.delegationChains.lookup(delegationId);
+      if (!chain) return [];
+      const checkpoint = this.readDelegateCheckpoint(chain);
+      const task = this.transcriptHistory.find(row => row.toolName === SUBAGENT_TOOL_NAME &&
+        isRecord(row.toolResult) && isRecord(row.toolResult.details) && row.toolResult.details.delegationId === delegationId);
+      const details = isRecord(task?.toolResult) && isRecord(task.toolResult.details) ? task.toolResult.details : undefined;
+      const report = typeof details?.report === "string" ? details.report
+        : checkpoint?.delegationId === delegationId ? checkpoint.report : undefined;
+      if (!report) return [];
+      const savedStatus = typeof details?.status === "string" ? details.status : checkpoint?.status ?? "interrupted";
+      const runPolicy = details?.runPolicy ?? checkpoint?.runPolicy;
+      return [{ delegationId, agent: chain.agentName,
+        ...(isDelegationRunPolicySnapshot(runPolicy) ? { runPolicy } : {}),
+        status: savedStatus === "running" ? "interrupted" : savedStatus,
+        report: truncateTextWithMarker(report, MAX_SUBAGENT_REPORT_CHARS, "\n[report truncated]\n"),
+        partial: savedStatus !== "completed",
+      }];
+    });
+  }
+
   /**
    * Rebuild the delegate's prior conversation from its transcript rows. The
    * rows carry `parentToolCallId` for exactly the chain's `Task` calls, so the
@@ -4692,12 +4728,19 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
   private seedResumedDelegate(
     chain: DelegationChain,
     provider: RuntimeProviderConfig,
+    checkpoint?: SubagentCheckpoint,
   ): AgentMessage[] | undefined {
     const originalTask =
       chain.originalTask ??
       originalTaskFromTranscript(this.transcriptHistory, chain);
     if (!originalTask) return undefined;
     const rows = selectChainRows(this.transcriptHistory, chain);
+    if (checkpoint) rows.push({
+      id: `delegate-checkpoint-${chain.delegateSessionId}`, role: "assistant",
+      content: `Retained task report (partial unless explicitly completed):\n${checkpoint.report}\nVerify any interrupted tool's effects before repeating it.`,
+      createdAt: nowIso(), status: "complete", agentName: chain.agentName,
+      parentToolCallId: chain.toolCallIds.at(-1),
+    });
     if (rows.length === 0) return undefined;
     // The seed is truncated against the delegate's own budget (ADR 0299 §7),
     // derived from the same model the resumed run will use, so the first
@@ -4889,8 +4932,9 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
         }
         const modelChangedFrom = resumedChain?.latestModelId && resumedChain.latestModelId !== provider.modelId
           ? resumedChain.latestModelId : undefined;
+        const checkpoint = resumedChain ? this.readDelegateCheckpoint(resumedChain) : undefined;
         const initialMessages = resumedChain
-          ? this.seedResumedDelegate(resumedChain, provider)
+          ? this.seedResumedDelegate(resumedChain, provider, checkpoint)
           : undefined;
         if (resume && !initialMessages) {
           // The chain resolved but has nothing left to replay. Drop it so it
@@ -4960,7 +5004,9 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           ...(providerKey ? { latestModelKey: providerKey } : {}),
           resumedFrom: resumedChain,
         });
+        const runPolicy = resolveDelegationRunPolicy(this.delegationSettings?.runPolicy);
         const record: DelegationRecord = {
+          runPolicy,
           delegationId,
           parentToolCallId: toolCallId,
           writable: declaredToolNames.some((name) => PATH_MUTATING_TOOLS.has(name)),
@@ -5005,7 +5051,14 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
             turnId: this.turnId,
             parentToolCallId: toolCallId,
             delegationId: record.delegationId,
+            delegateSessionId: chain.delegateSessionId,
             scratchDir: this.scratchDir,
+            initialReport: checkpoint?.report,
+            runPolicy,
+            onCheckpoint: (paths) => {
+              record.checkpoint = paths;
+              this.publishDelegationSettlement(record);
+            },
             task,
             provider,
             infiniteProviderRetry: this.infiniteProviderRetry,
@@ -5103,13 +5156,14 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           content: [
             {
               type: "text",
-              text: `Delegation ${delegationId} started: the ${definition.name} subagent is working in the background${label ? ` (${label})` : ""}.${this.delegationSettings ? ` Model: ${provider.modelId}. ${scheduler.decisions.filter((row) => row.decision === "skipped").map((row) => `${row.model}: ${row.reason}.`).join(" ")}` : ""} Continue your own independent work, then call TaskWait with this delegationId to converge, or TaskStop to stop it.`,
+              text: `Delegation ${delegationId} started: the ${definition.name} subagent is working in the background${label ? ` (${label})` : ""}.${this.delegationSettings ? ` Model: ${provider.modelId}. ${scheduler.decisions.filter((row) => row.decision === "skipped").map((row) => `${row.model}: ${row.reason}.`).join(" ")}` : ""} Continue your own independent work, then call TaskWait with this delegationId to converge, or TaskStop to stop it. ${describeDelegationRunPolicy(runPolicy)}`,
             },
           ],
           details: {
             delegationId,
             agent: definition.name,
             status: "running",
+            runPolicy,
             startedAt,
             modelId: provider.modelId,
             thinkingLevel,
@@ -5234,7 +5288,11 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       if (result.usage) {
         this.turnSubagentUsage = addUsage(this.turnSubagentUsage, result.usage);
       }
-      this.delegationChains.settle(record.delegateSessionId, record.status);
+      this.delegationChains.settle(
+        record.delegateSessionId,
+        record.status,
+        result.checkpointPath,
+      );
       // An aborted call never sends `tool_end`, so a settled run drops whatever
       // its calls left behind rather than pinning those arguments for the session.
       for (const toolCallId of record.pendingToolCallIds ?? []) {
@@ -5262,11 +5320,15 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     if (!record.taskMessage) return;
     const original = record.taskMessage.toolResult;
     const details = isRecord(original) && isRecord(original.details) ? original.details : undefined;
-    if (record.status === "running" && details?.modelId === record.modelId && details?.thinkingLevel === record.thinkingLevel) return;
+    if (record.status === "running" && details?.modelId === record.modelId &&
+        details?.thinkingLevel === record.thinkingLevel &&
+        details?.checkpointPath === record.checkpoint?.checkpointPath &&
+        details?.checkpointError === record.checkpoint?.error) return;
+    record.taskMessage = settledDelegationMessage(record.taskMessage, delegationSummary(record));
     this.emit(
       {
         type: "message_end",
-        message: settledDelegationMessage(record.taskMessage, delegationSummary(record)),
+        message: record.taskMessage,
       },
       record.taskTurnId,
     );
@@ -5645,7 +5707,8 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
               .map((id) => this.delegations.get(id))
               .filter((record): record is DelegationRecord => record !== undefined)
           : this.runningDelegations();
-        if (targets.length === 0) {
+        const restored = this.restoredDelegationResults(ids);
+        if (targets.length === 0 && restored.length === 0) {
           const text = ids.length
             ? "None of the requested delegation ids exist in this session. Call TaskList to see them."
             : "No subagents are currently running.";
@@ -5654,11 +5717,11 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
             details: { delegations: [] },
           };
         }
-        const unknownIds = ids.filter((id) => !this.delegations.has(id));
+        const unknownIds = ids.filter(id => !this.delegations.has(id) && !restored.some(row => row.delegationId === id));
         const targetCompleted =
           mode === "all"
             ? targets.length
-            : Math.min(Math.max(minCompleted, 1), targets.length);
+            : Math.min(Math.max(minCompleted - restored.length, 0), targets.length);
         const deadline = Date.now() + timeoutSeconds * 1000;
         this.beginDelegationWait(targets);
         const waitAbort = new AbortController();
@@ -5684,10 +5747,11 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
         // stay pending so the idle resume can deliver them later. Running
         // delegates keep their shot: a timeout or early `any` convergence has
         // not consumed it.
-        const results = targets.map((record) => ({
+        const results = [...restored, ...targets.map((record) => ({
           delegationId: record.delegationId,
           agent: record.agentName,
           status: record.status,
+          ...(record.runPolicy ? { runPolicy: record.runPolicy } : {}),
           modelId: record.modelId,
           thinkingLevel: record.thinkingLevel,
           startedAt: record.startedAt,
@@ -5696,11 +5760,14 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           ...(record.result?.scratchReportPath
             ? { scratchReportPath: record.result.scratchReportPath }
             : {}),
+          ...(record.result?.checkpointPath
+            ? { checkpointPath: record.result.checkpointPath }
+            : {}),
           report:
             record.status === "running"
               ? formatDelegationHeartbeat(record)
               : (record.result?.report ?? `(${record.status} without a report)`),
-        }));
+        }))];
         const note = interrupted
           ? "Interrupted by new user input. Unfinished subagents keep working; handle the user's message before waiting again."
           : timedOut
@@ -5871,7 +5938,10 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
             ? `Cancellation settled for ${targets.length} subagent${targets.length === 1 ? "" : "s"}: ${stopped.length} stopped and ${settled.length} had already finished.`
             : `Stopped ${stopped.length} subagent${stopped.length === 1 ? "" : "s"}.`;
     return {
-      content: [{ type: "text" as const, text }],
+      content: [{ type: "text" as const, text: [text, formatDelegationResults(
+        [...stopped, ...settled].map(record => ({ delegationId: record.delegationId,
+          agent: record.agentName, status: record.status, report: record.result?.report ?? "No report recorded." })),
+      ).text].filter(Boolean).join("\n\n") }],
       details: {
         stopped: stopped.map(delegationSummary),
         ...(pending.length > 0
@@ -5914,7 +5984,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     const resolved = this.resolveResumeChain(resume, chain.agentName);
     if (!resolved.ok) throw new Error(resolved.message);
     const originalTask = chain.originalTask ?? originalTaskFromTranscript(this.transcriptHistory, chain);
-    if (!originalTask || selectChainRows(this.transcriptHistory, chain).length === 0) {
+    if (!originalTask || (selectChainRows(this.transcriptHistory, chain).length === 0 && !this.readDelegateCheckpoint(chain))) {
       this.delegationChains.drop(chain.delegateSessionId);
       throw new Error(this.noHistoryResumeMessage(resume));
     }

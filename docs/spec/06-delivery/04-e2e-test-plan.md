@@ -11098,7 +11098,7 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
 | A — App startup | E2E-001, E2E-002, E2E-003, E2E-004, E2E-067, E2E-076, E2E-079, E2E-092, E2E-097, E2E-143, E2E-150, E2E-168, E2E-204 |
 | A / C / F / Quality — Tray session navigation | E2E-TRAY-bounded-session-navigation |
 | B — Model config | E2E-005, E2E-PROVIDER-custom-endpoint-no-api-key, E2E-006, E2E-007, E2E-038, E2E-050, E2E-052, E2E-055, E2E-066, E2E-080, E2E-082, E2E-102c, E2E-102d, E2E-102e, E2E-151, E2E-154, E2E-163, E2E-166, E2E-172, E2E-174, E2E-197, E2E-005G, E2E-005J, E2E-199, E2E-201, E2E-202, E2E-203, E2E-205, E2E-206, E2E-209, E2E-PLUGIN-provider-catalog-add-service |
-| C — Conversation & stream | E2E-CHAT-long-history-stream-keeps-responsive, E2E-CHAT-running-status-survives-output-pauses, E2E-008, E2E-008d, E2E-008e, E2E-008a, E2E-009, E2E-010, E2E-011, E2E-011a, E2E-011b, E2E-011d, E2E-011e, E2E-011g, E2E-031, E2E-040, E2E-047, E2E-048, E2E-048A, E2E-049, E2E-052, E2E-053, E2E-054, E2E-055, E2E-059, E2E-059a, E2E-060c, E2E-060d, E2E-061, E2E-061a, E2E-062, E2E-064, E2E-065, E2E-068, E2E-071, E2E-073, E2E-074, E2E-075, E2E-081, E2E-083, E2E-084, E2E-086, E2E-087, E2E-088, E2E-088b, E2E-089, E2E-090, E2E-COMPOSER-narrow-controls, E2E-094, E2E-095, E2E-096, E2E-097, E2E-098, E2E-099, E2E-102, E2E-102a, E2E-102b, E2E-102c, E2E-102d, E2E-102g, E2E-106, E2E-109, E2E-111, E2E-114, E2E-116, E2E-117, E2E-118, E2E-119, E2E-120, E2E-121, E2E-218, E2E-259, E2E-219, E2E-AGENTS-001, E2E-142, E2E-144, E2E-145, E2E-146, E2E-146a, E2E-147, E2E-151, E2E-154, E2E-155, E2E-158, E2E-159, E2E-161, E2E-162, E2E-166, E2E-172, E2E-173, E2E-174, E2E-177, E2E-178, E2E-179, E2E-180, E2E-182, E2E-183, E2E-187, E2E-198, E2E-199, E2E-202, E2E-203, E2E-207, E2E-208, E2E-CHAT-content-width-handles, E2E-250, E2E-102i, E2E-PLUGIN-session-orchestrator-real-workers, E2E-SUBAGENT-settlement-updates-before-parent-poll, E2E-SUBAGENT-resume-a-settled-delegation |
+| C — Conversation & stream | E2E-CHAT-long-history-stream-keeps-responsive, E2E-CHAT-running-status-survives-output-pauses, E2E-008, E2E-008d, E2E-008e, E2E-008a, E2E-009, E2E-010, E2E-011, E2E-011a, E2E-011b, E2E-011d, E2E-011e, E2E-011g, E2E-031, E2E-040, E2E-047, E2E-048, E2E-048A, E2E-049, E2E-052, E2E-053, E2E-054, E2E-055, E2E-059, E2E-059a, E2E-060c, E2E-060d, E2E-061, E2E-061a, E2E-062, E2E-064, E2E-065, E2E-068, E2E-071, E2E-073, E2E-074, E2E-075, E2E-081, E2E-083, E2E-084, E2E-086, E2E-087, E2E-088, E2E-088b, E2E-089, E2E-090, E2E-COMPOSER-narrow-controls, E2E-094, E2E-095, E2E-096, E2E-097, E2E-098, E2E-099, E2E-102, E2E-102a, E2E-102b, E2E-102c, E2E-102d, E2E-102g, E2E-106, E2E-109, E2E-111, E2E-114, E2E-116, E2E-117, E2E-118, E2E-119, E2E-120, E2E-121, E2E-218, E2E-259, E2E-219, E2E-AGENTS-001, E2E-142, E2E-144, E2E-145, E2E-146, E2E-146a, E2E-147, E2E-151, E2E-154, E2E-155, E2E-158, E2E-159, E2E-161, E2E-162, E2E-166, E2E-172, E2E-173, E2E-174, E2E-177, E2E-178, E2E-179, E2E-180, E2E-182, E2E-183, E2E-187, E2E-198, E2E-199, E2E-202, E2E-203, E2E-207, E2E-208, E2E-CHAT-content-width-handles, E2E-250, E2E-102i, E2E-PLUGIN-session-orchestrator-real-workers, E2E-SUBAGENT-settlement-updates-before-parent-poll, E2E-SUBAGENT-resume-a-settled-delegation, E2E-SUBAGENT-checkpoint-recovery, E2E-SUBAGENT-run-policy-settings |
 | C — Conversation & stream (composer drafts) | E2E-011c, E2E-011c-1, E2E-011c-2 |
 | D — Workspace | E2E-012, E2E-013, E2E-022B, E2E-024I, E2E-047, E2E-049, E2E-057, E2E-058, E2E-060, E2E-068, E2E-075, E2E-078, E2E-153, E2E-158, E2E-182, E2E-187, E2E-252 |
 | C / D / Quality — Project session history resets after collapse | E2E-263 |
@@ -11110,7 +11110,7 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
 | G — Plugins | E2E-022, E2E-022A, E2E-022B, E2E-022C, E2E-023, E2E-024, E2E-024B, E2E-024C, E2E-024D, E2E-024AA, E2E-024E, E2E-024W, E2E-024F, E2E-024G, E2E-024H, E2E-024I, E2E-024J, E2E-024K, E2E-024L, E2E-024M, E2E-024N, E2E-024O, E2E-024P, E2E-025, E2E-026, E2E-105, E2E-117, E2E-120, E2E-122, E2E-123, E2E-024Q, E2E-148, E2E-152, E2E-153, E2E-PLUGIN-imported-pi-package-skills, E2E-PLUGIN-imported-pi-package-wrapper, E2E-PLUGIN-import-extension-installs-dependencies, E2E-PLUGIN-import-extension-reports-missing-dependency, E2E-PLUGIN-global-shortcut-owns-only-its-own-command, E2E-PLUGIN-permission-gate-for-real-time-capabilities, E2E-PLUGIN-background-audio-and-realtime-connection, E2E-PLUGIN-fs-root-follows-the-calling-session, E2E-PLUGIN-provider-catalog-add-service, E2E-PLUGIN-reviews-public-reads |
 | H — Diagnostics | E2E-027, E2E-031, E2E-034, E2E-042, E2E-096, E2E-098, E2E-104, E2E-107, E2E-108, E2E-109, E2E-110, E2E-113, E2E-115, E2E-116, E2E-118, E2E-121, E2E-146, E2E-146a, E2E-155, E2E-159, E2E-176, E2E-194, E2E-195 |
 | Security | E2E-SETTINGS-inline-capability-imports, E2E-028, E2E-029, E2E-030, E2E-024J, E2E-024K, E2E-024M, E2E-049, E2E-068, E2E-086, E2E-102c, E2E-102d, E2E-102e, E2E-105, E2E-106, E2E-107, E2E-108, E2E-109, E2E-110, E2E-112, E2E-113, E2E-115, E2E-116, E2E-117, E2E-119, E2E-121, E2E-122, E2E-123, E2E-142, E2E-148, E2E-151, E2E-153, E2E-158, E2E-187, E2E-196c, E2E-196b, E2E-196, E2E-PROVIDER-custom-endpoint-no-api-key, E2E-PLUGIN-fs-root-follows-the-calling-session, E2E-PLUGIN-provider-catalog-add-service, E2E-PLUGIN-reviews-public-reads |
-| Quality | E2E-SETTINGS-inline-capability-imports, E2E-CHAT-long-history-stream-keeps-responsive, E2E-CHAT-running-status-survives-output-pauses, E2E-032, E2E-033, E2E-039, E2E-043, E2E-044, E2E-045, E2E-046, E2E-047, E2E-048, E2E-048A, E2E-049, E2E-050, E2E-053, E2E-055, E2E-056, E2E-057, E2E-058, E2E-059, E2E-060, E2E-061, E2E-062, E2E-063, E2E-064, E2E-065, E2E-066, E2E-067, E2E-068, E2E-069, E2E-070, E2E-071, E2E-072, E2E-073, E2E-074, E2E-075, E2E-076, E2E-077, E2E-078, E2E-079, E2E-080, E2E-081, E2E-082, E2E-083, E2E-084, E2E-085, E2E-086, E2E-092, E2E-093, E2E-094, E2E-095, E2E-096, E2E-097, E2E-098, E2E-099, E2E-100, E2E-101, E2E-102, E2E-102a, E2E-102b, E2E-102c, E2E-102d, E2E-102e, E2E-103, E2E-AGENTS-001, E2E-021a, E2E-024N, E2E-059a, E2E-060b, E2E-060c, E2E-061a, E2E-073a, E2E-111, E2E-114, E2E-117, E2E-118, E2E-119, E2E-120, E2E-122, E2E-123, E2E-142, E2E-143, E2E-144, E2E-145, E2E-146, E2E-147, E2E-148, E2E-150, E2E-151, E2E-153, E2E-155, E2E-158, E2E-159, E2E-160, E2E-161, E2E-162, E2E-163, E2E-168, E2E-172, E2E-173, E2E-174, E2E-011g, E2E-176, E2E-177, E2E-178, E2E-179, E2E-180, E2E-181, E2E-182, E2E-183, E2E-186, E2E-187, E2E-194, E2E-195, E2E-196a, E2E-196b, E2E-196c, E2E-198, E2E-199, E2E-200, E2E-196, E2E-201, E2E-204, E2E-202, E2E-203, E2E-205, E2E-206, E2E-207, E2E-208, E2E-209, E2E-210, E2E-UPDATE-preference-and-once-only-reminder, E2E-218, E2E-259, E2E-219, E2E-250, E2E-252, E2E-102i, E2E-SUBAGENT-settlement-updates-before-parent-poll, E2E-PLUGIN-imported-pi-package-skills, E2E-PLUGIN-fs-root-follows-the-calling-session, E2E-SUBAGENT-resume-a-settled-delegation, E2E-PLUGIN-provider-catalog-add-service |
+| Quality | E2E-SETTINGS-inline-capability-imports, E2E-CHAT-long-history-stream-keeps-responsive, E2E-CHAT-running-status-survives-output-pauses, E2E-032, E2E-033, E2E-039, E2E-043, E2E-044, E2E-045, E2E-046, E2E-047, E2E-048, E2E-048A, E2E-049, E2E-050, E2E-053, E2E-055, E2E-056, E2E-057, E2E-058, E2E-059, E2E-060, E2E-061, E2E-062, E2E-063, E2E-064, E2E-065, E2E-066, E2E-067, E2E-068, E2E-069, E2E-070, E2E-071, E2E-072, E2E-073, E2E-074, E2E-075, E2E-076, E2E-077, E2E-078, E2E-079, E2E-080, E2E-081, E2E-082, E2E-083, E2E-084, E2E-085, E2E-086, E2E-092, E2E-093, E2E-094, E2E-095, E2E-096, E2E-097, E2E-098, E2E-099, E2E-100, E2E-101, E2E-102, E2E-102a, E2E-102b, E2E-102c, E2E-102d, E2E-102e, E2E-103, E2E-AGENTS-001, E2E-021a, E2E-024N, E2E-059a, E2E-060b, E2E-060c, E2E-061a, E2E-073a, E2E-111, E2E-114, E2E-117, E2E-118, E2E-119, E2E-120, E2E-122, E2E-123, E2E-142, E2E-143, E2E-144, E2E-145, E2E-146, E2E-147, E2E-148, E2E-150, E2E-151, E2E-153, E2E-155, E2E-158, E2E-159, E2E-160, E2E-161, E2E-162, E2E-163, E2E-168, E2E-172, E2E-173, E2E-174, E2E-011g, E2E-176, E2E-177, E2E-178, E2E-179, E2E-180, E2E-181, E2E-182, E2E-183, E2E-186, E2E-187, E2E-194, E2E-195, E2E-196a, E2E-196b, E2E-196c, E2E-198, E2E-199, E2E-200, E2E-196, E2E-201, E2E-204, E2E-202, E2E-203, E2E-205, E2E-206, E2E-207, E2E-208, E2E-209, E2E-210, E2E-UPDATE-preference-and-once-only-reminder, E2E-218, E2E-259, E2E-219, E2E-250, E2E-252, E2E-102i, E2E-SUBAGENT-settlement-updates-before-parent-poll, E2E-PLUGIN-imported-pi-package-skills, E2E-PLUGIN-fs-root-follows-the-calling-session, E2E-SUBAGENT-resume-a-settled-delegation, E2E-PLUGIN-provider-catalog-add-service, E2E-SUBAGENT-checkpoint-recovery, E2E-SUBAGENT-run-policy-settings |
 | Quality (sidebar menu placement) | E2E-021c |
 | Quality (project ordering) | E2E-253 |
 | Quality (work-panel tab close visibility) | E2E-WORK-PANEL-active-tab-close-visibility |
@@ -11174,7 +11174,7 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
 | M2 (IME slash alias) | E2E-255 |
 | M5 (Skill residency) | E2E-254 |
 | M6 | E2E-104, E2E-105, E2E-106, E2E-107, E2E-108, E2E-109, E2E-110, E2E-111, E2E-112, E2E-113, E2E-114, E2E-115, E2E-116, E2E-117, E2E-118, E2E-119, E2E-120, E2E-103, E2E-172 |
-| M6+ | E2E-121, E2E-122, E2E-148, E2E-150, E2E-151, E2E-154, E2E-155, E2E-158, E2E-159, E2E-160, E2E-161, E2E-162, E2E-163, E2E-166, E2E-168, E2E-173, E2E-174, E2E-176, E2E-179, E2E-196a, E2E-196b, E2E-196c, E2E-198, E2E-199, E2E-200, E2E-202, E2E-203, E2E-205, E2E-209, E2E-SETTINGS-inline-capability-imports, E2E-210, E2E-UPDATE-preference-and-once-only-reminder, E2E-212, E2E-213, E2E-214, E2E-215, E2E-216, E2E-217, E2E-218, E2E-259, E2E-219, E2E-257, E2E-SUBAGENT-settlement-updates-before-parent-poll, E2E-PLUGIN-fs-root-follows-the-calling-session, E2E-SUBAGENT-resume-a-settled-delegation |
+| M6+ | E2E-121, E2E-122, E2E-148, E2E-150, E2E-151, E2E-154, E2E-155, E2E-158, E2E-159, E2E-160, E2E-161, E2E-162, E2E-163, E2E-166, E2E-168, E2E-173, E2E-174, E2E-176, E2E-179, E2E-196a, E2E-196b, E2E-196c, E2E-198, E2E-199, E2E-200, E2E-202, E2E-203, E2E-205, E2E-209, E2E-SETTINGS-inline-capability-imports, E2E-210, E2E-UPDATE-preference-and-once-only-reminder, E2E-212, E2E-213, E2E-214, E2E-215, E2E-216, E2E-217, E2E-218, E2E-259, E2E-219, E2E-257, E2E-SUBAGENT-settlement-updates-before-parent-poll, E2E-PLUGIN-fs-root-follows-the-calling-session, E2E-SUBAGENT-resume-a-settled-delegation, E2E-SUBAGENT-checkpoint-recovery, E2E-SUBAGENT-run-policy-settings |
 | M6+ (Session Orchestrator) | E2E-PLUGIN-session-orchestrator-real-workers |
 | M6+ (Selected model order) | E2E-MODEL-selected-order-persists |
 | M6+ (MCP server timeout override) | E2E-261 |
@@ -13327,10 +13327,9 @@ This test plan spec is accepted when:
     still running, with the instruction to converge through `TaskWait` first;
     nothing is started, nothing is queued, and the running delegate keeps
     working.
-  - Step 5 refuses `stopped`, `aborted`, and the run the app closed while it was
-    still working (which reads as `interrupted` after relaunch) as not
-    resumable, each naming that reason and the fresh-delegation path instead. No
-    run starts.
+  - Step 5 resumes stopped, aborted and interrupted chains only on the new
+    explicit Task call, using retained transcript and a validated checkpoint.
+    No work starts merely because cancellation finished or the app relaunched.
   - Step 6 resumes the failed chain like a completed one: the reads it already
     made seed the new run, and its failed assistant row is not replayed.
   - Step 7 is refused as a tool error: a resumed run keeps the chain's model, and
@@ -13344,10 +13343,8 @@ This test plan spec is accepted when:
     unknown delegation with the current reusable list, while a chain whose latest
     run is still working is never evicted — the group may sit over the bound
     rather than strand a live delegate.
-  - Step 10 drops the over-budget chain from the reusable list without trimming
-    its history: no later prompt offers it and a `resume` for it is refused as
-    having read too much to resume cheaply, while an ordinary delegation for the
-    same work still succeeds from cold.
+  - Step 10 keeps the chain reusable. The resumed model request uses bounded
+    seeding with intact tool call/result pairs and the retained report.
   - Step 11 matches the definition name case-insensitively and with the document
     suffix — `Explorer` and `explorer.md` both resume the chain — while a
     different definition's name is a name mismatch that lists the agents that do
@@ -13355,13 +13352,12 @@ This test plan spec is accepted when:
   - Step 12 offers each chain's latest `delegationId`, its objective, and at most
     eight of the files it read, with a `(+N more)` suffix past that. A chain that
     just settled is already there in the same session, with no app restart and no
-    new session; running, non-resumable, over-budget, and evicted chains never
-    appear.
+    new session; running, unsupported-status, and evicted chains never appear.
   - Step 13 rebuilds the chain relationship from the transcript, so the
     `completed` chain is offered again after relaunch and resumes as before.
-  - Step 14 fails as having no recorded history, and that same id is not listed
-    among the reusable ids in the error or in any later prompt: the chain leaves
-    the reusable list.
+  - Step 14 resumes from a validated checkpoint when present. With neither
+    child rows nor a valid checkpoint it fails visibly and removes the unusable
+    chain from the advertised list.
   - Throughout, the transcript shows the chain as one continuous multi-turn
     conversation under its newest Task card, with no "resumed" marker, and the
     resumed run's counters start at 0 so its turn, tool, and usage numbers
@@ -13369,8 +13365,7 @@ This test plan spec is accepted when:
 - **Specs linked**: `03-runtime/02-agent-runtime.md` §5f, ADR 0279
 - **Acceptance**: C (conversation), Quality
 - **Milestone**: M6+
-- **Not covered (二期)**: reviving a `stopped`/`aborted` delegation, in-chain
-  compaction, task queuing, and cross-session resumption.
+- **Not covered (二期)**: task queuing and cross-session resumption.
 - **Status**: Draft — chain resolution, resume validation, the reusable list, and
   transcript chain grouping are unit/regression covered
   (`packages/agent-runtime/src/delegation-chain.test.ts`,
@@ -19235,8 +19230,9 @@ registry-only installation and credential isolation.
   ids, and inspect the resumed requests. Repeat with user Stop and TaskStop.
 - **Expected**: Parent failure returns the session to idle; both delegates settle
   failed with SUBAGENT_PARENT_FAILED and resume with their own prior Read context.
-  Explicit Stop/TaskStop produce aborted/stopped; both resume attempts are rejected
-  without starting another delegate. No automatic restart occurs.
+  Explicit Stop/TaskStop produce aborted/stopped; a later explicit resume keeps
+  each child's prior context without repeating its completed Read. No automatic
+  restart occurs.
 - **Specs linked**: 03-runtime/02-agent-runtime.md §5f; ADR 0279.
 - **Acceptance**: C, E, Quality. **Milestone**: Maintenance.
 - **Status**: Automated headless runtime/provider integration via
@@ -20125,3 +20121,54 @@ Scenario: E2E-REVIEW-ROUNDS (local desktop, implemented)
 - Specs: ADR 0043; runtime RPC/storage specs; component spec Round review reader.
 - Milestone: maintenance. Traceability: acceptance criteria 1–9 of the approved
   native round-review enhancement map to this scenario and the tests above.
+
+#### E2E-SUBAGENT-checkpoint-recovery
+
+- **Preconditions**: Real parent/child Agent loops with a deterministic provider
+  boundary fixture, isolated scratch, and fixture Read tools.
+- **Steps**: Capture a finding, cancel during a tool, read its running and terminal
+  checkpoint, then rebuild the parent runtime and resume with/without child rows.
+  Read the report using TaskWait without launching a child. Exhaust an explicit
+  one-call budget and a controlled duration budget, cancel during finalization,
+  and run past the former call/report thresholds without ever calling TaskReport.
+  Also fail an optional report's scratch write and continue ordinary work.
+- **Expected**: Findings survive cancellation/restart, completed tools do not
+  replay, explicit budgets are enforced, finalization offers zero tools and ends
+  after one request/the configured deadline, and cancellation wins. Default work
+  does not pause for reports or an implicit job budget; optional reporting errors
+  remain observable without terminating work. Corrupt, cross-identity, oversized
+  and escaping checkpoint paths are rejected; older trial metadata remains readable.
+- **Specs linked**: 03-runtime/02-agent-runtime.md §5f; ADR 0279 §14.
+- **Acceptance**: C, Quality. **Milestone**: M6+ maintenance.
+- **Status**: Automated runtime/provider-boundary integration in
+  `subagent-recovery.test.ts`, `delegation-recovery-user-path.test.ts`, plus
+  filesystem contract tests in `subagent-checkpoint.test.ts`. This does not
+  claim Electron UI or real-provider testing.
+
+#### E2E-SUBAGENT-run-policy-settings
+
+- **Preconditions**: Isolated Scheduling page fixture, version-1 settings without
+  runPolicy, a retained Task snapshot, real parent/child loops with a deterministic
+  provider, and an isolated Host database.
+- **Steps**: Inspect defaults without writing; edit all three controls including 0
+  for unlimited work; submit empty/fractional/out-of-range values; save and reload;
+  edit/remove model rows; fail a save and restore only execution defaults. Render
+  a child detail with a different global policy, then with missing/partial metadata.
+  Resume a task under new settings and inspect model instructions, execution and
+  persisted metadata. Change the input object after run construction and advance
+  a controlled clock beyond the old default deadline with the time limit disabled.
+- **Expected**: Invalid values cannot replace stored settings. Model and policy
+  edits survive each other. UI shows actual immutable task values, never inferred
+  historical defaults. A new/resumed run uses the next parent turn's settings;
+  active tasks retain their original policy. Zero disables only the corresponding
+  work limit. Explicit budgets and finalization deadlines govern real execution;
+  retired report-gate fields do not. Loading an older trial policy is safe and a
+  new save removes only the retired fields. Authorization gates remain enforced.
+- **Specs linked**: 03-runtime/02-agent-runtime.md §5f; 04-ux/06-settings-ia.md;
+  ADR 0279 §14.
+- **Acceptance**: C, Quality. **Milestone**: M6+ maintenance.
+- **Status**: Automated isolated Electron UI path in
+  `apps/desktop/test/subagent-scheduling-user-path.test.mjs`, runtime paths in
+  `subagent-recovery.test.ts` and `delegation-recovery-user-path.test.ts`, shared
+  policy validation in `delegation-policy.test.ts`, and Host settings RPC
+  save/reopen/rejected-write tests in `delegation_settings_rpc_tests.rs`.

@@ -123,6 +123,13 @@ test("the delegation tab renders a message list with a read-only composer", () =
   assert.doesNotMatch(tabSource, /onSubmit|onSend|api\.send/);
 });
 
+test("the task policy snapshot is wired into the actual transcript tab", () => {
+  assert.match(tabSource, /<SubagentRunPolicySummary payload=\{delegateSettings\.payload\} \/>/);
+  assert.match(tabSource, /payload: result \? toolResultPayload\(result\) : undefined/);
+  assert.match(tabSource, /\[\.\.\.messages\]\.reverse\(\)\.find/);
+  assert.doesNotMatch(tabSource, /state\.settings|resolveDelegationRunPolicy/);
+});
+
 test("the tab owns one scroll surface and pins to the latest output", () => {
   assert.match(workPanelCss, /\.subagent-transcript-tab \{[^}]*flex-direction: column/);
   assert.match(workPanelCss, /\.subagent-transcript-scroll \{[^}]*overflow-y: auto/);

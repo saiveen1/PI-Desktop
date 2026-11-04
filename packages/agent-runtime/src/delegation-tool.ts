@@ -1,5 +1,5 @@
 import { Type } from "@earendil-works/pi-ai";
-import { describeDelegationModels, subagentModelKey, subagentToolsLabel, type DelegationSettings, type SubagentDefinition } from "@pi-desktop/shared";
+import { describeDelegationRunPolicy, resolveDelegationRunPolicy, describeDelegationModels, subagentModelKey, subagentToolsLabel, type DelegationSettings, type SubagentDefinition } from "@pi-desktop/shared";
 
 /** Stable tool metadata is supplied on every request, including after compaction. */
 export function subagentTaskDeclaration(options: {
@@ -20,6 +20,7 @@ export function subagentTaskDeclaration(options: {
     name: "Task",
     label: "Task",
     description: [
+      describeDelegationRunPolicy(resolveDelegationRunPolicy(settings?.runPolicy)),
       "Start one subagent in the background and return immediately; you keep working while it runs, then converge with TaskWait when you need its report.\n\nPrefer doing the work yourself. Only delegate when it saves significant context or enables genuine parallelism — not for tasks you can finish in a few tool calls.",
       "Use it only when the work is genuinely separable and substantial: parallel exploration of independent directions that each need many tool calls (one Task per direction in the same assistant message), a large multi-file implementation with a complete spec (fixer), an adversarial read-only review of a non-trivial change you already finished (code-reviewer), or a wide search whose raw output would fill this context (explorer, test-runner). A single file lookup or a small edit does not warrant delegation.",
       "Do not delegate what you can finish in a couple of tool calls, and do not delegate anything that needs the user — a subagent cannot ask a question or propose a plan on your behalf.",
@@ -29,6 +30,7 @@ export function subagentTaskDeclaration(options: {
       "`task` is the delegate's only instruction. It cannot see this conversation, and you cannot correct it while it runs, so state the goal, the paths and facts it cannot infer, and exactly what to report back.",
       "To run delegates concurrently, emit several Task calls in one assistant message. A message that mixes Task with any other tool runs one call at a time. You may keep working or talk to the user while they run; the runtime delivers their reports when they finish. Call TaskStop only to cancel.",
       "To continue a previous subagent, pass its `resume` id (the `delegationId` returned by Task). Saying \"reuse\" in prose is not enough. Do not pass `model` when resuming; start a new delegation to change models.",
+      "Stopped, aborted, interrupted and budget-exhausted delegates retain reports and can be explicitly resumed once settled. Use TaskWait to read their partial results before deciding to continue; a cancellation never resumes automatically.",
       `Available subagents:\n${catalog}`,
     ].join("\n\n"),
     parameters: Type.Object({

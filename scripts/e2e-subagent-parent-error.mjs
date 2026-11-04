@@ -105,7 +105,7 @@ const results = [];
 try {
   for (const mode of ["error", "abort", "stop", "direct"]) {
     const s = scenario = { mode, ids: new Map(), settled: new Map(), waiting: new Set(),
-      errors: [], replayed: [], rejected: [], parentErrors: [] };
+      errors: [], replayed: [], rejected: [], parentErrors: [], reads: [] };
     const runtime = new DesktopAgentRuntime({
       sessionId: `fixture-${mode}`, mode: "agent", provider: provider("parent"), thinkingLevel: "off", projectPath,
       commandShell: { id: "bash", label: "Bash", dialect: "posix", available: true, isDefault: true },
@@ -116,6 +116,7 @@ try {
         if (method === "project.instructions.resolve") return { entries: [] };
         if (method === "tools.execute") {
           assert.equal(params.toolName, "Read");
+          s.reads.push(params.args.path);
           return { ok: true, content: { path: params.args.path, text: `Finding from ${params.args.path}` } };
         }
         return {};
@@ -161,16 +162,12 @@ try {
       }
       if (mode === "error") assert.equal(s.parentErrors.length, 1);
       await bounded(runtime.prompt("Resume both delegates"));
-      if (mode === "error") {
-        assert.equal(s.replayed.length, 2);
-        assert.equal(s.rejected.length, 0);
-        const histories = s.replayed.map((body) => JSON.stringify(body.messages));
-        assert.ok(histories.some((body) => body.includes("fixture-A.txt") && !body.includes("fixture-B.txt")));
-        assert.ok(histories.some((body) => body.includes("fixture-B.txt") && !body.includes("fixture-A.txt")));
-      } else {
-        assert.equal(s.replayed.length, 0);
-        assert.equal(s.rejected.length, 2);
-      }
+      assert.equal(s.replayed.length, 2);
+      assert.equal(s.rejected.length, 0);
+      assert.equal(s.reads.length, 2, "resume must not replay either completed Read");
+      const histories = s.replayed.map((body) => JSON.stringify(body.messages));
+      assert.ok(histories.some((body) => body.includes("fixture-A.txt") && !body.includes("fixture-B.txt")));
+      assert.ok(histories.some((body) => body.includes("fixture-B.txt") && !body.includes("fixture-A.txt")));
       assert.deepEqual(s.errors, []);
       results.push({ mode, resumed: s.replayed.length, rejected: s.rejected.length });
     } finally {

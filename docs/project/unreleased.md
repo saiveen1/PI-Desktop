@@ -1,5 +1,13 @@
 # Unreleased changes
 
+- Preserve subagent progress reports through cancellation and restart. Explicit
+  resume reuses retained findings; long runs reserve a bounded report phase
+  when their work budget is exhausted, and TaskWait can recover saved reports.
+  Optional work budgets and final-report timing live in Subagents → Scheduling;
+  both work limits default to disabled. State is saved automatically without
+  requiring periodic model reports. Child details show the actual task settings,
+  including after reload; previous trial report-gate fields no longer affect work.
+
 - Add explicit session multi-selection with checkboxes, visible-only select all,
   batch archive/unarchive and Move to recycle bin. The sidebar recycle bin
   supports batch restore and confirmed permanent deletion. Trashed local

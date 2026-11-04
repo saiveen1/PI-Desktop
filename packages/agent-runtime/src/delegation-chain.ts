@@ -8,23 +8,27 @@
 
 import {
   MAX_RESUMABLE_CHAINS_PER_AGENT,
-  MAX_RESUMABLE_READ_LINES,
 } from "@pi-desktop/shared";
 import {
   formatResumableList,
-  isChainWithinReadBudget,
   type DelegationChain,
   type ResumableChain,
 } from "./delegation-history.js";
 
-const RESUMABLE_STATUSES = new Set(["completed", "failed", "timed_out"]);
+const RESUMABLE_STATUSES = new Set([
+  "completed",
+  "failed",
+  "timed_out",
+  "aborted",
+  "stopped",
+  "interrupted",
+]);
 
 export type ChainLookupError =
   | { kind: "unknown" }
   | { kind: "running"; delegationId: string }
   | { kind: "not-resumable"; status: string }
-  | { kind: "agent-mismatch"; expected: string; actual: string }
-  | { kind: "over-budget" };
+  | { kind: "agent-mismatch"; expected: string; actual: string };
 
 export class DelegationChainRegistry {
   private readonly chains = new Map<string, DelegationChain>();
@@ -74,9 +78,6 @@ export class DelegationChainRegistry {
         ok: false,
         error: { kind: "not-resumable", status: chain.latestStatus },
       };
-    }
-    if (!isChainWithinReadBudget(chain)) {
-      return { ok: false, error: { kind: "over-budget" } };
     }
     return { ok: true, chain };
   }
@@ -161,12 +162,13 @@ export class DelegationChainRegistry {
     });
   }
 
-  settle(delegateSessionId: string, status: string): void {
+  settle(delegateSessionId: string, status: string, checkpointPath?: string): void {
     const chain = this.chains.get(delegateSessionId);
     if (!chain) return;
     this.chains.set(delegateSessionId, {
       ...chain,
       latestStatus: status,
+      ...(checkpointPath ? { checkpointPath } : {}),
       lastActivityAt: Date.now(),
     });
     this.evictOverflow();
@@ -190,7 +192,6 @@ export class DelegationChainRegistry {
       if (chain.latestStatus && !RESUMABLE_STATUSES.has(chain.latestStatus)) {
         continue;
       }
-      if (!isChainWithinReadBudget(chain, MAX_RESUMABLE_READ_LINES)) continue;
       listed.push({
         ...chain,
         latestDelegationId: latest,

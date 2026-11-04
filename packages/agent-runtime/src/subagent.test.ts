@@ -51,9 +51,11 @@ describe("delegate execution policy", () => {
     expect(run.agent.state.tools.map((tool: any) => [tool.name, tool.executionMode])).toEqual([
       ["Read", "parallel"], ["Glob", "parallel"], ["Grep", "parallel"],
       ["Write", "parallel"], ["Edit", "parallel"], ["Bash", "sequential"], ["plugin_unknown", "sequential"],
+      ["TaskReport", "sequential"],
     ]);
     run.setSystemPrompt("child-only path rules");
-    expect(run.agent.state.systemPrompt).toBe("child-only path rules");
+    expect(run.agent.state.systemPrompt).toContain("child-only path rules");
+    expect(run.agent.state.systemPrompt).toContain("Subagent work budget");
   });
   it("inherits the parent's mixed Task/read batch policy", () => {
     const { run } = createRun({
@@ -177,7 +179,7 @@ describe("composeSubagentSystemPrompt", () => {
 
     expect(prompt).toContain("You may change files");
     expect(prompt).not.toContain("no tools that change files");
-    expect(prompt).toContain("If the final report would exceed ~8,000 characters, write the full report to a file yourself");
+    expect(prompt).toContain("TaskReport to save progress without granting workspace writes");
   });
 
   it("does not instruct read-only delegates to write reports to a file", () => {
@@ -660,6 +662,40 @@ describe("SubagentRun reporting", () => {
     expect(result.status).toBe("aborted");
     expect(prompt).not.toHaveBeenCalled();
   });
+
+  it("persists partial output when cancellation happens after a report was emitted", async () => {
+    const tmp = mkdtempSync(join(tmpdir(), "pi-subagent-partial-"));
+    try {
+      const controller = new AbortController();
+      const { run } = createRun({
+        scratchDir: tmp,
+        delegateSessionId: "chain-1",
+        signal: controller.signal,
+      });
+      run.handleEvent({
+        type: "message_end",
+        message: assistantMessage({
+          content: [{ type: "text", text: "Partial findings" }],
+        }),
+      });
+      controller.abort();
+
+      const result = await (run as unknown as SubagentRun).run();
+
+      expect(result.status).toBe("aborted");
+      expect(result.report).toContain("Partial findings");
+      expect(result.checkpointPath).toBeDefined();
+      expect(result.scratchReportPath).toContain("chain-1");
+      expect(JSON.parse(readFileSync(result.checkpointPath!, "utf8"))).toMatchObject({
+        status: "aborted",
+        report: expect.stringContaining("Partial findings"),
+      });
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+
 });
 
 describe("SubagentRun provider rate-limit recovery", () => {
@@ -1129,7 +1165,7 @@ describe("SubagentRun context budget (ADR 0299)", () => {
     expect(run.pendingContextOverflow).toBeUndefined();
   });
 
-  it("skips a fallback whose window cannot hold the carried context", () => {
+  it("skips a fallback whose window cannot hold the carried context", async () => {
     const small: RuntimeProviderConfig = {
       ...provider,
       id: "small",
@@ -1155,7 +1191,7 @@ describe("SubagentRun context budget (ADR 0299)", () => {
     run.agent.state.messages = [brief, failure];
     run.streamError = { code: "CONTEXT_TOO_LARGE", message: "prompt is too long" };
 
-    const switched = run.useNextModel();
+    const switched = await run.useNextModel();
 
     expect(switched).toBe(false);
     expect(run.agent.state.model.id).toBe("local-model");
@@ -1171,7 +1207,7 @@ describe("SubagentRun context budget (ADR 0299)", () => {
     ]);
   });
 
-  it("carries the uncompacted context onto a fallback whose window fits", () => {
+  it("carries the uncompacted context onto a fallback whose window fits", async () => {
     const big: RuntimeProviderConfig = {
       ...provider,
       id: "big",
@@ -1188,7 +1224,7 @@ describe("SubagentRun context budget (ADR 0299)", () => {
     run.agent.state.messages = [brief, failure];
     run.streamError = { code: "CONTEXT_TOO_LARGE", message: "prompt is too long" };
 
-    const switched = run.useNextModel();
+    const switched = await run.useNextModel();
 
     expect(switched).toBe(true);
     expect(run.agent.state.model.id).toBe("big-model");

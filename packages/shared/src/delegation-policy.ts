@@ -10,11 +10,74 @@ export type DelegationModel = {
   description: string;
 };
 
+export type DelegationRunPolicy = {
+  /** Zero disables this work-admission limit. */
+  maxToolCalls: number;
+  /** Zero disables the exploration deadline. */
+  maxDurationSeconds: number;
+  finalReportTimeoutSeconds: number;
+};
+
+export const DEFAULT_DELEGATION_RUN_POLICY: Readonly<DelegationRunPolicy> = Object.freeze({
+  maxToolCalls: 0,
+  maxDurationSeconds: 0,
+  finalReportTimeoutSeconds: 60,
+});
+
+export const DELEGATION_RUN_POLICY_LIMITS = {
+  maxToolCalls: { min: 0, max: 10_000 },
+  maxDurationSeconds: { min: 0, max: 21_600 },
+  finalReportTimeoutSeconds: { min: 1, max: 300 },
+} as const;
+
+// Older trial settings and checkpoint metadata remain readable. These fields
+// are never copied into the resolved policy or used to control execution.
+const ACCEPTED_RUN_POLICY_LIMITS = {
+  ...DELEGATION_RUN_POLICY_LIMITS,
+  checkpointInterval: { min: 1, max: 1_000 },
+  maxCheckpointRequests: { min: 1, max: 10 },
+} as const;
+
+/** Optional additive fields preserve existing version-1 scheduling settings. */
+export function isDelegationRunPolicy(value: unknown): value is Partial<DelegationRunPolicy> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  return Object.entries(value).every(([key, number]) => {
+    if (!Object.hasOwn(ACCEPTED_RUN_POLICY_LIMITS, key)) return false;
+    const limits = ACCEPTED_RUN_POLICY_LIMITS[key as keyof typeof ACCEPTED_RUN_POLICY_LIMITS];
+    return typeof number === "number" && Number.isInteger(number) && number >= limits.min && number <= limits.max;
+  });
+}
+
+/** Historical task metadata must contain all fields; never invent old effective values. */
+export function isDelegationRunPolicySnapshot(value: unknown): value is DelegationRunPolicy {
+  return isDelegationRunPolicy(value) && Object.keys(DEFAULT_DELEGATION_RUN_POLICY)
+    .every(key => Object.hasOwn(value, key));
+}
+
+export function resolveDelegationRunPolicy(value?: Partial<DelegationRunPolicy>): Readonly<DelegationRunPolicy> {
+  if (value !== undefined && !isDelegationRunPolicy(value)) throw new Error("Invalid subagent run policy");
+  return Object.freeze({
+    maxToolCalls: value?.maxToolCalls ?? DEFAULT_DELEGATION_RUN_POLICY.maxToolCalls,
+    maxDurationSeconds: value?.maxDurationSeconds ?? DEFAULT_DELEGATION_RUN_POLICY.maxDurationSeconds,
+    finalReportTimeoutSeconds: value?.finalReportTimeoutSeconds ?? DEFAULT_DELEGATION_RUN_POLICY.finalReportTimeoutSeconds,
+  });
+}
+
+/** Model-facing explanation of the exact snapshot owned by this run. */
+export function describeDelegationRunPolicy(policy: Readonly<DelegationRunPolicy>): string {
+  return `Subagent work budget: ${policy.maxToolCalls || "unlimited"} tool calls; ${policy.maxDurationSeconds || "unlimited"} seconds. ` +
+    "State is saved automatically. TaskReport is optional; work never requires periodic model-authored reports. " +
+    `Budget exhaustion reserves one tool-free report request for at most ${policy.finalReportTimeoutSeconds} seconds. Explicit cancellation starts no report request. ` +
+    "These are the effective Subagent Scheduling settings; an active run keeps its starting snapshot.";
+}
+
 export type DelegationSettings = {
   version: 1;
   /** Zero skips models requiring approval, for unattended work. */
   approvalTimeoutSeconds: number;
   models: DelegationModel[];
+  /** Execution/recovery settings for Task delegates; omitted fields use visible defaults. */
+  runPolicy?: Partial<DelegationRunPolicy>;
 };
 
 export type DelegationApprovalRequest = {
@@ -44,6 +107,7 @@ export function isDelegationSettings(value: unknown): value is DelegationSetting
   if (config.version !== 1 || !Number.isInteger(config.approvalTimeoutSeconds) ||
     Number(config.approvalTimeoutSeconds) < 0 || Number(config.approvalTimeoutSeconds) > 300 ||
     !Array.isArray(config.models) || config.models.length > 128) return false;
+  if (config.runPolicy !== undefined && !isDelegationRunPolicy(config.runPolicy)) return false;
   const identities = new Set<string>();
   for (const value of config.models) {
     if (!value || typeof value !== "object") return false;

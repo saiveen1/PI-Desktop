@@ -1,6 +1,8 @@
 # ADR 0253: Remove the subagent turn limit
 
 - Status: Accepted
+- Lifetime amendment: ADR 0279 (2026-11-04) adds resumable work budgets and durable
+  reports; this ADR still removes and ignores the legacy maxTurns field.
 - Date: 2026-09-15
 - Deciders: PI-Desktop core
 - Related: D423, ADR 0062, ADR 0063, ADR 0089, ADR 0119, ADR 0126, ADR 0166,

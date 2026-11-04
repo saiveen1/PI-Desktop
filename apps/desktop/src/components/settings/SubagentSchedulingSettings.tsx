@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import {
   delegationModelKey,
   isDelegationSettings,
+  resolveDelegationRunPolicy,
   legacyDelegationSettings,
   type AppSettings,
   type DelegationModel,
@@ -12,6 +13,7 @@ import { useAppStore } from "../../stores/app-store";
 import { SettingsCard, SettingsRow } from "../../features/settings/primitives";
 import { Button, Field, Input, SettingsToggle, Textarea } from "../ui";
 import { SettingsMenuSelect } from "./SettingsMenuSelect";
+import { SubagentRunPolicySettings } from "./SubagentRunPolicySettings";
 import "../../styles/subagent-scheduling.css";
 
 const referenceId = (model: Pick<DelegationModel, "providerId" | "modelId">) =>
@@ -54,6 +56,7 @@ export function SubagentSchedulingSettings({ saveSettings }: {
   const choice = candidates.find((model) => referenceId(model) === selected)
     ?? candidates.find((model) => model.available);
   const valid = isDelegationSettings(value);
+  const modelPolicyValid = isDelegationSettings({ ...value, runPolicy: undefined });
   const orderedModels = [...value.models].sort((a, b) =>
     (Number.isFinite(a.priority) ? a.priority : Infinity)
     - (Number.isFinite(b.priority) ? b.priority : Infinity));
@@ -81,7 +84,8 @@ export function SubagentSchedulingSettings({ saveSettings }: {
     setError(null);
     setSaved(false);
     try {
-      await saveSettings({ delegation: value });
+      await saveSettings({ delegation: value.runPolicy
+        ? { ...value, runPolicy: resolveDelegationRunPolicy(value.runPolicy) } : value });
       if (mounted.current) {
         setDraft(null);
         setSaved(true);
@@ -146,6 +150,8 @@ export function SubagentSchedulingSettings({ saveSettings }: {
           </div>
         </SettingsRow>
       </SettingsCard>
+      <SubagentRunPolicySettings policy={value.runPolicy} disabled={saving || !settings}
+        onChange={(runPolicy) => change({ ...value, runPolicy })} />
       {value.models.length === 0 ? (
         <p className="text-sm text-text-secondary">{t("settings.delegationEmpty")}</p>
       ) : null}
@@ -224,7 +230,7 @@ export function SubagentSchedulingSettings({ saveSettings }: {
           </div>
         </div>
       ) : null}
-      {!valid ? <p role="alert" className="text-sm text-text-secondary">{t("settings.delegationInvalid")}</p> : null}
+      {!modelPolicyValid ? <p role="alert" className="text-sm text-text-secondary">{t("settings.delegationInvalid")}</p> : null}
       {error ? <p role="alert" className="text-sm text-text-secondary">{error}</p> : null}
       {saved ? <p role="status" className="text-sm text-text-secondary">{t("settings.delegationSaved")}</p> : null}
       <Button variant="primary" disabled={saving || !settings || !valid} onClick={() => void save()}>

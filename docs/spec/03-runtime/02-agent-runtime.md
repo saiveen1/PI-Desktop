@@ -1094,14 +1094,14 @@ core set rather than the on-demand catalog of §7.1:
   heartbeat (agent, status, elapsed, turns, last tool) plus any finished
   reports. The runtime keeps the parent turn open and delivers remaining
   reports when they finish, even if the parent already stopped calling tools.
-  Only `TaskStop` or user Stop aborts a delegate.
+  TaskWait expiry does not spend or reset the separate delegate work budget.
 - `TaskList()` — reports every delegation of the session with status and a
   running heartbeat, plus the resumable chains (`details.resumable`) the parent
   can continue with `Task(resume: ...)`; this is the only read path for that
   list (ADR 0337).
 - `TaskStop(delegationIds?)` — stops running delegations (defaults to all);
   waits for each abort to settle, then persists `status: "stopped"` with
-  `completedAt` on `details.stopped[]`. Stopped delegations read as `stopped`.
+  `completedAt` on `details.stopped[]`. Stopped delegations read as `stopped` and remain available through `Task(resume: ...)` when their transcript history is retained.
 
 **Explicit desktop cancellation.** A running delegate can be stopped from its
 card or detail panel. The subagent group header also offers session-wide stop-all.
@@ -1130,9 +1130,20 @@ provider/model, its declared tools, and the same host connection. A pinned or
 explicitly selected delegation model uses the exact provider/model binding
 saved in Settings for its effective thinking capability; Pi catalog supplies
 the baseline only. It runs under
-the same bounded provider retry policy as the parent. A delegate has no turn
-limit: it ends when it finishes, when the parent calls `TaskStop`, when the user
-Stops, or when a terminal parent error aborts it (ADR 0253). A document that
+the same bounded provider retry policy as the parent. User-authored
+`idle-timeout` and `max-duration` values do not terminate a run, but each run
+uses the optional resource limits below (both work limits are disabled by default). Reaching a configured
+ceiling stops new work-tool admission. The call budget lets already admitted
+tools retire; the duration budget requests cooperative cancellation. The
+runtime then allows one tool-free report request with the configured deadline (default 60 seconds),
+without retries or model fallback, and settles `failed` with
+`SUBAGENT_BUDGET_EXHAUSTED`. All model-requested tool admissions, including
+optional TaskReport calls, spend the configured tool budget. Automatic state
+persistence does not. User Stop cancels immediately and never starts that extra request.
+`Task(resume: ...)` starts the
+next run with a fresh safety budget. A delegate otherwise ends when it finishes,
+when the parent calls `TaskStop`, when the user Stops, or when a terminal parent
+error aborts it (ADR 0253). A document that
 still declares `maxTurns` loads normally and the key is ignored like any other
 unrecognized frontmatter key. `maxTokens` is an optional per-definition
 output cap (maximum 200000); omitted, `none`, or `0` follows the model's
@@ -1153,21 +1164,80 @@ the terminal ones surface through `TaskWait`, whose text is
 the report (bounded to `MAX_SUBAGENT_REPORT_CHARS`, 12k; when exceeded, persisted to session scratch with a pointer notice per ADR 0062) and whose details
 carry `delegationId`, `agent`, `modelId`, `thinkingLevel`, `status`, `startedAt`,
 `completedAt` when settled, `turns`, `toolCalls`, and `scratchReportPath` when
-the full report was spilled to scratch; on failure or timeout they carry
-`error` (including resume ID hints on `SUBAGENT_OUTPUT_TRUNCATED`). The same effective model and thinking fields are included in the
+the report was saved to scratch; on failure or timeout they carry
+`error` (including resume ID hints on `SUBAGENT_OUTPUT_TRUNCATED`), plus
+`checkpointPath` when the session scratch is available and `checkpointError`
+when the best-effort checkpoint write failed. The same effective model and
+thinking fields are included in the
 immediate `Task` result and in lifecycle snapshots so live and restored
 delegation views do not re-derive them from definitions or parent settings.
 `startedAt` and `completedAt` are runtime timestamps in milliseconds and are the source of
 truth for renderer delegation duration; the immediate `Task` tool-call
 duration only covers starting the background work.
 
-**Delegate lifetime (D328).** The runtime does not idle-timeout or
-duration-timeout a delegate. `idle-timeout` / `max-duration` frontmatter still
-parses so old documents load, but those values are not armed. A delegate runs
-until it finishes, fails, is `TaskStop`'d, or the user Stops / the runtime is
-disposed. The parent agent judges whether to cancel via `TaskStop`; a one-line
-heartbeat (who, status, elapsed, turns, last tool) is what it has to go on while
-the delegate is running.
+**Progress reports and bounded lifetime (ADR 0279 amendment).**
+
+Settings → Subagents → Scheduling → Execution and recovery stores optional
+`AppSettings.delegation.runPolicy` fields within the existing version-1 policy.
+Absent fields use the shared visible defaults; merely opening Settings does not
+write them. Rust and TypeScript reject unknown keys, null, fractions and out-of-range
+values without changing the saved policy. No SQLite migration or IPC channel is added.
+
+| Field | Default | Allowed values |
+| --- | --- | --- |
+| `maxToolCalls` | 0 | integer 0–10000; 0 disables the work-tool admission limit |
+| `maxDurationSeconds` | 0 | integer 0–21600; 0 disables the exploration deadline |
+| `finalReportTimeoutSeconds` | 60 | integer 1–300 seconds for the one final report request |
+
+The retired trial fields `checkpointInterval` and `maxCheckpointRequests` remain
+accepted as legacy data so old settings and checkpoint files stay readable. They
+are ignored by execution, omitted from resolved new task snapshots, and removed
+on the next settings save. Existing explicit call/time limits are preserved;
+changing defaults does not overwrite a user's saved budget.
+
+The next parent conversation turn loads the saved policy. Each new or resumed
+Task captures an immutable resolved snapshot. Active children keep their starting
+values; provider fallback does not reset them. A resumed Task uses the newly
+loaded settings, not the policy stored in an old checkpoint. Immediate Task,
+TaskList, TaskWait, settlement and checkpoint metadata carry the full effective
+`runPolicy`. The child detail tab renders that snapshot, never current global
+settings; missing/incomplete historical snapshots remain absent. The parent and
+child model instructions also describe the effective policy. These execution
+limits apply to Task delegates; other delegation routes retain their execution
+behavior and continue to use the independent model authorization policy.
+
+The child-only
+`TaskReport({ report })` tool accepts up to 32000 characters describing findings,
+evidence, checked scope, remaining work, and next steps. It grants no general
+filesystem capability. This summary tool is optional: ordinary work never waits
+for a periodic report, and there is no missing-report counter that terminates a
+working agent. State persistence at event boundaries is independent of model
+summarization. A failed optional scratch write is returned as a reporting warning;
+the report remains in the transcript and work may continue. Normal final text is
+still accepted as the terminal report. Tool activity counts do not establish
+semantic progress and never trigger a model-authored checkpoint by themselves.
+
+Local runs save version-1 `checkpoint.json` and `report.md` beneath
+`<scratchDir>/delegations/<stable-chain-id>/` at startup, assistant/tool boundaries,
+and settlement. The JSON is authoritative; both files use separate atomic
+replacements, not a two-file transaction. Snapshots include task/run/session
+identity, counters, the saved report, effective run policy, partial status and termination reason.
+Existing context-compaction summaries also join the recovery report as plain
+text, without another model request. The host-owned transcript retains the
+underlying tool history; the scratch report supplements it.
+Pending tools are labeled as requiring verification, never assumed undone.
+Task lifecycle snapshots expose the live checkpoint path and safe write errors.
+TaskStop returns retired workers' partial reports along with status. It still
+reports uncooperative workers as pending, not stopped.
+
+Scratch restoration accepts only the expected session/agent/chain/run and a
+bounded regular JSON file, rejecting escaping links and unknown formats. It
+never restores arbitrary serialized context or authority from that file. Missing
+or invalid scratch falls back to retained transcript; a missing transcript AND
+checkpoint fails visibly. Remote runs have no local scratch and keep transcript
+reports only. Checkpoints are session artifacts, removed with session scratch.
+Legacy idle/max-duration/maxTurns frontmatter remains ignored; the runtime work
+budgets above are independent. Cancellation never automatically resumes a chain.
 
 When the parent stops calling tools while delegates are still running, the
 runtime swallows that `agent_end`, keeps the durable turn open, waits for the
@@ -1188,8 +1258,11 @@ later delegate turn that ends normally clears the marker and can complete. A
 terminal parent error also aborts leftover delegates, skips the resume prompt,
 and returns the session to idle so Continue is not `AGENT_BUSY` (D352). The
 interrupted delegates settle as `failed` with `SUBAGENT_PARENT_FAILED` and keep
-their transcript-backed resume eligibility. This does not automatically restart
-them; user Stop, TaskStop and dispose still settle as non-resumable cancellations.
+their transcript-backed resume eligibility. Aborted and stopped delegates also
+remain resumable when their transcript history is retained; cancellation never
+automatically restarts them. SubagentRun terminal results save the retained
+partial output when local scratch is available; initialization failures before a
+child exists retain the existing visible error path.
 
 **Resumable delegations (ADR 0279).** `Task` accepts an optional `resume`
 parameter carrying the `delegationId` of a settled delegation in the same
@@ -1200,8 +1273,10 @@ read or changed a file continues from that context instead of starting cold.
 Seeding is transcript-backed: the chain's rows are exactly those carrying
 `parentToolCallId` for one of the chain's `Task` calls, and they are converted
 into provider messages with the delegate's own binding (a pinned delegation
-model is not the session model). Nothing is kept warm in memory and no new
-event type, storage schema, or tool parameter is introduced.
+model is not the session model). A validated scratch report supplements this
+seed and can replace missing child rows, but the original Task record is still
+required. Completed tool calls are history, never automatically executed again.
+No SQLite schema, IPC channel, or parent Task parameter changes are needed.
 
 A chain is the sequence of `Task` calls that share one delegate session: the
 first call, plus every later call that passed the earlier `delegationId` as
@@ -1212,12 +1287,11 @@ name normalized on rebuild — so resumability survives a sidecar restart.
 Chain identity (`delegateSessionId`) stays internal; the parent only
 ever passes a `delegationId`, and the reverse map resolves it.
 
-Only `completed` and `failed` chains are resumable; `stopped` and `aborted` runs
-are terminal and revive only by starting a new delegation, and a run the app
-closed while it still worked rebuilds as `interrupted`, which is not resumable
-either. A chain whose read-only tool output exceeds `MAX_RESUMABLE_READ_LINES`
-(50000) leaves the reusable list without an in-chain trim, so a resume never
-silently drops history. The registry keeps at most
+`completed`, `failed`, `aborted`, `stopped`, and `interrupted` chains are
+resumable; a resumed run is always a new `SubagentRun` seeded from the retained
+transcript and validated checkpoint and receives a fresh work budget. Cumulative
+read volume is telemetry, not a resume veto: the existing seed/context budget
+trims old call/result pairs together to fit the selected model. The registry keeps at most
 `MAX_RESUMABLE_CHAINS_PER_AGENT` (2) reusable chains per definition name and
 evicts least-recently-active ones whenever a delegation settles; a chain that is
 still working is never evicted, so the bound counts reusable chains and a live
@@ -1236,9 +1310,11 @@ matches. When nothing authorized resolves it the run
 continues on the definition's current binding and records the previous model id
 as `modelChangedFrom` in its lifecycle details. Changing models on purpose means
 starting a new delegation. An unknown id, an id belonging to another definition,
-a non-resumable status, an over-budget chain, and a chain whose rows are gone
+an unsupported status, and a chain with neither retained rows nor a checkpoint
 each return a tool error naming the reason and, for an unknown id, the reusable
-ids when there are any.
+ids when there are any. After restart, TaskWait can read a persisted terminal
+report or a matching checkpoint without launching a child; a formerly running
+record is reported as interrupted and partial.
 TaskWait and the idle-delivery path append an explicit `Task(resume: "<id>")`
 hint to failed reports; if the existing resume validation rejects the chain for
 missing history, the hint directs the parent to start a new delegation instead.
@@ -1259,8 +1335,9 @@ The Desktop-only `agent/retry-subagent` control can force a retry of a settled
 creates a new durable turn and synthetic `Task` row, then uses the same resume
 path and all existing authorization, worktree, history, and read-budget gates.
 The retry is available only for local failed delegations with retained history;
-running, cancelled, over-budget, missing-history, remote, and native sessions
-remain unavailable.
+running, missing-history, remote, and native sessions remain unavailable. A
+budget-exhausted run is a failed delegation and can use the same retry/resume
+path when its history remains available.
 
 **Model pins.** `model: <provider>/<model>` in the frontmatter is resolved once
 per launch in Electron main, where credentials and the Pi catalog snapshot live, against
@@ -1340,7 +1417,7 @@ task brief and the recent turns and drops the oldest tool results first — so
 a resume starts below `hardLimit` instead of overflowing on its first
 request.
 
-Delegate compaction affects the delegate's model context only. It rewrites no
+The delegate's working-context rewrite remains local. It rewrites no
 persisted transcript row, writes no host-core checkpoint, and adds no
 compaction row, warning toast, or context-inspector line; the delegate keeps
 its complete visible rows and the parent still sees only reports. Compaction
