@@ -1239,6 +1239,9 @@ starting a new delegation. An unknown id, an id belonging to another definition,
 a non-resumable status, an over-budget chain, and a chain whose rows are gone
 each return a tool error naming the reason and, for an unknown id, the reusable
 ids when there are any.
+TaskWait and the idle-delivery path append an explicit `Task(resume: "<id>")`
+hint to failed reports; if the existing resume validation rejects the chain for
+missing history, the hint directs the parent to start a new delegation instead.
 
 The parent discovers reusable chains through `TaskList`, whose result lists
 each chain's latest `delegationId`, its objective, and up to

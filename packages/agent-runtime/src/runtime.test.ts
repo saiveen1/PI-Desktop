@@ -10350,6 +10350,7 @@ describe("DesktopAgentRuntime subagents", () => {
     expect(converged.content[0].text).toContain(
       "The explorer subagent failed after 1 turn(s): no route.",
     );
+    expect(converged.content[0].text).toContain(`Task(resume: "${delegationId}")`);
     expect(converged.details).toMatchObject({
       status: "completed",
       delegations: [
@@ -10768,6 +10769,7 @@ describe("DesktopAgentRuntime subagents", () => {
     );
     expect(delivered).toContain("src/app.ts:12 misses the null check.");
     expect(delivered).toContain("Integrate their reports");
+    expect(delivered).not.toContain("Task(resume:");
 
     subagentRuns.deferred = false;
     await runtime.dispose();

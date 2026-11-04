@@ -693,7 +693,10 @@ function formatDelegationResults(
   let total = 0;
   let omitted = 0;
   for (const result of results) {
-    const block = `## ${result.agent} (${result.delegationId}) — ${result.status}\n${result.report}`;
+    const resumeHint = result.status === "failed"
+      ? `\nIf this delegation did not finish the work, retry it with Task(resume: "${result.delegationId}"). If resume is rejected because no history is available, start a new delegation.`
+      : "";
+    const block = `## ${result.agent} (${result.delegationId}) — ${result.status}\n${result.report}${resumeHint}`;
     if (total + block.length > MAX_TASKWAIT_RESULT_CHARS) {
       omitted += 1;
       continue;
