@@ -38,7 +38,10 @@ const server = createServer(async (req, res) => {
 await new Promise((resolvePromise) => server.listen(0, "127.0.0.1", resolvePromise));
 const url = `http://127.0.0.1:${server.address().port}`;
 
-const env = { ...process.env, PI_DIALOG_FIXTURE_URL: url, PI_DIALOG_ARTIFACT_DIR: artifacts }; delete env.ELECTRON_RUN_AS_NODE;
+const env = { ...process.env, PI_DIALOG_FIXTURE_URL: url, PI_DIALOG_ARTIFACT_DIR: artifacts,
+  PI_DIALOG_EXTENSION_ONLY: process.argv.includes("--extension-only") ? "1" : "0" };
+delete env.ELECTRON_RUN_AS_NODE;
+delete env.PI_DESKTOP_DATA_DIR;
 try {
   const child = spawn(resolveElectronBinary(root).electronBinary, [`--user-data-dir=${join(temp, "profile")}`, join(root, "apps/desktop/test/fixtures/dialog-overflow-runner.cjs")], { env, windowsHide: true, stdio: "inherit" });
   const code = await new Promise((resolvePromise, reject) => { child.on("exit", resolvePromise); child.on("error", reject); });

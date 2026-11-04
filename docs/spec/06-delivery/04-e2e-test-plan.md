@@ -18,18 +18,38 @@
   its stale answer. Exercise `modelSelection=require`, a provider failure after
   one successful edit, and plugin collaboration spawn/send, including Send now
   promotion of queued collaboration input into a running turn.
+  While approval is open, click its backdrop, then explicitly select and submit
+  each decision. Repeat with close, Escape, Cancel and a host retirement event.
+  In Scheduling, load 40 models in reverse priority order, including disabled,
+  unavailable and same-name/different-provider entries. Select with the keyboard,
+  edit priorities and descriptions, switch models/tabs, remove all and add again.
+  Exercise failed saves and reload. Measure wide/light and narrow/dark layouts.
 - Expected: Guidance remains in Task declarations; only enabled candidates are
   eligible. No approved-model HTTP request occurs before consent, including
   Auto mode. Timeout uses a compatible authorized alternate inside the same
   Task. Cancellation/Stop never starts an alternate; late answers are inert.
+  Approval has no preselected option; backdrop clicks send no answer and leave
+  the prompt pending. Close/Escape/Cancel abort the invocation rather than
+  requesting another model. Only the explicit alternative option requests one;
+  host retirement sends no user answer. Ordinary extension dialogs are unchanged.
   Exact selection never silently changes model. Resume requires fresh consent.
   Fallback does not repeat the successful edit. Saved policies replace legacy
   opt-in authority without changing main-session model selection.
+  The model selector is stably sorted by ascending priority without mutating
+  saved order. Only one detail form is mounted; reordering preserves selection,
+  focus and drafts. Add/remove selects a valid detail or empty state. The list
+  scrolls independently, stacks above the editor at narrow widths, and long
+  identities do not create horizontal overflow. Saving semantics are unchanged.
 - Traceability: runtime spec §5f; ADR `delegation-scheduling-and-approval`;
   Shared policy contract and Host settings validation.
 - Coverage: `delegation-policy.test.ts`, `delegation-scheduler.test.ts`,
   `delegation-user-path.test.ts`, `subagent-fallback.test.ts`, targeted Desktop
-  settings/approval/collaboration tests, and Host settings round trips.
+  settings/approval/collaboration tests, Host settings round trips, and mounted
+  production dialog interactions via
+  `node scripts/test-dialog-overflow.mjs --extension-only`.
+  `subagent-scheduling-user-path.test.mjs` covers the model-editor workflow and
+  responsive geometry using production components, source styles and synthetic
+  settings; preload IPC is the only mocked application boundary.
 - Milestone: Product maintenance. Status: deterministic lower-layer and
   component/transport automation; installed-Desktop manual acceptance separate.
 

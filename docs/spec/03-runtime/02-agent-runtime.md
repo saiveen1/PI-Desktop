@@ -989,8 +989,12 @@ model requires approval, only the host's human UI decision grants it.
 The independent host model gate applies even in Auto mode and rereads policy
 before use and after waiting. Approval is scoped to this invocation and model;
 resume needs fresh authorization. Expiry/unavailable UI skips the candidate and
-permits an authorized alternative within the same Task. Explicit cancellation
-and Stop do not authorize fallback; stale approvals never revive work. Provider
+permits an authorized alternative within the same Task. Approval prompts do not
+preselect an option, and clicking the backdrop leaves them pending. Closing the
+dialog, pressing Escape or Cancel, and choosing Cancel delegation all cancel the
+invocation; only the explicit Use another model option requests a fallback.
+Host retirement/expiry remains distinct from a user dismissal. Explicit
+cancellation and Stop never authorize fallback; stale approvals never revive work. Provider
 fallback keeps successful tool history and checks the next model before any
 request. `Task` results and settlement snapshots record requested model and
 selection/skip reasons in additive `scheduling` details. Main conversation model

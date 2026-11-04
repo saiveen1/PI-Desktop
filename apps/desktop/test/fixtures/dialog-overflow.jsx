@@ -107,13 +107,20 @@ window.dialogFixture = {
     if (kind === "extension") {
       const requestKind = options.request ?? "input";
       const request = { kind: requestKind, title: options.longTitle ? long : "Your name?",
-        placeholder: "e.g. Ann", message: long.repeat(2), options: [long, "Second option"] };
+        placeholder: "e.g. Ann", message: long.repeat(2), options: options.delegation
+          ? ["Allow once", "Use another model", "Cancel delegation"] : [long, "Second option"] };
       for (const listener of listeners.get(IPC.event.extensionsUiPrompt) ?? []) {
-        listener({ promptId: `fixture-${revision}`, sessionId: "s", extensionId: path,
+        listener({ promptId: `fixture-${revision}`, sessionId: "s",
+          extensionId: options.delegation ? "core.delegation-approval" : path,
           extensionLabel: options.longTitle ? long : "greet", request });
       }
     }
     await frame(); await frame();
     await Promise.all(document.getAnimations().filter((animation) => animation.effect.getComputedTiming().iterations !== Infinity).map((animation) => animation.finished.catch(() => {})));
+  },
+  dismissPrompt() {
+    for (const listener of listeners.get(IPC.event.extensionsUiPrompt) ?? []) {
+      listener({ promptId: `fixture-${revision}`, cancelled: true });
+    }
   },
 };

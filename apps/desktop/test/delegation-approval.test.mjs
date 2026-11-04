@@ -42,11 +42,19 @@ function fixture({ approval = "ask", timeout = 60, ui, legacy = false, language 
 for (const [label, value, expected] of [
   ["approve once", "Allow once", "allow"], ["choose alternative", "Use another model", "skip"],
   ["explicit cancellation", "Cancel delegation", "cancel"],
+  ["close, Escape or Cancel", undefined, "cancel"],
 ]) test(`Auto permission mode still requires real host UI: ${label}`, async () => {
   const { service, prompts } = fixture({ ui: async () => ({ kind: "select", value }) });
   assert.equal((await service.authorize(request)).decision, expected);
   assert.equal(prompts[0].extensionId, "core.delegation-approval");
   assert.equal(prompts[0].requestId, request.requestId);
+});
+
+test("only the explicit alternative option is reported as an alternative request", async () => {
+  const { service } = fixture({ ui: async () => ({ kind: "select", value: "unexpected" }) });
+  assert.deepEqual(await service.authorize(request), {
+    decision: "skip", reason: "Invalid delegation approval response",
+  });
 });
 
 test("zero deadline skips ask without displaying a prompt; auto and absent policy remain allowed", async () => {

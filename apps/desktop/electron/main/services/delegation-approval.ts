@@ -93,8 +93,10 @@ export function createDelegationApprovalService(deps: Dependencies) {
         } catch { return decision("skip", "Delegation approval UI unavailable"); }
         if (cancelled) return decision("cancel", "Delegation cancelled");
         if (response.kind !== "select" || response.cancelled) return decision("skip", "Delegation approval dismissed or expired");
-        if (response.value === stop) return decision("cancel", "Delegation cancelled");
-        if (response.value !== allow) return decision("skip", "Alternative model requested");
+        // Renderer dismissal is an explicit cancellation, not consent to fallback.
+        if (response.value === undefined || response.value === stop) return decision("cancel", "Delegation cancelled");
+        if (response.value === skip) return decision("skip", "Alternative model requested");
+        if (response.value !== allow) return decision("skip", "Invalid delegation approval response");
         const latest = await read(request);
         if (cancelled || disposed) return decision("cancel", "Delegation cancelled");
         if (latest.policy && latest.model?.approval === "ask" && latest.policy.approvalTimeoutSeconds === 0) {

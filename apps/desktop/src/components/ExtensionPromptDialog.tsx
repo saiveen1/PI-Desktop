@@ -80,9 +80,10 @@ function ExtensionPromptDialog({
 }) {
   const { t } = useTranslation();
   const { request } = prompt;
+  const isDelegationApproval = prompt.extensionId === "core.delegation-approval";
   const [draft, setDraft] = useState("");
   const [selected, setSelected] = useState<string | undefined>(
-    request.kind === "select" ? request.options[0] : undefined,
+    request.kind === "select" && !isDelegationApproval ? request.options[0] : undefined,
   );
   const inputRef = useRef<HTMLInputElement | null>(null);
   const dialogId = `extension-prompt-${prompt.promptId}`;
@@ -111,7 +112,9 @@ function ExtensionPromptDialog({
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (request.kind === "confirm") onSettle(true);
-    else if (request.kind === "select") onSettle(selected);
+    else if (request.kind === "select") {
+      if (selected !== undefined) onSettle(selected);
+    }
     else onSettle(draft);
   };
 
@@ -125,7 +128,7 @@ function ExtensionPromptDialog({
       className="overlay session-rename-dialog-overlay extension-prompt-overlay"
       role="presentation"
       onClick={(event) => {
-        if (event.target === event.currentTarget) onSettle(undefined);
+        if (!isDelegationApproval && event.target === event.currentTarget) onSettle(undefined);
       }}
     >
       <div

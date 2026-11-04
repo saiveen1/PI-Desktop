@@ -1,0 +1,121 @@
+/* Scheduling is one model browser and one editor, not a form per model. */
+.delegation-settings {
+  container-type: inline-size;
+  min-width: 0;
+}
+
+.delegation-workbench {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.delegation-model-sidebar,
+.delegation-model-editor {
+  min-width: 0;
+}
+
+.delegation-workbench .settings-card-block {
+  margin-bottom: 0;
+}
+
+.delegation-model-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 440px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding: 6px;
+}
+
+.btn.delegation-model-item {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 10px;
+  flex: 0 0 auto;
+  width: 100%;
+  padding: 10px 8px;
+  border-radius: var(--radius-md);
+  text-align: left;
+  white-space: normal;
+  color: var(--ds-text-secondary);
+}
+
+.btn.delegation-model-item[aria-pressed="true"] {
+  background: var(--ds-bg-hover);
+  color: var(--ds-text-primary);
+  box-shadow: inset 2px 0 0 var(--ds-text-primary);
+}
+
+.delegation-model-priority {
+  align-self: start;
+  padding-top: 2px;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.delegation-model-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.delegation-model-name,
+.delegation-model-provider {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.delegation-model-name {
+  font-size: var(--text-sm-plus);
+  font-weight: var(--font-weight-medium);
+  color: var(--ds-text-primary);
+}
+
+.delegation-model-provider,
+.delegation-model-status,
+.delegation-model-reference {
+  font-size: var(--text-xs);
+  color: var(--ds-text-muted);
+}
+
+.delegation-model-reference {
+  margin: 0;
+  padding: 0 0 10px;
+  overflow-wrap: anywhere;
+}
+
+.delegation-model-editor .settings-card-heading {
+  overflow-wrap: anywhere;
+}
+
+.delegation-model-editor .settings-row {
+  flex-wrap: wrap;
+  gap: 10px 16px;
+}
+
+.delegation-model-editor .settings-row-control {
+  max-width: 100%;
+}
+
+.delegation-model-editor textarea {
+  width: 100%;
+  max-width: 100%;
+}
+
+@container (max-width: 720px) {
+  .delegation-workbench {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px;
+  }
+
+  .delegation-model-list {
+    max-height: 220px;
+  }
+}

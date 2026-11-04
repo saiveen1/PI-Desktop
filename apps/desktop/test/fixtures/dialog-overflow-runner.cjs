@@ -11,6 +11,12 @@ app.whenReady().then(async () => {
   await evaluate(`new Promise((resolve, reject) => { const deadline = Date.now() + 10000; function check() { if (window.dialogFixture) return resolve(); if (Date.now() > deadline) return reject(new Error('fixture did not mount')); requestAnimationFrame(check); } check(); })`);
   const results = [];
   const check = (name, ok, detail) => { results.push({ name, ok: !!ok, detail }); console.log((ok ? 'PASS ' : 'FAIL ') + name + ' ' + JSON.stringify(detail ?? '')); };
+  function finish() {
+    writeFileSync(join(process.env.PI_DIALOG_ARTIFACT_DIR, 'results.json'), JSON.stringify(results, null, 2));
+    const failed = results.filter(r => !r.ok).length;
+    console.log('SUMMARY ' + (results.length-failed) + '/' + results.length + ' passed');
+    win.destroy(); app.exit(failed ? 1 : 0);
+  }
   async function measure() {
     return evaluate(`(() => {
       const dialog = document.querySelector('[role="dialog"]');
@@ -38,6 +44,38 @@ app.whenReady().then(async () => {
     win.webContents.sendInputEvent({ type: 'mouseUp', button: 'left', clickCount: 1, ...point });
     await evaluate('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
   }
+  async function clickBackdrop() {
+    win.webContents.sendInputEvent({ type: 'mouseDown', button: 'left', clickCount: 1, x: 4, y: 4 });
+    win.webContents.sendInputEvent({ type: 'mouseUp', button: 'left', clickCount: 1, x: 4, y: 4 });
+    await evaluate('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+  }
+  await evaluate('window.dialogFixture.show("extension", { request: "select", delegation: true })');
+  check('delegation requires an explicit option before confirmation', await evaluate('!document.querySelector("input:checked") && document.querySelector("button[type=submit]").disabled'));
+  await clickBackdrop();
+  check('delegation backdrop click keeps approval pending without answering', await evaluate('!!document.querySelector("[role=dialog]") && window.dialogFixture.responses.length === 0 && window.dialogFixture.isBlockingOverlayActive()'));
+  for (const option of ['Allow once', 'Use another model', 'Cancel delegation']) {
+    await evaluate('window.dialogFixture.show("extension", { request: "select", delegation: true })');
+    await click('input[value="' + option + '"]');
+    check('selecting ' + option + ' does not submit the decision', await evaluate('window.dialogFixture.responses.length === 0 && !!document.querySelector("[role=dialog]")'));
+    await click('button[type="submit"]');
+    check('delegation returns the explicit choice ' + option, await evaluate('window.dialogFixture.responses.length === 1 && window.dialogFixture.responses[0].value === ' + JSON.stringify(option)));
+  }
+  for (const action of ['close', 'cancel', 'Escape']) {
+    await evaluate('window.dialogFixture.show("extension", { request: "select", delegation: true })');
+    if (action === 'Escape') {
+      win.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
+      win.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
+      await evaluate('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+    } else await click(action === 'close' ? '.session-rename-dialog-close' : '.session-rename-dialog-actions button[type="button"]');
+    check('delegation ' + action + ' returns dismissal, never an alternative', await evaluate('!document.querySelector("[role=dialog]") && window.dialogFixture.responses.length === 1 && window.dialogFixture.responses[0].value === undefined'));
+  }
+  await evaluate('window.dialogFixture.show("extension", { request: "select", delegation: true })');
+  await evaluate('window.dialogFixture.dismissPrompt(); new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+  check('host retirement removes delegation prompt without a user response', await evaluate('!document.querySelector("[role=dialog]") && window.dialogFixture.responses.length === 0 && !window.dialogFixture.isBlockingOverlayActive()'));
+  await evaluate('window.dialogFixture.show("extension", { request: "select" })');
+  check('ordinary extension selects still default to the first option', await evaluate('!!document.querySelector("input:checked") && !document.querySelector("button[type=submit]").disabled'));
+  await clickBackdrop();
+  check('ordinary extension backdrop dismissal is unchanged', await evaluate('!document.querySelector("[role=dialog]") && window.dialogFixture.responses.length === 1'));
   await evaluate('window.dialogFixture.show("extension")');
   const original = await measure();
   check('extension source fits and close is reachable', original.contained && original.overflow <= 1 && original.closeContained && original.closeHit, original);
@@ -65,6 +103,7 @@ app.whenReady().then(async () => {
       check(theme + ' ' + request + ' Escape dismisses', await evaluate('!document.querySelector("[role=dialog]")'));
     }
   }
+  if (process.env.PI_DIALOG_EXTENSION_ONLY === '1') { finish(); return; }
   for (const kind of ['rename','instructions','memory','delete','install','plugin-settings','plugin-review','oauth']) {
     win.setContentSize(1100, 800);
     await evaluate('window.dialogFixture.show(' + JSON.stringify(kind) + ')');
@@ -129,8 +168,5 @@ app.whenReady().then(async () => {
   await click('.provider-chosen-advanced-toggle');
   check('Advanced stays operable after the narrow viewport stacks the panes',
     await evaluate(`document.querySelectorAll('.provider-chosen-row-body:not([hidden])').length === 1`));
-  writeFileSync(join(process.env.PI_DIALOG_ARTIFACT_DIR, 'results.json'), JSON.stringify(results, null, 2));
-  const failed = results.filter(r => !r.ok).length;
-  console.log('SUMMARY ' + (results.length-failed) + '/' + results.length + ' passed');
-  win.destroy();app.exit(failed ? 1 : 0);
+  finish();
 }).catch(error => { console.error(error.stack);app.exit(1); });

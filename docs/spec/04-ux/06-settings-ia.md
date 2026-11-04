@@ -675,6 +675,31 @@ contract modes are intent boundaries, not strict read-only security profiles.
 - The tool is on demand and unavailable in Plan and Goal modes. Removing the
   key turns Jev off first, then deletes it.
 
+### Subagent scheduling model editor
+
+Subagents has separate Roles and Scheduling tabs. Scheduling keeps its policy
+help, approval wait, model-add control and explicit Save action. Model editing
+uses a compact selector beside a single detail form rather than one expanded
+form per model. The selector displays priority, model, provider and approval or
+disabled status; full provider/model identity remains available through its
+accessible name, tooltip and detail form.
+
+Display every saved model in ascending numeric priority, including disabled or
+unavailable references. Equal priorities retain saved insertion order. Sorting
+is a presentation projection: it does not reorder persisted settings or change
+runtime scheduling. Selection and mutations use provider/model identity, not
+the sorted position. Editing priority reorders the selector without changing
+the selected model or input focus. Empty/invalid priority keeps its editor and
+blocks Save. Switching models or tabs preserves unsaved edits and save failures
+retain the full draft.
+
+Adding selects the new model; removing the selected model opens the first
+remaining entry by priority, or the existing empty state. The selector scrolls
+independently for large pools. At a content width of 720px or less, place its
+bounded list above the detail form; long identities must not cause horizontal
+overflow. Use shared Settings controls, theme tokens and native keyboard
+activation. No new persistence, approval or provider-mutation contract is added.
+
 ### Agent capability destinations (Skills / MCP / Subagents)
 
 Skills, MCP servers, and user-owned Subagents remain three independent
