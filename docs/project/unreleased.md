@@ -1,5 +1,16 @@
 # Unreleased changes
 
+- Add explicit session multi-selection with checkboxes, visible-only select all,
+  batch archive/unarchive and Move to recycle bin. The sidebar recycle bin
+  supports batch restore and confirmed permanent deletion. Trashed local
+  sessions keep their history, isolated worktrees and original archive/pin
+  state until permanently deleted; there is no automatic expiry. Running or
+  queued work is protected, and failed batch items stay selected for retry.
+- Show chat file links as blue document-icon labels. Their context menu now
+  offers Open file, Open with, Save as, Copy file contents, and Show in folder
+  alongside the existing path-copy actions. Save as copies the original bytes
+  through a native destination picker; source navigation and remote-file
+  restrictions are preserved.
 - Fixed the composer context ring staying at the pre-compaction figure after
   `/compact` or an automatic compaction until another turn ran (#2015). The
   ring now shows the compacted context's estimated size as soon as the
