@@ -14466,15 +14466,29 @@ are withdrawn with ADR 0165.
   that matches nothing. On an HTML reference, open the Open with submenu and
   choose File Manager, built-in browser, and default browser; repeat for the
   scratch HTML file. 9) Use Copy full path and Copy relative path, then do the
-  same on a reference that resolves in the session scratch store.
+  same on a reference that resolves in the session scratch store. 10) On a local
+  text link choose Open file, Open with default application, Save as (cancel,
+  then confirm a destination), Copy file contents, and Show in folder. Repeat
+  copying with an empty, binary and oversized file. Switch sessions while a
+  reference resolves or a text read is pending. Check a remote reference menu.
 - **Expected**:
-  - Right-clicking a file reference offers Copy full path and Copy relative
-    path on each transcript surface that names it. The transcript menu has no
-    Show in folder item. An unpositioned HTML reference also has a second-level
-    Open with submenu for File Manager, built-in browser, and default browser;
-    non-HTML references keep only the copy actions. Each open choice resolves
-    the reference first, and a missing reference reports itself without opening
-    a same-named file elsewhere.
+  - Markdown file links have a document icon and blue semibold label, preserving
+    author text, line wrapping, focus indication and source-line navigation.
+    HTTP links keep their own style and browser/copy menu.
+  - Local reference menus offer Open file, Open with, Save as, Copy full path,
+    Copy relative path, Copy file contents, and Show in folder on each transcript
+    surface. Open with contains File Manager and the default application;
+    HTML retains its built-in/default browser choices. Every action completes
+    the reference first; a missing reference reports itself without an OS action.
+  - Save as copies exact bytes to the user-picked destination and preserves the
+    source; cancellation writes nothing and emits no success notice. Copy contents
+    copies complete text, including an empty string, and rejects non-text/oversized
+    previews with a notice. Native failures report an error. Remote menus retain
+    copy-path actions only. Session/project changes prevent stale native actions
+    and stale content reads from writing to the clipboard.
+  - Automated coverage: `chat-file-open-with-menu.test.mjs` (menu-to-action flow,
+    errors, cancellation and session races), `markdown-file-links.test.mjs`
+    (production Markdown render/click), and the dedicated Save as native-handler tests.
   - A copy writes exactly what it names: the absolute address for the full copy
     and the project-relative spelling for the relative one; a scratch or
     attachment file reports that it has no relative path instead of copying an

@@ -5,6 +5,28 @@
 
 /* ---------- chat → work-panel preview links ---------- */
 
+/* File links read as inline documents, not download buttons or attachment cards. */
+.prose-chat a.chat-file-link {
+  color: var(--ds-file-link);
+  font-weight: var(--font-weight-semibold);
+  text-decoration-line: none;
+  overflow-wrap: anywhere;
+}
+.prose-chat a.chat-file-link:hover,
+.prose-chat a.chat-file-link:focus-visible {
+  color: var(--ds-file-link);
+  text-decoration-line: underline;
+  text-decoration-color: currentColor;
+}
+.chat-file-link-icon {
+  display: inline-block;
+  margin-inline-end: 4px;
+  vertical-align: -2px;
+}
+.chat-file-link-icon svg {
+  display: block;
+}
+
 /* Inline-code file/URL refs: keep the code-chip look, add link affordance. */
 .chat-code-link {
   background: none;

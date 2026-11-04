@@ -101,6 +101,7 @@
   --ds-raised: var(--gray-750);
   --ds-raised-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
   --ds-accent: var(--gray-0);
+  --ds-file-link: #68b5f9;
   --ds-accent-hover: var(--gray-100);
   --ds-accent-soft: var(--gray-300);
   /* Focus rings / resize affordances. Tied to the accent so themes stay monochrome. */
@@ -260,6 +261,7 @@
   --ds-raised-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 0 0 0.5px rgba(0, 0, 0, 0.04);
   /* Light theme accent inverts: dark ink on pale surfaces. */
   --ds-accent: #1a1c1f;
+  --ds-file-link: #0672ce;
   --ds-accent-hover: #303030;
   --ds-accent-soft: #5d5d5d;
   --ds-focus: var(--ds-accent);

@@ -159,7 +159,7 @@ async function ensureFileManagerView(workspacePath: string | null): Promise<bool
   }
 }
 
-function useResolveChatFileRef() {
+export function useResolveChatFileRef() {
   const paneSessionId = useSlotSessionId();
   const { t } = useTranslation();
   const workspacePath = useAppStore((s) => s.workspace?.path ?? null);

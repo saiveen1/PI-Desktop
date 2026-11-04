@@ -17,6 +17,7 @@ import * as jsxRuntime from "react/jsx-runtime";
 import { renderToStaticMarkup } from "react-dom/server";
 import ts from "typescript";
 import { readTranscriptSource } from "./helpers/source-contracts.mjs";
+import * as chatLinks from "../src/lib/chat-links.ts";
 
 const read = (relative) => readFileSync(new URL(relative, import.meta.url), "utf8");
 
@@ -51,6 +52,9 @@ const calls = {
   toasts: [],
   resolved: [],
   menus: [],
+  saves: [],
+  reveals: [],
+  reads: [],
 };
 
 const state = {
@@ -77,6 +81,10 @@ const useAppStore = Object.assign(
 let nextMatch = null;
 let clipboardFails = false;
 const copied = [];
+let readResult = { kind: "text", content: "complete file\n", size: 14 };
+let saveResult = { canceled: false };
+let actionFails = false;
+let resolveGate;
 
 /*
   The hooks read `navigator.clipboard` off the global, exactly as the app does,
@@ -113,6 +121,7 @@ const previewTarget = loadModule("../src/hooks/use-preview-target.ts", {
         calls.defaultBrowsers.push([path, mimeType, sessionId]),
       fsResolveRef: async (ref) => {
         calls.resolved.push(ref);
+        if (resolveGate) await resolveGate;
         return { match: nextMatch };
       },
     },
@@ -134,6 +143,22 @@ const nativeCapability = loadModule("../src/hooks/use-chat-session-capability.ts
   "../stores/app-store": { useAppStore },
 });
 
+const fileActions = loadModule("../src/hooks/use-chat-file-action.ts", {
+  react: React,
+  "react-i18next": { useTranslation: translate },
+  "../stores/app-store": { useAppStore },
+  "../plugins/renderer-slots/use-slots": { useSlotSessionId: () => "" },
+  "../lib/remote-session-safety": loadModule("../src/lib/remote-session-safety.ts", {}),
+  "./use-preview-target": previewTarget,
+  "./use-chat-session-capability": nativeCapability,
+  "../lib/api": { api: {
+    fsOpen: async (...args) => { if (actionFails) throw new Error("open failed"); calls.defaultBrowsers.push(args); },
+    fsReveal: async (...args) => { if (actionFails) throw new Error("reveal failed"); calls.reveals.push(args); },
+    fsSaveAs: async (...args) => { if (actionFails) throw new Error("save failed"); calls.saves.push(args); return saveResult; },
+    fsRead: async (...args) => { if (actionFails) throw new Error("read failed"); calls.reads.push(args); return readResult; },
+  } },
+});
+
 const { useChatFileMenu, useChatFileMenuItems } = loadModule(
   "../src/hooks/use-chat-file-menu.tsx",
   {
@@ -143,13 +168,14 @@ const { useChatFileMenu, useChatFileMenuItems } = loadModule(
     "../components/icons": {
       IconBrowser: () => null,
       IconCopy: () => null,
+      IconDownload: () => null,
+      IconFileText: () => null,
       IconExternal: () => null,
       IconFolderOpen: () => null,
       IconGlobe: () => null,
     },
-    "../lib/chat-links": {
-      isHtmlFilePath: (path) => /\.html?$/i.test(path),
-    },
+    "../lib/chat-links": chatLinks,
+    "./use-chat-file-action": fileActions,
     "../components/ContextMenu": {
       useContextMenu: () => ({
         contextMenu: null,
@@ -168,6 +194,14 @@ function reset(match) {
   Object.values(calls).forEach((list) => list.splice(0, list.length));
   nextMatch = match;
   clipboardFails = false;
+  state.sessions = [];
+  state.activeSessionId = "session-1";
+  state.workspace = { path: "C:/project" };
+  readResult = { kind: "text", content: "complete file\n", size: 14 };
+  saveResult = { canceled: false };
+  actionFails = false;
+  resolveGate = undefined;
+  copied.length = 0;
 }
 
 /** The match the main process reports for a file of the project's main folder. */
@@ -210,23 +244,21 @@ test("the HTML menu exposes three open destinations as one submenu", () => {
   openFileMenu({}, { path: "src/dir/a.html" });
   const menu = calls.menus[0].items;
   assert.deepEqual(menu.map((item) => item.id), [
-    "open-with",
-    "copy-full-path",
-    "copy-relative-path",
+    "open-file", "open-with", "save-as", "copy-full-path",
+    "copy-relative-path", "copy-file-content", "reveal-in-folder",
   ]);
-  assert.equal(menu[0].label, "chat.openWith:");
+  assert.equal(menu[1].label, "chat.openWith:");
   assert.deepEqual(
-    menu[0].submenu.map((item) => [item.id, item.label]),
+    menu[1].submenu.map((item) => [item.id, item.label]),
     [
       ["open-with-file-manager", "chat.openWithFileManager:"],
       ["open-with-built-in-browser", "chat.openWithBuiltInBrowser:"],
       ["open-with-default-browser", "chat.openWithDefaultBrowser:"],
     ],
   );
-  assert.equal(menu.some((item) => item.id === "reveal-in-folder"), false);
 });
 
-test("non-HTML references keep copy actions without an open-with submenu", () => {
+test("non-HTML references offer file actions and native open destinations", () => {
   reset(projectMatch());
   let openFileMenu = null;
   function Harness() {
@@ -236,8 +268,11 @@ test("non-HTML references keep copy actions without an open-with submenu", () =>
   renderToStaticMarkup(React.createElement(Harness));
   openFileMenu({}, { path: "src/dir/a.ts" });
   assert.deepEqual(calls.menus[0].items.map((item) => item.id), [
-    "copy-full-path",
-    "copy-relative-path",
+    "open-file", "open-with", "save-as", "copy-full-path",
+    "copy-relative-path", "copy-file-content", "reveal-in-folder",
+  ]);
+  assert.deepEqual(calls.menus[0].items[1].submenu.map((item) => item.id), [
+    "open-with-file-manager", "open-with-default-application",
   ]);
 });
 
@@ -282,10 +317,8 @@ test("an unresolved HTML reference is reported and opened nowhere", async () => 
 
 /** Run one copy item of the reference menu on the reference it names. */
 async function copyRef(path, kind) {
-  let copy = null;
   let items = null;
   function Harness() {
-    copy = previewTarget.useCopyChatFileRef();
     items = useChatFileMenuItems()({ path });
     return null;
   }
@@ -293,7 +326,7 @@ async function copyRef(path, kind) {
   const id = kind === "absolute" ? "copy-full-path" : "copy-relative-path";
   const item = items.find((entry) => entry.id === id);
   assert.ok(item, "the reference offers the copy");
-  copy(path, undefined, kind);
+  item.onSelect();
   await flush();
 }
 
@@ -394,7 +427,7 @@ test("every transcript surface that names a file opens that item", () => {
   // Inline code, a file link, and a local image each hand their own reference
   // to that surface; `./` and `../` keep the markdown base beside the path.
   assert.match(markdown, /openFileMenu\(event, \{ path: text \?\? target\.path, baseDir \}\)/);
-  assert.match(markdown, /openFileMenu\(event, \{ path: ref, baseDir \}\)/);
+  assert.match(markdown, /openFileMenu\(event, \{\s*path: ref, baseDir,/);
   assert.match(markdown, /openFileMenu\(event, \{ path: localRef, baseDir \}\)/);
   assert.match(markdown, /onContextMenu=\{onLocalContextMenu\}/);
   // A local image that cannot be shown inline keeps a chip, and both carry the
@@ -407,10 +440,8 @@ test("every transcript surface that names a file opens that item", () => {
 
 test("HTTP URLs keep their own menu instead of the file open submenu", () => {
   const menu = read("../src/hooks/use-chat-file-menu.tsx");
-  // The submenu only recognizes HTML paths, and an HTTP link keeps its own
-  // external/work-panel/copy menu.
+  // Browser choices only apply to HTML; HTTP links retain their own menu.
   assert.match(menu, /isHtmlFilePath\(path\)/);
-  assert.doesNotMatch(menu, /useRevealChatFileRef|reveal-in-folder/);
   assert.ok(markdown.includes('if (!/^https?:\\/\\//i.test(href)) {'));
 });
 
@@ -441,4 +472,122 @@ test("remote workspace references retain copy actions but never offer local open
   renderToStaticMarkup(React.createElement(Harness));
   assert.deepEqual(items.map(item => item.id), ["copy-full-path", "copy-relative-path"]);
   state.sessions = before;
+});
+
+function menuFor(target) {
+  let open;
+  function Harness() { open = useChatFileMenu().openFileMenu; return null; }
+  renderToStaticMarkup(React.createElement(Harness));
+  open({}, target);
+  return calls.menus.at(-1).items;
+}
+
+async function choose(items, id) {
+  const item = items.flatMap((entry) => [entry, ...(entry.submenu ?? [])]).find((entry) => entry.id === id);
+  assert.ok(item, `menu offers ${id}`);
+  item.onSelect();
+  await flush();
+}
+
+test("file menu user path opens, saves, copies and reveals the same resolved file", async () => {
+  reset(projectMatch());
+  const items = menuFor({ path: "./a.ts", baseDir: "src/dir" });
+  assert.deepEqual(calls.resolved, [], "rendering the menu performs no file I/O");
+  await choose(items, "open-file");
+  assert.equal(calls.tabs.at(-1).location, "src/dir/a.ts");
+  await choose(items, "open-with-default-application");
+  await choose(items, "save-as");
+  await choose(items, "copy-file-content");
+  await choose(items, "reveal-in-folder");
+  assert.ok(calls.resolved.every((ref) => ref === "src/dir/a.ts"));
+  assert.deepEqual(calls.defaultBrowsers, [["C:/project/src/dir/a.ts", undefined, "session-1"]]);
+  assert.deepEqual(calls.saves, [["C:/project/src/dir/a.ts", "session-1"]]);
+  assert.deepEqual(calls.reveals, [["C:/project/src/dir/a.ts", "session-1"]]);
+  assert.deepEqual(copied, ["complete file\n"]);
+  assert.deepEqual(calls.toasts.map(([message]) => message), ["chat.fileSaved:", "chat.copied:"]);
+});
+
+test("Open file from a positioned link preserves its source position", async () => {
+  reset(projectMatch());
+  await choose(menuFor({ path: "a.ts", line: 12, column: 3 }), "open-file");
+  assert.deepEqual(calls.files, [["src/dir/a.ts", undefined, { line: 12, column: 3 }]]);
+});
+
+test("canceled Save as is silent and a failed native action reports an error", async () => {
+  reset(projectMatch());
+  saveResult = { canceled: true };
+  const items = menuFor({ path: "a.ts" });
+  await choose(items, "save-as");
+  assert.deepEqual(calls.toasts, []);
+  actionFails = true;
+  for (const id of ["save-as", "open-with-default-application", "reveal-in-folder", "copy-file-content"]) {
+    await choose(items, id);
+  }
+  assert.equal(calls.toasts.length, 4);
+  assert.ok(calls.toasts.every(([message, options]) => message === "chat.fileActionFailed:" && options.variant === "error"));
+});
+
+test("copy contents accepts empty text but rejects images, binary and oversized previews", async () => {
+  reset(projectMatch());
+  const items = menuFor({ path: "a.ts" });
+  readResult = { kind: "text", content: "", size: 0 };
+  await choose(items, "copy-file-content");
+  assert.deepEqual(copied, [""]);
+  for (const kind of ["image", "binary", "tooLarge"]) {
+    readResult = { kind, size: 1000000 };
+    await choose(items, "copy-file-content");
+    assert.equal(calls.toasts.at(-1)[0], "chat.fileContentsUnavailable:");
+  }
+  assert.deepEqual(copied, [""]);
+  readResult = { kind: "text", content: "text", size: 4 };
+  clipboardFails = true;
+  await choose(items, "copy-file-content");
+  assert.equal(calls.toasts.at(-1)[0], "chat.fileActionFailed:");
+});
+
+test("missing files never reach a native file action", async () => {
+  reset(null);
+  const items = menuFor({ path: "missing.txt" });
+  for (const id of ["save-as", "open-with-default-application", "reveal-in-folder", "copy-file-content"]) await choose(items, id);
+  assert.deepEqual([calls.saves, calls.defaultBrowsers, calls.reveals, calls.reads, copied], [[], [], [], [], []]);
+  assert.ok(calls.toasts.every(([message]) => message === "chat.fileRefMissing:missing.txt"));
+});
+
+test("native file actions reject stale sessions, projects and revoked local capabilities", async () => {
+  for (const mutate of [
+    () => { state.activeSessionId = "session-2"; },
+    () => { state.workspace = { path: "C:/other" }; },
+    () => { state.sessions = [{ id: "session-1", remoteWorkspace: { hostKey: "ssh", path: "/work" } }]; },
+    () => { state.sessions = [{ id: "session-1", capabilities: { canUseLocalTools: false } }]; },
+  ]) {
+    reset(projectMatch());
+    let release;
+    resolveGate = new Promise((resolve) => { release = resolve; });
+    const item = menuFor({ path: "a.ts" }).find((entry) => entry.id === "save-as");
+    item.onSelect();
+    mutate();
+    release();
+    await flush();
+    assert.deepEqual(calls.saves, []);
+    assert.deepEqual(calls.toasts, []);
+    item.onSelect();
+    await flush();
+    assert.deepEqual(calls.saves, []);
+  }
+  reset(projectMatch());
+});
+
+test("switching sessions during a content read never changes the clipboard", async () => {
+  reset(projectMatch());
+  let release;
+  readResult = new Promise((resolve) => { release = resolve; });
+  const items = menuFor({ path: "a.ts" });
+  await choose(items, "copy-file-content");
+  assert.equal(calls.reads.length, 1);
+  state.activeSessionId = "session-2";
+  release({ kind: "text", content: "old session", size: 11 });
+  await flush();
+  assert.deepEqual(copied, []);
+  assert.deepEqual(calls.toasts, []);
+  reset(projectMatch());
 });

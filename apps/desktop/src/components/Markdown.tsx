@@ -44,6 +44,7 @@ import {
   IconCode,
   IconCopy,
   IconExternal,
+  IconFileText,
   IconGlobe,
   IconImage,
   IconWorkflow,
@@ -587,6 +588,10 @@ function Anchor({
   const openUrl = useAppStore((s) => s.openUrlInWorkPanel);
   const showToast = useAppStore((s) => s.showToast);
 
+  const fileTarget = href
+    ? resolvePreviewTarget(safeDecodeUri(href), root, baseDir)
+    : null;
+  const isFileLink = fileTarget?.kind === "file";
   const { contextMenu, openContextMenu, closeContextMenu } = useContextMenu();
 
   /*
@@ -628,7 +633,10 @@ function Anchor({
       const target = resolvePreviewTarget(decoded, root, baseDir);
       const ref = target?.kind === "file" ? target.path : toWorkspaceRel(decoded, root, baseDir);
       if (!ref || !openFileMenu) return;
-      openFileMenu(event, { path: ref, baseDir });
+      openFileMenu(event, {
+        path: ref, baseDir,
+        ...(target?.kind === "file" ? { line: target.line, column: target.column } : {}),
+      });
       return;
     }
     const target = href;
@@ -683,12 +691,15 @@ function Anchor({
     <>
       <a
         {...rest}
+        className={[rest.className, isFileLink ? "chat-file-link" : ""].filter(Boolean).join(" ") || undefined}
+        title={isFileLink ? `${t("chat.fileMenuOpen")} — ${fileTarget.path}` : rest.title}
         href={localToolsAllowed ? href : undefined}
         onClick={onClick}
         onContextMenu={onContextMenu}
         target="_blank"
         rel="noopener noreferrer"
       >
+        {isFileLink && <span className="chat-file-link-icon" aria-hidden="true"><IconFileText size={14} /></span>}
         {children}
       </a>
       <ContextMenu state={contextMenu} onClose={closeContextMenu} />

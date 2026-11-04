@@ -1947,6 +1947,25 @@ Renderer IPC kept for the Plan-safe preview facade and URL fallback:
   `attachments/<sha256>` blob declared as `video/mp4`, the host creates a
   `.mp4` symlink inside its private app-data directory before the OS handoff,
   so the extensionless blob has a media association without copying its bytes.
+- `fs/saveAs({path, sessionId?})` → `{ canceled: boolean }`. Copy one
+  already-readable file to a destination the **user** picks in the native save
+  dialog ("Save a copy" on chat file chips / the files panel). Not a plugin
+  host API. Containment matches `fs/open` (workspace, `<data_dir>/scratch/`,
+  `<data_dir>/attachments/`, the project group's other folders, realpath
+  re-checked); a remote session's files are refused
+  (`INVALID_ARGUMENT`) because they live on another machine. The source is
+  validated before the dialog and revalidated after it returns: a source that
+  disappeared or changed identity while the dialog was open fails
+  (`INVALID_ARGUMENT` / `CONFLICT`) instead of copying a stale file. The
+  dialog is seeded only with the source's basename — the destination never
+  comes from the renderer — and a dismissed dialog writes nothing
+  (`canceled: true`). The copy is byte-exact via the filesystem
+  (`copyFile`), never the bounded text/image preview path, so binary and
+  larger-than-preview files arrive complete. Saving onto the source itself —
+  same resolved path, same realpath, or the same inode behind a link — is
+  refused and the original is preserved. Failures classify as `NOT_FOUND`,
+  `UNAUTHORIZED`, `INVALID_ARGUMENT`, `CONFLICT`, or `INTERNAL` (spec
+  03-runtime/08-error-codes).
 - `fs/resolveRef({ref, sessionId?})` → `FsChatRefResolveResult`
   (for isolated sessions, lookup and file reads use `worktree.location` rather
   than the parent project checkout; an absolute reference under the parent

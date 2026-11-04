@@ -3750,13 +3750,20 @@ Anatomy:
   primary-folder file is addressed to the view as a project-relative path and a
   sibling-folder file as an absolute one, which is also how scratch and
   attachment files are addressed. A reference that matches no file opens nothing
-  and reports itself. Right-clicking a transcript file reference offers Copy
-  full path and Copy relative path on every surface that names it. Unpositioned
-  `.html` and `.htm` references also offer an **Open with** submenu containing
-  File Manager, built-in browser, and default browser. Each choice completes the
-  reference first and opens that exact resolved file. Other file types keep the
-  copy actions only; the transcript menu has no **Show in folder** action. A
-  file outside the project has no relative path to copy and reports that fact.
+  and reports itself. Markdown file links use an inline document icon and a
+  semibold blue label (`--ds-file-link`), preserving the authored label and
+  normal line wrapping. Hover/focus adds an underline; HTTP(S) styling is unchanged.
+  Local file context menus offer Open file, Open with, Save as, Copy full path,
+  Copy relative path, Copy file contents, and Show in folder. Open with includes
+  File Manager and the default application; HTML keeps its built-in/default
+  browser choices. Every action completes the same reference first. Open file
+  retains source line/column navigation. Save as uses a native destination picker
+  and copies original bytes without changing the source; cancellation writes nothing.
+  Copy contents accepts only a complete text preview, including empty files;
+  binary, image and oversized files report that Save as is required instead.
+  Native actions are absent for remote references, and pending actions stop
+  before a new side effect if the owning session or project changes. A file
+  outside the project has no relative path to copy and reports that fact.
   The OS default application is no longer what this click does. HTTP(S)
   URLs stay text links. Plain clicks follow the Link open destination setting,
   and right-clicking a URL exposes the same external, work-panel, and copy

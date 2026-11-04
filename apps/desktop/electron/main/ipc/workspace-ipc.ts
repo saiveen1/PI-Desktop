@@ -39,6 +39,7 @@ import {
   resolveRealOpenablePath,
 } from "@pi-desktop/host-runtime";
 import { openableMp4Path } from "../open-attachment-video";
+import { saveFileAs } from "../fs-save-as";
 import { isChatRefOutsideRoots, resolveChatFileRef } from "../chat-ref-resolve";
 import { rebaseWorktreeRef, type WorktreeRefContext } from "../worktree-ref";
 import { getWorkspaceFileIndex, searchWorkspaceFiles } from "../fs-index";
@@ -1012,6 +1013,39 @@ export function registerWorkspaceIpc({
     if (openError) throw new Error(openError);
     return { ok: true };
   });
+
+  /**
+   * Copy one already-readable file to a destination the *user* picks (chat file
+   * chips "Save as…"). Containment matches `fs/open`: workspace, the session
+   * stores, and the project group's other folders, all re-checked through
+   * `realpath`. A remote session's file lives on another machine, so it is
+   * refused rather than copied from a same-named local path; the destination
+   * never comes from the renderer, and the source is revalidated after the
+   * native dialog returns (`fs-save-as.ts`).
+   */
+  handle(
+    IPC.invoke.fsSaveAs,
+    async (input: { path?: string; sessionId?: string } = {}): Promise<{ canceled: boolean }> => {
+      const remote = await remoteFileWorkspace(input.sessionId);
+      if (remote) {
+        throw Object.assign(new Error("remote paths cannot be saved on this computer"), {
+          errorCode: ErrorCodes.INVALID_ARGUMENT,
+        });
+      }
+      const workspaceRoot = await optionalWorkspaceRoot(input.sessionId);
+      const extraRoots = await fsExtraRoots(workspaceRoot);
+      return saveFileAs(String(input.path ?? ""), {
+        resolveSource: (ref) => resolveRealOpenablePath(ref, workspaceRoot, extraRoots),
+        showSaveDialog: async (options) => {
+          const owner = getMainWindow();
+          const result = owner
+            ? await dialog.showSaveDialog(owner, options)
+            : await dialog.showSaveDialog(options);
+          return { canceled: result.canceled, filePath: result.filePath };
+        },
+      });
+    },
+  );
 
   handle(IPC.invoke.fsIndex, async (input: { sessionId?: string } = {}) => {
     const remote = await remoteFileWorkspace(input.sessionId);

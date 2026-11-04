@@ -441,6 +441,8 @@ export const IPC = {
     statsGetTokenUsageHistory: "pi-desktop/stats/getTokenUsageHistory",
     fsReveal: "pi-desktop/fs/reveal",
     fsOpen: "pi-desktop/fs/open",
+    /** Copy one already-contained regular file to a destination the user picks. */
+    fsSaveAs: "pi-desktop/fs/saveAs",
     fsIndex: "pi-desktop/fs/index",
     fsSearch: "pi-desktop/fs/search",
     fsResolveRef: "pi-desktop/fs/resolveRef",

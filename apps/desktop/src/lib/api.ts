@@ -1695,6 +1695,18 @@ export const api = {
   fsReveal: (path: string, sessionId?: string) => invoke(IPC.invoke.fsReveal, { path, ...(sessionId ? { sessionId } : {}) }),
   fsOpen: (path: string, mimeType?: string, sessionId?: string) =>
     invoke(IPC.invoke.fsOpen, { path, mimeType, ...(sessionId ? { sessionId } : {}) }),
+  /**
+   * Copy one file the app may already read to a destination the user picks in
+   * the native save dialog. `path` is the contained source reference from chat
+   * or the files panel; Electron Main resolves it, asks for the destination,
+   * and copies the exact bytes. `canceled: true` means the user dismissed the
+   * dialog and nothing was written.
+   */
+  fsSaveAs: (path: string, sessionId?: string) =>
+    invoke<{ canceled: boolean }>(IPC.invoke.fsSaveAs, {
+      path,
+      ...(sessionId ? { sessionId } : {}),
+    }),
   fsIndex: (sessionId?: string) => invoke<FsIndexResult>(IPC.invoke.fsIndex, { ...(sessionId ? { sessionId } : {}) }),
   fsSearch: (sessionId: string | undefined, query: string) =>
     invoke<FsIndexResult>(IPC.invoke.fsSearch, { ...(sessionId ? { sessionId } : {}), query }),
