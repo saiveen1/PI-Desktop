@@ -68,6 +68,17 @@ test("production Markdown renders document links and preserves click/menu target
   anchor.props.onContextMenu({});
   assert.deepEqual(menus, [{ path: "D:/scratch/复盘.prg", baseDir: "", line: 12, column: 3 }]);
   assert.equal(calls.length, 1);
+
+  function ExtensionlessProbe() {
+    const element = ProbeAnchor({ href: "D:/scratch/Makefile:4", children: "Makefile" });
+    anchor = element.props.children[0];
+    return element;
+  }
+  ssr.render(createElement(ProbeMenuContext.Provider, {
+    value: (_event, target) => menus.push(target),
+  }, createElement(ExtensionlessProbe)));
+  anchor.props.onContextMenu({});
+  assert.deepEqual(menus.at(-1), { path: "D:/scratch/Makefile", baseDir: "", line: 4, column: undefined });
 });
 
 test("file link presentation has theme tokens, wrapping and a keyboard focus affordance", async () => {

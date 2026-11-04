@@ -78,6 +78,7 @@ import {
 } from "../hooks/use-chat-file-menu";
 import {
   handleMarkdownFileLinkClick,
+  markdownLinkFileTarget,
   remarkChatFileLinks,
   resolvePreviewTarget,
   safeDecodeUri,
@@ -629,13 +630,11 @@ function Anchor({
         action on the file's folder. `./` and `../` resolve against the markdown
         file on screen, which is the base this row already holds.
       */
-      const decoded = safeDecodeUri(href);
-      const target = resolvePreviewTarget(decoded, root, baseDir);
-      const ref = target?.kind === "file" ? target.path : toWorkspaceRel(decoded, root, baseDir);
-      if (!ref || !openFileMenu) return;
+      const target = markdownLinkFileTarget(href, root, baseDir);
+      if (!target || !openFileMenu) return;
       openFileMenu(event, {
-        path: ref, baseDir,
-        ...(target?.kind === "file" ? { line: target.line, column: target.column } : {}),
+        path: target.path, baseDir,
+        ...(target.line !== undefined ? { line: target.line, column: target.column } : {}),
       });
       return;
     }

@@ -158,6 +158,25 @@ test("new ID mutations preserve the existing remote read-only capability boundar
   }
 });
 
+test("merged delegation and review channels preserve the remote read-only boundary", () => {
+  const { guardRemoteInvocation } = load("../src/lib/remote-ipc-safety.ts", {
+    "@pi-desktop/shared": { IPC }, i18next: { default: { t: () => "Remote history is read-only" } },
+  });
+  for (const channel of [
+    IPC.invoke.agentRetrySubagent,
+    IPC.invoke.workspaceReviewRollback,
+    IPC.invoke.workspaceReviewTurns,
+    IPC.invoke.workspaceReviewChanges,
+    IPC.invoke.workspaceReviewContext,
+    IPC.invoke.workspaceReviewOpenFile,
+    IPC.invoke.workspaceReviewRollbackFile,
+  ]) {
+    assert.equal(typeof channel, "string");
+    assert.throws(() => guardRemoteInvocation(channel, { sessionId: "remote:host:session" }), { code: "CAPABILITY_UNAVAILABLE" });
+    assert.doesNotThrow(() => guardRemoteInvocation(channel, { sessionId: "local-session" }));
+  }
+});
+
 test("the real store/API/preload/IPC path uploads bounded ids with more than 64 MiB retained history", async () => {
   const huge = [...previous];
   huge[1] = { ...huge[1], content: "A".repeat(65 * 1024 * 1024) };
