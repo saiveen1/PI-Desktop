@@ -1,3 +1,4 @@
+import { SubagentRunPolicySummary } from "./SubagentRunPolicySummary";
 import { toolResultPayload } from "../../lib/tool-presentation";
 import { SubagentStopButton } from "../../features/chat/transcript/SubagentStopButton";
 import { collectDelegationStatuses, subagentOutcome } from "../../lib/subagent-topology";
@@ -66,13 +67,14 @@ function SubagentTranscriptSurface({ delegationId }: { delegationId: string }) {
     });
   }, [messages, delegationId]);
   const delegateSettings = useMemo(() => {
-    const result = messages.find((message) => {
+    const result = [...messages].reverse().find((message) => {
       if (message.role !== "tool") return false;
       const payload = toolResultPayload(message);
       return payload && typeof payload === "object" && !Array.isArray(payload) &&
         "delegationId" in payload && payload.delegationId === delegationId;
     });
     return {
+      payload: result ? toolResultPayload(result) : undefined,
       modelId: result ? delegateModelId(result) : "",
       thinkingLevel: result ? delegateThinkingLevel(result) : undefined,
     };
@@ -139,6 +141,7 @@ function SubagentTranscriptSurface({ delegationId }: { delegationId: string }) {
           tabIndex={0}
         >
           <div ref={contentRef} className="subagent-transcript-list">
+            <SubagentRunPolicySummary payload={delegateSettings.payload} />
             {transcriptResult ? (
               transcriptResult.turns.map((turn, turnIndex) => (
                 <Fragment key={`turn-${turnIndex}`}>

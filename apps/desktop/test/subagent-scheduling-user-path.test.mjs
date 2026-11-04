@@ -16,7 +16,9 @@ import { flushSync } from "react-dom";
 import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
 import { catalogs } from "@pi-desktop/i18n";
-import { IPC, bindingForCustomModel } from "@pi-desktop/shared";
+import { IPC, bindingForCustomModel, DEFAULT_DELEGATION_RUN_POLICY, DELEGATION_RUN_POLICY_LIMITS } from "@pi-desktop/shared";
+import { delegationRunPolicyFields } from "../../apps/desktop/src/lib/subagent-run-policy";
+import { SubagentTranscriptTab } from "../../apps/desktop/src/components/workpanel/SubagentTranscriptTab";
 import { SubagentSettingsPage } from "../../apps/desktop/src/components/settings/SubagentSettingsPage";
 import { ModelSelectionPanes, useModelSelection } from "../../apps/desktop/src/components/settings/ModelSelectionPanes";
 import { api } from "../../apps/desktop/src/lib/api";
@@ -85,21 +87,31 @@ async function saveSettings(patch) {
 }
 let round = 0;
 const rootNode = createRoot(document.getElementById("root"));
-function render(mode = "settings") {
+function render(mode = "settings", props = {}) {
   flushSync(() => rootNode.render(React.createElement(
-    mode === "settings" ? SubagentSettingsPage : ModelPane,
-    { key: ++round, saveSettings },
+    mode === "settings" ? SubagentSettingsPage : mode === "transcript" ? SubagentTranscriptTab : ModelPane,
+    { key: ++round, saveSettings, ...props },
   )));
 }
 const frame = () => new Promise(requestAnimationFrame);
 async function settle() { await frame(); await frame(); }
 async function waitFor(predicate, message) {
-  for (let attempt = 0; attempt < 60; attempt += 1) {
-    const value = predicate();
-    if (value) return value;
-    await frame();
-  }
-  throw new Error(message);
+  const initial = predicate();
+  if (initial) return initial;
+  return new Promise((resolve, reject) => {
+    const observer = new MutationObserver(() => {
+      const value = predicate();
+      if (!value) return;
+      observer.disconnect();
+      clearTimeout(deadline);
+      resolve(value);
+    });
+    const deadline = setTimeout(() => {
+      observer.disconnect();
+      reject(new Error(message));
+    }, 2000);
+    observer.observe(document.body, { subtree: true, childList: true, attributes: true, characterData: true });
+  });
 }
 function check(condition, message) {
   if (!condition) throw new Error(message);
@@ -109,6 +121,7 @@ const button = (label) => [...document.querySelectorAll("button")]
 function click(label) {
   const node = button(label);
   check(node && !node.disabled, "Missing or disabled button: " + label);
+  node.scrollIntoView({ block: "nearest" });
   flushSync(() => node.click());
 }
 const field = (label, required = true) => {
@@ -191,6 +204,111 @@ window.resetSchedulingFixture = () => {
   flushSync(() => rootNode.render(null));
   useAppStore.setState({ settings: persisted, providers: structuredClone(originalProviders), settingsAnchor: null });
   document.getElementById("root").style.width = "";
+};
+
+window.runPolicyProbe = async () => {
+  const label = (key) => i18n.t(delegationRunPolicyFields.find((item) => item.key === key).label);
+  const policyValues = () => Object.fromEntries(delegationRunPolicyFields.map(({ key }) => [key, Number(field(label(key)).value)]));
+  const equals = (actual, expected, message) => check(JSON.stringify(actual) === JSON.stringify(expected), message + ": " + JSON.stringify(actual));
+  const saved = () => waitFor(() => [...document.querySelectorAll('[role="status"]')]
+    .some((node) => node.textContent === i18n.t("settings.delegationSaved")), "run policy save did not finish");
+  render();
+  await settle();
+  click("Scheduling");
+  equals(policyValues(), DEFAULT_DELEGATION_RUN_POLICY, "omitted policy did not show defaults");
+  check(writes.length === 0 && persisted.delegation === undefined, "reading defaults wrote settings");
+  check(delegationRunPolicyFields.length === 3, "retired report controls remain visible");
+  // Old trial values are readable, ignored during work, and removed on a new save.
+  persisted = { ...persisted, delegation: { version: 1, approvalTimeoutSeconds: 60,
+    models: [{ providerId: "account", modelId: "legacy", enabled: true, priority: 1, approval: "auto", description: "" }],
+    runPolicy: { ...DEFAULT_DELEGATION_RUN_POLICY, checkpointInterval: 1, maxCheckpointRequests: 1 } } };
+  flushSync(() => useAppStore.setState({ settings: persisted }));
+  for (const { key } of delegationRunPolicyFields) {
+    const { min, max } = DELEGATION_RUN_POLICY_LIMITS[key];
+    for (const invalid of ["", min - 1, max + 1, min + 0.5]) {
+      input(label(key), invalid);
+      check(button("Save").disabled && field(label(key)).getAttribute("aria-invalid") === "true", "invalid policy value accepted: " + key);
+      check(field(label(key)).value === String(invalid), "invalid value was silently clamped: " + key);
+      check([...document.querySelectorAll('[role="alert"]')].some((node) => node.textContent === i18n.t("settings.delegationRunInvalid")), "localized policy validation error missing");
+      check(![...document.querySelectorAll('[role="alert"]')].some((node) => node.textContent === i18n.t("settings.delegationInvalid")), "run policy error showed unrelated model-policy validation");
+      flushSync(() => button("Save").click());
+      check(writes.length === 0, "invalid policy was saved");
+    }
+    input(label(key), DEFAULT_DELEGATION_RUN_POLICY[key]);
+  }
+  const edited = { maxToolCalls: 0, maxDurationSeconds: 0, finalReportTimeoutSeconds: 45 };
+  for (const [key, value] of Object.entries(edited)) input(label(key), value);
+  click("Save");
+  await saved();
+  equals(persisted.delegation.runPolicy, edited, "policy edits were not saved");
+  render();
+  click("Scheduling");
+  equals(policyValues(), edited, "saved policy was not retained on reload");
+  input(description("legacy"), "Model changes preserve run policy");
+  click("Remove " + name("legacy") + " from scheduling");
+  await option("Choose a configured model", name("alpha"));
+  click("Add model");
+  input(description("alpha"), "Model changes preserve run policy");
+  click("Save");
+  await saved();
+  equals(persisted.delegation.runPolicy, edited, "model edit/removal replaced policy");
+  input(label("maxToolCalls"), 64);
+  input(label("maxDurationSeconds"), 120);
+  input(description("alpha"), "Keep this model draft");
+  input(waitLabel, 19);
+  failNext = true;
+  const persistedBeforeFailure = JSON.stringify(persisted);
+  click("Save");
+  await waitFor(() => document.querySelector('[role="alert"]')?.textContent.includes("fixture disk unavailable"), "policy failure was not displayed");
+  check(field(label("maxToolCalls")).value === "64" && field(label("maxDurationSeconds")).value === "120", "failed save lost policy draft");
+  check(JSON.stringify(persisted) === persistedBeforeFailure, "failed save changed persisted values");
+  click(i18n.t("settings.delegationRunReset"));
+  equals(policyValues(), DEFAULT_DELEGATION_RUN_POLICY, "restore defaults did not restore the supported fields");
+  check(field(description("alpha")).value === "Keep this model draft" && field(waitLabel).value === "19", "restoring policy defaults overwrote other edits");
+  check(button(approval("alpha")).textContent.includes("Ask every time") && modelLabels().length === 1, "restoring defaults changed model authorization");
+  click("Save");
+  await saved();
+  equals(persisted.delegation.runPolicy, DEFAULT_DELEGATION_RUN_POLICY, "restored defaults were not saved");
+  check(persisted.delegation.models[0].description === "Keep this model draft" && persisted.delegation.approvalTimeoutSeconds === 19, "default save lost other draft values");
+  render();
+  click("Scheduling");
+  equals(policyValues(), DEFAULT_DELEGATION_RUN_POLICY, "restored defaults were not retained");
+
+  // Render the real work-panel tab against task metadata and different global settings.
+  const snapshot = { maxToolCalls: 0, maxDurationSeconds: 77, checkpointInterval: 9, maxCheckpointRequests: 4, finalReportTimeoutSeconds: 61 };
+  const task = (id, delegationId, runPolicy) => ({ id, sessionId: "policy-session", role: "tool", content: "", status: "complete",
+    toolName: "Task", toolCallId: "call-" + id, toolArgs: { task: "Inspect " + delegationId },
+    toolResult: { details: { delegationId, status: "completed", ...(runPolicy === undefined ? {} : { runPolicy }) } } });
+  flushSync(() => useAppStore.setState({ activeSessionId: "policy-session", runningSessions: {}, messages: [
+    task("old", "chosen", DEFAULT_DELEGATION_RUN_POLICY),
+    task("current", "chosen", snapshot),
+    task("other", "other", { ...snapshot, maxDurationSeconds: 999 }),
+    task("legacy", "legacy"),
+    task("partial", "partial", { maxToolCalls: 12 }),
+  ] }));
+  render("transcript", { delegationId: "chosen" });
+  await settle();
+  const summary = () => document.querySelector('section[aria-label="' + i18n.t("settings.delegationRunSnapshot") + '"]');
+  check(summary(), "task snapshot summary is absent");
+  const rows = [...summary().querySelectorAll("dl > div")];
+  equals(rows.map((row) => row.querySelector("dd").textContent), delegationRunPolicyFields.map(({ key, unit }) =>
+    snapshot[key] === 0 ? i18n.t("settings.delegationRunUnlimited") : snapshot[key] + " " + i18n.t(unit)), "tab displayed global settings or another task instead of latest task snapshot");
+  check(!summary().querySelector("input, button"), "snapshot exposes running-policy editing controls");
+  flushSync(() => useAppStore.setState({ settings: { ...persisted, delegation: { ...persisted.delegation,
+    runPolicy: { ...DEFAULT_DELEGATION_RUN_POLICY, maxDurationSeconds: 888 } } } }));
+  check(summary().textContent.includes("77 seconds") && !summary().textContent.includes("888"), "global setting update changed task snapshot");
+  for (const delegationId of ["legacy", "partial"]) {
+    render("transcript", { delegationId });
+    await settle();
+    check(!summary(), "missing or partial task metadata fabricated defaults: " + delegationId);
+  }
+  const settingsWrites = writes.length;
+  flushSync(() => rootNode.render(null));
+  persisted = { defaultMode: "agent", theme: "light", language: "en", developerMode: false };
+  writes = [];
+  useAppStore.setState({ settings: persisted, providers: structuredClone(originalProviders), activeSessionId: null,
+    messages: [], runningSessions: {}, settingsAnchor: null });
+  return { passed: true, fields: delegationRunPolicyFields.length, settingsWrites, snapshotRendered: true };
 };
 
 window.schedulingProbe = async () => {
@@ -334,6 +452,7 @@ test("Subagent scheduling user path preserves legacy opt-ins, policy edits, relo
     await build({
       stdin: { contents: fixture, resolveDir: join(root, "scripts/e2e"), loader: "tsx" },
       outfile: join(temp, "renderer.js"), bundle: true, platform: "browser", format: "esm", jsx: "automatic",
+      loader: { ".woff2": "file", ".woff": "file", ".ttf": "file" },
       define: { "process.env.NODE_ENV": '"production"', "import.meta.env.DEV": "false" },
       alias: {
         "@pi-desktop/i18n": join(root, "packages/i18n/src"),
@@ -355,7 +474,7 @@ app.commandLine.appendSwitch("disable-renderer-backgrounding");
 app.setPath("userData", path.join(__dirname, "profile"));
 app.whenReady().then(async () => {
   const win = new BrowserWindow({ show: false, width: 1000, height: 760,
-    webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, backgroundThrottling: false } });
+    webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, backgroundThrottling: false, offscreen: true } });
   win.webContents.on("console-message", (_event, ...args) => console.log("RENDERER", ...args));
   try {
     await win.loadFile(path.join(__dirname, "index.html"));
@@ -370,6 +489,8 @@ app.whenReady().then(async () => {
     }
     await win.webContents.executeJavaScript("window.resetSchedulingFixture()");
     console.log("SCHEDULING_PROBE " + JSON.stringify(await win.webContents.executeJavaScript("window.schedulingProbe().catch(error => { console.error(error.stack); throw error; })")));
+    await win.loadFile(path.join(__dirname, "index.html"));
+    console.log("RUN_POLICY_PROBE " + JSON.stringify(await win.webContents.executeJavaScript("window.runPolicyProbe().catch(error => { console.error(error.stack); throw error; })")));
     app.exit(0);
   } catch (error) { console.error(error?.stack ?? error); app.exit(1); }
 });`);
@@ -388,6 +509,11 @@ app.whenReady().then(async () => {
       code = await new Promise((resolve, reject) => { child.once("error", reject); child.once("close", resolve); });
     } finally { clearTimeout(timer); }
     assert.equal(code, 0, output.slice(-8000));
+    const policyLine = output.split(/\r?\n/).find((item) => item.startsWith("RUN_POLICY_PROBE "));
+    assert.ok(policyLine, output.slice(-8000));
+    assert.deepEqual(JSON.parse(policyLine.slice("RUN_POLICY_PROBE ".length)), {
+      passed: true, fields: 3, settingsWrites: 4, snapshotRendered: true,
+    });
     const line = output.split(/\r?\n/).find((item) => item.startsWith("SCHEDULING_PROBE "));
     assert.ok(line, output.slice(-8000));
     assert.deepEqual(JSON.parse(line.slice("SCHEDULING_PROBE ".length)), {

@@ -94,7 +94,7 @@ describe("resolveResume", () => {
   });
 
   it("reports a settled chain whose status is not resumable", () => {
-    for (const status of ["stopped", "aborted", "interrupted"]) {
+    for (const status of ["unknown-status"]) {
       const registry = new DelegationChainRegistry();
       start(registry, { delegateSessionId: "res-1", delegationId: "del-1" });
       registry.settle("res-1", status);
@@ -109,7 +109,7 @@ describe("resolveResume", () => {
   });
 
   it("accepts every settled status a delegate can end on", () => {
-    for (const status of ["completed", "failed", "timed_out"]) {
+    for (const status of ["completed", "failed", "timed_out", "stopped", "aborted", "interrupted"]) {
       const registry = new DelegationChainRegistry();
       start(registry, { delegateSessionId: "res-1", delegationId: "del-1" });
       registry.settle("res-1", status);
@@ -137,7 +137,7 @@ describe("resolveResume", () => {
     });
   });
 
-  it("reports a chain that read past the resume budget", () => {
+  it("keeps large chains resumable because seeding bounds the model context", () => {
     const registry = new DelegationChainRegistry();
     start(registry, { delegateSessionId: "res-1", delegationId: "del-1" });
     registry.noteReads("res-1", ["huge.ts"], 50_001);
@@ -148,7 +148,7 @@ describe("resolveResume", () => {
         agentName: "explorer",
         runningDelegationIds: NONE,
       }),
-    ).toEqual({ ok: false, error: { kind: "over-budget" } });
+    ).toMatchObject({ ok: true });
   });
 
   it("accepts a chain exactly at the budget", () => {
@@ -167,7 +167,7 @@ describe("resolveResume", () => {
 });
 
 describe("resumableList / resumableBlock", () => {
-  it("excludes running, non-resumable and over-budget chains, newest first", () => {
+  it("excludes running chains and retains cancelled or large chains, newest first", () => {
     vi.useFakeTimers({ now: 1_700_000_000_000 });
     const registry = new DelegationChainRegistry();
     // One agent per excluded case: eviction is per agent, so a third settled
@@ -208,13 +208,13 @@ describe("resumableList / resumableBlock", () => {
       registry
         .resumableList({ runningDelegationIds: new Set(["del-c"]) })
         .map((entry) => entry.latestDelegationId),
-    ).toEqual(["del-b", "del-a"]);
+    ).toEqual(["del-b", "del-d", "del-e", "del-a"]);
     // A chain whose status is unknown is only held back while it is running.
     expect(
       registry
         .resumableList({ runningDelegationIds: NONE })
         .map((entry) => entry.latestDelegationId),
-    ).toEqual(["del-c", "del-b", "del-a"]);
+    ).toEqual(["del-c", "del-b", "del-d", "del-e", "del-a"]);
   });
 
   it("prompts with the agent, the id, the objective and the files it read", () => {

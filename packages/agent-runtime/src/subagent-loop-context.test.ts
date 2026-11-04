@@ -1,4 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { prepareDelegateTurnContext } from "./subagent-context.js";
+import { createCompactionSummaryMessage } from "./pi-runtime-messages.js";
 import type { SubagentDefinition } from "@pi-desktop/shared";
 import { SubagentRun } from "./subagent.js";
 import type { RuntimeProviderConfig } from "./provider-binding.js";
@@ -51,10 +56,11 @@ type DelegateAgent = {
   ) => Promise<{ context?: { messages: unknown[] } } | undefined>;
 };
 
-function createDelegate(): DelegateAgent {
+function createDelegate(scratchDir?: string): DelegateAgent {
   const run = new SubagentRun({
     definition: definition(),
     sessionId: "session-1",
+    scratchDir,
     turnId: "turn-1",
     parentToolCallId: "task-1",
     task: "Find where the permission dialog is rendered.",
@@ -115,5 +121,20 @@ describe("SubagentRun loop context ownership (D620)", () => {
     const streamed = assistantMessage("round 2");
     carried.push(streamed);
     expect(agent.state.messages).not.toContain(streamed);
+  });
+
+  it("persists the existing context summary without requiring a TaskReport call", async () => {
+    const scratchDir = mkdtempSync(join(tmpdir(), "pi-delegate-summary-"));
+    try {
+      vi.mocked(prepareDelegateTurnContext).mockResolvedValueOnce({
+        kind: "compacted", tokensBefore: 1000,
+        messages: [createCompactionSummaryMessage("Confirmed a.ts:12; next inspect b.ts.", 1000, 1)],
+      });
+      const agent = createDelegate(scratchDir);
+      await agent.prepareNextTurnWithContext!({ toolResults: [] }, new AbortController().signal);
+      const stored = JSON.parse(readFileSync(join(scratchDir, "delegations", "task-1", "checkpoint.json"), "utf8"));
+      expect(stored).toMatchObject({ status: "running", contextCompactions: 1 });
+      expect(stored.report).toContain("Confirmed a.ts:12; next inspect b.ts.");
+    } finally { rmSync(scratchDir, { recursive: true, force: true }); }
   });
 });

@@ -2,6 +2,9 @@
 
 - Status: Accepted for implementation
 - Date: 2026-09-20
+- Recovery amendment (2026-11-05, ADR 0279): SubagentRun copies the already
+  generated summary into its scratch recovery report. No additional model request
+  or host-core compaction record is introduced.
 - Deciders: PI-Desktop core
 - Amends: ADR 0064 (extends its compaction contract to delegates); extends
   ADR 0062 / ADR 0279
@@ -157,7 +160,8 @@ protection at all.
   context), so nothing about the parent's context changes.
 - **Durable checkpoints.** No host-core compaction record is written for a
   delegate. The checkpoint chain of ADR 0064 clause 6 remains the session's.
-  A delegate's compaction is in-memory for the duration of its run.
+  The working message window remains local; its generated summary is also
+  retained by the scratch report under the recovery amendment above.
 - **Transcript presentation.** No compaction divider row, no warning toast, and
   no context-inspector line for a delegate. The user's visible surface for a
   delegate stays the delegation card and its report.

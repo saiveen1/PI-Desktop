@@ -799,7 +799,7 @@ describe("rebuildChainsFromTranscript restart status (ADR 0279)", () => {
     }
   });
 
-  it("keeps a stopped or aborted chain out of the resumable set", () => {
+  it("keeps a stopped or aborted chain resumable", () => {
     for (const status of ["stopped", "aborted"]) {
       const chains = rebuildChainsFromTranscript([
         restartedTaskRow("call-1", {
@@ -809,10 +809,7 @@ describe("rebuildChainsFromTranscript restart status (ADR 0279)", () => {
         }),
       ]);
       expect(chains[0].latestStatus).toBe(status);
-      expect(resolveRebuilt(chains, "d1")).toEqual({
-        ok: false,
-        error: { kind: "not-resumable", status },
-      });
+      expect(resolveRebuilt(chains, "d1").ok).toBe(true);
     }
   });
 
@@ -825,10 +822,7 @@ describe("rebuildChainsFromTranscript restart status (ADR 0279)", () => {
       }),
     ]);
     expect(chains[0].latestStatus).toBe("interrupted");
-    expect(resolveRebuilt(chains, "d1")).toEqual({
-      ok: false,
-      error: { kind: "not-resumable", status: "interrupted" },
-    });
+    expect(resolveRebuilt(chains, "d1").ok).toBe(true);
   });
 
   it("normalizes an errored Task row without a status to failed", () => {
@@ -948,7 +942,7 @@ describe("rebuildChainsFromTranscript settled copies and replay (ADR 0279)", () 
     ).toEqual(["d2"]);
   });
 
-  it("gates a rebuilt chain on the lines its own rows read", () => {
+  it("retains read-volume telemetry without refusing bounded resume", () => {
     const text = Array.from({ length: MAX_RESUMABLE_READ_LINES + 1 }, () => "x").join(
       "\n",
     );
@@ -970,10 +964,7 @@ describe("rebuildChainsFromTranscript settled copies and replay (ADR 0279)", () 
 
     expect(chain.readLineCount).toBe(MAX_RESUMABLE_READ_LINES + 1);
     expect(isChainWithinReadBudget(chain)).toBe(false);
-    expect(resolveRebuilt([chain], "d1")).toEqual({
-      ok: false,
-      error: { kind: "over-budget" },
-    });
+    expect(resolveRebuilt([chain], "d1").ok).toBe(true);
   });
 
   it("replays a delegate tool row with the arguments its call recorded", () => {

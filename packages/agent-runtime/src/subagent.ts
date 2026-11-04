@@ -16,11 +16,9 @@
  *   runs in the background under the session runtime (ADR 0089 / D328):
  *   `Task` starts it and returns, `TaskWait` may converge early, and when it
  *   finishes the runtime delivers the report to the parent even if the parent
- *   already stopped calling tools. Only user Stop or `TaskStop` aborts it.
+ *   already stopped calling tools. Cancellation and work budgets preserve partial reports.
  */
 
-import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { toolExecutionMode, withDynamicTaskExecutionMode } from "./tool-execution-policy.js";
 import { DESKTOP_AGENT_IDENTITY } from "./agent-identity.js";
@@ -40,6 +38,9 @@ import {
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import {
   addUsage,
+  resolveDelegationRunPolicy,
+  describeDelegationRunPolicy,
+  type DelegationRunPolicy,
   cumulativeDelta,
   isCertificateVerificationError,
   subagentCanMutate,
@@ -72,6 +73,7 @@ import {
   subagentContextOverflowError,
   type DelegateTurnUpdate,
 } from "./subagent-context.js";
+import { SubagentProgress, SUBAGENT_REPORT_TOOL, SUBAGENT_FINAL_REPORT_PROMPT } from "./subagent-progress.js";
 import {
   dedupeToolCallMessages,
   createToolCallIdentity,
@@ -122,8 +124,14 @@ export type SubagentRunResult = {
   contextDegraded?: boolean;
   /** True when the delegate response hit the model's output token limit. */
   outputTruncated?: boolean;
-  /** File path in session scratch where the unclipped report was preserved (ADR 0062). */
+  /** File path in session scratch where the complete report was preserved. */
   scratchReportPath?: string;
+  /** Host-owned JSON checkpoint for resume/partial-result recovery. */
+  checkpointPath?: string;
+  /** Checkpoint persistence failure; the in-memory result remains available. */
+  checkpointError?: string;
+  partial?: boolean;
+  runPolicy?: Readonly<DelegationRunPolicy>;
   error?: {
     code: string;
     message: string;
@@ -149,6 +157,14 @@ export type SubagentRunOptions = {
   delegationId?: string;
   /** Session scratch workspace root for persistent spillover artifacts (ADR 0062). */
   scratchDir?: string;
+  /** Stable chain identity used for checkpoint files across Task(resume) runs. */
+  delegateSessionId?: string;
+  /** Scheduling policy captured for this run; legacy definition watchdogs stay ignored. */
+  runPolicy?: Partial<DelegationRunPolicy>;
+  /** Latest validated report from this chain, kept when transcript seeding is trimmed. */
+  initialReport?: string;
+  /** Publish live checkpoint locations through the owning Task record. */
+  onCheckpoint?: (paths: { checkpointPath?: string; reportPath?: string; error?: string }) => void;
   /** The delegated instruction, written by the parent model. */
   task: string;
   /** Provider resolved by Electron main (the definition's pin, or the
@@ -217,10 +233,11 @@ export function composeSubagentSystemPrompt(options: {
     `You are the \"${definition.name}\" subagent inside PI-Desktop, working on one task delegated by the main agent.`,
     `You cannot see the user, ask questions, or delegate further. Finish the task with the tools you have: ${toolList}.`,
     subagentCanMutate(definition, resolved)
-      ? "You may change files, but only the ones the task is about; leave everything else untouched. If the final report would exceed ~8,000 characters, write the full report to a file yourself and make the final message a compact summary plus the file path."
+      ? "You may change files, but only the ones the task is about; leave everything else untouched."
       : "You have no tools that change files or run commands, so never report an edit you could not have made.",
     "Your final message is the report the main agent receives when you finish. Make it self-contained: what you did, what you found with exact paths and line numbers, and anything you could not finish.",
     "Keep the report tight. Report findings, not narration, and never pad it with a summary of your own process.",
+    "The runtime also provides TaskReport to save progress without granting workspace writes. Use it to record evidence and next steps when useful. Progress summaries are optional; state and final text are saved automatically.",
     "If you discover in the first few turns that you lack a tool essential to the task (e.g. no Bash when shell commands are needed), stop immediately with a one-sentence report naming the missing capability. Do not attempt workarounds or pad the report with unrelated reading.",
   ].join("\n");
   return [framing, definition.prompt, ...(options.guidance ?? [])]
@@ -236,14 +253,6 @@ function boundedReport(value: string): string {
   const head = Math.ceil(available / 2);
   const tail = Math.floor(available / 2);
   return `${text.slice(0, head)}${marker}${text.slice(-tail)}`;
-}
-
-/** Keep opaque provider/tool-call ids inside the session scratch directory. */
-function scratchPathSegment(value: string): string {
-  if (/^[A-Za-z0-9._-]+$/.test(value) && value !== "." && value !== "..") {
-    return value;
-  }
-  return `id-${encodeURIComponent(value)}`;
 }
 
 export { addUsage };
@@ -281,19 +290,41 @@ export class SubagentRun {
   private fallbackIndex = 0;
   private readonly attemptedModels = new Set<string>();
   private readonly modelFailures: NonNullable<SubagentRunResult["modelFailures"]> = [];
+  private readonly runPolicy: Readonly<DelegationRunPolicy>;
+  private budgetTimer?: ReturnType<typeof setTimeout>;
+  private budgetExceeded?: { code: "SUBAGENT_BUDGET_EXHAUSTED"; message: string };
   private readonly retryState: SubagentProviderRetryState = {
     claim: (error, phase) => this.claimProviderRetry(error, phase),
   };
-  private readonly runAbortController = new AbortController();
+  private runAbortController = new AbortController();
+  private readonly progress: SubagentProgress;
+  private admittedToolCalls = 0;
+  private finalizing = false;
 
   constructor(opts: SubagentRunOptions) {
     this.opts = opts;
+    this.runPolicy = resolveDelegationRunPolicy(opts.runPolicy);
     const initialMessages = recoverMalformedToolCalls(opts.initialMessages ?? []);
     this.uniqueToolCalls = createToolCallIdentity(initialMessages);
     this.provider = opts.provider;
     this.thinkingLevel = opts.thinkingLevel;
     this.attemptedModels.add(`${opts.provider.id}/${opts.provider.modelId}`);
+    this.progress = new SubagentProgress({
+      scratchDir: opts.scratchDir, delegateSessionId: opts.delegateSessionId,
+      parentToolCallId: opts.parentToolCallId, initialReport: opts.initialReport,
+      metadata: () => ({
+        version: 1, sessionId: opts.sessionId,
+        delegateSessionId: opts.delegateSessionId ?? opts.parentToolCallId,
+        delegationId: opts.delegationId ?? opts.parentToolCallId, task: opts.task,
+        agentName: opts.definition.name, modelId: this.provider.modelId,
+        thinkingLevel: this.thinkingLevel, turns: this.turns, toolCalls: this.toolCalls,
+        updatedAt: Date.now(), contextCompactions: this.contextCompactions,
+        contextDegraded: this.contextDegraded, runPolicy: this.runPolicy,
+      }),
+    });
     const binding = this.modelBinding();
+    const systemPrompt = `${opts.systemPrompt}\n\n${describeDelegationRunPolicy(this.runPolicy)}`;
+    const tools = [...opts.tools.filter(tool => tool.name !== SUBAGENT_REPORT_TOOL), this.progress.tool];
     this.agent = new Agent({
       identity: DESKTOP_AGENT_IDENTITY,
       streamFn: binding.streamFn,
@@ -306,13 +337,34 @@ export class SubagentRun {
       prepareNextTurnWithContext: (context, signal) =>
         this.prepareNextTurn(context, signal),
       afterToolCall: async (context) => this.afterToolCall(context),
-      beforeToolCall: opts.beforeToolCall,
+      beforeToolCall: async (context) => {
+        if (this.finalizing || this.budgetExceeded) {
+          return { block: true, reason: "The delegation is closing; no new work tools may run.", terminate: true };
+        }
+        if (this.runPolicy.maxToolCalls > 0 && this.admittedToolCalls >= this.runPolicy.maxToolCalls) {
+          this.stopForBudget("tool_calls");
+          return { block: true, reason: "The tool-call budget is exhausted.", terminate: true };
+        }
+        this.admittedToolCalls++;
+        if (context.toolCall.name === SUBAGENT_REPORT_TOOL) return;
+        return opts.beforeToolCall?.(context);
+      },
+      prepareRequest: ({ context }) => ({
+        context: this.progress.prepareRequest(context, this.finalizing),
+      }),
+      finishTurn: (turn) => {
+        if (this.finalizing || this.mutationTermination) return { action: "end" };
+        if (this.runPolicy.maxToolCalls > 0 && this.admittedToolCalls >= this.runPolicy.maxToolCalls) this.stopForBudget("tool_calls");
+        if (this.budgetExceeded) return { action: "end" };
+        if (turn.message.stopReason === "stop") this.saveProgress();
+        return undefined;
+      },
       initialState: {
-        systemPrompt: opts.systemPrompt,
+        systemPrompt,
         model: binding.model,
         // Preserve the parent's provenance decision; a same-name extension must
         // not inherit the builtin allowlist. Also reject unproven parallel hints.
-        tools: opts.tools.map((tool) =>
+        tools: tools.map((tool) =>
           withDynamicTaskExecutionMode(
             {
               ...tool,
@@ -325,7 +377,7 @@ export class SubagentRun {
           ),
         ),
         thinkingLevel: binding.agentThinkingLevel,
-        messages: initialSystemTranscript(opts.systemPrompt, opts.tools, [...initialMessages]),
+        messages: initialSystemTranscript(systemPrompt, tools, [...initialMessages]),
       },
       toolExecution: "parallel",
     });
@@ -333,14 +385,14 @@ export class SubagentRun {
   }
 
   setSystemPrompt(prompt: string): void {
-    this.agent.state.messages = replaceSystemPrompt(this.agent.state.messages, prompt);
+    this.agent.state.messages = replaceSystemPrompt(this.agent.state.messages, `${prompt}\n\n${describeDelegationRunPolicy(this.runPolicy)}`);
   }
 
   async run(): Promise<SubagentRunResult> {
     const { signal } = this.opts;
-    if (signal?.aborted) {
-      return this.result("aborted", "The delegated task was aborted before it started.");
-    }
+    if (signal?.aborted) return this.result("aborted", this.lastReportText);
+    this.saveProgress();
+    this.startBudgetTimer();
     const onAbort = () => {
       this.runAbortController.abort();
       this.agent.abort();
@@ -348,114 +400,95 @@ export class SubagentRun {
     signal?.addEventListener("abort", onAbort, { once: true });
     let caughtError: ReturnType<typeof classifyAgentError> | undefined;
     try {
-      const initialTaskMessage: AgentMessage = {
-        role: "user",
-        content: this.opts.task,
-        timestamp: Date.now(),
-      };
-      const agentState = this.agent.state;
-      const preflightModel = agentState?.model ?? this.modelBinding().model;
-      const preflightMessages = (agentState?.messages ?? []).filter(
-        (message) => message.role !== "system",
-      );
-      const preflightSystemPrompt =
-        agentState?.systemPrompt ?? this.opts.systemPrompt;
-      const preflightTools = agentState?.tools ?? this.opts.tools;
-      const initialContext = await prepareDelegateTurnContext({
-        messages: preflightMessages,
-        additionalMessages: [initialTaskMessage],
-        model: preflightModel,
-        taskBrief: this.opts.task,
-        retentionMode: "active_turn",
-        summaryModels: () =>
-          delegateSummaryModels(
-            this.provider,
-            preflightModel,
-            this.opts.sessionId,
-            usage => this.recordUsage(usage),
-          ),
-        systemPrompt: preflightSystemPrompt,
-        tools: preflightTools,
-        retainTaskBriefOnDegradation: false,
-        thinkingLevel: agentState?.thinkingLevel ?? this.thinkingLevel,
-        signal: this.runSignal(),
-      });
-      if (this.runSignal().aborted) {
-        return this.result("aborted", "The delegated task was aborted.");
-      }
-      if (initialContext.kind === "overflow") {
-        return this.result(
-          "failed",
-          "",
-          subagentContextOverflowError(this.provider.modelId),
-        );
-      }
-      if (initialContext.kind !== "unchanged") {
-        this.installContextOutcome(initialContext);
-      }
-      await this.agent.prompt(this.opts.task);
-      await this.agent.waitForIdle();
-      while (!signal?.aborted) {
-        if (this.pendingProviderRetry) {
-          await this.retryPendingProviderFailure();
-        } else if (this.streamError && await this.useNextModel()) {
-          await this.agent.continue();
+      try {
+        const initialTaskMessage: AgentMessage = {
+          role: "user", content: this.opts.task, timestamp: Date.now(),
+        };
+        const agentState = this.agent.state;
+        const preflightModel = agentState?.model ?? this.modelBinding().model;
+        const initialContext = await prepareDelegateTurnContext({
+          messages: (agentState?.messages ?? []).filter(message => message.role !== "system"),
+          additionalMessages: [initialTaskMessage], model: preflightModel,
+          taskBrief: this.opts.task, retentionMode: "active_turn",
+          summaryModels: () => delegateSummaryModels(this.provider, preflightModel,
+            this.opts.sessionId, usage => this.recordUsage(usage)),
+          systemPrompt: agentState?.systemPrompt ?? this.opts.systemPrompt,
+          tools: agentState?.tools ?? this.opts.tools,
+          retainTaskBriefOnDegradation: false,
+          thinkingLevel: agentState?.thinkingLevel ?? this.thinkingLevel,
+          signal: this.runSignal(),
+        });
+        if (initialContext.kind === "overflow") {
+          this.streamError = subagentContextOverflowError(this.provider.modelId);
+        } else if (!this.runSignal().aborted) {
+          if (initialContext.kind !== "unchanged") this.installContextOutcome(initialContext);
+          await this.agent.prompt(this.opts.task);
           await this.agent.waitForIdle();
-        } else {
-          break;
+          while (!this.runSignal().aborted && !this.budgetExceeded) {
+            if (this.pendingProviderRetry) await this.retryPendingProviderFailure();
+            else if (this.streamError && await this.useNextModel()) {
+              await this.agent.continue();
+              await this.agent.waitForIdle();
+            } else break;
+          }
         }
+      } catch (error) {
+        caughtError = classifyAgentError(error);
       }
-    } catch (error) {
-      caughtError = classifyAgentError(error);
+      this.finalizeCurrentAssistant();
+      if (this.budgetExceeded && !signal?.aborted) await this.finalizeBudgetReport();
     } finally {
       signal?.removeEventListener("abort", onAbort);
+      this.clearBudgetTimer();
       this.finalizeCurrentAssistant();
     }
-
-    if (signal?.aborted) {
-      return this.result("aborted", "The delegated task was aborted.");
-    }
-
-    // A cancel the settled message itself reported outranks any failure text:
-    // pi-ai can wrap an AbortError that fired before the parent signal flipped,
-    // and the marker's preserved cause name is the only trace of the Stop. The
-    // session runtime reads that same marker as an aborted turn.
-    if (this.turnAborted) {
-      return this.result("aborted", "The delegated task was aborted.");
-    }
-    if (this.mutationTermination) {
-      return this.result("failed", this.lastReportText, this.mutationTermination);
-    }
-    if (caughtError) {
-      if (caughtError.code === "TURN_ABORTED") {
-        return this.result("aborted", "The delegated task was aborted.");
-      }
-      return this.result("failed", "", this.terminalError(caughtError));
-    }
-    if (this.streamError) {
-      return this.result("failed", "", this.terminalError(this.streamError));
-    }
-    if (!this.lastReportText.trim()) {
-      return this.result("failed", "", {
-        code: "SUBAGENT_NO_REPORT",
-        message: "The subagent finished without writing a report.",
-      });
-    }
+    // User cancellation always wins over a simultaneous runtime limit.
+    if (signal?.aborted) return this.result("aborted", this.lastReportText);
+    if (this.budgetExceeded) return this.result("failed", this.lastReportText, this.budgetExceeded);
+    if (this.turnAborted || caughtError?.code === "TURN_ABORTED") return this.result("aborted", this.lastReportText);
+    const error = this.mutationTermination ?? caughtError ?? this.streamError;
+    if (error) return this.result("failed", this.lastReportText, this.terminalError(error));
+    if (!this.lastReportText.trim()) return this.result("failed", "", {
+      code: "SUBAGENT_NO_REPORT", message: "The subagent finished without writing a final report.",
+    });
     if (this.lastReportTruncated) {
       const produced = this.lastReportText.length;
-      const stats = ` (${produced} characters produced before truncation)`;
-      const hint = this.opts.delegationId
-        ? ` Resume this delegation with Task(resume: "${this.opts.delegationId}").`
-        : "";
+      const hint = this.opts.delegationId ? ` Resume this delegation with Task(resume: "${this.opts.delegationId}").` : "";
       return this.result("failed", this.lastReportText, {
         code: "SUBAGENT_OUTPUT_TRUNCATED",
-        message:
-          `The subagent response exceeded the model's output token limit and was truncated${stats}.${hint}`,
+        message: `The subagent response exceeded the model's output token limit and was truncated (${produced} characters produced before truncation).${hint}`,
         ...(this.opts.delegationId ? { resumeId: this.opts.delegationId } : {}),
         charactersProduced: produced,
       });
     }
     return this.result("completed", this.lastReportText);
+  }
+
+  /** One fresh, tool-free report request after the exploration loop has retired. */
+  private async finalizeBudgetReport(): Promise<void> {
+    this.finalizing = true;
+    this.clearBudgetTimer();
+    this.runAbortController = new AbortController();
+    this.pendingProviderRetry = undefined;
+    this.streamError = undefined;
+    this.turnAborted = false;
+    this.budgetTimer = setTimeout(() => {
+      this.runAbortController.abort();
+      this.agent.abort();
+    }, this.runPolicy.finalReportTimeoutSeconds * 1000);
+    this.budgetTimer.unref?.();
+    try {
+      await this.agent.prompt(SUBAGENT_FINAL_REPORT_PROMPT);
+      await this.agent.waitForIdle();
+    } catch {
+      // The pre-existing checkpoint remains the partial result if reporting fails.
+      this.progress.error = { code: "SUBAGENT_FINAL_REPORT_FAILED", message: "The reserved report request did not finish; retained progress is available." };
+    }
+  }
+
+  private saveProgress(): void {
+    const saved = this.progress.save("running", this.progress.partialText(this.lastReportText));
+    this.opts.onCheckpoint?.(saved);
   }
 
   private modelBinding() {
@@ -498,6 +531,11 @@ export class SubagentRun {
     ];
     if (outcome.kind === "compacted") {
       this.contextCompactions += 1;
+      const summary = outcome.messages.find(message => message.role === "compactionSummary");
+      if (summary && "summary" in summary && typeof summary.summary === "string") {
+        this.progress.recordContextSummary(summary.summary);
+        this.saveProgress();
+      }
     } else {
       this.contextDegraded = true;
     }
@@ -506,7 +544,7 @@ export class SubagentRun {
   /**
    * Shape the delegate's next in-run turn, mirroring the session's
    * `prepareNextTurn` (ADR 0299, decisions 2-4). A compaction rewrites only
-   * this agent's in-memory messages; nothing is persisted anywhere.
+   * this agent's model context; its generated summary also joins the recovery report.
    */
   private async prepareNextTurn(
     turn: PrepareNextTurnContext,
@@ -560,7 +598,7 @@ export class SubagentRun {
   private async useNextModel(): Promise<boolean> {
     // An aborted turn never continues, whether the signal flipped yet or the
     // cancel was only visible on the settled message.
-    if (this.runSignal().aborted || this.turnAborted || !this.streamError || this.streamError.code === "TURN_ABORTED") return false;
+    if (this.finalizing || this.budgetExceeded || this.runSignal().aborted || this.turnAborted || !this.streamError || this.streamError.code === "TURN_ABORTED") return false;
     if (!this.opts.fallbackModels?.length) return false;
     const failed = this.agent.state.messages.at(-1);
     // Only a provider's terminal assistant error permits fallback. Host/tool
@@ -637,7 +675,7 @@ export class SubagentRun {
     error: ReturnType<typeof classifyAgentError>,
     phase: "request" | "stream",
   ): number | undefined {
-    if (!error.retriable) return undefined;
+    if (this.finalizing || this.budgetExceeded || this.runSignal().aborted || !error.retriable) return undefined;
     const infinite = this.opts.infiniteProviderRetry === true;
     if (error.code === "PROVIDER_RATE_LIMITED") {
       if (!infinite && this.providerRateLimitRetryAttempt >= PROVIDER_RATE_LIMIT_MAX_RETRIES) {
@@ -700,25 +738,6 @@ export class SubagentRun {
     return error;
   }
 
-  private saveScratchReport(text: string): string | undefined {
-    if (!this.opts.scratchDir || text.length <= MAX_SUBAGENT_REPORT_CHARS) {
-      return undefined;
-    }
-    try {
-      const dir = join(
-        this.opts.scratchDir,
-        "delegations",
-        scratchPathSegment(this.opts.parentToolCallId),
-      );
-      mkdirSync(dir, { recursive: true });
-      const target = join(dir, "report.md");
-      writeFileSync(target, text, "utf8");
-      return target;
-    } catch {
-      return undefined;
-    }
-  }
-
   private result(
     status: SubagentRunStatus,
     report: string,
@@ -730,18 +749,19 @@ export class SubagentRun {
     },
   ): SubagentRunResult {
     const name = this.opts.definition.name;
-    const body = report.trim();
+    const body = status === "completed" ? report.trim() : this.progress.partialText(report || this.lastReportText);
     const text =
       status === "completed"
         ? body
         : status === "aborted"
-          ? `The ${name} subagent was aborted after ${this.turns} turn(s).`
+          ? [
+              `The ${name} subagent was aborted after ${this.turns} turn(s).`,
+              ...(body ? ["Its last output was:", body] : []),
+            ].join("\n\n")
           : [
               `The ${name} subagent failed after ${this.turns} turn(s): ${error?.message ?? "unknown error"}.`,
               ...(body ? ["Its last output was:", body] : []),
             ].join("\n\n");
-    // A degraded run must say so, or the parent would read a partial answer
-    // as a complete one (ADR 0299, decision 4).
     const degradationNote = this.contextDegraded
       ? "Note: this subagent's context exceeded its model's window and older working history was discarded without a summary, so this report may be incomplete."
       : undefined;
@@ -751,22 +771,21 @@ export class SubagentRun {
           `Model ${failure.model} failed (${failure.code}): ${failure.message}`,
       ),
       ...(degradationNote ? [degradationNote] : []),
+      ...(this.progress.error ? [`Reporting issue: ${this.progress.error.message}`] : []),
     ];
-    const scratchReportPath = this.saveScratchReport(text);
-    let finalReport: string;
-    if (scratchReportPath) {
-      const notice = `Complete subagent report (${text.length} characters) was saved to: ${scratchReportPath}`;
-      finalReport =
-        preamble.length > 0 ? `${preamble.join("\n\n")}\n\n${notice}` : notice;
-    } else {
-      finalReport = boundedReport([...preamble, text].join("\n\n"));
-    }
+    const completeReport = [...preamble, text].filter(Boolean).join("\n\n");
+    const persisted = this.progress.save(status, completeReport, error);
+    this.opts.onCheckpoint?.(persisted);
+    const finalReport = persisted.reportPath && completeReport.length > MAX_SUBAGENT_REPORT_CHARS
+      ? `${preamble.length > 0 ? `${preamble.join("\n\n")}\n\n` : ""}Complete subagent report (${completeReport.length} characters) was saved to: ${persisted.reportPath}`
+      : boundedReport(completeReport);
     return {
       agentName: name,
       modelId: this.provider.modelId,
       thinkingLevel: this.thinkingLevel,
       status,
       report: finalReport,
+      runPolicy: this.runPolicy,
       turns: this.turns,
       toolCalls: this.toolCalls,
       ...(this.usage ? { usage: this.usage } : {}),
@@ -774,9 +793,39 @@ export class SubagentRun {
       ...(this.contextCompactions > 0 ? { contextCompactions: this.contextCompactions } : {}),
       ...(this.contextDegraded ? { contextDegraded: true } : {}),
       ...(this.lastReportTruncated ? { outputTruncated: true } : {}),
-      ...(scratchReportPath ? { scratchReportPath } : {}),
+      ...(persisted.reportPath ? { scratchReportPath: persisted.reportPath } : {}),
+      ...(persisted.checkpointPath ? { checkpointPath: persisted.checkpointPath } : {}),
+      ...(persisted.error ? { checkpointError: persisted.error } : {}),
+      ...(status !== "completed" ? { partial: true } : {}),
       ...(error ? { error } : {}),
     };
+  }
+
+  private startBudgetTimer(): void {
+    if (this.runPolicy.maxDurationSeconds === 0) return;
+    this.budgetTimer = setTimeout(() => this.stopForBudget("duration"), this.runPolicy.maxDurationSeconds * 1000);
+    this.budgetTimer.unref?.();
+  }
+
+  private clearBudgetTimer(): void {
+    if (this.budgetTimer !== undefined) clearTimeout(this.budgetTimer);
+    this.budgetTimer = undefined;
+  }
+
+  private stopForBudget(kind: "tool_calls" | "duration"): void {
+    if (this.budgetExceeded) return;
+    const resumeId = this.opts.delegationId ?? "";
+    this.budgetExceeded = {
+      code: "SUBAGENT_BUDGET_EXHAUSTED",
+      message: kind === "tool_calls"
+        ? `The subagent reached its hard limit of ${this.runPolicy.maxToolCalls} tool calls. Continue it with Task(resume: "${resumeId}").`
+        : `The subagent reached its hard runtime limit of ${this.runPolicy.maxDurationSeconds} seconds. Continue it with Task(resume: "${resumeId}").`,
+    };
+    this.saveProgress();
+    if (kind === "duration") {
+      this.runAbortController.abort();
+      this.agent.abort();
+    }
   }
 
   /** Parent bookkeeping: host failures and a mutation-failure terminate. */
@@ -805,9 +854,8 @@ export class SubagentRun {
   }
 
   /**
-   * Idle and duration watchdogs are withdrawn (D328). Stopping a delegate is
-   * the parent agent's `TaskStop` or the user's Stop, not a timer, so the
-   * only abort sources are the parent's signal and this run's own controller.
+   * Parent cancellation also interrupts the reserved report phase. The run
+   * controller is renewed only after budget-limited exploration retires.
    */
   private runSignal(): AbortSignal {
     return AbortSignal.any(
@@ -992,6 +1040,7 @@ export class SubagentRun {
         };
         this.currentAssistant = undefined;
         this.emit({ type: "message_end", message: row });
+        this.saveProgress();
         break;
       }
       case "tool_execution_start":
@@ -1002,6 +1051,8 @@ export class SubagentRun {
           toolName: event.toolName,
           args: event.args,
         });
+        this.progress.started(event.toolCallId, event.toolName);
+        this.saveProgress();
         break;
       case "tool_execution_update":
         this.emit({
@@ -1011,6 +1062,8 @@ export class SubagentRun {
         });
         break;
       case "tool_execution_end":
+        this.progress.ended(event.toolCallId);
+        this.saveProgress();
         this.emit({
           type: "tool_end",
           toolCallId: event.toolCallId,
@@ -1032,5 +1085,6 @@ export class SubagentRun {
     const row: UiMessage = { ...this.currentAssistant, status: "aborted" };
     this.currentAssistant = undefined;
     this.emit({ type: "message_end", message: row });
+    this.saveProgress();
   }
 }

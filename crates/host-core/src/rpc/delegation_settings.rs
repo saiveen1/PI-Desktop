@@ -15,6 +15,9 @@ pub(super) fn validate(settings: &Value) -> Result<(), &'static str> {
     if !integer_in_range(policy.get("approvalTimeoutSeconds"), 0.0, 300.0) {
         return Err("delegation.approvalTimeoutSeconds must be an integer from 0 to 300");
     }
+    if let Some(run_policy) = policy.get("runPolicy") {
+        validate_run_policy(run_policy)?;
+    }
     let models = policy
         .get("models")
         .and_then(Value::as_array)
@@ -63,6 +66,27 @@ pub(super) fn validate(settings: &Value) -> Result<(), &'static str> {
     Ok(())
 }
 
+fn validate_run_policy(value: &Value) -> Result<(), &'static str> {
+    let policy = value
+        .as_object()
+        .ok_or("delegation.runPolicy must be an object")?;
+    for (key, value) in policy {
+        let (min, max) = match key.as_str() {
+            "maxToolCalls" => (0.0, 10_000.0),
+            "maxDurationSeconds" => (0.0, 21_600.0),
+            // Retired trial fields are preserved as data and ignored by the runtime.
+            "checkpointInterval" => (1.0, 1_000.0),
+            "maxCheckpointRequests" => (1.0, 10.0),
+            "finalReportTimeoutSeconds" => (1.0, 300.0),
+            _ => return Err("delegation.runPolicy contains an unknown field"),
+        };
+        if !integer_in_range(Some(value), min, max) {
+            return Err("delegation.runPolicy values must be integers within the supported range");
+        }
+    }
+    Ok(())
+}
+
 fn integer_in_range(value: Option<&Value>, min: f64, max: f64) -> bool {
     value
         .and_then(Value::as_f64)
@@ -89,6 +113,8 @@ pub(super) mod tests {
         json!({
             "version": 1,
             "approvalTimeoutSeconds": 60,
+            "runPolicy": { "maxToolCalls": 27, "maxDurationSeconds": 120,
+                "finalReportTimeoutSeconds": 9 },
             "models": [
                 {"providerId": "provider-a", "modelId": "economy", "enabled": true,
                  "priority": 1, "approval": "auto", "description": "Routine work"},
@@ -190,10 +216,54 @@ pub(super) mod tests {
             value["models"][0][field] = invalid;
             cases.push(value);
         }
+        for run_policy in [Value::Null, json!([]), json!(true), json!({"typo": 1})] {
+            let mut value = policy();
+            value["runPolicy"] = run_policy;
+            cases.push(value);
+        }
+        for (field, min, max) in [
+            ("maxToolCalls", 0, 10_000),
+            ("maxDurationSeconds", 0, 21_600),
+            ("checkpointInterval", 1, 1_000),
+            ("maxCheckpointRequests", 1, 10),
+            ("finalReportTimeoutSeconds", 1, 300),
+        ] {
+            for invalid in [
+                json!(min - 1),
+                json!(max + 1),
+                json!(1.5),
+                json!("1"),
+                Value::Null,
+                json!(false),
+            ] {
+                let mut value = policy();
+                value["runPolicy"] = json!({});
+                value["runPolicy"][field] = invalid;
+                cases.push(value);
+            }
+        }
         let mut duplicate = policy();
         duplicate["models"][1]["modelId"] = json!("economy");
         cases.push(duplicate);
         cases
+    }
+
+    #[test]
+    fn delegation_settings_run_policy_accepts_partial_and_unlimited_values() {
+        for run_policy in [
+            json!({}),
+            json!({"maxToolCalls": 0, "maxDurationSeconds": 0}),
+            json!({"maxToolCalls": 10_000, "maxDurationSeconds": 21_600,
+                "checkpointInterval": 1_000, "maxCheckpointRequests": 10, "finalReportTimeoutSeconds": 300}),
+            json!({"checkpointInterval": 1, "maxCheckpointRequests": 1, "finalReportTimeoutSeconds": 1}),
+        ] {
+            let mut value = policy();
+            value["runPolicy"] = run_policy;
+            assert!(validate(&json!({"delegation": value})).is_ok());
+        }
+        let mut legacy = policy();
+        legacy.as_object_mut().unwrap().remove("runPolicy");
+        assert!(validate(&json!({"delegation": legacy})).is_ok());
     }
 
     #[test]

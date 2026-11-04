@@ -2,6 +2,8 @@
 
 - Status: Accepted for implementation
 - Date: 2026-09-17
+- Amended: 2026-11-04 — durable progress reports and explicit recovery after cancellation
+- Amended: 2026-11-05 — visible scheduling run policy and immutable task snapshots
 - Deciders: PI-Desktop core
 - Related: [ADR 0062](0062-bounded-subagents-behind-a-task-tool.md) ·
   [ADR 0089](0089-proactive-background-subagent-delegation.md) ·
@@ -89,16 +91,16 @@ definition's permission scope, and settles through the existing
 `resume` is validated before the run starts; every failure is a tool error the
 model can act on:
 
-| Condition | Error |
+| Condition | Outcome |
 |---|---|
 | unknown or evicted id | `Unknown delegation "<id>"` plus the current resumable list |
 | still running | `Delegation <id> is still running`, call TaskWait first — a resume is never queued |
-| `stopped` / `aborted` | not resumable; a future revive path (out of scope here) |
-| `interrupted` (the app closed mid-run) | not resumable; start a new delegation |
+| `stopped` / `aborted` | explicit resume permitted after retirement; never automatic |
+| `interrupted` (the app closed mid-run) | explicit resume from retained transcript/checkpoint |
 | `Task.agent` differs from the chain's agent | name mismatch, lists available |
 | `Task.model` present on a resume | not allowed on a resumed run — start a new delegation to change models |
-| chain exceeds the read budget | `Delegation <id> has read too much to resume cheaply` |
-| the chain resolves but has no rows left to replay | the chain is dropped and reported as having no recorded history; the same id is never listed as reusable |
+| large retained history | existing model-context seeding bounds call/result pairs; read volume alone does not reject resume |
+| the chain resolves but has neither rows nor a validated checkpoint | the chain is dropped and reported as having no recorded history; the same id is never listed as reusable |
 
 No new error codes for "evicted" versus "never existed": both resolve to the
 same unknown-id error, because the model's only correct action is identical.
@@ -116,19 +118,15 @@ previous model id in the delegation's lifecycle details as `modelChangedFrom`:
 refusing instead would strand the chain forever, and swapping silently would hand
 the same conversation to a different model with no trace.
 
-### 5. Only `completed` and `failed` are resumable
+### 5. Cancellation ends execution without destroying explicit resume
 
-A `failed` run's reads and findings still have value; its failed assistant row
-is dropped by the converter like any other error row. `stopped` and `aborted`
-encode an explicit Stop or runtime disposal, and resuming it would contradict
-the cancellation. A terminal parent error still cancels active execution, but
-its interrupted delegates settle as `failed` with `SUBAGENT_PARENT_FAILED`
-instead: this system interruption preserves manual resume eligibility (#680).
-`interrupted` (the app closed while the
-run still worked) means the same thing for this purpose: the delegate never
-settled, so there is nothing trustworthy to continue. (`timed_out` is a vestigial
-status — ADR 0119's timeouts were withdrawn by D328 — and is treated as `failed`
-for this purpose.)
+Completed, failed, stopped, aborted, interrupted and legacy timed_out chains
+can be continued explicitly after they retire. Stop still cancels current work
+and never triggers a new provider request. This separates permission to run now
+from the ability to use saved findings in a later authorized Task invocation.
+Model authorization and tool permissions are rechecked on that new invocation.
+A parent failure keeps SUBAGENT_PARENT_FAILED; user Stop keeps its aborted or
+stopped status. Recovery does not relabel cancellation as a provider failure.
 
 ### 6. One live record per chain, ever
 
@@ -148,18 +146,14 @@ bound counts reusable chains and a live chain may momentarily push the group ove
 it. Tombstones are unnecessary: `delegationId` is a random UUID, so an evicted id
 cannot collide with a future one.
 
-### 8. Read budget gates chain growth
+### 8. Bound the replay context rather than rejecting large chains
 
-A delegate has no compaction of its own, so an unbounded chain would eventually
-overflow its own context window. Rather than trimming inside the chain, a chain
-whose cumulative read volume exceeds `MAX_RESUMABLE_READ_LINES` (50,000) silently
-leaves the resumable list — the next delegation for that work is a cold start,
-which still works. The gate is checked when the resumable list is built, so it
-costs nothing at delegation time.
-
-Reads are counted from the delegate's read-only tool rows (`Read`, `Glob`,
-`Grep`, `BrowserPreview`), accumulated per chain; write-tool targets are not
-counted and not listed.
+ADR 0299 already bounds seed messages and compacts live delegate context.
+Cumulative read volume therefore no longer prevents resume; a 50001-line audit
+must not discard its findings just because it was expensive. The existing seed
+projection removes old tool call/result pairs together and retains the original
+task. The validated report supplements that bounded context. Read counts and
+file lists remain telemetry, and the two-chain LRU retention limit is unchanged.
 
 ### 9. The parent discovers a resumable list through `TaskList`
 
@@ -206,8 +200,8 @@ rebuilt chain still selects its own rows and still matches `Task.agent`. And eac
 call carries the status its own `Task` row recorded: the settlement projection
 rewrites that row in place, so a chain knows whether its last run was `completed`
 or `failed`. A run the app closed while it still worked never settled: its row
-still says `running`, which rebuilds as `interrupted` — not resumable, rather
-than staying open forever. A row that records no status at all is trusted as
+still says `running`, which rebuilds as `interrupted` and is explicitly
+resumable, rather than staying open forever. A row that records no status at all is trusted as
 settled, because every `Task` row this app writes carries one. The model binding
 itself is not persisted as a key, so a rebuilt chain is matched to a configured
 binding by model id; two accounts offering the same model id are
@@ -218,6 +212,51 @@ indistinguishable at that point.
 A resumed delegation's card shows the whole chain's rows as consecutive turns
 (task → reply → task → reply) with no special "resumed" badge. The new run's
 counters start at zero; `details.resumedFrom` keeps the link auditable.
+
+### 14. Durable progress before enforcing a work budget
+
+The observed audit spent hundreds of calls and then lost its only deliverable
+on cancellation. A hard timeout alone would make that failure happen sooner.
+The runtime saves state throughout execution independently of model behavior.
+TaskReport is an optional summary tool; calling it is never a prerequisite to
+continue work. The earlier trial's periodic report gate and missing-report
+termination counter are removed: a fixed cadence favored some model/workflow
+patterns and imposed new failure modes without improving durable recovery.
+
+Scheduling exposes three resource settings: an optional tool-admission limit,
+an optional duration limit, and the bounded final-report deadline. The two work
+limits default to 0 (disabled). A configured budget ending reserves one tool-free
+report request, default 60 seconds; failure to produce that report still returns
+retained partial output. Explicit cancellation skips the extra request. This
+contract does not depend on a model completing a task within a presumed number
+of steps or summarizing on a prescribed schedule.
+
+Shared defaults/ranges, Rust write validation, next-parent-turn propagation and
+immutable per-run snapshots make the active resource policy visible. Model
+summaries are subject to the same explicitly configured tool budget as other
+admitted tools. Automatic persistence consumes no model request or tool slot.
+Legacy checkpointInterval/maxCheckpointRequests fields are accepted as historical
+data but ignored on execution and dropped from new resolved settings/snapshots.
+Existing explicit work budgets and old reports remain intact.
+A budget result is failed/partial with SUBAGENT_BUDGET_EXHAUSTED and can resume.
+
+An existing context-compaction summary is reused in the recovery report as
+plain text; saving it makes no additional model request.
+
+Session transcript remains host-core owned. The Node runtime writes only its
+session scratch artifacts, as it previously did for long reports. The versioned
+JSON report and Markdown projection are individually atomically replaced. Reads
+are path-derived, size-bounded and identity-validated; no serialized Agent or
+permission state is loaded. TaskWait can recover reports after a restart without
+spawning a child. No new SQLite schema or parent IPC contract is needed.
+
+Alternatives rejected: restoring a raw Agent dump would couple storage to
+provider internals and duplicate the host transcript; a general tool-side-effect
+guard would broaden this change without fixing lost reports. Costs are local
+checkpoint writes and optional summary tokens. Disk errors remain visible and
+local artifacts require scratch availability. A process killed between tool
+boundaries can retain incomplete results, so resumed work must verify uncertain
+side effects. It never automatically replays an interrupted write.
 
 ## Consequences
 
@@ -232,13 +271,10 @@ counters start at zero; `details.resumedFrom` keeps the link auditable.
   `modelChangedFrom` ride the existing lifecycle details projection.
 - A resumed run is billed and bounded exactly like a fresh one — same concurrency
   slot, same permission scope, same fallback models, same abort sources.
-- Failure mode of the read budget is graceful degradation to a cold start, never
-  a broken or oversized request.
+- Large histories use bounded seeding; partial results remain explicit and resumable.
 
 ## Out of scope (二期)
 
-- Reviving a `stopped` / `aborted` delegation.
 - In-chain compaction or placeholder substitution for old tool results.
 - Task queuing / work append on a running delegation.
 - Cross-session resumption.
-- User-visible settings for the bounds; they stay code constants.

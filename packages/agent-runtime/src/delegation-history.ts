@@ -61,6 +61,8 @@ export type DelegationChain = {
   readFiles: string[];
   /** Cumulative lines the chain's read-only tools have produced. */
   readLineCount: number;
+  /** Latest durable checkpoint path, when the session scratch is available. */
+  checkpointPath?: string;
   /** First `task` brief; seeds the resumed run's opening user turn. */
   originalTask?: string;
   /** Settled `delegationId` of the chain's latest run, for the prompt listing. */
@@ -73,7 +75,7 @@ export type DelegationChain = {
   latestModelKey?: string;
   /** Settled status of the latest run; `running` while it works. Owns the
    * resumability gate so pruning finished delegation records cannot make a
-   * stopped chain look reusable (ADR 0279). */
+   * running chain look reusable (ADR 0279). */
   latestStatus?: string;
   /** Latest activity timestamp, used for LRU eviction. */
   lastActivityAt: number;
@@ -494,6 +496,8 @@ export type RebuiltTaskCall = {
   createdAt: number;
   /** Settled status this call's `Task` row recorded, when it recorded one. */
   status?: string;
+  /** Latest checkpoint path recorded in the settled Task row. */
+  checkpointPath?: string;
 };
 /**
  * Status a rebuilt chain carries after a restart (ADR 0279 §12). The settled
@@ -558,6 +562,8 @@ export function rebuildChainsFromTranscript(
     const task = typeof args?.task === "string" ? args.task.trim() : "";
     const modelId =
       typeof details?.modelId === "string" ? details.modelId : undefined;
+    const checkpointPath =
+      typeof details?.checkpointPath === "string" ? details.checkpointPath : undefined;
     const call: RebuiltTaskCall = {
       toolCallId: row.toolCallId,
       delegationId,
@@ -566,6 +572,7 @@ export function rebuildChainsFromTranscript(
       objective: taskObjectiveFromArgs(args),
       ...(task ? { task } : {}),
       ...(modelId ? { modelId } : {}),
+      ...(checkpointPath ? { checkpointPath } : {}),
       status: chainStatusFromDetail(details, row),
       createdAt: timestampMs(row.createdAt) || Date.now(),
     };
@@ -629,6 +636,7 @@ export function rebuildChainsFromTranscript(
       latestObjective: latest?.objective ?? root.objective,
       latestModelId: latest?.modelId,
       latestStatus: latest?.status,
+      ...(latest?.checkpointPath ? { checkpointPath: latest.checkpointPath } : {}),
       lastActivityAt: latest?.createdAt ?? root.createdAt,
     });
   }

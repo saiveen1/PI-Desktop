@@ -677,7 +677,22 @@ contract modes are intent boundaries, not strict read-only security profiles.
 
 ### Subagent scheduling model editor
 
-Subagents has separate Roles and Scheduling tabs. Scheduling keeps its policy
+Subagents has separate Roles and Scheduling tabs. Scheduling adds an Execution
+and recovery card with three numeric controls: optional tool budget, optional
+run duration in seconds, and final report timeout. The two work limits default
+to 0 (disabled), and final reporting defaults to 60 seconds. Labels display units, inclusive ranges, and zero-as-unlimited
+for the two work budgets. Defaults and ranges come from the shared run-policy
+contract. Empty, fractional or out-of-range values remain editable and block
+Save with localized feedback; values are never silently clamped. Restore defaults
+changes only execution fields, preserving model/approval edits. Saving uses the
+same delegation policy transaction; failures retain the whole draft. Explain
+that subsequent parent turns load the settings, active tasks retain their starting
+snapshot, state is saved automatically, summaries are optional, and cancellation
+sends no extra report request. There are no report-cadence or missing-report
+termination controls. Legacy trial fields remain readable but a new save drops
+those retired fields without changing model/approval choices. Child details show actual task metadata, not current Settings values.
+
+Scheduling keeps its policy
 help, approval wait, model-add control and explicit Save action. Model editing
 uses a compact selector beside a single detail form rather than one expanded
 form per model. The selector displays priority, model, provider and approval or
