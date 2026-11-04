@@ -1,5 +1,5 @@
 import { expandMcpInvocation } from "../composer-mcp";
-import { IPC, ErrorCodes, compactionRecordId, findSkillMentions, isGlobalPermissionMode, isRpcTimeoutError, type AgentEventEnvelope, type AgentPromptRequest, type AgentSteerRequest, type UiMessage, type AgentQueuePushRequest, type AgentStopRequest, type AgentStopSubagentsRequest, type AskToolResolution, type GlobalPermissionMode, type MessageUsage, type PendingInteractiveRequests, type PlanExecutionFinishStatus, type PlanResolutionResult, type PlanResolveRequest, type VoiceOrigin } from "@pi-desktop/shared";
+import { IPC, ErrorCodes, compactionRecordId, findSkillMentions, isGlobalPermissionMode, isRpcTimeoutError, type AgentEventEnvelope, type AgentPromptRequest, type AgentSteerRequest, type UiMessage, type AgentQueuePushRequest, type AgentStopRequest, type AgentStopSubagentsRequest, type AgentRetrySubagentRequest, type AgentRetrySubagentResponse, type AskToolResolution, type GlobalPermissionMode, type MessageUsage, type PendingInteractiveRequests, type PlanExecutionFinishStatus, type PlanResolutionResult, type PlanResolveRequest, type VoiceOrigin } from "@pi-desktop/shared";
 import type { FinishTurn } from "../runtime/plans";
 import { expandSlashInvocation, visionFromModelConfig, type ComposerTemplate } from "@pi-desktop/agent-runtime";
 import { appendPromptFallbackPaths, durableUserMessageId, preparePromptAttachments, type PreparedPromptAttachment } from "../prompt-attachments";
@@ -691,6 +691,55 @@ export function registerAgentIpc({
     return result;
     } finally {
       releaseSessionOperation?.();
+    }
+  });
+
+  handle(IPC.invoke.agentRetrySubagent, async (req: AgentRetrySubagentRequest): Promise<AgentRetrySubagentResponse> => {
+    if (!req || typeof req.sessionId !== "string" || !req.sessionId.trim() ||
+      typeof req.delegationId !== "string" || !req.delegationId.trim()) {
+      throw new Error("Invalid subagent retry request");
+    }
+    rejectNativeAgentOperation(req.sessionId);
+    if (req.sessionId.startsWith("remote:")) {
+      throw Object.assign(new Error("Direct subagent retry is unavailable for remote sessions"), {
+        errorCode: "CAPABILITY_UNAVAILABLE",
+      });
+    }
+    if (!host || !sidecar) throw new Error("backend unavailable");
+    const releaseSessionOperation = await acquireSessionOperation(req.sessionId);
+    try {
+      if (activeTurns.has(req.sessionId)) {
+        throw Object.assign(new Error("session already has an active turn"), {
+          errorCode: ErrorCodes.AGENT_BUSY,
+        });
+      }
+      const settings = await host.call<any>("settings.get");
+      const detail = await host.call<{ session?: any }>("session.get", { id: req.sessionId });
+      if (!detail.session) throw Object.assign(new Error("Session not found"), { errorCode: ErrorCodes.NOT_FOUND });
+      const launch = await resolveAgentRuntimeLaunch(req.sessionId, detail.session, settings);
+      sidecar.setProjectInstructionRoot(req.sessionId, launch.workspaceRoot ?? launch.projectPath);
+      const turn = await host.call<{ turnId?: string }>("session.beginTurn", {
+        sessionId: req.sessionId,
+        providerId: launch.providerId,
+        modelId: launch.modelId,
+      });
+      const turnId = String(turn?.turnId ?? "").trim();
+      if (!turnId) throw new Error("session.beginTurn returned no turn");
+      activeTurns.set(req.sessionId, turnId);
+      recordTurnStart(req.sessionId, turnId);
+      activeTurnUsages.delete(req.sessionId);
+      try {
+        return await sidecar.call<AgentRetrySubagentResponse>("agent.retrySubagent", {
+          ...launch.sidecarParams,
+          turnId,
+          delegationId: req.delegationId.trim(),
+        });
+      } catch (error) {
+        await finishTurn(req.sessionId, "error", (error as { errorCode?: string })?.errorCode, { turnId });
+        throw error;
+      }
+    } finally {
+      releaseSessionOperation();
     }
   });
 

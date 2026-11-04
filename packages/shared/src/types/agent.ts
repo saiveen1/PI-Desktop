@@ -345,3 +345,22 @@ export type AgentStopSubagentsRequest = {
 export type AgentStopSubagentsResponse = {
   pending: string[];
 };
+
+export type AgentRetrySubagentRequest = {
+  sessionId: string;
+  delegationId: string;
+};
+
+export type AgentRetrySubagentResponse =
+  | {
+      accepted: true;
+      turnId: string;
+      delegationId: string;
+      resumedFrom: string;
+    }
+  | {
+      accepted: false;
+      turnId: string;
+      resumedFrom: string;
+      error: string;
+    };

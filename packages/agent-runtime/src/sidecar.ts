@@ -574,6 +574,18 @@ async function handle(method: string, params: any): Promise<unknown> {
       }
       return { ok: true };
     }
+    case "agent.retrySubagent": {
+      const sessionId = String(params.sessionId ?? "").trim();
+      const delegationId = String(params.delegationId ?? "").trim();
+      const turnId = String(params.turnId ?? "").trim();
+      if (!sessionId || !delegationId || !turnId) {
+        throw Object.assign(new Error("sessionId, delegationId and turnId are required"), {
+          errorCode: "INVALID_ARGUMENT",
+        });
+      }
+      const runtime = await runtimeFor(params);
+      return runtime.retryFailedSubagent(delegationId, turnId);
+    }
     case "agent.stopSubagents": {
       const runtime = runtimes.get(String(params.sessionId));
       if (!runtime) throw new Error("No active runtime for this session");

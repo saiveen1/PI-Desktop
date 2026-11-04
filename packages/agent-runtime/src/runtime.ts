@@ -586,6 +586,10 @@ export type DelegationRecord = {
   delegateSessionId: string;
   /** Prior `delegationId` this run continues, when `Task.resume` was set. */
   resumedFrom?: string;
+  /** Durable turn owned by a renderer-triggered direct resume. */
+  manualTurnId?: string;
+  /** Prevent duplicate terminal events when a very fast delegate settles. */
+  manualTurnClosed?: boolean;
   /** Model the run kept before the resume could not re-resolve it (ADR 0279
    * §4): recorded so the parent can see that the delegate's binding moved. */
   modelChangedFrom?: string;
@@ -5318,6 +5322,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       // touch the system prompt, which would invalidate the provider's prompt
       // cache mid-session (ADR 0337).
       this.pruneFinishedDelegations();
+      if (record.manualTurnId) this.finishManualDelegationTurn(record);
     }
   }
 
@@ -5945,6 +5950,124 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           : {}),
       },
     };
+  }
+
+  /**
+   * Start a renderer-triggered resume without asking the parent model to emit
+   * another Task call. The synthetic Task row keeps the retry auditable and
+   * lets the normal delegation persistence path own the child transcript.
+   */
+  async retryFailedSubagent(
+    delegationId: string,
+    durableTurnId: string,
+  ): Promise<{
+    accepted: boolean;
+    turnId: string;
+    resumedFrom: string;
+    delegationId?: string;
+    error?: string;
+  }> {
+    const resume = delegationId.trim();
+    const turnId = durableTurnId.trim();
+    if (!resume || !turnId) throw new Error("delegationId and turnId are required");
+    if (this.disposed) throw new Error("runtime disposed");
+    if (this.getStatus().isRunning) {
+      throw Object.assign(new Error("session already has an active turn"), { errorCode: "AGENT_BUSY" });
+    }
+    const chain = this.delegationChains.lookup(resume);
+    if (!chain) throw new Error(this.unknownResumeMessage(resume));
+    if (chain.latestStatus !== "failed") {
+      throw new Error(`Delegation ${resume} is not failed and cannot be force-retried.`);
+    }
+    const resolved = this.resolveResumeChain(resume, chain.agentName);
+    if (!resolved.ok) throw new Error(resolved.message);
+    const originalTask = chain.originalTask ?? originalTaskFromTranscript(this.transcriptHistory, chain);
+    if (!originalTask || selectChainRows(this.transcriptHistory, chain).length === 0) {
+      this.delegationChains.drop(chain.delegateSessionId);
+      throw new Error(this.noHistoryResumeMessage(resume));
+    }
+
+    this.turnId = turnId;
+    this.acceptingSteering = false;
+    this.gracefulStopRequested = false;
+    this.runCancelled = false;
+    this.turnSubagentUsage = undefined;
+    this.pendingUserMessageId = undefined;
+    this.turnEpoch += 1;
+    this.resetRunRecoveryState();
+    this.requestStartedAt = Date.now();
+    this.rebuildToolCatalog();
+    this.setAgentTools(this.activeTools());
+    this.emit({ type: "agent_start" }, turnId);
+    this.emit({ type: "turn_start" }, turnId);
+
+    const toolCallId = `manual-task-${randomUUID()}`;
+    const task = "Continue the failed subagent task and finish the remaining work. Re-check the current workspace before making further changes.";
+    const args = { agent: chain.agentName, task, resume };
+    const taskTool = this.toolCatalog.get(SUBAGENT_TOOL_NAME) ?? this.buildSubagentTool();
+    await this.handleAgentEvent({
+      type: "tool_execution_start",
+      toolName: SUBAGENT_TOOL_NAME,
+      toolCallId,
+      args,
+    });
+    let result: AgentToolResult<unknown>;
+    try {
+      result = await taskTool.execute(toolCallId, args);
+    } catch (error) {
+      result = {
+        content: [{ type: "text", text: error instanceof Error ? error.message : String(error) }],
+        details: { error: error instanceof Error ? error.message : String(error) },
+        isError: true,
+      };
+    }
+    await this.handleAgentEvent({
+      type: "tool_execution_end",
+      toolCallId,
+      toolName: SUBAGENT_TOOL_NAME,
+      result,
+      isError: result.isError === true,
+    });
+
+    const resultDetails = isRecord(result.details) ? result.details : undefined;
+    const errorText = typeof resultDetails?.error === "string" ? resultDetails.error : undefined;
+    if (errorText) {
+      this.finishManualDelegationTurn(turnId);
+      return { accepted: false, turnId, resumedFrom: resume, error: errorText };
+    }
+    const startedId = isRecord(result.details) && typeof result.details.delegationId === "string"
+      ? result.details.delegationId
+      : undefined;
+    const record = startedId ? this.delegations.get(startedId) : undefined;
+    if (!startedId || !record) {
+      this.finishManualDelegationTurn(turnId);
+      return {
+        accepted: false,
+        turnId,
+        resumedFrom: resume,
+        error: "The subagent retry did not start.",
+      };
+    }
+    record.manualTurnId = turnId;
+    this.beginDelegationWait([record]);
+    if (record.status !== "running") this.finishManualDelegationTurn(record);
+    return { accepted: true, turnId, delegationId: startedId, resumedFrom: resume };
+  }
+
+  /** Close the durable turn created for a renderer-triggered retry. */
+  private finishManualDelegationTurn(recordOrTurnId: DelegationRecord | string): void {
+    const record = typeof recordOrTurnId === "string" ? undefined : recordOrTurnId;
+    if (record?.manualTurnClosed) return;
+    const turnId = typeof recordOrTurnId === "string" ? recordOrTurnId : recordOrTurnId.manualTurnId;
+    if (!turnId || this.turnId !== turnId) return;
+    if (record) record.manualTurnClosed = true;
+    this.endDelegationWait();
+    this.acceptingSteering = false;
+    this.clearAgentActivity();
+    const subagentUsage = this.turnSubagentUsage;
+    this.turnSubagentUsage = undefined;
+    this.emit({ type: "turn_end", ...(subagentUsage ? { subagentUsage } : {}) }, turnId);
+    this.emit({ type: "agent_end", messageIds: [] }, turnId);
   }
 
   /** `TaskStop`: stop running delegations (ADR 0089). */

@@ -1,5 +1,6 @@
 import { useChatSessionCapability } from "../../../hooks/use-chat-session-capability";
 import { SubagentStopButton } from "./SubagentStopButton";
+import { SubagentRetryButton } from "./SubagentRetryButton";
 import { PlanHistoryCard } from "./PlanHistoryCard";
 import { planSubmission } from "../../../lib/plan-history";
 import { reviewChangeFromMessage } from "../../../lib/workspace-review";
@@ -460,6 +461,7 @@ function HostToolRow({
           ) : null}
         </button>
         {typeof delegationId === "string" && <SubagentStopButton delegationId={delegationId} running={outcome === "running" && !creating} name={agentName} />}
+        {typeof delegationId === "string" && <SubagentRetryButton delegationId={delegationId} failed={outcome === "failed"} compact />}
         </div>
       ) : (
         <div className={`tool-row-head${runHead ? " is-run" : ""}`}>

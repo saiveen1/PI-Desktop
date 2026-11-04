@@ -50,6 +50,7 @@ Examples:
 - `pi-desktop/agent/steer`
 - `pi-desktop/agent/stop`
 - `pi-desktop/agent/stop-subagents`
+- `pi-desktop/agent/retry-subagent`
 - `pi-desktop/agent/abort`
 - `pi-desktop/agent/event/message`
 - `pi-desktop/agent/askTool/resolve`
@@ -325,6 +326,29 @@ Unconfirmed IDs are returned in `pending`; their durable status stays running
 until settlement. The parent and unselected delegates remain active. Existing
 terminal Task snapshots carry settlement through the normal persistence and
 renderer event path; no synthetic tool call is added to model history.
+
+### 5.2b retry-subagent
+
+```ts
+type AgentRetrySubagentRequest = {
+  sessionId: string;
+  delegationId: string;
+};
+
+type AgentRetrySubagentResponse =
+  | { accepted: true; turnId: string; delegationId: string; resumedFrom: string }
+  | { accepted: false; turnId: string; resumedFrom: string; error: string };
+```
+
+`pi-desktop/agent/retry-subagent` is a local Desktop-only control for a
+settled `failed` delegation. Main creates a new durable turn, and the sidecar
+starts the equivalent of `Task(resume: delegationId)` directly; the parent
+model is not prompted and cannot veto the action. Existing delegation
+authorization, recorded model binding, history, read-budget, worktree, and
+permission checks still apply. The runtime emits a synthetic `Task` row so the
+retry and its child transcript remain auditable. Remote and native sessions,
+running delegations, cancellations, and chains without retained history are
+rejected or returned as `accepted: false`.
 
 ### 5.3 abort
 

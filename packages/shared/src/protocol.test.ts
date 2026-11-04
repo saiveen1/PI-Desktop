@@ -44,6 +44,8 @@ describe("Plan protocol contracts", () => {
     expect(IPC_WHITELIST.has(IPC.invoke.plansPending)).toBe(true);
     expect(IPC_WHITELIST.has(IPC.invoke.plansResolve)).toBe(true);
     expect(IPC_WHITELIST.has(IPC.event.plansChanged)).toBe(true);
+    expect(IPC.invoke.agentRetrySubagent).toBe("pi-desktop/agent/retry-subagent");
+    expect(IPC_WHITELIST.has(IPC.invoke.agentRetrySubagent)).toBe(true);
     expect(IPC.invoke.commandShellList).toBe("pi-desktop/commandShell/list");
     expect(IPC_WHITELIST.has(IPC.invoke.commandShellList)).toBe(true);
     expect(IPC_WHITELIST.has(IPC.invoke.scheduledList)).toBe(true);

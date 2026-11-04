@@ -1254,6 +1254,13 @@ snapshots. The immediate `Task` result and the lifecycle details add
 `resumedFrom` for audit; the transcript renders a chain as one continuous
 multi-turn conversation under its latest `Task` card, with no separate
 "resumed" marker.
+The Desktop-only `agent/retry-subagent` control can force a retry of a settled
+`failed` chain without asking the parent model to emit another `Task` call. It
+creates a new durable turn and synthetic `Task` row, then uses the same resume
+path and all existing authorization, worktree, history, and read-budget gates.
+The retry is available only for local failed delegations with retained history;
+running, cancelled, over-budget, missing-history, remote, and native sessions
+remain unavailable.
 
 **Model pins.** `model: <provider>/<model>` in the frontmatter is resolved once
 per launch in Electron main, where credentials and the Pi catalog snapshot live, against

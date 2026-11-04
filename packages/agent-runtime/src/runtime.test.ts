@@ -11408,6 +11408,50 @@ describe("DesktopAgentRuntime subagents", () => {
         await runtime.dispose();
       }
     });
+    it("force-retries a failed delegation without a parent model turn", async () => {
+      const onEvent = vi.fn();
+      const runtime = createRuntime({
+        subagents: [explorer],
+        history: [
+          restartedTaskRow("task-1", "del-1", { status: "failed" }),
+          delegateRow("child-1", "task-1"),
+        ],
+        onEvent,
+      });
+      subagentRuns.calls.length = 0;
+      subagentRuns.instances.length = 0;
+      subagentRuns.deferred = true;
+      try {
+        const result = await runtime.retryFailedSubagent("del-1", "manual-turn");
+        expect(result).toMatchObject({ accepted: true, resumedFrom: "del-1" });
+        expect(subagentRuns.calls).toHaveLength(1);
+        expect(subagentRuns.calls[0].task).toContain("Continue the failed subagent task");
+        expect(JSON.stringify(subagentRuns.calls[0].initialMessages)).toContain("reading src/app.ts");
+        expect(runtime.getStatus().isRunning).toBe(true);
+
+        subagentRuns.resolveRun?.({
+          agentName: "explorer",
+          status: "completed",
+          report: "finished",
+          turns: 1,
+          toolCalls: 0,
+        });
+        await vi.waitFor(() => expect(runtime.getStatus().isRunning).toBe(false));
+        const events = onEvent.mock.calls.map(([envelope]) => envelope as AgentEventEnvelope);
+        expect(events).toContainEqual(expect.objectContaining({
+          event: expect.objectContaining({
+            type: "tool_start",
+            toolName: "Task",
+            args: expect.objectContaining({ resume: "del-1" }),
+          }),
+        }));
+        expect(events.some((envelope) => envelope.event.type === "agent_end")).toBe(true);
+      } finally {
+        subagentRuns.deferred = false;
+        await runtime.dispose();
+      }
+    });
+
 
     it.each(["abort", "TaskStop"])("explicit %s wins over a pending parent-error interruption", async (action) => {
       const runtime = createRuntime({ subagents: [explorer] });

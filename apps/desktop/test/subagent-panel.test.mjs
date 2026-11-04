@@ -7,6 +7,14 @@ const tabSource = await readFile(
   new URL("../src/components/workpanel/SubagentTranscriptTab.tsx", import.meta.url),
   "utf8",
 );
+const toolRowSource = await readFile(
+  new URL("../src/features/chat/transcript/ToolRow.tsx", import.meta.url),
+  "utf8",
+);
+const retryButtonSource = await readFile(
+  new URL("../src/features/chat/transcript/SubagentRetryButton.tsx", import.meta.url),
+  "utf8",
+);
 const workPanelSource = await readFile(
   new URL("../src/components/workpanel/WorkPanel.tsx", import.meta.url),
   "utf8",
@@ -65,6 +73,13 @@ test("a topology node opens a real subagent tab in the work panel", () => {
   // Retained runtime state must survive the session-switch sanitizer.
   assert.match(tabsSource, /export function subagentTabDisplayLabels\(/);
 });
+test("failed topology nodes expose a direct local subagent retry", () => {
+  assert.match(toolRowSource, /SubagentRetryButton/);
+  assert.match(toolRowSource, /failed=\{outcome === "failed"\}/);
+  assert.match(retryButtonSource, /api\.retrySubagent\(\{ sessionId, delegationId \}\)/);
+  assert.match(retryButtonSource, /source === "remote" \|\| source === "pi-native"/);
+});
+
 
 test("the work panel renders the delegation tab like every other resource", () => {
   assert.match(workPanelSource, /subagent: IconBot/);
