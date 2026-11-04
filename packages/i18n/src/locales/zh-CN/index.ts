@@ -3148,7 +3148,7 @@ sklm: {
     STREAM_FAILED: "回复中断了。",
     EMPTY_MODEL_RESPONSE: "模型连续两轮都没有输出内容。可以重试，或换一种说法。",
     MUTATION_RETRY_BUDGET_EXHAUSTED:
-      "同一处修改连续失败三次，本轮已停止，不再盲目重试。再说一次即可继续。",
+      "重复编辑或命令失败已达到三次恢复上限，本轮已停止。请检查错误后再继续。",
     CONTEXT_TOO_LARGE: "上下文恢复后对话仍然过长。请缩短消息内容或新开对话。",
     CONTEXT_COMPACTION_FAILED: "无法压缩当前对话的模型上下文。",
     SUBAGENT_CONTEXT_OVERFLOW:

@@ -2037,7 +2037,7 @@ describe("DesktopAgentRuntime configuration matching", () => {
       { command: 'printf "%s" x # ; patch notes' },
     ];
     for (const [index, args] of inertArgs.entries()) {
-      for (let attempt = 1; attempt <= 5; attempt += 1) {
+      for (let attempt = 1; attempt <= 2; attempt += 1) {
         const id = `inert-${index}-${attempt}`;
         const result = await bash.execute(id, args);
         await expect(agent.afterToolCall({ toolCall: { id } })).resolves.toEqual({
@@ -2077,7 +2077,7 @@ describe("DesktopAgentRuntime configuration matching", () => {
       { command: 'cat <<""\npatch notes' },
     ];
     for (const [index, args] of payloadOnly.entries()) {
-      for (let attempt = 1; attempt <= 5; attempt += 1) {
+      for (let attempt = 1; attempt <= 2; attempt += 1) {
         const id = `looks-closed-${index}-${attempt}`;
         const result = await bash.execute(id, args);
         await expect(agent.afterToolCall({ toolCall: { id } })).resolves.toEqual({

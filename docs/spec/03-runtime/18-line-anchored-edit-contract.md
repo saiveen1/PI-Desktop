@@ -467,8 +467,9 @@ warning is emitted. Requirements:
 An apply that produces text identical to the input is `EDIT_NO_CHANGE`, not
 success.
 
-§4d's repeat guard still stops a prompt that keeps failing on one path, but it
-does not count every failure the same way. The three recoverable codes —
+§4d's repeat guard stops a prompt that keeps failing on one path through
+`Edit` or `Write`; both share the path's count. It does not count every failure
+the same way. The three recoverable codes —
 `EDIT_TAG_MISMATCH`, `EDIT_TAG_UNKNOWN`, `EDIT_LINES_UNSEEN` — each hand back
 what the retry needs: the live tag, or the content of the lines the host refused
 to write blind (§9.1). One honest retry is the designed response to them, so
@@ -508,8 +509,8 @@ state; still-running delegates retain theirs until they settle.
 When the count does reach the limit the tool result carries `terminate: true`
 and the agent loop stops after that batch. Stopping there must not leave a turn
 that merely ends: the runtime finalizes the assistant row with
-`MUTATION_RETRY_BUDGET_EXHAUSTED` — retriable, `details.kind` of `edit` or
-`patch-command`, plus the last error code and a class-specific `details.recovery`
+`MUTATION_RETRY_BUDGET_EXHAUSTED` — retriable, `details.kind` of `edit`, `write`,
+`patch-command`, or `command`, plus the last error code and a class-specific `details.recovery`
 hint — and emits a matching error event, so the user sees that the agent stopped
 on purpose and keeps the continue affordance. For `EDIT_PARSE_FAILED`, the hint
 corrects the operation syntax without asking for another `Read`: a `PUT` with
@@ -517,6 +518,13 @@ body rows must end its header with `:`, for example `PUT 48.=48:`. Stale-tag and
 unseen-line failures continue to direct the model to re-read or use the complete
 reveal. A terminated turn with no message is indistinguishable from a model that
 chose to say nothing.
+
+Write failures have no Edit provenance grace. Permission refusals and
+`TOOL_ABORTED` are excluded for all guarded tools. Ordinary Bash failures use
+a separate per-command diagnostic budget, reset by successful file work or a
+changed result as specified in [03-tools-and-permissions](03-tools-and-permissions.md)
+§4d. The runtime owns this bookkeeping in `MutationRecoveryGuard`; tool execution,
+permission checks, Edit provenance, and provider retry budgets remain unchanged.
 
 For delegates, exhaustion is reported on the Task result as `failed` with
 `MUTATION_RETRY_BUDGET_EXHAUSTED`. Earlier report text is preserved but cannot

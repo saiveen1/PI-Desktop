@@ -1,8 +1,17 @@
+import { createHash } from "node:crypto";
 import { realpath } from "node:fs/promises";
 import { resolve } from "node:path";
 
 export const MAX_MUTATION_RECOVERY_FAILURES = 3;
 export const BASH_PATCH_FAILURE_KEY = "__bash_patch_command__";
+export const BASH_COMMAND_FAILURE_KEY_PREFIX = "__bash_command__";
+export type MutationRecoveryKind = "edit" | "write" | "patch-command" | "command";
+
+export function bashCommandFailureKey(command: unknown): string | undefined {
+  if (typeof command !== "string" || command.trim() === "") return undefined;
+  const digest = createHash("sha256").update(command, "utf8").digest("hex").slice(0, 16);
+  return `${BASH_COMMAND_FAILURE_KEY_PREFIX}${digest}`;
+}
 /**
  * Edit failures the line-anchored contract expects and already answers: each
  * one hands back the live tag, or the content of the lines it refused to write
@@ -18,11 +27,17 @@ export const RECOVERABLE_MUTATION_ERROR_CODES = new Set([
 ]);
 
 export function mutationTerminationAdvice(
-  kind: "edit" | "patch-command",
+  kind: MutationRecoveryKind,
   errorCode?: string,
 ): string {
   if (kind === "patch-command") {
     return "Use Edit on the specific lines instead of repeating a shell patch command.";
+  }
+  if (kind === "write") {
+    return "Correct the Write path, content, or permissions before retrying; do not repeat the same payload.";
+  }
+  if (kind === "command") {
+    return "Check the command's exit code and stderr, then change or split the Bash command before retrying; do not repeat it verbatim.";
   }
   if (errorCode === "EDIT_PARSE_FAILED") {
     return "Fix the Edit ops syntax and retry with a corrected payload; do not repeat the same ops. A PUT with body rows must end its header with `:`, for example `PUT 48.=48:`.";
@@ -400,13 +415,18 @@ export function isPatchCommand(command: unknown): boolean {
 }
 
 export function mutationTerminationMessage(
-  kind: "edit" | "patch-command",
+  kind: MutationRecoveryKind,
   target: string,
   errorCode?: string,
 ): string {
   const recovery = mutationTerminationAdvice(kind, errorCode);
   const lastError = errorCode ? ` Last error: ${errorCode}.` : "";
-  return kind === "edit"
-    ? `Stopped after ${MAX_MUTATION_RECOVERY_FAILURES} failed Edit attempts on ${target}.${lastError} ${recovery}`
-    : `Stopped after ${MAX_MUTATION_RECOVERY_FAILURES} failed patch commands.${lastError} ${recovery}`;
+  if (kind === "edit" || kind === "write") {
+    const tool = kind === "write" ? "Write" : "Edit";
+    return `Stopped after ${MAX_MUTATION_RECOVERY_FAILURES} failed file mutations on ${target}. Last tool: ${tool}.${lastError} ${recovery}`;
+  }
+  if (kind === "command") {
+    return `Stopped after ${MAX_MUTATION_RECOVERY_FAILURES} repetitions of the same failed Bash command.${lastError} ${recovery}`;
+  }
+  return `Stopped after ${MAX_MUTATION_RECOVERY_FAILURES} failed patch commands.${lastError} ${recovery}`;
 }

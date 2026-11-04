@@ -36,13 +36,38 @@ the delegate's counters and graces. A terminal tool error is carried to the
 delegate result so earlier prose cannot classify an exhausted run as completed.
 The failed chain and its report remain resumable through the existing Task flow.
 
+### Write and ordinary command recovery
+
+The original guard allowed repeated Write failures and ordinary shell failures
+to consume unlimited model turns. The same owner-scoped guard now includes
+Write under its canonical path, and ordinary Bash under a digest of exact
+command text. Ordinary command counting requires an unchanged diagnostic
+signature; a different error restarts the count. A successful command clears
+its own history, and a successful Edit, Write, or recognized patch clears that
+owner's ordinary-command history to permit a build/test after a fix. Read
+success does not count as corrective progress. Denial and cancellation are
+excluded, and no automatic command replay is introduced.
+
+The public error code remains `MUTATION_RETRY_BUDGET_EXHAUSTED`; the open-ended
+error details add `write` and `command` kinds. Recovery copy distinguishes them,
+and locale messages describe editing or command failures. A small runtime
+helper owns the counters instead of extending the central runtime's branch
+chain. Parent reset and delegate disposal retain their existing ownership.
+
+Counting every Bash failure together was rejected because independent commands
+and legitimate debug iterations would terminate each other. Parsing stderr to
+classify arbitrary commands was deferred: exact signatures give a conservative
+bound without guessing shell semantics. Changes made outside these tools are
+not observed; a new user prompt starts a fresh parent budget.
+
 ## Consequences
 
 - The model gets one additional bounded opportunity to correct an Edit or
   recognized shell patch failure.
 - Persistent or guessing mutation loops still terminate deterministically.
 - The runtime error message and every shipped locale must say three failures.
-- No IPC, storage, host protocol, or tool result shape changes.
+- No IPC, storage, Host protocol, or tool result shape changes; error details
+  accept the additional recovery kinds.
 
 ## Alternatives considered
 
@@ -55,4 +80,8 @@ The failed chain and its report remain resumable through the existing Task flow.
 
 - Runtime unit tests cover Edit, shell patch, per-code grace, reset after a
   successful mutation, and the visible terminating error row.
+- `runtime-tool-recovery.test.ts` drives real Agent loops with synthetic
+  provider/Host boundaries: Write/Bash terminate after three failures, emit a
+  visible error, and accept a follow-up. It also covers changed diagnostics,
+  fix-then-retest, cancellation, refusals, and owner isolation.
 - E2E-140 and E2E-141 document the third-failure boundary.

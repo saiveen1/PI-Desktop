@@ -2,10 +2,9 @@ import { DelegationScheduler, type DelegationDecisionRecord } from "./delegation
 import { subagentTaskDeclaration } from "./delegation-tool.js";
 import { describeDelegationModels, type DelegationSettings, type DelegationApprovalDecision } from "@pi-desktop/shared";
 import {
-  MAX_MUTATION_RECOVERY_FAILURES, BASH_PATCH_FAILURE_KEY,
-  RECOVERABLE_MUTATION_ERROR_CODES, mutationFailureKey, isPatchCommand,
-  mutationTerminationAdvice, mutationTerminationMessage,
+  mutationFailureKey, mutationTerminationAdvice, mutationTerminationMessage,
 } from "./mutation-recovery.js";
+import { MutationRecoveryGuard, type MutationTermination } from "./mutation-recovery-guard.js";
 import { DESKTOP_AGENT_IDENTITY } from "./agent-identity.js";
 import { resolveMcpToolSelection } from "./mcp-tool-selection.js";
 import { BatchPlanner, withBatchTurn } from "./batch-planner.js";
@@ -1999,18 +1998,11 @@ export class DesktopAgentRuntime {
   /** Host failures need to reach pi-agent-core's tool error channel without
    * discarding the structured diagnostics returned in `details`. */
   private failedHostToolCalls = new Set<string>();
-  /** Per-prompt mutation failures provide one recovery attempt, then stop. */
-  private mutationFailureCounts = new Map<string, number>();
-  /** `<failure key> <error code>` pairs that already spent their free retry. */
-  private mutationRecoveryGraces = new Set<string>();
+  private readonly mutationRecovery = new MutationRecoveryGuard();
   /** Tool-call ownership keeps concurrent delegates' mutation budgets apart. */
   private mutationOwners = new Map<string, string>();
   /** Why the recovery guard ended the turn, pending its visible error row. */
-  private pendingMutationTermination?: {
-    kind: "edit" | "patch-command";
-    target: string;
-    lastErrorCode?: string;
-  };
+  private pendingMutationTermination?: MutationTermination;
   private terminatingToolCalls = new Set<string>();
   private delegateMutationTerminations = new Map<string, { code: string; message: string }>();
   private fullEntries: MessageEntry[];
@@ -3749,100 +3741,21 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
         if (executionFailed) throw executionError;
         if (!result) throw new Error("tool execution returned no result");
         const recordParams = isRecord(params) ? params : undefined;
-        const failedToolExecution = !result.ok && result.denied !== true;
-        const failedEditPath =
-          toolName === "Edit" &&
-          failedToolExecution &&
-          typeof recordParams?.path === "string"
-            ? recordParams.path
-            : undefined;
-        const failedPatchCommand =
-          toolName === "Bash" &&
-          failedToolExecution &&
-          isPatchCommand(recordParams?.command);
         const mutationOwner = this.mutationOwners.get(toolCallId);
-        const targetKey = failedEditPath
-          ? mutationPath
-          : failedPatchCommand
-            ? BASH_PATCH_FAILURE_KEY
-            : undefined;
-        const failureKey = targetKey
-          ? `${mutationOwner ?? "parent"}\0${targetKey}`
-          : undefined;
-        const mutationFailureKind = failedEditPath
-          ? "edit"
-          : failedPatchCommand
-            ? "patch-command"
-            : undefined;
-        // A recoverable code is forgiven once per path, not once per call: a
-        // stale tag followed by unseen lines is two different honest failures,
-        // while the same code twice on the same path is a model that ignored
-        // what the first error told it.
-        const graceKey =
-          failureKey !== undefined &&
-          typeof result.errorCode === "string" &&
-          RECOVERABLE_MUTATION_ERROR_CODES.has(result.errorCode)
-            ? `${failureKey} ${result.errorCode}`
-            : undefined;
-        const grantedRecoveryGrace =
-          graceKey !== undefined && !this.mutationRecoveryGraces.has(graceKey);
-        if (graceKey !== undefined && grantedRecoveryGrace) {
-          this.mutationRecoveryGraces.add(graceKey);
-        }
-        const mutationFailureAttempt =
-          failureKey && !grantedRecoveryGrace
-            ? (this.mutationFailureCounts.get(failureKey) ?? 0) + 1
-            : undefined;
-        const terminateAfterMutationFailure =
-          mutationFailureAttempt !== undefined &&
-          mutationFailureAttempt >= MAX_MUTATION_RECOVERY_FAILURES;
-        if (failureKey && mutationFailureAttempt !== undefined) {
-          this.mutationFailureCounts.set(failureKey, mutationFailureAttempt);
-        }
-        // The guard counts consecutive failures. A write that landed is
-        // progress, so it clears that path's history instead of leaving one
-        // stale strike to terminate the next unrelated failure.
-        if (!failureKey && result.ok) {
-          const succeededTarget =
-            PATH_MUTATING_TOOLS.has(toolName) && typeof recordParams?.path === "string"
-              ? mutationPath
-              : toolName === "Bash" && isPatchCommand(recordParams?.command)
-                ? BASH_PATCH_FAILURE_KEY
-                : undefined;
-          const succeededKey = succeededTarget
-            ? `${mutationOwner ?? "parent"}\0${succeededTarget}`
-            : undefined;
-          if (succeededKey !== undefined) {
-            this.mutationFailureCounts.delete(succeededKey);
-            for (const key of this.mutationRecoveryGraces) {
-              if (key.startsWith(`${succeededKey} `)) {
-                this.mutationRecoveryGraces.delete(key);
-              }
-            }
-          }
-        }
-        if (terminateAfterMutationFailure) {
+        const termination = this.mutationRecovery.observe({
+          owner: mutationOwner ?? "parent", toolName,
+          path: typeof recordParams?.path === "string" ? recordParams.path : undefined,
+          pathKey: mutationPath, command: recordParams?.command, result,
+        });
+        const terminateAfterMutationFailure = termination !== undefined;
+        if (termination) {
           this.terminatingToolCalls.add(toolCallId);
-          // The loop stops after this batch, so nothing downstream would
-          // explain why. Hold the reason for agent_end to turn into a visible
-          // row instead of a turn that just ends.
           if (!mutationOwner) {
-            this.pendingMutationTermination = {
-              kind: mutationFailureKind ?? "edit",
-              target: failedEditPath ?? "the patch command",
-              ...(typeof result.errorCode === "string"
-                ? { lastErrorCode: result.errorCode }
-                : {}),
-            };
+            this.pendingMutationTermination = termination;
           } else {
-            const kind = mutationFailureKind ?? "edit";
             this.delegateMutationTerminations.set(toolCallId, {
               code: "MUTATION_RETRY_BUDGET_EXHAUSTED",
-              message: mutationTerminationMessage(
-                kind,
-                failedEditPath ?? "the patch command",
-                result.errorCode,
-              ),
+              message: mutationTerminationMessage(termination.kind, termination.target, termination.lastErrorCode),
             });
           }
         }
@@ -6816,13 +6729,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
   }
 
   private clearMutationRecovery(owner: string): void {
-    const prefix = `${owner}\0`;
-    for (const key of this.mutationFailureCounts.keys()) {
-      if (key.startsWith(prefix)) this.mutationFailureCounts.delete(key);
-    }
-    for (const key of this.mutationRecoveryGraces) {
-      if (key.startsWith(prefix)) this.mutationRecoveryGraces.delete(key);
-    }
+    this.mutationRecovery.clear(owner);
   }
 
   /**
@@ -9683,8 +9590,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     this.delegationWaitTargets = undefined;
     this.pathInstructionClaims.clear();
     this.failedHostToolCalls.clear();
-    this.mutationFailureCounts.clear();
-    this.mutationRecoveryGraces.clear();
+    this.mutationRecovery.clear();
     this.mutationOwners.clear();
     this.delegateMutationTerminations.clear();
     this.pendingMutationTermination = undefined;

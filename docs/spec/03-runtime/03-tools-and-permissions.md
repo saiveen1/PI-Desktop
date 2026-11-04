@@ -518,7 +518,7 @@ keeps only the ordering and loop-guard rules. The agent mutation workflow is:
    operation payload directly; another `Read` does not repair malformed syntax.
    A body-bearing replacement must use a header such as `PUT 48.=48:`. After three
    counted failures on one path in a prompt (18-line-anchored-edit-contract §9.3),
-   the third counted failed `Edit` for that path — or the third failed shell patch
+   the third counted failed `Edit` or `Write` for that path — or the third failed shell patch
    command (`apply_patch`, `git apply`, or `patch`) — returns a terminating tool
    result with an error-specific recovery hint, so the agent stops after reporting
    the exact mismatch. Do not hand-edit old unified-diff hunk headers or continue a
@@ -535,6 +535,21 @@ An `EDIT_LINES_UNSEEN` rejection whose reveal was complete is exempt from step
 the session's provenance, so the same `tag` retried unchanged applies. That
 retry is also the one grace `EDIT_LINES_UNSEEN` gets on the path, so a second
 one does count toward the guard.
+
+Ordinary foreground `Bash` commands also have a three-failure budget, scoped
+by the executing owner and exact command text (stored as a digest). A changed
+failure signature (error code, exit code, stdout, stderr, or error text) restarts
+that command at attempt one. Successful execution clears that command's count;
+a successful `Edit`, `Write`, or recognized patch clears that owner's ordinary
+command counts so a fix can be retested. Successful reads and unrelated ordinary
+commands do not reset them. Different commands and different owners have
+independent budgets. Permission refusals and `TOOL_ABORTED` never count.
+The terminal row keeps `MUTATION_RETRY_BUDGET_EXHAUSTED`, with `details.kind`
+`write` or `command` and a recovery hint. It never copies command text into the
+terminal error. No command is automatically retried, rewritten, or authorized.
+This exact-match guard deliberately does not infer shell equivalence or track
+changes made externally; varied output/text can avoid counting and a user's new
+prompt resets the parent's counters.
 
 Serialization also protects the snapshot store, which both producers and `Edit`
 mutate: without the per-session permit, a concurrent record could land between a

@@ -3077,7 +3077,7 @@ sklm: {
     "TIMEOUT": "Bei der Anfrage an den KI-Anbieter ist eine Zeitüberschreitung aufgetreten.",
     "STREAM_FAILED": "Die Antwort wurde unterbrochen.",
     "EMPTY_MODEL_RESPONSE": "Das Modell beendete seinen Zug zweimal hintereinander, ohne etwas zu sagen. Versuchen Sie es erneut oder formulieren Sie Ihre Anfrage um.",
-    "MUTATION_RETRY_BUDGET_EXHAUSTED": "Die gleiche Bearbeitung schlug dreimal fehl, daher wurde dieser Zug abgebrochen, anstatt es erneut zu versuchen. Bitten Sie erneut, fortzufahren.",
+    "MUTATION_RETRY_BUDGET_EXHAUSTED": "Wiederholte Bearbeitungs- oder Befehlsfehler haben die Grenze von drei Versuchen erreicht. Dieser Zug wurde gestoppt. Prüfen Sie den Fehler, bevor Sie fortfahren.",
     "CONTEXT_TOO_LARGE": "Dieser Chat ist nach der Kontextwiederherstellung immer noch zu lang. Kürzen Sie Ihre Nachricht oder starten Sie einen neuen Chat.",
     "CONTEXT_COMPACTION_FAILED": "Der Modellkontext dieser Konversation konnte nicht komprimiert werden.",
     "SUBAGENT_CONTEXT_OVERFLOW": "Die Aufgabe eines Subagenten hat das Kontextlimit seines Modells überschritten. Grenzen Sie die Aufgabe ein, geben Sie dem Subagenten ein Modell mit größerem Kontextfenster oder lassen Sie ihn weniger auf einmal lesen.",

@@ -42,11 +42,11 @@ test("failed turns expose a localized continuation prompt", () => {
   );
   assert.equal(
     english["errors.MUTATION_RETRY_BUDGET_EXHAUSTED"],
-    "The same edit failed three times, so this turn stopped instead of retrying blind. Ask again to continue.",
+    "Repeated edits or commands exhausted the three-attempt recovery budget. This turn stopped; inspect the error before continuing.",
   );
   assert.equal(
     chinese["errors.MUTATION_RETRY_BUDGET_EXHAUSTED"],
-    "同一处修改连续失败三次，本轮已停止，不再盲目重试。再说一次即可继续。",
+    "重复编辑或命令失败已达到三次恢复上限，本轮已停止。请检查错误后再继续。",
   );
 });
 
