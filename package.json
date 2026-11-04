@@ -14,6 +14,7 @@
     "pack": "pnpm --filter @pi-desktop/desktop run pack",
     "dist": "pnpm --filter @pi-desktop/desktop run dist",
     "dist:personal": "node scripts/build-personal-release.mjs",
+    "clean:personal-release": "node scripts/clean-personal-release.mjs",
     "pi-plugin": "pi-plugin",
     "build": "pnpm -r --if-present build && cargo build --release -p host-core",
     "build:js": "pnpm -r --if-present build",

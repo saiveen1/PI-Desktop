@@ -4,6 +4,7 @@ import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createReadStream, appendFileSync, closeSync, copyFileSync, existsSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import { cleanPersonalRelease } from "./clean-personal-release.mjs";
 import { basename, dirname, extname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -128,9 +129,12 @@ export async function buildPersonal(context, { run = runCommand } = {}) {
   try {
     writeFileSync(lock, JSON.stringify({ pid: process.pid, started: new Date().toISOString(), root: context.root }));
     writeFileSync(log, `Building current checkout ${context.root}; version ${context.version}. Build only, never install.\n`);
+    // Clean regenerable intermediates before the first stage so a stale
+    // .build tree or log can never be mistaken for this build's output.
+    for (const entry of cleanPersonalRelease({ root: context.root }).cleaned) {
+      appendFileSync(log, `clean ${entry.removed ? "removed" : "absent"} ${entry.label}\n`);
+    }
     mkdirSync(context.staging, { recursive: true });
-    const staleInstaller = join(context.staging, context.installerName);
-    if (existsSync(staleInstaller)) unlinkSync(staleInstaller);
     for (const [index, stage] of context.stages.entries()) {
       if (stage.name === "NSIS installer only") {
         for (const required of ["target/release/pi-desktop-host-core.exe", "packages/agent-runtime/dist-bundle/sidecar.js", "packages/agent-runtime/dist-bundle/package.json", "apps/desktop/out/main/index.js", "apps/desktop/out/renderer/index.html"]) nonempty(join(context.root, required));

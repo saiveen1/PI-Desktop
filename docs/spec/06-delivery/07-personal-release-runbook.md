@@ -88,6 +88,19 @@ must launch the fixed entry through the workstation's required WMI process path,
 with captured output/exit status; do not manufacture alternative build scripts.
 A host-specific launcher may wrap this exact entry for logging, but must not alter
 its stages, source, targets, or validation scope.
+## Build-preparation cleanup
+
+`pnpm dist:personal` now clears the regenerable intermediates itself before the
+first stage: `apps/desktop/release/personal/.build` and the previous
+`.artifacts/personal-release/build.log`. This removes stale `.build` trees and
+partial installers that once collided with a live output file. The published
+installer, its `.sha256`, `build-info.json`, and any `build.lock` are kept: a
+failed build must still leave the previous verified deliverable intact, and a
+lock needs operator inspection rather than silent deletion. Cleaning is also
+available on its own through `pnpm clean:personal-release`, which accepts no
+arguments and refuses paths that resolve outside the checkout or behind a link.
+The preflight in `build.log` records each `clean` line; intermediate removal is
+not a substitute for diagnosing why an earlier build failed.
 
 At a no-progress checkpoint inspect that build's log/owned compiler or archiver
 activity; do not blindly restart, increase timeouts, or kill unrelated processes.

@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
 import { buildEnvironment, buildPersonal, prepareBuild, runCommand } from "../../../scripts/build-personal-release.mjs";
-
+import { cleanPersonalRelease as cleanStandalone } from "../../../scripts/clean-personal-release.mjs";
 const repo = fileURLToPath(new URL("../../../", import.meta.url));
 const read = (p) => readFileSync(join(repo, p), "utf8");
 const write = (file, content) => { mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, content); };
@@ -170,4 +170,62 @@ test("CLI rejects install/launch/target overrides before creating any build stat
     assert.equal(result.status, 1);
     assert.match(result.stderr, /No install, launch, target, or checkout overrides/);
   }
+});
+
+test("pre-build cleanup removes intermediates and stale log before the first stage", async (t) => {
+  const { context } = fixture(t);
+  write(join(context.staging, "win-unpacked", "PI-Desktop.exe"), "stale unpacked tree");
+  write(join(context.staging, context.installerName), "stale partial installer");
+  write(join(context.logs, "build.log"), "stale stage log");
+  let sawCleanState = false;
+  const result = await buildPersonal(context, { run: async (stage) => {
+    if (stage.name === "Desktop dependencies") {
+      sawCleanState = !existsSync(join(context.staging, "win-unpacked"));
+      assert.equal(readFileSync(join(context.logs, "build.log"), "utf8").split("\n").some((line) => line.startsWith("clean removed")), true);
+    }
+    if (stage.name === "Desktop production build") buildInputs(context);
+    if (stage.name === "NSIS installer only") await packageOutput(context);
+  } });
+  assert.ok(existsSync(result.artifact));
+  assert.ok(sawCleanState, "staging must be cleaned before the first stage runs");
+  assert.ok(existsSync(join(context.logs, "build.log")));
+  assert.match(readFileSync(join(context.logs, "build.log"), "utf8"), /clean removed/);
+  assert.equal(result.installed, false);
+});
+
+test("a live build lock still blocks a rebuild while cleanup is armed", async (t) => {
+  const { context } = fixture(t);
+  write(join(context.logs, "build.lock"), "another build");
+  await assert.rejects(buildPersonal(context, { run: async () => assert.fail("must not run") }), /EEXIST/);
+  assert.equal(readFileSync(join(context.logs, "build.lock"), "utf8"), "another build");
+});
+
+test("standalone cleanup removes intermediates and keeps lock, installer and info", (t) => {
+  const { context } = fixture(t);
+  const installer = join(context.output, context.installerName);
+  write(installer, "previous verified installer");
+  write(join(context.output, `${context.installerName}.sha256`), "digest");
+  write(join(context.output, "build-info.json"), "{}");
+  const lock = join(context.logs, "build.lock");
+  write(lock, "another build");
+  write(join(context.staging, "win-unpacked", "PI-Desktop.exe"), "stale");
+  write(join(context.logs, "build.log"), "stale log");
+  const result = cleanStandalone({ root: context.root });
+  assert.ok(!existsSync(context.staging));
+  assert.ok(!existsSync(join(context.logs, "build.log")));
+  assert.equal(readFileSync(lock, "utf8"), "another build");
+  assert.equal(readFileSync(installer, "utf8"), "previous verified installer");
+  assert.ok(existsSync(join(context.output, `${context.installerName}.sha256`)));
+  assert.ok(existsSync(join(context.output, "build-info.json")));
+  assert.deepEqual(result.cleaned.map((entry) => entry.label).sort(), [".artifacts/personal-release/build.log", "release/personal/.build"]);
+});
+
+test("cleanup refuses a staging path redirected behind a junction", (t) => {
+  const { context } = fixture(t);
+  const victim = mkdtempSync(join(tmpdir(), "personal-clean-victim-"));
+  t.after(() => rmSync(victim, { recursive: true, force: true }));
+  mkdirSync(dirname(context.staging), { recursive: true });
+  symlinkSync(victim, context.staging, "junction");
+  assert.throws(() => cleanStandalone({ root: context.root }), /refusing to clean it/);
+  assert.ok(readdirSync(victim).length === 0 && existsSync(victim), "junction target must survive");
 });
