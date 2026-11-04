@@ -1,6 +1,18 @@
 import { en, type EnglishCatalog } from "../en/index.js";
 
 export const es = {
+  sessionOrganization: {
+    select: "Seleccionar sesiones", selectVisible: "Seleccionar visibles", selectSession: "Seleccionar {{title}}",
+    done: "Listo", selected: "{{count}} seleccionadas", unarchive: "Desarchivar", moveToTrash: "Mover a la papelera",
+    trashTitle: "Papelera",
+    trashDescription: "Las sesiones eliminadas permanecen aquí hasta que las restaures o elimines definitivamente. Al restaurarlas conservan su estado de archivo y fijación.",
+    empty: "La papelera está vacía.", loading: "Cargando sesiones…", retry: "Reintentar", restore: "Restaurar",
+    deletePermanently: "Eliminar definitivamente",
+    confirmDelete: "¿Eliminar definitivamente las {{count}} sesiones seleccionadas? Se borrarán su historial y los worktrees aislados asociados. Esta acción no se puede deshacer.",
+    deletedAt: "Eliminada el {{date}}", unsupported: "Solo se pueden mover a la papelera las sesiones locales de Desktop.",
+    running: "Detén esta sesión antes de moverla a la papelera.", failed: "{{title}}: {{reason}}",
+    processed: "{{count}} sesiones procesadas.", restored: "{{count}} sesiones restauradas.", permanentlyDeleted: "{{count}} sesiones eliminadas definitivamente.",
+  },
   delegationApproval: {
     label: "Aprobación de delegación", title: "Aprobar modelo delegado", reason: "Motivo de selección",
     allowOnce: "Permitir una vez", useOther: "Usar otro modelo", cancel: "Cancelar delegación",

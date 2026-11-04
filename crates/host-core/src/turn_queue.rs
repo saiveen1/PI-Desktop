@@ -131,7 +131,7 @@ pub fn push(db: &Database, input: QueuedTurnInput) -> Result<QueuedTurn> {
     }
     let conn = db.conn();
     let session_exists: bool = conn.query_row(
-        "SELECT EXISTS(SELECT 1 FROM sessions WHERE id = ?1)",
+        "SELECT EXISTS(SELECT 1 FROM sessions WHERE id = ?1 AND deleted_at IS NULL)",
         params![input.session_id],
         |row| row.get(0),
     )?;

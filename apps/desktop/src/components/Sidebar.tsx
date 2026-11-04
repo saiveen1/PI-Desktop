@@ -15,7 +15,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { TooltipButton, cx } from "./ui";
+import { Checkbox, TooltipButton, cx } from "./ui";
 
 import { portalToBody } from "../lib/portal-visibility";
 import {
@@ -28,6 +28,11 @@ import { api } from "../lib/api";
 import { formatSessionLastReplyDate } from "../lib/sidebar-session-date";
 import { SessionHoverCard } from "../features/sessions/SessionHoverCard";
 import { useSessionHoverCard } from "../features/sessions/useSessionHoverCard";
+import { useSessionSelection } from "../features/sessions/useSessionSelection";
+import { useSessionOrganization } from "../features/sessions/useSessionOrganization";
+import { canTrashSession, type SessionOrganizationAction } from "../features/sessions/session-organization";
+import { SessionSelectionToolbar } from "../features/sessions/SessionSelectionToolbar";
+import { SessionTrashDialog } from "../features/sessions/SessionTrashDialog";
 import { isDefaultSessionTitle, useAppStore } from "../stores/app-store";
 import {
   getGlobalPinnedSessions,
@@ -86,7 +91,6 @@ import { NotificationCenter } from "./NotificationCenter";
 import {
   WorktreeBadge,
   WorktreeDialogs,
-  useWorktreeDeleteLossText,
   useWorktreeProjectMenuItems,
   useWorktreeSessionMenuItems,
 } from "../features/worktree/WorktreeSidebarParts";
@@ -100,7 +104,6 @@ import {
   sidebarMenuSubmenu,
   type SidebarMenuPanelContent,
 } from "../lib/sidebar-menu";
-import { useArmedDelete } from "../hooks/use-armed-delete";
 import { useUpdateState } from "../hooks/use-update-state";
 import { ProjectDeleteDialog } from "./ProjectDeleteDialog";
 import { ProjectEditDialog } from "./ProjectEditDialog";
@@ -125,7 +128,6 @@ import {
   IconSettings,
   IconStar,
   IconTrash,
-  IconX,
 } from "./icons";
 
 type ProjectEntry = {
@@ -294,10 +296,7 @@ export function Sidebar({
   const activateProject = useAppStore((s) => s.activateProject);
   const renameProject = useAppStore((s) => s.renameProject);
   const toggleSessionPinned = useAppStore((s) => s.toggleSessionPinned);
-  const archiveSessionAction = useAppStore((s) => s.archiveSession);
-  const restoreSession = useAppStore((s) => s.restoreSession);
   const renameSession = useAppStore((s) => s.renameSession);
-  const deleteSessionAction = useAppStore((s) => s.deleteSession);
   const setSessionSort = useAppStore((s) => s.setSessionSort);
   const moveSessionProject = useAppStore((s) => s.moveSessionProject);
   const setSessionArchiveVisibility = useAppStore((s) => s.setSessionArchiveVisibility);
@@ -318,12 +317,9 @@ export function Sidebar({
   const [renameFor, setRenameFor] = useState<SessionSummary | null>(null);
   const [editProjectFor, setEditProjectFor] = useState<ProjectEntry | null>(null);
   const [deleteProjectFor, setDeleteProjectFor] = useState<ProjectEntry | null>(null);
-  // Which row menu item is armed for its second, confirming click.
-  const { armed: armedDelete, setArmed: setArmedDelete } = useArmedDelete();
+  const [trashOpen, setTrashOpen] = useState(false);
+  const { busy: organizationBusy, run: runOrganization } = useSessionOrganization();
   const [projectMenu, setProjectMenu] = useState<string | null>(null);
-  // Multi-select: Shift/Cmd+click session rows for batch operations.
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const lastClickedIdRef = useRef<string | null>(null);
   const [sectionMenu, setSectionMenu] = useState<"sessions" | "projects" | null>(null);
   const [menuPosition, setMenuPosition] = useState<{
     top: number;
@@ -498,19 +494,6 @@ export function Sidebar({
     };
   }, []);
 
-  // Escape clears multi-select (only when no menu is open — menus consume
-  // their own Escape first, so clearing happens on the next press).
-  useEffect(() => {
-    if (selectedIds.size === 0) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      // Let menu/sort close handlers consume Escape first.
-      if (sessionMenu || projectMenu || sectionMenu || sortOpen) return;
-      setSelectedIds(new Set());
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [selectedIds.size, sessionMenu, projectMenu, sectionMenu, sortOpen]);
 
   const showArchived = sessionView.archived;
   const sessionSort = sessionView.sort;
@@ -1048,88 +1031,37 @@ export function Sidebar({
   const remoteProjectGroups = useMemo(() => groupRemoteProjectSessions(
     filtered.filter((session) => isRemoteSession(session) && !pinnedSessionIds.has(session.id)), compareSessions,
   ), [filtered, pinnedSessionIds, compareSessions]);
-  // Flat ordered list of every visible session id — used for Shift+click range selection.
+  // Follow the rendered order, excluding collapsed groups and unloaded history.
   const flatSessionOrder = useMemo(() => {
-    const ids: string[] = [];
-    // Pinned first (same order as rendered)
-    for (const s of pinnedSessions) ids.push(s.id);
-    // Then project sessions
+    const ids = pinnedSessions.map((session) => session.id);
+    ids.push(...temporarySessionHistory.map((session) => session.id));
     for (const entry of projectEntries) {
-      for (const s of entry.sessions) {
-        if (!pinnedSessionIds.has(s.id)) ids.push(s.id);
-      }
+      if (entry.meta.collapsed ?? projectCollapsed[entry.key] ?? false) continue;
+      const history = entry.sessions.filter((session) => !pinnedSessionIds.has(session.id));
+      const { visibleSessions } = getVisibleProjectSessions(history, expandedProjectSessions[entry.key] ?? false);
+      ids.push(...visibleSessions.map((session) => session.id));
     }
-    for (const group of remoteProjectGroups) for (const session of group.sessions) ids.push(session.id);
-    // Then temporary (standalone) sessions
-    for (const s of temporarySessionHistory) ids.push(s.id);
+    for (const group of remoteProjectGroups) ids.push(...group.sessions.map((session) => session.id));
     return ids;
-  }, [pinnedSessions, projectEntries, pinnedSessionIds, temporarySessionHistory, remoteProjectGroups]);
+  }, [pinnedSessions, temporarySessionHistory, projectEntries, projectCollapsed, pinnedSessionIds, expandedProjectSessions, remoteProjectGroups]);
+  const selection = useSessionSelection(flatSessionOrder);
+  const { selectedIds } = selection;
+  const selectedSessions = sessions.filter((session) => selectedIds.has(session.id));
+  const hasUnarchivedSelection = selectedSessions.some((session) => !sessionArchived(session, sessionMeta[session.id]));
+  const hasArchivedSelection = selectedSessions.some((session) => sessionArchived(session, sessionMeta[session.id]));
+  const handleMultiSelectClick = (event: ReactMouseEvent, id: string) =>
+    organizationBusy || selection.click(event, id);
 
-  /** Handle multi-select click on a session row. Returns true if the click was consumed by multi-select. */
-  const handleMultiSelectClick = (event: React.MouseEvent, sessionId: string): boolean => {
-    const isMeta = event.metaKey || event.ctrlKey;
-    const isShift = event.shiftKey;
-    if (!isMeta && !isShift) {
-      // Plain click: clear selection, let normal handler run.
-      if (selectedIds.size > 0) setSelectedIds(new Set());
-      lastClickedIdRef.current = sessionId;
-      return false;
-    }
-    event.preventDefault();
-    event.stopPropagation();
-    if (isMeta && !isShift) {
-      // Toggle individual item
-      setSelectedIds((prev) => {
-        const next = new Set(prev);
-        if (next.has(sessionId)) next.delete(sessionId);
-        else next.add(sessionId);
-        return next;
-      });
-      lastClickedIdRef.current = sessionId;
-      return true;
-    }
-    if (isShift) {
-      // Range select from lastClickedId to current
-      const anchor = lastClickedIdRef.current;
-      if (!anchor) {
-        setSelectedIds(new Set([sessionId]));
-        lastClickedIdRef.current = sessionId;
-        return true;
-      }
-      const startIdx = flatSessionOrder.indexOf(anchor);
-      const endIdx = flatSessionOrder.indexOf(sessionId);
-      if (startIdx === -1 || endIdx === -1) {
-        setSelectedIds(new Set([sessionId]));
-        lastClickedIdRef.current = sessionId;
-        return true;
-      }
-      const lo = Math.min(startIdx, endIdx);
-      const hi = Math.max(startIdx, endIdx);
-      const range = flatSessionOrder.slice(lo, hi + 1);
-      setSelectedIds((prev) => {
-        const next = new Set(prev);
-        for (const id of range) next.add(id);
-        return next;
-      });
-      // Don't update lastClickedIdRef on shift-click so further shifts extend from same anchor
-      return true;
-    }
-    return false;
-  };
-
-  // Clear multi-select when sessions list changes (e.g. after batch delete)
-  const sessionIdSet = useMemo(() => new Set(sessions.map((s) => s.id)), [sessions]);
   useEffect(() => {
-    if (selectedIds.size === 0) return;
-    // Remove any selected ids that no longer exist
-    let changed = false;
-    const next = new Set<string>();
-    for (const id of selectedIds) {
-      if (sessionIdSet.has(id)) next.add(id);
-      else changed = true;
-    }
-    if (changed) setSelectedIds(next);
-  }, [sessionIdSet]); // intentionally not including selectedIds to avoid loop
+    if (!selection.active) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (sessionMenu || projectMenu || sectionMenu || sortOpen || trashOpen || organizationBusy) return;
+      selection.exit();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [selection.active, selection.exit, sessionMenu, projectMenu, sectionMenu, sortOpen, trashOpen, organizationBusy]);
 
   const renderSessionStatus = (status: SidebarSessionStatus) => {
     const labelKey =
@@ -1291,160 +1223,17 @@ export function Sidebar({
     });
   };
 
-  const archiveSession = async (session: SessionSummary) => {
-    const archived = sessionArchived(session, sessionMeta[session.id]);
-    const wasActive = activeSessionId === session.id;
-    const next =
-      !archived && wasActive
-        ? session.projectPath
-          ? projectEntries
-              .find((entry) => entry.key === normalizeProjectPath(session.projectPath))
-              ?.sessions.find(
-                (item) =>
-                  item.id !== session.id &&
-                  !sessionArchived(item, sessionMeta[item.id]),
-              )
-          : temporarySessions.find(
-              (item) =>
-                item.id !== session.id &&
-                !sessionArchived(item, sessionMeta[item.id]),
-            )
-        : undefined;
-    try {
-      closeMenus();
-      if (archived) {
-        restoreSession(session.id);
-        return;
-      }
-      if (wasActive && next) {
-        if (!(await selectProjectSession(next))) return;
-        archiveSessionAction(session.id);
-        return;
-      }
-      if (wasActive) {
-        // Archive first so an empty active slot is not reused as its own
-        // replacement. Restore it if creating the fallback slot fails.
-        archiveSessionAction(session.id);
-        try {
-          await newSession({ projectPath: session.projectPath ?? null });
-        } catch (error) {
-          restoreSession(session.id);
-          throw error;
-        }
-        return;
-      }
-      archiveSessionAction(session.id);
-    } catch (error) {
-      reportError(error);
-    }
-  };
-
-  const deleteSession = async (session: SessionSummary) => {
+  const runSessionAction = async (action: SessionOrganizationAction, ids = [...selectedIds]) => {
     closeMenus();
-    const wasActive = activeSessionId === session.id;
-    const sameScope = session.projectPath
-      ? projectEntries.find(
-          (entry) => entry.key === normalizeProjectPath(session.projectPath),
-        )?.sessions ?? []
-      : temporarySessions;
-    const next = wasActive
-      ? sameScope.find(
-          (item) =>
-            item.id !== session.id &&
-            !sessionArchived(item, sessionMeta[item.id]),
-        ) ?? projectEntries
-          .flatMap((entry) => entry.sessions)
-          .find(
-            (item) =>
-              item.id !== session.id &&
-              !sessionArchived(item, sessionMeta[item.id]),
-          )
-      : undefined;
-    try {
-      await deleteSessionAction(session.id);
-      if (wasActive) {
-        if (next) await selectProjectSession(next);
-        else await newSession({ projectPath: session.projectPath ?? null });
-      }
-    } catch (error) {
-      reportError(error);
-    }
+    selection.remove(await runOrganization(ids, action));
   };
 
-  /**
-   * Two-step delete for one row's menu item. The first click arms the item and
-   * relabels it; only the second click runs the delete, and the arm expires on
-   * its own. The menu stays open between the two clicks.
-   */
+  const archiveSession = (session: SessionSummary) => runSessionAction(
+    sessionArchived(session, sessionMeta[session.id]) ? "unarchive" : "archive", [session.id],
+  );
+
   const requestDeleteSession = (session: SessionSummary) => {
-    if (armedDelete !== session.id) {
-      setArmedDelete(session.id);
-      return;
-    }
-    setArmedDelete(null);
-    void deleteSession(session);
-  };
-
-  /** Batch delete: delete all selected sessions sequentially. */
-  const batchDeleteSessions = async () => {
-    const ids = [...selectedIds];
-    if (ids.length === 0) return;
-    closeMenus();
-    const toDelete = sessions.filter(
-      (s) => ids.includes(s.id) && s.source !== "pi-native",
-    );
-    for (const session of toDelete) {
-      try {
-        await deleteSessionAction(session.id);
-      } catch (error) {
-        reportError(error);
-      }
-    }
-    // If we deleted the active session, create or select a fallback
-    if (ids.includes(activeSessionId ?? "")) {
-      const remaining = sessions.find(
-        (s) => !ids.includes(s.id) && !sessionArchived(s, sessionMeta[s.id]),
-      );
-      try {
-        if (remaining) await selectSession(remaining.id);
-        else await newSession({ projectPath: null });
-      } catch (error) {
-        reportError(error);
-      }
-    }
-    setSelectedIds(new Set());
-  };
-
-  /** Batch archive: archive all selected sessions. */
-  const batchArchiveSessions = async () => {
-    const ids = [...selectedIds];
-    if (ids.length === 0) return;
-    closeMenus();
-    for (const id of ids) {
-      const session = sessions.find((s) => s.id === id);
-      if (!session) continue;
-      const alreadyArchived = sessionArchived(session, sessionMeta[session.id]);
-      if (alreadyArchived) continue;
-      archiveSessionAction(id);
-    }
-    // If we archived the active session (and it wasn't already archived), select a fallback
-    const activeWasArchived = (() => {
-      if (!activeSessionId || !ids.includes(activeSessionId)) return false;
-      const s = sessions.find((s) => s.id === activeSessionId);
-      return s ? !sessionArchived(s, sessionMeta[s.id]) : false;
-    })();
-    if (activeWasArchived) {
-      const remaining = sessions.find(
-        (s) => !ids.includes(s.id) && !sessionArchived(s, sessionMeta[s.id]),
-      );
-      try {
-        if (remaining) await selectSession(remaining.id);
-        else await newSession({ projectPath: null });
-      } catch (error) {
-        reportError(error);
-      }
-    }
-    setSelectedIds(new Set());
+    void runSessionAction("trash", [session.id]);
   };
 
   /** Always route project deletion through the explicit confirmation dialog. */
@@ -1632,7 +1421,7 @@ export function Sidebar({
    * panel's items come from the selection rather than from the clicked row.
    */
   const batchSelected = Boolean(
-    sessionMenu && selectedIds.size > 1 && selectedIds.has(sessionMenu),
+    sessionMenu && selection.active && selectedIds.has(sessionMenu),
   );
 
   /**
@@ -1650,9 +1439,6 @@ export function Sidebar({
     running: Boolean(menuSession && runningSessions[menuSession.id]),
     onDone: () => closeMenus(false),
   });
-  const sessionDeleteLoss = useWorktreeDeleteLossText(
-    menuSession && armedDelete === menuSession.id ? menuSession.id : "",
-  );
   const menuProject = projectMenu
     ? projectEntries.find((item) => item.key === projectMenu)
     : undefined;
@@ -1702,6 +1488,13 @@ export function Sidebar({
       return {
         label: t("nav.sessionActions", { defaultValue: "Session actions" }),
         items: [
+          sidebarMenuAction({
+            id: "select-sessions",
+            label: t("sessionOrganization.select"),
+            icon: <IconCheck size={14} />,
+            disabled: organizationBusy,
+            onSelect: () => { closeMenus(); selection.enter(session.id); },
+          }),
           ...(native
             ? []
             : [
@@ -1726,9 +1519,10 @@ export function Sidebar({
           sidebarMenuAction({
             id: "toggle-session-archive",
             label: archived
-              ? t("nav.restoreTask", { defaultValue: "Restore" })
+              ? t("sessionOrganization.unarchive")
               : t("nav.archiveTask", { defaultValue: "Archive" }),
             icon: archived ? <IconArchiveRestore size={14} /> : <IconArchive size={14} />,
+            disabled: organizationBusy,
             onSelect: () => void archiveSession(session),
           }),
           ...(gitItems.length
@@ -1780,35 +1574,18 @@ export function Sidebar({
                 }),
               ]
             : []),
-          ...(native
-            ? []
-            : [
-                sidebarMenuSubmenu({
-                  id: "session-danger",
-                  label: t("nav.dangerZone", { defaultValue: "Danger zone" }),
-                  icon: <IconTrash size={14} />,
-                  items: [
-                    sidebarMenuAction({
-                      id: "delete-session",
-                      label: armedDelete === session.id
-                        ? t("nav.deleteTaskConfirm", { defaultValue: "Delete?" })
-                        : t("nav.deleteTask", { defaultValue: "Delete" }),
-                      icon: <IconX size={14} />,
-                      danger: true,
-                      armed: armedDelete === session.id,
-                      onSelect: () => requestDeleteSession(session),
-                    }),
-                  ],
-                  notes: sessionDeleteLoss
-                    ? [{ id: "session-delete-loss", text: sessionDeleteLoss }]
-                    : undefined,
-                }),
-              ]),
+          ...(canTrashSession(session) ? [sidebarMenuAction({
+            id: "delete-session",
+            label: t("sessionOrganization.moveToTrash"),
+            icon: <IconTrash size={14} />,
+            disabled: organizationBusy || Boolean(runningSessions[session.id]),
+            title: runningSessions[session.id] ? t("sessionOrganization.running") : undefined,
+            onSelect: () => requestDeleteSession(session),
+          })] : []),
         ],
       };
     },
     [
-      armedDelete,
       archiveSession,
       copyConversationId,
       copySessionPath,
@@ -1817,12 +1594,13 @@ export function Sidebar({
       openSessionPath,
       requestDeleteSession,
       runningSessions,
-      sessionDeleteLoss,
       sessionMeta,
       sessionWorktreeItems,
       settings?.developerMode,
       t,
       toggleSessionPin,
+      organizationBusy,
+      selection.enter,
     ],
   );
 
@@ -1914,48 +1692,27 @@ export function Sidebar({
     ],
   );
 
-  const batchMenuContent = useCallback(
-    (count: number): SidebarMenuPanelContent => ({
-      label: t("nav.sessionActions", { defaultValue: "Session actions" }),
-      hint: t("nav.batchSelectionHint", {
-        defaultValue: "{{count}} sessions selected",
-        count,
+  const batchMenuContent = (count: number): SidebarMenuPanelContent => ({
+    label: t("nav.sessionActions"),
+    hint: t("sessionOrganization.selected", { count }),
+    items: [
+      sidebarMenuAction({
+        id: "batch-archive", label: t("nav.archiveTask"), icon: <IconArchive size={14} />,
+        disabled: organizationBusy || !hasUnarchivedSelection,
+        onSelect: () => void runSessionAction("archive"),
       }),
-      items: [
-        sidebarMenuAction({
-          id: "batch-archive",
-          label: t("nav.batchArchive", { defaultValue: "Archive {{count}} sessions", count }),
-          icon: <IconArchive size={14} />,
-          onSelect: () => void batchArchiveSessions(),
-        }),
-        sidebarMenuSubmenu({
-          id: "batch-danger",
-          label: t("nav.dangerZone", { defaultValue: "Danger zone" }),
-          icon: <IconTrash size={14} />,
-          items: [
-            sidebarMenuAction({
-              id: "batch-delete",
-              label: armedDelete === "batch"
-                ? t("nav.batchDeleteConfirm", { defaultValue: "Delete {{count}} sessions?", count })
-                : t("nav.batchDelete", { defaultValue: "Delete {{count}} sessions", count }),
-              icon: <IconTrash size={14} />,
-              danger: true,
-              armed: armedDelete === "batch",
-              onSelect: () => {
-                if (armedDelete !== "batch") {
-                  setArmedDelete("batch");
-                  return;
-                }
-                setArmedDelete(null);
-                void batchDeleteSessions();
-              },
-            }),
-          ],
-        }),
-      ],
-    }),
-    [armedDelete, batchArchiveSessions, batchDeleteSessions, t],
-  );
+      sidebarMenuAction({
+        id: "batch-unarchive", label: t("sessionOrganization.unarchive"), icon: <IconArchiveRestore size={14} />,
+        disabled: organizationBusy || !hasArchivedSelection,
+        onSelect: () => void runSessionAction("unarchive"),
+      }),
+      sidebarMenuAction({
+        id: "batch-delete", label: t("sessionOrganization.moveToTrash"), icon: <IconTrash size={14} />,
+        disabled: organizationBusy || count === 0,
+        onSelect: () => void runSessionAction("trash"),
+      }),
+    ],
+  });
 
   const sortMenuContent = useMemo(
     (): SidebarMenuPanelContent => ({
@@ -2149,9 +1906,9 @@ export function Sidebar({
         key={session.id}
         className={`thread-item ${active ? "active" : ""} ${archived ? "archived" : ""} ${draggingSessionId === session.id ? "is-dragging" : ""} ${selectedIds.has(session.id) ? "selected" : ""}`}
         data-sidebar-session-row={session.id}
-        draggable={!running && !isRemoteSession(session)}
+        draggable={!selection.active && !running && !isRemoteSession(session)}
         onDragStart={(event) => {
-          if (running || isRemoteSession(session)) {
+          if (selection.active || running || isRemoteSession(session)) {
             event.preventDefault();
             return;
           }
@@ -2160,7 +1917,7 @@ export function Sidebar({
         onDragEnd={endSessionDrag}
         onClick={(event) => {
           const target = event.target as HTMLElement | null;
-          if (target?.closest("button, [data-action]")) return;
+          if (target?.closest("button, input, label, [data-action]")) return;
           if (handleMultiSelectClick(event, session.id)) return;
           cancelSessionPrefetch();
           hideSessionHoverCard();
@@ -2173,8 +1930,8 @@ export function Sidebar({
           event.stopPropagation();
           // If right-clicking a non-selected row while multi-select is active,
           // add it to the selection instead of replacing.
-          if (selectedIds.size > 0 && !selectedIds.has(session.id)) {
-            setSelectedIds((prev) => new Set([...prev, session.id]));
+          if (selection.active && !organizationBusy && !selectedIds.has(session.id)) {
+            selection.enter(session.id);
           }
           placeMenuAtPoint(event.clientX, event.clientY);
           openSessionRowMenu(
@@ -2185,7 +1942,9 @@ export function Sidebar({
           );
         }}
       >
-        {status ? renderSessionStatus(status) : null}
+        {selection.active ? <Checkbox className="session-selection-checkbox" label={<span className="sr-only">{t("sessionOrganization.selectSession", { title: taskTitle(session.title) })}</span>}
+          checked={selectedIds.has(session.id)} disabled={organizationBusy} onChange={() => selection.toggle(session.id)} />
+          : status ? renderSessionStatus(status) : null}
         <button
           type="button"
           className="thread-item-main"
@@ -2208,6 +1967,7 @@ export function Sidebar({
               ? selectTemporarySession(session.id)
               : selectProjectSession(session));
           }}
+          aria-pressed={selection.active ? selectedIds.has(session.id) : undefined}
           aria-current={active ? "page" : undefined}
           aria-describedby={sessionHoverCard?.session.id === session.id ? `session-hover-${session.id}` : undefined}
         >
@@ -2237,6 +1997,7 @@ export function Sidebar({
           ) : null}
           <TooltipButton
             type="button"
+            disabled={organizationBusy}
             className="thread-item-more"
             data-action="session-menu"
             tooltip={t("nav.sessionActions", { defaultValue: "Session actions" })}
@@ -2249,6 +2010,7 @@ export function Sidebar({
                 closeMenus();
                 return;
               }
+              if (selection.active) selection.enter(session.id);
               placeMenu(event);
               openSessionRowMenu(session.id, event.currentTarget);
             }}
@@ -2501,6 +2263,11 @@ export function Sidebar({
                   else void openProjectPicker();
                 },
               }),
+              sidebarMenuAction({
+                id: "select-sessions", label: t("sessionOrganization.select"), icon: <IconCheck size={14} />,
+                disabled: organizationBusy,
+                onSelect: () => { closeMenus(); selection.enter(); },
+              }),
             ],
           }}
         />,
@@ -2586,6 +2353,11 @@ export function Sidebar({
       </div>
 
       <div className="sidebar-body no-drag">
+        {selection.active && <SessionSelectionToolbar count={selectedIds.size} total={flatSessionOrder.length}
+          busy={organizationBusy} onSelectAll={selection.selectAll} onExit={selection.exit}
+          onArchive={hasUnarchivedSelection ? () => void runSessionAction("archive") : undefined}
+          onUnarchive={hasArchivedSelection ? () => void runSessionAction("unarchive") : undefined}
+          onTrash={() => void runSessionAction("trash")} />}
 
         {pinnedSessions.length > 0 ? (
           <section
@@ -2626,6 +2398,12 @@ export function Sidebar({
               {t("nav.sessions", { defaultValue: "Sessions" })}
             </span>
             <div className="sidebar-toolbar-actions">
+              <TooltipButton className="sidebar-toolbar-button" data-action="select-sessions"
+                tooltip={t("sessionOrganization.select")} ariaLabel={t("sessionOrganization.select")}
+                aria-pressed={selection.active} disabled={organizationBusy}
+                onClick={() => { closeMenus(); selection.active ? selection.exit() : selection.enter(); }}>
+                <IconCheck size={14} />
+              </TooltipButton>
               <div className="sidebar-menu-wrap">
                 <TooltipButton
                   type="button"
@@ -2751,6 +2529,11 @@ export function Sidebar({
 
         <div className="sidebar-footer no-drag">
           <div className="footer-actions">
+            <TooltipButton className="footer-action" data-nav="recycle-bin"
+              tooltip={t("sessionOrganization.trashTitle")} ariaLabel={t("sessionOrganization.trashTitle")}
+              disabled={organizationBusy} onClick={() => { closeMenus(); setTrashOpen(true); }}>
+              <IconTrash size={14} aria-hidden />
+            </TooltipButton>
             <TooltipButton
               type="button"
               className={`footer-action ${page === "settings" ? "active" : ""}`}
@@ -2816,6 +2599,7 @@ export function Sidebar({
         </div>
       </div>
       {renderFloatingMenu()}
+      {trashOpen && <SessionTrashDialog onClose={() => setTrashOpen(false)} />}
       {sessionHoverCard ? (
         <SessionHoverCard
           key={sessionHoverCard.session.id}

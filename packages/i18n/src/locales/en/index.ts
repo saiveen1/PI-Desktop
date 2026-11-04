@@ -1,4 +1,16 @@
 export const en = {
+  sessionOrganization: {
+    select: "Select sessions", selectVisible: "Select visible", selectSession: "Select {{title}}",
+    done: "Done", selected: "{{count}} selected", unarchive: "Unarchive", moveToTrash: "Move to recycle bin",
+    trashTitle: "Recycle bin",
+    trashDescription: "Deleted sessions stay here until you restore or permanently delete them. Restoring keeps their original archive and pin state.",
+    empty: "The recycle bin is empty.", loading: "Loading sessions…", retry: "Retry", restore: "Restore",
+    deletePermanently: "Delete permanently",
+    confirmDelete: "Permanently delete {{count}} selected sessions? Their history and any isolated worktrees will be removed. This cannot be undone.",
+    deletedAt: "Deleted {{date}}", unsupported: "Only local Desktop sessions can be moved to the recycle bin.",
+    running: "Stop this session before moving it to the recycle bin.", failed: "{{title}}: {{reason}}",
+    processed: "Processed {{count}} sessions.", restored: "Restored {{count}} sessions.", permanentlyDeleted: "Permanently deleted {{count}} sessions.",
+  },
   delegationApproval: {
     label: "Delegation approval", title: "Approve delegated model", reason: "Selection reason",
     allowOnce: "Allow once", useOther: "Use another model", cancel: "Cancel delegation",

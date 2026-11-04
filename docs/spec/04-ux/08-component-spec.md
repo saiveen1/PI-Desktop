@@ -1488,6 +1488,21 @@ session (`task_runs.session_id`), the host reports that ownership as
 point. Global session search hides the same rows. Deleting the task releases the
 transcript back into the ordinary lists (issue #1291).
 
+Session menus and the list toolbar expose **Select sessions**. Selection mode
+adds shared checkboxes and a compact, wrapping action bar with the selected
+count, Select visible, Done, Archive, Unarchive and Move to recycle bin. Only
+applicable archive actions appear. Selection never navigates or drags sessions;
+hidden/folded rows are excluded from range selection and Select visible.
+
+The sidebar footer opens the **Recycle bin** dialog, distinct from Show archived.
+The host owns trash membership; renderer organization metadata survives trash
+and restore. The dialog displays title, project, deletion time, empty/loading/
+retry states, and multi-select Restore/Delete permanently. Permanent deletion
+requires an explicit, count-specific confirmation and warns about associated
+isolated worktrees. Controls are disabled while mutations run; only successful
+items disappear, and failed items remain selected. Tab stays within the dialog,
+Escape cancels confirmation before closing, and closing restores focus.
+
 ### 6.2 Anatomy
 
 Groups and session items:

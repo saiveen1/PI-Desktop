@@ -216,10 +216,11 @@ test("sidebar row menus expose hover submenus for related actions", () => {
   assert.ok(projectMenu, "project menu content must exist");
   assert.ok(sortMenu, "sort menu content must exist");
 
-  /* Destructive actions are nested instead of sharing the root menu. */
-  assert.match(sessionMenu, /sidebarMenuSubmenu\(\{[\s\S]*?id: "session-danger"[\s\S]*?id: "delete-session"/);
+  /* Session removal is reversible; only project deletion stays destructive here. */
+  assert.match(sessionMenu, /id: "delete-session"[\s\S]*?sessionOrganization\.moveToTrash/);
   assert.match(projectMenu, /sidebarMenuSubmenu\(\{[\s\S]*?id: "project-danger"[\s\S]*?id: "delete-project"/);
-  assert.match(sidebarSource, /sidebarMenuSubmenu\(\{[\s\S]*?id: "batch-danger"[\s\S]*?id: "batch-delete"/);
+  assert.match(sidebarSource, /id: "batch-delete"[\s\S]*?sessionOrganization\.moveToTrash/);
+  assert.doesNotMatch(sessionMenu, /deleteTaskConfirm|deleteSessionAction/);
   assert.match(sessionMenu, /id: "batch-archive"|id: "copy-session-link"/);
 
   /* Related actions open as real second-level menus. */

@@ -1,6 +1,18 @@
 import { en, type EnglishCatalog } from "../en/index.js";
 
 export const zhTW = {
+  sessionOrganization: {
+    select: "多選", selectVisible: "全選可見任務", selectSession: "選擇「{{title}}」",
+    done: "完成", selected: "已選 {{count}} 項", unarchive: "取消封存", moveToTrash: "移至資源回收筒",
+    trashTitle: "資源回收筒",
+    trashDescription: "刪除的任務會保留在此，直到你還原或永久刪除。還原時保留原有的封存和釘選狀態。",
+    empty: "資源回收筒是空的。", loading: "正在載入任務…", retry: "重試", restore: "還原",
+    deletePermanently: "永久刪除",
+    confirmDelete: "確定永久刪除選取的 {{count}} 個任務？對話記錄和相關的隔離工作目錄將被清除，此操作無法復原。",
+    deletedAt: "刪除於 {{date}}", unsupported: "僅本機 Desktop 對話支援移至資源回收筒。",
+    running: "請先停止此任務，再移至資源回收筒。", failed: "{{title}}：{{reason}}",
+    processed: "已處理 {{count}} 個任務。", restored: "已還原 {{count}} 個任務。", permanentlyDeleted: "已永久刪除 {{count}} 個任務。",
+  },
   delegationApproval: {
     label: "子代理模型核准", title: "核准本次使用的模型", reason: "選擇理由",
     allowOnce: "僅允許本次", useOther: "改用其他模型", cancel: "取消本次委派",

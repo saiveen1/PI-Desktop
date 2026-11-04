@@ -394,6 +394,56 @@ export function registerSessionIpc({
     }
     return { ...result, session: enrichSession(result.session, providers, defaults) };
   });
+  handle(IPC.invoke.sessionTrashList, async () => {
+    const currentHost = getHost();
+    if (!currentHost) throw new Error("host unavailable");
+    return currentHost.call("session.listTrashed", {});
+  });
+  const mutateTrash = async (
+    method: "session.trash" | "session.restoreTrashed" | "session.deleteTrashed",
+    input: unknown,
+  ) => {
+    if (typeof input !== "string" || !input.trim() || input.length > 256
+      || input.startsWith("native-pi:") || input.startsWith("remote:")) {
+      throw Object.assign(new Error("A local Desktop session id is required"), { errorCode: ErrorCodes.INVALID_ARGUMENT });
+    }
+    const id = input;
+    const currentHost = getHost();
+    const currentSidecar = getSidecar();
+    if (!currentHost) throw new Error("host unavailable");
+    const release = await acquireSessionOperation(id);
+    try {
+      if (activeTurns.has(id)) {
+        throw Object.assign(new Error("Stop the session before recycling it"), { errorCode: ErrorCodes.AGENT_BUSY });
+      }
+      if (method === "session.trash") await persistenceOutbox.prepareSessionMutation(id, getHost);
+      if (currentHost !== getHost() || currentSidecar !== getSidecar()) {
+        throw Object.assign(new Error("Host changed during session operation"), { errorCode: ErrorCodes.HOST_UNAVAILABLE });
+      }
+      if (activeTurns.has(id)) {
+        throw Object.assign(new Error("Stop the session before recycling it"), { errorCode: ErrorCodes.AGENT_BUSY });
+      }
+      const result = await currentHost.call<{ ok: boolean }>(method, { id });
+      if (result.ok && method !== "session.restoreTrashed") {
+        if (method === "session.deleteTrashed") await persistenceOutbox.dropSession(id);
+        forgetTranscriptRewriteHistory(id);
+        sessionProjects.delete(id);
+        if (currentSidecar) {
+          currentSidecar.clearProjectInstructionRoot(id);
+          currentSidecar.clearVendorAuthBindings(id);
+          await currentSidecar.call("agent.disposeSession", { sessionId: id }).catch((error: unknown) => {
+            logger.app("session", "warn", "recycled session runtime disposal failed", { sessionId: id, data: { error: String(error) } });
+          });
+        }
+      }
+      return result;
+    } finally {
+      release();
+    }
+  };
+  handle(IPC.invoke.sessionTrash, (id: unknown) => mutateTrash("session.trash", id));
+  handle(IPC.invoke.sessionTrashRestore, (id: unknown) => mutateTrash("session.restoreTrashed", id));
+  handle(IPC.invoke.sessionTrashDelete, (id: unknown) => mutateTrash("session.deleteTrashed", id));
   handle(IPC.invoke.sessionDelete, async (id: string) => {
     if (id.startsWith("native-pi:")) {
       throw Object.assign(new Error("Native Pi sessions cannot be deleted from PI-Desktop"), {

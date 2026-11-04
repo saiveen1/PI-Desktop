@@ -136,9 +136,8 @@ async function createNamedProjectGroup(
 }
 
 /**
- * Purge renderer-local state for one session whose durable row is already gone
- * (deleted directly, or removed together with its project). This never talks to
- * the host: records and transcripts are deleted before it runs.
+ * Release renderer resources after a session leaves the active catalog.
+ * Recycle-bin moves retain organization metadata; permanent deletion drops it.
  */
 function clearLocalSessionState(
   {
@@ -151,6 +150,7 @@ function clearLocalSessionState(
     "get" | "set" | "runtime" | "withoutRecordKey"
   >,
   id: string,
+  preserveMetadata = false,
 ): void {
   forgetTranscriptReadingState(id);
   runtime.pendingSessionConfigurations.delete(id);
@@ -160,7 +160,7 @@ function clearLocalSessionState(
   if (get().activeSessionId === id) get().resetWorkPanelContext();
   set((state) => {
     const sessionMeta = { ...state.sessionMeta };
-    delete sessionMeta[id];
+    if (!preserveMetadata) delete sessionMeta[id];
     const sessions = state.sessions.filter((session) => session.id !== id);
     const runningSessions = { ...state.runningSessions };
     delete runningSessions[id];
@@ -250,6 +250,9 @@ export function createProjectSlice({
   | "renameSession"
   | "moveSessionProject"
   | "deleteSession"
+  | "trashSession"
+  | "restoreTrashedSession"
+  | "deleteTrashedSession"
   | "setSessionSort"
   | "setSessionArchiveVisibility"
   | "setSessionView"
@@ -595,6 +598,28 @@ export function createProjectSlice({
       clearLocalSessionState({ get, set, runtime, withoutRecordKey }, id);
       persistCurrentSidebar(get);
       await get().refreshSessions();
+    },
+
+    trashSession: async (id) => {
+      const result = await api.trashSession(id);
+      if (!result.ok) throw new Error(i18n.t("errors.sessionNotFound"));
+      void api.pluginViewClose("pi.browser", "browser", { sessionId: id })
+        .catch((error) => get().showToast(String(error), { variant: "error" }));
+      clearLocalSessionState({ get, set, runtime, withoutRecordKey }, id, true);
+      persistCurrentSidebar(get);
+    },
+
+    restoreTrashedSession: async (id) => {
+      const result = await api.restoreTrashedSession(id);
+      if (!result.ok) throw new Error(i18n.t("errors.sessionNotFound"));
+      // The recycle-bin batch refreshes once after all successful restores.
+    },
+
+    deleteTrashedSession: async (id) => {
+      const result = await api.deleteTrashedSession(id);
+      if (!result.ok) throw new Error(i18n.t("errors.sessionNotFound"));
+      clearLocalSessionState({ get, set, runtime, withoutRecordKey }, id);
+      persistCurrentSidebar(get);
     },
 
     setSessionSort: (sort) => {

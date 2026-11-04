@@ -1,6 +1,18 @@
 import { en, type EnglishCatalog } from "../en/index.js";
 
 export const tr = {
+  sessionOrganization: {
+    select: "Oturumları seç", selectVisible: "Görünenleri seç", selectSession: "{{title}} oturumunu seç",
+    done: "Bitti", selected: "{{count}} seçildi", unarchive: "Arşivden çıkar", moveToTrash: "Geri dönüşüm kutusuna taşı",
+    trashTitle: "Geri dönüşüm kutusu",
+    trashDescription: "Silinen oturumlar, geri yüklenene veya kalıcı olarak silinene kadar burada kalır. Geri yükleme, önceki arşivleme ve sabitleme durumunu korur.",
+    empty: "Geri dönüşüm kutusu boş.", loading: "Oturumlar yükleniyor…", retry: "Yeniden dene", restore: "Geri yükle",
+    deletePermanently: "Kalıcı olarak sil",
+    confirmDelete: "Seçilen {{count}} oturum kalıcı olarak silinsin mi? Geçmişleri ve ilişkili yalıtılmış çalışma ağaçları kaldırılacak. Bu işlem geri alınamaz.",
+    deletedAt: "Silinme tarihi: {{date}}", unsupported: "Yalnızca yerel Desktop oturumları geri dönüşüm kutusuna taşınabilir.",
+    running: "Geri dönüşüm kutusuna taşımadan önce bu oturumu durdurun.", failed: "{{title}}: {{reason}}",
+    processed: "{{count}} oturum işlendi.", restored: "{{count}} oturum geri yüklendi.", permanentlyDeleted: "{{count}} oturum kalıcı olarak silindi.",
+  },
   delegationApproval: {
     label: "Yetkilendirme onayı", title: "Görevlendirilen modeli onayla", reason: "Seçim nedeni",
     allowOnce: "Bir kez izin ver", useOther: "Başka model kullan", cancel: "Görevlendirmeyi iptal et",

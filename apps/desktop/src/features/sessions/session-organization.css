@@ -1,0 +1,112 @@
+.session-selection-toolbar {
+  flex: 0 0 auto;
+  margin: 4px 0;
+  padding: 8px;
+  border: 1px solid var(--ds-border-default);
+  border-radius: var(--radius-sm);
+  background: var(--ds-bg-secondary);
+}
+
+.session-selection-heading,
+.session-selection-actions,
+.session-trash-heading,
+.session-trash-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.session-selection-heading,
+.session-trash-heading {
+  justify-content: space-between;
+}
+
+.session-selection-count {
+  display: block;
+  margin: 4px 0 6px;
+  color: var(--ds-text-secondary);
+  font-size: var(--text-sm);
+}
+
+.thread-item .session-selection-checkbox {
+  margin-left: 5px;
+  flex-shrink: 0;
+}
+
+.thread-item:has(.session-selection-checkbox) .thread-item-main {
+  padding-left: 4px;
+}
+
+.session-trash-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(640px, calc(100vw - 32px));
+  max-height: calc(100dvh - 48px);
+  min-height: 0;
+}
+
+.session-trash-heading h2 {
+  margin: 0;
+  font-size: var(--text-lg);
+}
+
+.session-trash-description,
+.session-trash-empty {
+  color: var(--ds-text-secondary);
+  font-size: var(--text-sm);
+}
+
+.session-trash-list {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-block: 1px solid var(--ds-border-default);
+}
+
+.session-trash-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 2px;
+}
+
+.session-trash-row .ui-checkbox {
+  min-width: 0;
+  flex: 1;
+}
+
+.session-trash-row .ui-checkbox > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.session-trash-details {
+  display: block;
+  margin-top: 3px;
+  color: var(--ds-text-muted);
+  font-size: var(--text-xs);
+  overflow-wrap: anywhere;
+}
+
+.session-trash-confirmation {
+  padding: 10px;
+  border: 1px solid var(--ds-border-default);
+  border-radius: var(--radius-sm);
+}
+
+.session-trash-confirmation p {
+  margin: 0 0 8px;
+  overflow-wrap: anywhere;
+}
+
+.session-trash-danger,
+.session-trash-error {
+  color: var(--ds-error);
+}
+
+.session-trash-error {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

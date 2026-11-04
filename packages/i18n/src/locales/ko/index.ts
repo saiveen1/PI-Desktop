@@ -1,6 +1,18 @@
 import { en, type EnglishCatalog } from "../en/index.js";
 
 export const ko = {
+  sessionOrganization: {
+    select: "세션 선택", selectVisible: "표시된 항목 선택", selectSession: "{{title}} 선택",
+    done: "완료", selected: "{{count}}개 선택됨", unarchive: "보관 해제", moveToTrash: "휴지통으로 이동",
+    trashTitle: "휴지통",
+    trashDescription: "삭제한 세션은 복원하거나 영구 삭제할 때까지 여기에 보관됩니다. 복원 시 기존 보관 및 고정 상태가 유지됩니다.",
+    empty: "휴지통이 비어 있습니다.", loading: "세션을 불러오는 중…", retry: "다시 시도", restore: "복원",
+    deletePermanently: "영구 삭제",
+    confirmDelete: "선택한 세션 {{count}}개를 영구 삭제할까요? 기록과 연결된 격리 작업 트리가 삭제되며 되돌릴 수 없습니다.",
+    deletedAt: "삭제 일시: {{date}}", unsupported: "로컬 Desktop 세션만 휴지통으로 이동할 수 있습니다.",
+    running: "휴지통으로 이동하기 전에 이 세션을 중지하세요.", failed: "{{title}}: {{reason}}",
+    processed: "세션 {{count}}개를 처리했습니다.", restored: "세션 {{count}}개를 복원했습니다.", permanentlyDeleted: "세션 {{count}}개를 영구 삭제했습니다.",
+  },
   delegationApproval: {
     label: "위임 승인", title: "위임 모델 승인", reason: "선택 이유",
     allowOnce: "이번만 허용", useOther: "다른 모델 사용", cancel: "위임 취소",

@@ -1102,6 +1102,19 @@ Minimal interface:
   `session/get` and must never enter the renderer's live transcript cache.
   Both channels are explicitly included in the preload IPC allowlist.
 - `session/delete`
+- `session/trash/list() -> { sessions: (SessionSummary & { deletedAt: string })[] }`
+  lists host-owned recycle-bin entries, including previously trashed imports.
+- `session/trash(id) -> { ok: boolean }` moves an idle local Desktop session into
+  the recycle bin. Main serializes with session operations and drains pending
+  transcript writes before calling Host; failed drains preserve the session.
+- `session/trash/restore(id) -> { ok: boolean }` clears trash membership without
+  resetting renderer pin/archive metadata.
+- `session/trash/delete(id) -> { ok: boolean }` permanently deletes only a trashed
+  session, including its isolated worktrees. UI confirmation belongs to the
+  recycle-bin dialog. All mutations reject native/remote identities and running
+  sessions, release locks on failure, and verify host identity across awaits.
+  These additive allowlisted channels do not change `session/delete` or the
+  plugin deletion API. See [session recycle-bin ADR](../../adr/session-recycle-bin.md).
 - `session/rename({ id, title }) -> { ok: boolean }` trims the title and
   accepts 1–80 Unicode code points. Blank or overlong titles are rejected as
   `INVALID_PARAMS`; a successful rename changes only session metadata and does

@@ -1,6 +1,18 @@
 import { en, type EnglishCatalog } from "../en/index.js";
 
 export const zhCN = {
+  sessionOrganization: {
+    select: "多选", selectVisible: "全选可见任务", selectSession: "选择“{{title}}”",
+    done: "完成", selected: "已选 {{count}} 项", unarchive: "取消归档", moveToTrash: "移入回收站",
+    trashTitle: "回收站",
+    trashDescription: "删除的任务会保留在这里，直到你恢复或永久删除。恢复时保留原有的归档和置顶状态。",
+    empty: "回收站为空。", loading: "正在加载任务…", retry: "重试", restore: "恢复",
+    deletePermanently: "永久删除",
+    confirmDelete: "确定永久删除选中的 {{count}} 个任务？会话记录和关联的隔离工作目录将被清除，此操作无法撤销。",
+    deletedAt: "删除于 {{date}}", unsupported: "仅本地 Desktop 会话支持移入回收站。",
+    running: "请先停止此任务，再移入回收站。", failed: "{{title}}：{{reason}}",
+    processed: "已处理 {{count}} 个任务。", restored: "已恢复 {{count}} 个任务。", permanentlyDeleted: "已永久删除 {{count}} 个任务。",
+  },
   delegationApproval: {
     label: "子代理模型审批", title: "批准本次使用的模型", reason: "选择理由",
     allowOnce: "仅允许本次", useOther: "改用其他模型", cancel: "取消本次委派",

@@ -6,6 +6,37 @@
 
 ---
 
+### E2E-SESSION-recycle-bin-and-multiselect
+
+- **Preconditions:** Isolated renderer profile and synthetic sessions: pinned,
+  archived, running, native Pi, project history beyond the initial ten rows,
+  and a collapsed project. Host fixtures use temporary SQLite/transcript roots.
+- **Steps:** Enter Select sessions from the toolbar and row menu. Toggle rows,
+  select a range and Select visible; archive, reveal Show archived, and unarchive
+  a batch. Move pinned and archived sessions to the recycle bin, reopen the
+  dialog, select all and restore. Repeat, cancel permanent deletion with Cancel
+  and Escape, then explicitly confirm. Inject listing and per-item mutation
+  failures and retry. Attempt to trash running/native sessions. Reopen the host
+  fixture between trash and restore; inspect transcript/worktree retention.
+- **Expected:** Selection does not navigate or drag. Hidden/folded rows are
+  never selected by visible/range selection. Archive does not delete or stop
+  work. Trashed sessions disappear from ordinary list/search, retain data and
+  original archive/pin state, and never expire automatically. Only confirmed
+  permanent deletion removes durable data/worktrees. Failed targets stay selected;
+  unsupported/running targets are rejected; stale loads cannot replace a newer
+  dialog state. Repeated submissions are disabled. All nine locales have matching
+  interpolation keys.
+- **Specs:** [interaction-patterns §2](../04-ux/09-interaction-patterns.md),
+  [component-spec §6](../04-ux/08-component-spec.md),
+  [data-storage](../03-runtime/04-data-storage.md).
+- **Acceptance:** Normal and archived tasks can be batch-organized; recycling
+  remains reversible until explicit permanent deletion.
+- **Milestone:** Post-MVP session organization.
+- **Status:** Automated component user path in
+  `apps/desktop/test/session-organization-user-path.test.mjs`; backend contract
+  coverage accompanies the recycle-bin RPC implementation. No daily Desktop or
+  live provider is part of these fixtures.
+
 ### E2E-DELEGATION-scheduling-and-model-approval
 
 - Preconditions: Isolated settings, synthetic providers and a local HTTP/SSE
@@ -10997,6 +11028,7 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
 
 | Acceptance | Scenarios |
 |---|---|
+| A / Data safety / Quality — Session multiselect and reversible deletion | E2E-SESSION-recycle-bin-and-multiselect |
 | C / E / Security / Quality — Unified delegation scheduling and model consent | E2E-DELEGATION-scheduling-and-model-approval |
 | A / F / Quality — Self-managed daily release and isolated Dev | E2E-RELEASE-self-managed-daily-build |
 | A / F / Security — Explicit Dev data-directory inheritance | E2E-DEV-explicit-data-directory-inheritance |

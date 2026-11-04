@@ -819,6 +819,10 @@ export const api = {
   getSessionCollaboration: (sessionId: string) =>
     invoke<SessionCollaborationSummary>(IPC.invoke.sessionCollaboration, { sessionId }),
   deleteSession: (id: string) => invoke(IPC.invoke.sessionDelete, id),
+  listTrashedSessions: () => invoke<{ sessions: (SessionSummary & { deletedAt: string })[] }>(IPC.invoke.sessionTrashList),
+  trashSession: (id: string) => invoke<{ ok: boolean }>(IPC.invoke.sessionTrash, id),
+  restoreTrashedSession: (id: string) => invoke<{ ok: boolean }>(IPC.invoke.sessionTrashRestore, id),
+  deleteTrashedSession: (id: string) => invoke<{ ok: boolean }>(IPC.invoke.sessionTrashDelete, id),
   getSessionScratchPath: (sessionId: string) =>
     invoke<{ path: string }>(IPC.invoke.sessionGetScratchPath, { sessionId }),
   openSessionScratchPath: (sessionId: string) =>

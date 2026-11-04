@@ -1,6 +1,18 @@
 import { en, type EnglishCatalog } from "../en/index.js";
 
 export const de = {
+  sessionOrganization: {
+    select: "Sitzungen auswählen", selectVisible: "Sichtbare auswählen", selectSession: "{{title}} auswählen",
+    done: "Fertig", selected: "{{count}} ausgewählt", unarchive: "Aus Archiv holen", moveToTrash: "In den Papierkorb",
+    trashTitle: "Papierkorb",
+    trashDescription: "Gelöschte Sitzungen bleiben hier, bis Sie sie wiederherstellen oder endgültig löschen. Archiv- und Anheftstatus bleiben bei der Wiederherstellung erhalten.",
+    empty: "Der Papierkorb ist leer.", loading: "Sitzungen werden geladen…", retry: "Erneut versuchen", restore: "Wiederherstellen",
+    deletePermanently: "Endgültig löschen",
+    confirmDelete: "{{count}} ausgewählte Sitzungen endgültig löschen? Ihr Verlauf und zugehörige isolierte Worktrees werden entfernt. Dies kann nicht rückgängig gemacht werden.",
+    deletedAt: "Gelöscht am {{date}}", unsupported: "Nur lokale Desktop-Sitzungen können in den Papierkorb verschoben werden.",
+    running: "Beenden Sie diese Sitzung, bevor Sie sie in den Papierkorb verschieben.", failed: "{{title}}: {{reason}}",
+    processed: "{{count}} Sitzungen verarbeitet.", restored: "{{count}} Sitzungen wiederhergestellt.", permanentlyDeleted: "{{count}} Sitzungen endgültig gelöscht.",
+  },
   delegationApproval: {
     label: "Delegationsfreigabe", title: "Delegiertes Modell freigeben", reason: "Auswahlgrund",
     allowOnce: "Einmal erlauben", useOther: "Anderes Modell verwenden", cancel: "Delegation abbrechen",

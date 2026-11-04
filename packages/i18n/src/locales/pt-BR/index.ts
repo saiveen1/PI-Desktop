@@ -1,6 +1,18 @@
 import { en, type EnglishCatalog } from "../en/index.js";
 
 export const ptBR = {
+  sessionOrganization: {
+    select: "Selecionar sessões", selectVisible: "Selecionar visíveis", selectSession: "Selecionar {{title}}",
+    done: "Concluído", selected: "{{count}} selecionadas", unarchive: "Desarquivar", moveToTrash: "Mover para a lixeira",
+    trashTitle: "Lixeira",
+    trashDescription: "As sessões excluídas ficam aqui até serem restauradas ou excluídas permanentemente. A restauração mantém o estado de arquivamento e fixação original.",
+    empty: "A lixeira está vazia.", loading: "Carregando sessões…", retry: "Tentar novamente", restore: "Restaurar",
+    deletePermanently: "Excluir permanentemente",
+    confirmDelete: "Excluir permanentemente as {{count}} sessões selecionadas? O histórico e os worktrees isolados associados serão removidos. Esta ação não pode ser desfeita.",
+    deletedAt: "Excluída em {{date}}", unsupported: "Somente sessões locais do Desktop podem ser movidas para a lixeira.",
+    running: "Pare esta sessão antes de movê-la para a lixeira.", failed: "{{title}}: {{reason}}",
+    processed: "{{count}} sessões processadas.", restored: "{{count}} sessões restauradas.", permanentlyDeleted: "{{count}} sessões excluídas permanentemente.",
+  },
   delegationApproval: {
     label: "Aprovação de delegação", title: "Aprovar modelo delegado", reason: "Motivo da seleção",
     allowOnce: "Permitir uma vez", useOther: "Usar outro modelo", cancel: "Cancelar delegação",

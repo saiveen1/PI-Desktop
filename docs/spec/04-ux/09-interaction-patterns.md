@@ -271,10 +271,29 @@ may be retained while exactly one workspace supplies the visible shell context.
 - **Archive** is non-destructive. Archived rows are hidden by default,
   available through Show archived, and restorable. Archiving does not cancel
   a turn or delete a transcript.
-- **Delete** removes a session or project permanently. Session deletion takes two
-  clicks: the first arms the overflow item and relabels it, and only the second
-  click removes the row. Project deletion opens a confirmation dialog as soon as
-  Delete is chosen from its menu. Only the dialog's explicit Delete button
+- **Select sessions** is available from the session toolbar and row/section
+  menus. Selection mode exposes checkboxes, a selected count, Select visible,
+  Done, and applicable Archive / Unarchive / Move to recycle bin actions.
+  Plain row clicks toggle selection without navigating; Ctrl/Cmd toggles and
+  Shift ranges remain available. Selection follows rendered order and excludes
+  collapsed groups, folded history and filtered rows. Escape exits selection
+  after any open menu or dialog has handled it. Batch operations retain failed
+  targets for retry and remove only successful targets from the selection.
+- **Move to recycle bin** replaces permanent deletion in local Desktop session
+  menus. It preserves transcripts, isolated worktrees, and original pin/archive
+  metadata. Running sessions must be stopped first. Native Pi and remote session
+  storage is not modified by this action; unsupported batch targets report an
+  error instead of silently disappearing. Archive remains presentation-only.
+- **Recycle bin** has a dedicated sidebar footer entry. Its dialog lists trashed
+  sessions with project and deletion time and supports multi-select Restore or
+  Delete permanently. Restore retains the original archive/pin state. There is
+  no automatic expiry. Permanent deletion requires an explicit confirmation
+  naming the selected count and warning about transcript/worktree loss. The
+  confirmed identity set is fixed; Cancel/Escape dismiss confirmation without
+  deleting anything. Mutations disable repeated submission, partial failures
+  remain selected, and failed listing exposes Retry.
+- **Delete project** retains its separate permanent-deletion confirmation. The
+  dialog opens as soon as Delete is chosen. Only its explicit Delete button
   removes the project; X, Cancel, Escape, or clicking the backdrop dismisses it
   without changing anything. The dialog names the project and session count,
   leaves the folder on disk untouched, and names/stops live sessions only after

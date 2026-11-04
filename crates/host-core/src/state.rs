@@ -44,6 +44,8 @@ pub struct AppState {
     /// One reconciliation worker per local vault. The lock is separate from
     /// the AppState mutex so WebDAV I/O never monopolizes the host state lock.
     pub config_sync_lock: Arc<tokio::sync::Mutex<()>>,
+    /// Serialize restore with permanent deletion across asynchronous Git cleanup.
+    pub session_trash_lock: Arc<tokio::sync::Mutex<()>>,
     /// Process-local status for the single active sync worker. It is never
     /// persisted and only drives the renderer's transient "syncing" state.
     pub config_sync_in_progress: Arc<AtomicBool>,
@@ -151,6 +153,7 @@ impl AppState {
             user_skills,
             user_subagents,
             config_sync_lock: Arc::new(tokio::sync::Mutex::new(())),
+            session_trash_lock: Arc::new(tokio::sync::Mutex::new(())),
             config_sync_in_progress: Arc::new(AtomicBool::new(false)),
             background_tasks: crate::background_tasks::BackgroundTaskRegistry::default(),
             started_at: Instant::now(),

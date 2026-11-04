@@ -681,7 +681,7 @@ CREATE TABLE sessions (
   fast_mode   INTEGER NOT NULL DEFAULT 0       -- ADR 0334: session /fast switch
                CHECK (fast_mode IN (0, 1)),
   source      TEXT,                            -- import origin: claude-code | codex | opencode | pi
-  deleted_at  INTEGER,                         -- plugin trash marker; null means active
+  deleted_at  INTEGER,                         -- host recycle-bin marker; null means active
   pinned      INTEGER NOT NULL DEFAULT 0,
   last_seq    INTEGER NOT NULL DEFAULT 0,      -- current message count / ordinal allocator
   created_at  INTEGER NOT NULL,
@@ -757,10 +757,20 @@ CREATE INDEX idx_session_import_origins_plugin
   state.
 - `source` + deterministic imported ids keep re-imports idempotent and let the
   UI badge imported sessions.
-- `deleted_at` is a host timestamp used by the plugin `trash` operation. A
-  trashed plugin session is hidden from normal session lists and plugin reads,
-  but its transcript and origin remain until the owning plugin purges it. Core
-  session deletion cascades the sidecar; purging also removes transcript files.
+- `deleted_at` is a host timestamp shared by Desktop recycling and the existing
+  plugin `trash` operation. Trashed sessions are hidden from normal list, detail,
+  search and plugin reads, and cannot start or queue turns. Transcript, origin,
+  project binding and isolated worktrees remain intact across restart. Desktop
+  lists all host-owned trashed rows, including plugin imports, and may restore
+  or explicitly purge them; plugin ownership checks and API semantics do not
+  change. Restoring clears only this marker. Renderer pin/archive metadata is
+  retained separately through trash and restore. No automatic expiry runs.
+- Permanent deletion requires trash membership through the new Desktop route,
+  removes isolated worktrees first, then uses the existing session/transcript/
+  side-data cleanup. A host-owned gate serializes restore with asynchronous
+  deletion. Running turns and pending queue/plan/collaboration work are refused.
+  The existing internal `session.delete` and project-deletion contracts remain
+  unchanged. Reusing this already-migrated field needs no new schema version.
 - `session_import_origins` stores the plugin/source/external idempotency key and
   the original `projectPath`, `modelId`, and `providerId` as history JSON. Those
   values never become active session bindings for plugin imports. A plugin may

@@ -1315,13 +1315,12 @@ fn session_created_at(db: &Database, session_id: &str) -> Result<String> {
         .ok_or_else(|| anyhow!("session not found: {session_id}"))
 }
 
-const SUMMARY_SELECT: &str =
+pub(crate) const SUMMARY_SELECT: &str =
     "SELECT s.id, s.title, s.last_seq, p.path, s.model_id, s.provider_id, s.mode,
             s.thinking_level, s.permission_mode, s.updated_at, s.created_at,
             EXISTS (SELECT 1 FROM task_runs r WHERE r.session_id = s.id) AS scheduled_run,
-            s.fast_mode
-     FROM sessions s LEFT JOIN projects p ON p.id = s.project_id
-     WHERE s.deleted_at IS NULL";
+            s.fast_mode, s.deleted_at
+     FROM sessions s LEFT JOIN projects p ON p.id = s.project_id";
 
 pub(crate) fn summary_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<SessionSummary> {
     Ok(SessionSummary {
@@ -1359,7 +1358,7 @@ fn attach_worktrees(db: &Database, summaries: &mut [SessionSummary]) -> Result<(
 // ---- sessions ---------------------------------------------------------------
 
 pub fn list_sessions(db: &Database) -> Result<Vec<SessionSummary>> {
-    let sql = format!("{SUMMARY_SELECT} ORDER BY s.updated_at DESC");
+    let sql = format!("{SUMMARY_SELECT} WHERE s.deleted_at IS NULL ORDER BY s.updated_at DESC");
     let mut stmt = db.conn().prepare_cached(&sql)?;
     let rows = stmt.query_map([], summary_from_row)?;
     let mut out = Vec::new();
@@ -1548,7 +1547,7 @@ pub fn get_session(db: &Database, id: &str) -> Result<Option<SessionDetail>> {
 /// just to check that the session exists. Everything they need is in
 /// `SUMMARY_SELECT`, so this is one indexed row.
 pub fn session_summary(db: &Database, id: &str) -> Result<Option<SessionSummary>> {
-    let sql = format!("{SUMMARY_SELECT} AND s.id = ?1");
+    let sql = format!("{SUMMARY_SELECT} WHERE s.deleted_at IS NULL AND s.id = ?1");
     let mut summary = db
         .conn()
         .prepare_cached(&sql)?
@@ -3892,7 +3891,7 @@ pub fn begin_turn(
         .prepare_cached(
             "INSERT INTO turns (id, session_id, provider_id, model_id, started_at)
              SELECT ?1, ?2, ?3, ?4, ?5
-             WHERE EXISTS (SELECT 1 FROM sessions WHERE id = ?2)
+             WHERE EXISTS (SELECT 1 FROM sessions WHERE id = ?2 AND deleted_at IS NULL)
                AND NOT EXISTS (
                  SELECT 1 FROM turns WHERE session_id = ?2 AND status = 'running'
                )",
@@ -3910,7 +3909,7 @@ pub fn begin_turn(
         })?;
     if inserted == 0 {
         let session_exists: bool = db.conn().query_row(
-            "SELECT EXISTS(SELECT 1 FROM sessions WHERE id = ?1)",
+            "SELECT EXISTS(SELECT 1 FROM sessions WHERE id = ?1 AND deleted_at IS NULL)",
             params![session_id],
             |row| row.get(0),
         )?;

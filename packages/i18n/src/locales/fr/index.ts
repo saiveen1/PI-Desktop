@@ -1,6 +1,18 @@
 import { en, type EnglishCatalog } from "../en/index.js";
 
 export const fr = {
+  sessionOrganization: {
+    select: "Sélectionner des sessions", selectVisible: "Sélectionner les visibles", selectSession: "Sélectionner {{title}}",
+    done: "Terminé", selected: "{{count}} sélectionnées", unarchive: "Désarchiver", moveToTrash: "Mettre à la corbeille",
+    trashTitle: "Corbeille",
+    trashDescription: "Les sessions supprimées restent ici jusqu’à leur restauration ou suppression définitive. La restauration conserve leur état d’archivage et d’épinglage.",
+    empty: "La corbeille est vide.", loading: "Chargement des sessions…", retry: "Réessayer", restore: "Restaurer",
+    deletePermanently: "Supprimer définitivement",
+    confirmDelete: "Supprimer définitivement les {{count}} sessions sélectionnées ? Leur historique et les worktrees isolés associés seront effacés. Cette action est irréversible.",
+    deletedAt: "Supprimée le {{date}}", unsupported: "Seules les sessions Desktop locales peuvent être mises à la corbeille.",
+    running: "Arrêtez cette session avant de la mettre à la corbeille.", failed: "{{title}} : {{reason}}",
+    processed: "{{count}} sessions traitées.", restored: "{{count}} sessions restaurées.", permanentlyDeleted: "{{count}} sessions supprimées définitivement.",
+  },
   delegationApproval: {
     label: "Approbation de délégation", title: "Approuver le modèle délégué", reason: "Motif de sélection",
     allowOnce: "Autoriser une fois", useOther: "Utiliser un autre modèle", cancel: "Annuler la délégation",

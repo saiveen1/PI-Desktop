@@ -153,6 +153,10 @@ export const IPC = {
     /** Validate and select a durable session from a reviewed host operation. */
     sessionOpen: "pi-desktop/session/open",
     sessionDelete: "pi-desktop/session/delete",
+    sessionTrashList: "pi-desktop/session/trash/list",
+    sessionTrash: "pi-desktop/session/trash",
+    sessionTrashRestore: "pi-desktop/session/trash/restore",
+    sessionTrashDelete: "pi-desktop/session/trash/delete",
     /** Isolated sessions in git worktrees (ADR 0329). */
     worktreeProbe: "pi-desktop/worktree/probe",
     worktreePreview: "pi-desktop/worktree/preview",

@@ -365,6 +365,22 @@ to later refresh and inference; the vendor picker does not collect them.
   cursors. Ordinary and uncapped reads omit this navigation-only field.
 - `session.delete` — for an isolated session, also removes its worktree and
   branch (discarding unmerged work)
+- `session.listTrashed({}) -> { sessions: (SessionSummary & { deletedAt: string })[] }`
+  returns soft-deleted rows, newest deletion first. `deletedAt` is RFC3339.
+- `session.trash({ id }) -> { ok: boolean }` marks an idle session deleted while
+  retaining transcripts, scratch/visualization/review data and isolated worktrees.
+  Repeated trash keeps the original deletion time. Background processes are
+  stopped and session-local tool snapshots dropped; no automatic purge runs.
+- `session.restoreTrashed({ id }) -> { ok: boolean }` clears the marker; no-op
+  missing/non-trashed targets return false.
+- `session.deleteTrashed({ id }) -> { ok: boolean }` refuses non-trashed targets
+  before filesystem changes, removes isolated worktrees, then invokes the
+  existing permanent session and side-data cleanup. Restore and purge share a
+  host-owned gate across Git I/O. All three mutations reject running turns and
+  pending queue/plan/collaboration work (`AGENT_BUSY`), and reject native/remote
+  identities (`INVALID_ARGUMENT`). Protocol v11 and the schema version stay
+  unchanged: existing methods, plugin permissions and persisted layouts remain
+  compatible.
 - `session.getScratchPath` — the session's scratch directory (D114), created
   on demand
 - `visualizations.readFragment({ sessionId, fileName })` — private Main-to-Host

@@ -7,6 +7,7 @@ mod remote_tools;
 mod scheduled_rpc;
 mod scheduled_settings;
 mod scheduled_tools;
+mod session_trash_rpc;
 mod todos;
 mod window_corner_rpc;
 mod worktree_rpc;
@@ -2965,6 +2966,10 @@ async fn handle_request(
             )?;
             Ok(json!({ "session": session }))
         }
+        "session.listTrashed"
+        | "session.trash"
+        | "session.restoreTrashed"
+        | "session.deleteTrashed" => session_trash_rpc::handle(&state, method, params).await,
         "session.delete" => {
             let id = params
                 .get("id")

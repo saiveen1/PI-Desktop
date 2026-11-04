@@ -326,6 +326,9 @@ export type AppState = {
   /** Move an idle session into an already-known project, preserving history. */
   moveSessionProject: (id: string, projectPath: string) => Promise<boolean>;
   deleteSession: (id: string) => Promise<void>;
+  trashSession: (id: string) => Promise<void>;
+  restoreTrashedSession: (id: string) => Promise<void>;
+  deleteTrashedSession: (id: string) => Promise<void>;
   setSessionSort: (sort: SessionSort) => void;
   setSessionArchiveVisibility: (show: boolean) => void;
   setSessionView: (view: Partial<SessionView> | boolean) => void;
