@@ -18,7 +18,7 @@ try {
     entryPoints: [join(root, "scripts/e2e/transcript-reading-position.tsx")],
     outfile: join(temp, "renderer.js"), bundle: true, platform: "browser", format: "iife",
     jsx: "automatic", define: { "process.env.NODE_ENV": '"production"', "import.meta.env": JSON.stringify({ DEV: false, MODE: "production" }) },
-    loader: { ".css": "empty" },
+    loader: { ".css": "empty", ".png": "file", ".gif": "file" },
     alias: { react: join(root, "apps/desktop/node_modules/react"),
       "react-dom": join(root, "apps/desktop/node_modules/react-dom") },
     plugins: [{ name: "url-assets", setup(build) {
@@ -48,11 +48,15 @@ app.whenReady().then(async () => {
   window.webContents.on("console-message", (event) => console.error(event.message));
   try {
     await window.loadFile(path.join(__dirname, "index.html"));
-    const scrolling = await window.webContents.executeJavaScript("globalThis.transcriptReadingPositionProbe()");
-    const session = scrolling.ok ? await window.webContents.executeJavaScript("globalThis.sessionReadingPositionProbe()") : null;
+    console.error("READING_POSITION_STAGE switch restoration");
+    const switching = await window.webContents.executeJavaScript("globalThis.transcriptSwitchRestorationProbe()");
+    console.error("READING_POSITION_STAGE retained panes");
+    const scrolling = switching.ok ? await window.webContents.executeJavaScript("globalThis.transcriptReadingPositionProbe()") : null;
+    console.error("READING_POSITION_STAGE production reading");
+    const session = scrolling?.ok ? await window.webContents.executeJavaScript("globalThis.sessionReadingPositionProbe()") : null;
     const continuation = session?.ok ? await window.webContents.executeJavaScript("globalThis.transcriptContinuationProbe()") : null;
     const liveTail = continuation?.ok ? await window.webContents.executeJavaScript("globalThis.transcriptLiveTailProbe()") : null;
-    const result = { ok: scrolling.ok && session?.ok && continuation?.ok && liveTail?.ok, scrolling, session, continuation, liveTail };
+    const result = { ok: switching.ok && scrolling?.ok && session?.ok && continuation?.ok && liveTail?.ok, switching, scrolling, session, continuation, liveTail };
     console.log("READING_POSITION_PROBE " + JSON.stringify(result));
     app.exit(result.ok ? 0 : 1);
   } catch (error) { console.error(error); app.exit(1); }
@@ -61,9 +65,11 @@ app.whenReady().then(async () => {
   delete env.ELECTRON_RUN_AS_NODE;
   const child = spawn(electronBinary, [join(temp, "main.cjs")], { env, stdio: ["ignore", "pipe", "pipe"] });
   let output = "";
-  for (const stream of [child.stdout, child.stderr]) stream.on("data", (data) => { output += data; });
-  // Four renderer probes share this process; slower hidden Windows frames can
-  // exceed the old single-probe budget even when every assertion passes.
+  for (const stream of [child.stdout, child.stderr]) stream.on("data", (data) => {
+    output += data;
+    if (stream === child.stderr) process.stderr.write(data);
+  });
+  // Renderer probes share this process and keep the existing bounded budget.
   const timer = setTimeout(() => child.kill("SIGKILL"), 90_000);
   let code;
   try { code = await new Promise((resolve, reject) => {
@@ -73,7 +79,7 @@ app.whenReady().then(async () => {
   assert(line, `No probe result (exit=${code}): ${output.slice(-4000)}`);
   const result = JSON.parse(line.slice("READING_POSITION_PROBE ".length));
   console.log(JSON.stringify(result));
-  assert.equal(code, 0, result.scrolling?.error ?? result.session?.error ?? result.continuation?.error ?? result.liveTail?.error ?? output.slice(-4000));
+  assert.equal(code, 0, result.switching?.error ?? result.scrolling?.error ?? result.session?.error ?? result.continuation?.error ?? result.liveTail?.error ?? output.slice(-4000));
   assert.equal(result.ok, true);
 } finally {
   await rm(temp, { recursive: true, force: true });

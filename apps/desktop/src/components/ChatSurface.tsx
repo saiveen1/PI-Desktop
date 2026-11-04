@@ -159,6 +159,18 @@ export const ChatSurface = memo(function ChatSurface({
         </div>
       ) : null}
       <ConversationWidthHandles />
+      <div
+        className="session-panes"
+        style={showEmptyState ? { position: "absolute", inset: 0, pointerEvents: "none" } : undefined}
+      >
+        {retainedSessionIds.map((id) => (
+          <SessionPane
+            key={id}
+            sessionId={id}
+            visible={visible && !showEmptyState && id === visibleSessionId}
+          />
+        ))}
+      </div>
       {showEmptyState ? (
         <div
           className="home-main-content"
@@ -199,18 +211,7 @@ export const ChatSurface = memo(function ChatSurface({
           </div>
         </div>
       ) : (
-        <>
-          <div className="session-panes">
-            {retainedSessionIds.map((id) => (
-              <SessionPane
-                key={id}
-                sessionId={id}
-                visible={visible && id === visibleSessionId}
-              />
-            ))}
-          </div>
-          <StableComposer variant="docked" />
-        </>
+        <StableComposer variant="docked" />
       )}
 
       {noticeError ? (

@@ -6746,7 +6746,10 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
   4) Return to A and scroll to the lower boundary of the restored range without
   clicking any load control. 5) Return to E, then D, and confirm they are still
   warm. 6) Repeat the whole cycle once more and watch for a stuck progress track,
-  an error toast, or a blank chat area.
+  an error toast, or a blank chat area. 7) Hold an ordinary older-page response,
+  switch away and back, then release it. 8) Repeat the hold, click return-to-latest,
+  and release the obsolete response. 9) Switch through an existing empty session
+  and back; compare the original scroller node and its reading offset.
 - **Expected**: Only the visible pane and the two most recently visited ones are
   retained; visiting beyond that budget evicts the oldest pane. A warm return
   paints the retained frame and offset immediately. The returned pane keeps the
@@ -6771,6 +6774,12 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
   continuation reaches the tail, live updates resume without adding older
   cached rows above the reading position. Explicit search still uses manual
   later-message paging.
+  An ordinary page pending on return does not bottom the pane or mark its bookmark
+  as pinned. Revalidation preserves its reading range and pending page owner.
+  A warm restoration keeps its mounted-row budget instead of mounting every
+  loaded row. Returning through empty home keeps the same retained scroller.
+  Return-to-latest exits history, reaches the canonical tail, and remains there
+  after an obsolete page completes. Read failures notify without forcing latest.
 - **Specs linked**: `04-ux/08-component-spec.md` §1.6 / §3.5 / §7,
   `04-ux/09-interaction-patterns.md` §5, ADR 0130, ADR 0137
 - **Acceptance**: C (switch sessions), Quality

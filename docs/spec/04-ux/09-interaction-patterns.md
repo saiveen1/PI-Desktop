@@ -347,9 +347,11 @@ may be retained while exactly one workspace supplies the visible shell context.
   `display: none`, which would discard their scroll offset — and each pane keeps
   its own scroll position for its lifetime. Switching to a session that still has
   a pane (warm) reveals it immediately with its retained content and position:
-  nothing is dimmed, no skeleton appears, and no transcript remounts. If the
-  destination is running or still holds a completed reply the durable page has
-  not caught up to, revalidation treats the durable read as a lower-water mark
+  nothing is dimmed, no skeleton appears, and no transcript remounts.
+  Switching to an existing empty session reveals its home surface while keeping
+  the retained panes mounted, hidden, and inert within the same three-pane budget.
+  If the destination is running or still holds a completed reply the durable page
+  has not caught up to, revalidation treats the durable read as a lower-water mark
   and keeps its renderer-owned assistant/tool tail; completed durable rows may
   be added, but the partial or just-finished reply cannot be rolled back. The
   bounded durable page is stitched onto the live snapshot in chronological
@@ -374,8 +376,15 @@ may be retained while exactly one workspace supplies the visible shell context.
   offset; the user can grow the window to reach the anchor. Revalidation must
   not replace that reading range with the latest page. Real scroll input, search
   navigation, return-to-latest, and send/retry/regenerate take priority over
-  restoration; obsolete reads cannot reclaim the viewport. A missing anchor
-  falls back to latest, and read failures use the existing error notification.
+  restoration; obsolete reads cannot reclaim the viewport. Restoration distinguishes
+  a missing anchor from an ordinary page still loading, superseded navigation,
+  and read failure. Only a confirmed missing anchor falls back to latest. A pending
+  ordinary page keeps the current anchor and resumes restoration when it settles;
+  a read failure keeps the current view and uses the existing error notification.
+  Restoring a reading range preserves its saved mounted-row budget. Reading newer
+  pages expands that budget on demand and anchors the existing visible rows;
+  explicit search continues to mount its target range. Return-to-latest cancels
+  restoration and pagination holds, and late page results cannot restore history.
 - New Task is not a cold switch. Creating a session reveals the empty home on
   the first frame (the previous conversation and retained panes clear before
   `session.create`). Reusing the group's latest empty session commits that empty

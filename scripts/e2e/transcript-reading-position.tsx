@@ -1,3 +1,4 @@
+import "./transcript-switch-restoration";
 import "./session-reading-position";
 import "./transcript-continuation";
 import "./transcript-live-tail";
@@ -8,7 +9,7 @@ import type { UiMessage } from "@pi-desktop/shared";
 import { useTranscriptScroll } from "../../apps/desktop/src/features/chat/transcript/hooks/useTranscriptScroll";
 import { transcriptEntryMessages } from "../../apps/desktop/src/lib/assistant-turns";
 import { retainSessionPane, type RetainedPanes } from "../../apps/desktop/src/lib/session-panes";
-import { sessionReadingState, type TranscriptReadingPosition } from "../../apps/desktop/src/lib/transcript-reading-position";
+import { sessionReadingState, type TranscriptReadingPosition, type TranscriptReadingRestoreResult } from "../../apps/desktop/src/lib/transcript-reading-position";
 import { TranscriptDisclosureProvider, useAutomaticDisclosure } from "../../apps/desktop/src/features/chat/transcript/disclosure";
 import { DisclosureAnchorContext } from "../../apps/desktop/src/lib/disclosure-anchor-context";
 
@@ -17,7 +18,7 @@ const messages: UiMessage[] = Array.from({ length: 100 }, (_, index) => ({
   createdAt: "2026-09-01T00:00:00Z", status: "complete",
 }));
 const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-let finishDeferredRestore: ((found: boolean) => void) | undefined;
+let finishDeferredRestore: ((result: TranscriptReadingRestoreResult) => void) | undefined;
 let deferredRestoreAborted = false;
 function assert(condition: unknown, label: string): asserts condition {
   if (!condition) throw new Error(label);
@@ -40,11 +41,12 @@ function Row({ message }: { message: UiMessage }) {
 
 function Pane({ id, visible, running }: { id: string; visible: boolean; running: boolean }) {
   const onRestoreReading = useCallback((position: TranscriptReadingPosition, signal: AbortSignal) => {
-    if (id === "G") return new Promise<boolean>((resolve) => {
+    if (id === "G") return new Promise<TranscriptReadingRestoreResult>((resolve) => {
       finishDeferredRestore = resolve;
       signal.addEventListener("abort", () => { deferredRestoreAborted = true; }, { once: true });
     });
-    return Promise.resolve(!signal.aborted && messages.some((message) => message.id === position.messageId));
+    return Promise.resolve<TranscriptReadingRestoreResult>(signal.aborted ? "superseded"
+      : messages.some((message) => message.id === position.messageId) ? "restored" : "missing");
   }, [id]);
   const scroll = useTranscriptScroll({
     sessionId: id, messages, hasMoreBefore: false, isRunning: running,
@@ -145,7 +147,7 @@ globalThis.transcriptReadingPositionProbe = async () => {
     assert(Math.abs(deferredScroller.scrollTop - initialTop) < 2,
       "the saved offset must wait until the restore lookup completes");
     assert(!deferredRestoreAborted, "the alignment deadline must not abort a pending history lookup");
-    finishDeferredRestore(true);
+    finishDeferredRestore("restored");
     finishDeferredRestore = undefined;
     await until(() => Math.abs(deferredScroller.scrollTop - 650) < 2,
       "the saved offset applies after a successful restore lookup");

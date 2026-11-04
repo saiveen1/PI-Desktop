@@ -170,6 +170,7 @@ function TranscriptBody({
     contentRef,
     historyBoundaryRef,
     loadingOlder,
+    historyPending,
     showJump,
     historyEntries,
     tailEntry,
@@ -182,6 +183,7 @@ function TranscriptBody({
     revealEarlierHistory,
     releaseFollow,
     jumpToLatest,
+    loadNewer,
     disclosureAnchorNotifier,
   } = useTranscriptScroll({
     sessionId,
@@ -189,6 +191,7 @@ function TranscriptBody({
     compactions,
     hasMoreBefore,
     onLoadOlder,
+    onLoadNewer,
     // Rejoining live output is not a new turn: keep the reader's scroll owner.
     isRunning: isRunning && !readingWindow,
     pendingPermission,
@@ -199,6 +202,7 @@ function TranscriptBody({
     searchTarget,
     readingWindow,
     onRestoreReading,
+    navigationLoading,
   });
 
   const continuationCursor = useAppStore((state) =>
@@ -206,10 +210,10 @@ function TranscriptBody({
   );
   const automaticContinuation = readingWindow && !searchTarget;
   useTranscriptContinuation({
-    scrollRef, contentRef, messages, onLoadNewer,
+    scrollRef, contentRef, messages, onLoadNewer: loadNewer,
     enabled: automaticContinuation && hasMoreAfter && paneVisible && !veilCovering,
     cursor: continuationCursor,
-    loading: navigationLoading,
+    loading: navigationLoading || historyPending,
   });
 
   const specializedActivity = agentActivity;
@@ -490,7 +494,7 @@ function TranscriptBody({
               type="button"
               className="transcript-load-later"
               disabled={navigationLoading}
-              onClick={() => void onLoadNewer?.()}
+              onClick={() => void loadNewer()}
             >
               {t("chat.loadLaterMessages")}
             </button>

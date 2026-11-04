@@ -533,7 +533,7 @@ test("an evicted reading position loads its message without search focus or live
   const calls = [];
   const r = reader(async (...args) => { calls.push(args); return page([message("old")]); });
   const live = r.get().messages;
-  assert.equal(await r.restoreTranscriptReading("s", bookmark, new AbortController().signal), true);
+  assert.equal(await r.restoreTranscriptReading("s", bookmark, new AbortController().signal), "restored");
   assert.deepEqual(calls, [["s", { messageAround: "old", messageLimit: 60, contentLimit: 65536 }]]);
   assert.equal(r.view().focus, null);
   assert.equal(r.view().restored, true);
@@ -547,7 +547,7 @@ test("an evicted reading position loads its message without search focus or live
 
 test("a loaded reading anchor does not fetch or replace the existing reading range", async () => {
   const r = reader(async () => { throw new Error("unexpected read"); }, { messages: [message("old")] });
-  assert.equal(await r.restoreTranscriptReading("s", bookmark, new AbortController().signal), true);
+  assert.equal(await r.restoreTranscriptReading("s", bookmark, new AbortController().signal), "restored");
   assert.equal(r.view(), undefined);
 });
 
@@ -559,7 +559,7 @@ test("input cancellation prevents a delayed restoration from replacing the curre
   controller.abort();
   assert.equal(r.view(), undefined);
   pending.resolve(page([message("old")]));
-  assert.equal(await request, false);
+  assert.equal(await request, "superseded");
   assert.equal(r.view(), undefined);
 });
 
@@ -570,7 +570,7 @@ test("search navigation owns a delayed reading restoration", async () => {
   const request = r.restoreTranscriptReading("s", bookmark, new AbortController().signal);
   await r.navigateTranscript(target("hit"));
   pending.resolve(page([message("old")]));
-  assert.equal(await request, false);
+  assert.equal(await request, "superseded");
   assert.equal(r.view().focus.messageId, "hit");
 });
 
@@ -583,24 +583,26 @@ test("session changes, eviction and new turns invalidate a delayed reading resto
     const request = r.restoreTranscriptReading("s", bookmark, new AbortController().signal);
     r.set(patch);
     pending.resolve(page([message("old")]));
-    assert.equal(await request, false);
+    assert.equal(await request, "superseded");
     assert.equal(r.view(), undefined);
   }
 });
 
-test("missing reading anchors and IO failures fall back without a stuck loading view", async () => {
-  for (const read of [async () => page([message("different")]), async () => { throw new Error("read failed"); }]) {
-    const r = reader(read);
-    assert.equal(await r.restoreTranscriptReading("s", bookmark, new AbortController().signal), false);
-    assert.equal(r.view(), undefined);
-  }
+test("missing anchors and read failures have distinct outcomes and release loading", async () => {
+  const missing = reader(async () => page([message("different")]));
+  assert.equal(await missing.restoreTranscriptReading("s", bookmark, new AbortController().signal), "missing");
+  assert.equal(missing.view(), undefined);
+  const failed = reader(async () => { throw new Error("read failed"); });
+  assert.equal(await failed.restoreTranscriptReading("s", bookmark, new AbortController().signal), "failed");
+  assert.equal(failed.view(), undefined);
+  assert.deepEqual(failed.errors, ["read failed"]);
 });
 
 test("selection revalidation cannot remove a restored range, but an explicit rewrite can", async () => {
   const r = reader(async () => page([message("old")]), {
     messages: [message("stale-tail")], selectingSessionId: "s",
   });
-  assert.equal(await r.restoreTranscriptReading("s", bookmark, new AbortController().signal), true);
+  assert.equal(await r.restoreTranscriptReading("s", bookmark, new AbortController().signal), "restored");
   r.set({ messages: [message("tail")], selectingSessionId: undefined });
   assert.equal(r.view().restored, true);
   r.set({ messages: [message("tail", "edited")] });
@@ -652,7 +654,7 @@ test("a bookmark inside the page being revalidated keeps that page instead of a 
   const r = reader(async () => { throw new Error("unexpected read"); }, {
     messages: [message("old"), message("tail")], selectingSessionId: "s",
   });
-  assert.equal(await r.restoreTranscriptReading("s", bookmark, new AbortController().signal), true);
+  assert.equal(await r.restoreTranscriptReading("s", bookmark, new AbortController().signal), "restored");
   assert.deepEqual(r.visible().map((row) => row.id), ["old", "tail"]);
   assert.equal(r.view().restored, true);
   assert.equal(r.view().hasMoreAfter, false);
@@ -671,6 +673,36 @@ test("a saved anchor does not supersede in-flight navigation when both rows are 
     transcriptViews: { s: focused },
   });
 
-  assert.equal(await r.restoreTranscriptReading("s", bookmark, new AbortController().signal), false);
+  assert.equal(await r.restoreTranscriptReading("s", bookmark, new AbortController().signal), "superseded");
   assert.equal(r.view(), focused, "explicit navigation keeps ownership of the reading view");
+});
+
+test("a return during ordinary paging defers restoration and keeps the page owner", async () => {
+  const pageRead = deferred();
+  const r = reader(() => pageRead.promise, {
+    messages: [message("old"), message("tail")], selectingSessionId: "s",
+  });
+  const loading = r.loadTranscriptPage("s", "before");
+  const owner = r.view();
+  assert.equal(await r.restoreTranscriptReading("s", bookmark, new AbortController().signal), "pending");
+  assert.equal(r.view(), owner, "restoration must not invalidate the page already being loaded");
+  pageRead.resolve(page([message("older")], { messageStart: 0, hasMoreBefore: false }));
+  await loading;
+  assert.equal(await r.restoreTranscriptReading("s", bookmark, new AbortController().signal), "restored");
+  assert.deepEqual(r.visible().map((row) => row.id), ["older", "old", "tail"]);
+  assert.equal(r.view().restored, true);
+});
+
+test("selection revalidation preserves ordinary paging before bookmark restoration completes", async () => {
+  const pageRead = deferred();
+  const r = reader(() => pageRead.promise, {
+    messages: [message("old"), message("tail")], selectingSessionId: "s",
+  });
+  const loading = r.loadTranscriptPage("s", "before");
+  const owner = r.view();
+  r.set({ messages: [message("tail")], selectingSessionId: undefined });
+  assert.equal(r.view(), owner, "the bounded tail must not evict an ordinary reading range");
+  pageRead.resolve(page([message("older")], { messageStart: 0, hasMoreBefore: false }));
+  await loading;
+  assert.deepEqual(r.visible().map((row) => row.id), ["older", "old", "tail"]);
 });

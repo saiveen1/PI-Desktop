@@ -7,6 +7,13 @@ export type TranscriptReadingPosition = {
   scrollTop: number;
   windowSize: number;
 };
+
+export type TranscriptReadingRestoreResult =
+  | "restored"
+  | "pending"
+  | "superseded"
+  | "missing"
+  | "failed";
 export type TranscriptDisclosureChoice = { open: boolean; revealRequest?: number };
 type ReadingState = {
   position?: TranscriptReadingPosition;

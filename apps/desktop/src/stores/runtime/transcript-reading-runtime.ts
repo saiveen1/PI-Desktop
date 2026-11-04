@@ -67,23 +67,17 @@ export function createTranscriptReadingRuntime({ get, set }: StoreAccess, read: 
   const actions: ReadingActions = {
     returnToLatestTranscript,
     restoreTranscriptReading: async (sessionId, position, signal) => {
-      if (signal.aborted || get().activeSessionId !== sessionId || !position.messageId) return false;
+      if (signal.aborted || get().activeSessionId !== sessionId) return "superseded";
+      if (!position.messageId) return "missing";
       const previous = get().transcriptViews[sessionId];
       const range = currentView(sessionId);
-      // A user navigation already in flight always wins over automatic restore.
-      if (range.focus || range.loading) return false;
+      if (range.focus || range.loading === "target") return "superseded";
+      if (range.loading) return "pending";
       if (range.messages.some((message) => message.id === position.messageId)) {
-        // The page already holds the bookmark, so a bounded read around it would
-        // only narrow the transcript. Re-selecting a retained session commits
-        // that page while `selectingSessionId` is still set and then swaps
-        // `messages` for the revalidated window, so publish the page as the
-        // reading range: that keeps the bookmarked row, and the reader's
-        // offset, across the swap. Skipping the read also matters because a
-        // window around a bookmark in a tail page reports `hasMoreAfter`, which
-        // paints the load-later affordance on a conversation nobody left.
+        // Keep the loaded reading range across the selection's bounded revalidation.
         if (get().selectingSessionId === sessionId && !previous?.restored)
           publish(sessionId, { ...range, restored: true });
-        return true;
+        return "restored";
       }
       const pending: TranscriptView = { ...range, restored: true, loading: "target" };
       const rollback = () => {
@@ -99,25 +93,24 @@ export function createTranscriptReadingRuntime({ get, set }: StoreAccess, read: 
           messageLimit: TRANSCRIPT_SEARCH_PAGE_SIZE,
           contentLimit: TRANSCRIPT_CONTENT_LIMIT,
         });
-        if (signal.aborted || get().transcriptViews[sessionId] !== pending) return false;
+        if (signal.aborted || get().transcriptViews[sessionId] !== pending) return "superseded";
         if (get().activeSessionId !== sessionId) {
           rollback();
-          return false;
+          return "superseded";
         }
         const message = session?.messages.find((row) => row.id === position.messageId);
         if (!session || !message || (message.parentToolCallId && !session.navigationParent)) {
           rollback();
-          return false;
+          return "missing";
         }
         publish(sessionId, { ...transcriptViewFromSession(session), restored: true });
-        return true;
+        return "restored";
       } catch (error) {
-        if (!signal.aborted && get().transcriptViews[sessionId] === pending) {
-          rollback();
-          if (get().activeSessionId === sessionId)
-            get().showToast(error instanceof Error ? error.message : String(error), { variant: "error" });
-        }
-        return false;
+        if (signal.aborted || get().transcriptViews[sessionId] !== pending) return "superseded";
+        rollback();
+        if (get().activeSessionId === sessionId)
+          get().showToast(error instanceof Error ? error.message : String(error), { variant: "error" });
+        return "failed";
       } finally {
         signal.removeEventListener("abort", rollback);
       }
@@ -208,7 +201,7 @@ export function createTranscriptReadingRuntime({ get, set }: StoreAccess, read: 
         previous.activeSessionId === id &&
         !state.runningSessions[id] &&
         !previous.runningSessions[id] &&
-        !(view.restored && previous.selectingSessionId === id) &&
+        previous.selectingSessionId !== id &&
         state.messages !== previous.messages &&
         transcriptWasRewritten(previous.messages, state.messages);
       if (evicted || started || rewritten) returnToLatestTranscript(id);

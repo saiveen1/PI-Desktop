@@ -5,17 +5,18 @@ import {
   restoreTranscriptReadingPosition,
   sessionReadingState,
   type TranscriptReadingPosition,
+  type TranscriptReadingRestoreResult,
 } from "../lib/transcript-reading-position";
 
 export type RestoreTranscriptReading = (
   position: TranscriptReadingPosition,
   signal: AbortSignal,
-) => Promise<boolean>;
+) => Promise<TranscriptReadingRestoreResult>;
 
 /** A bounded initial alignment, cancelled by real input/navigation/new turns. */
 export function useTranscriptReadingPosition({
   sessionId, scrollRef, contentRef, pinnedRef, visible, windowSize,
-  contentVersion, onPosition, onRestore, onMissing,
+  contentVersion, loading, onPosition, onRestore, onMissing,
 }: {
   sessionId: string | undefined;
   scrollRef: RefObject<HTMLDivElement | null>;
@@ -24,6 +25,7 @@ export function useTranscriptReadingPosition({
   visible: boolean;
   windowSize: number;
   contentVersion: unknown;
+  loading: boolean;
   onPosition: (top: number) => void;
   onRestore?: RestoreTranscriptReading;
   onMissing: () => void;
@@ -33,6 +35,7 @@ export function useTranscriptReadingPosition({
   const requestRef = useRef<AbortController | null>(null);
   const completedRestoreRef = useRef<TranscriptReadingPosition | null>(null);
   const restoreReadyRef = useRef(!onRestore);
+  const deferredRef = useRef(false);
   const [restoreRevision, setRestoreRevision] = useState(0);
   const alignmentUntilRef = useRef(0);
   const wasVisibleRef = useRef(visible);
@@ -40,9 +43,6 @@ export function useTranscriptReadingPosition({
     if (visible && !wasVisibleRef.current) {
       const bookmark = getTranscriptReadingPosition(sessionId);
       if (bookmark?.pinned === false) {
-        // The follow flag can still read `true` when a send or retry hid the
-        // pane; the recorded bookmark is the authoritative state for this
-        // reveal, so claim the edge instead of letting follow bottom it.
         pendingRef.current = bookmark;
         pinnedRef.current = false;
       } else if (!pinnedRef.current) {
@@ -52,10 +52,17 @@ export function useTranscriptReadingPosition({
     }
     wasVisibleRef.current = visible;
   }, [pinnedRef, sessionId, visible]);
+  const abortRequest = useCallback(() => {
+    const controller = requestRef.current;
+    requestRef.current = null;
+    controller?.abort();
+  }, []);
   const cancel = useCallback(() => {
     pendingRef.current = undefined;
-    requestRef.current?.abort();
-  }, []);
+    restoreReadyRef.current = false;
+    deferredRef.current = false;
+    abortRequest();
+  }, [abortRequest]);
   const remember = useCallback(() => {
     const scroller = scrollRef.current;
     const content = contentRef.current;
@@ -66,30 +73,35 @@ export function useTranscriptReadingPosition({
   const callbacks = useRef({ remember, onMissing });
   callbacks.current = { remember, onMissing };
 
-  // Fetch only if the row is outside the current range. Abort also invalidates
-  // completion when a pane hides/unmounts, or the reader takes over during IO.
+  // Content/loading changes retry deferred paging without aborting an owned lookup.
+  useLayoutEffect(() => abortRequest, [abortRequest, onRestore, visible]);
   useLayoutEffect(() => {
     const position = pendingRef.current;
-    if (!visible || !position || !onRestore || completedRestoreRef.current === position) return;
-    // Do not start the bounded alignment window while the target may still be
-    // loading. A slow history read must not be aborted by the fallback timer.
+    if (!visible || !position || !onRestore || requestRef.current || completedRestoreRef.current === position) return;
     restoreReadyRef.current = false;
     const controller = new AbortController();
     requestRef.current = controller;
-    void onRestore(position, controller.signal).then((found) => {
-      if (controller.signal.aborted) return;
-      if (found) {
-        completedRestoreRef.current = position;
+    void onRestore(position, controller.signal).then((result) => {
+      if (controller.signal.aborted || requestRef.current !== controller || pendingRef.current !== position) return;
+      requestRef.current = null;
+      if (result === "restored" || result === "pending") {
+        deferredRef.current = result === "pending";
+        if (!deferredRef.current) completedRestoreRef.current = position;
         restoreReadyRef.current = true;
         setRestoreRevision((revision) => revision + 1);
         return;
       }
       cancel();
-      callbacks.current.onMissing();
-      callbacks.current.remember();
+      if (result === "missing") {
+        callbacks.current.onMissing();
+        callbacks.current.remember();
+      }
+    }, (error: unknown) => {
+      if (controller.signal.aborted || requestRef.current !== controller) return;
+      cancel();
+      console.error("Transcript reading restoration failed", error);
     });
-    return () => controller.abort();
-  }, [cancel, onRestore, visible]);
+  }, [cancel, contentVersion, loading, onRestore, visible]);
 
   useLayoutEffect(() => {
     const scroller = scrollRef.current;
@@ -111,6 +123,8 @@ export function useTranscriptReadingPosition({
       }
       if (!restoreTranscriptReadingPosition(scroller, content, position)) return;
       onPosition(scroller.scrollTop);
+      // An existing page owns IO; keep its visible anchor without timing it out.
+      if (deferredRef.current) return;
       if (!alignmentUntilRef.current) {
         alignmentUntilRef.current = performance.now() + 1500;
       }

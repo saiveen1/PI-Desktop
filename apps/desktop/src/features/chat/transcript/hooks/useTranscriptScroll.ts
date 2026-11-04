@@ -38,7 +38,7 @@ import {
 } from "../../../../lib/transcript-scroll";
 import { readScrollInputContext, stopSmoothScroll } from "../../../../lib/scroll-input";
 import { useDisclosureAnchor } from "../../../../hooks/use-disclosure-anchor";
-import type { TranscriptSearchTarget } from "../../../../lib/transcript-reading";
+import { TRANSCRIPT_PAGE_SIZE, type TranscriptSearchTarget } from "../../../../lib/transcript-reading";
 import { useTranscriptSearchFocus } from "../../../../hooks/use-transcript-search-focus";
 import {
   getTranscriptReadingPosition,
@@ -54,6 +54,7 @@ type UseTranscriptScrollOptions = {
   compactions?: ContextCompactionMark[];
   hasMoreBefore: boolean;
   onLoadOlder?: () => Promise<void>;
+  onLoadNewer?: () => Promise<void>;
   isRunning: boolean;
   pendingPermission?: PendingPermission;
   askPending: boolean;
@@ -63,6 +64,7 @@ type UseTranscriptScrollOptions = {
   searchTarget: TranscriptSearchTarget | null;
   readingWindow: boolean;
   onRestoreReading?: RestoreTranscriptReading;
+  navigationLoading?: boolean;
 };
 
 export function useTranscriptScroll({
@@ -71,6 +73,7 @@ export function useTranscriptScroll({
   compactions,
   hasMoreBefore,
   onLoadOlder,
+  onLoadNewer,
   isRunning,
   pendingPermission,
   askPending,
@@ -80,6 +83,7 @@ export function useTranscriptScroll({
   searchTarget,
   readingWindow,
   onRestoreReading,
+  navigationLoading = false,
 }: UseTranscriptScrollOptions) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -139,8 +143,8 @@ export function useTranscriptScroll({
     cancel: cancelReadingPosition,
   } = useTranscriptReadingPosition({
     sessionId, scrollRef, contentRef, pinnedRef, visible: paneVisible,
-    windowSize, contentVersion: messages, onPosition: recordScrollPosition,
-    onRestore: onRestoreReading, onMissing: readingPositionMissing,
+    windowSize, contentVersion: messages, loading: navigationLoading,
+    onPosition: recordScrollPosition, onRestore: onRestoreReading, onMissing: readingPositionMissing,
   });
 
   // State transition only: completion calls this after starting its own
@@ -360,6 +364,16 @@ export function useTranscriptScroll({
     if (!hasMoreBefore || !onLoadOlder) return;
     preserveHistory(onLoadOlder, windowSize, true);
   }, [hasMoreBefore, onLoadOlder, preserveHistory, windowSize]);
+
+  const loadNewer = useCallback(async () => {
+    if (!paneVisibleRef.current || !onLoadNewer) return;
+    if (searchTarget) return onLoadNewer();
+    preserveHistory(async () => {
+      // Keep the old reading rows mounted while the newer page joins them.
+      setWindowSize((size) => size + TRANSCRIPT_PAGE_SIZE);
+      await onLoadNewer();
+    }, windowSize);
+  }, [onLoadNewer, preserveHistory, searchTarget, windowSize]);
 
   /**
    * Reaching the top escalates in two stages (D261): mount more of what is
@@ -605,7 +619,7 @@ export function useTranscriptScroll({
 
   const transcriptWindow = reduceTranscriptWindow({
     historyLength: allHistoryEntries.length,
-    windowSize: readingWindow ? allHistoryEntries.length : windowSize,
+    windowSize: searchTarget ? allHistoryEntries.length : windowSize,
     initialCommit: hydrationBounded,
   });
   // Memoized so unrelated re-renders (jump pill, loading row) hand
@@ -823,6 +837,7 @@ export function useTranscriptScroll({
     contentRef,
     historyBoundaryRef,
     loadingOlder,
+    historyPending,
     showJump,
     historyEntries,
     tailEntry,
@@ -833,6 +848,7 @@ export function useTranscriptScroll({
     veilPhase,
     handleScroll,
     revealEarlierHistory,
+    loadNewer,
     scrollToBottom,
     jumpToLatest,
     releaseFollow: releaseNavigationFollow,

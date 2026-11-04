@@ -117,12 +117,18 @@ Outer frame that positions Topbar, Sidebar, MainChat, and WorkPanel. Owns resize
   stay mounted but are hidden with `visibility: hidden` +
   `content-visibility: hidden` — never `display: none`, which would destroy the
   layout box and its scroll offset — and are `aria-hidden` and non-interactive.
+  Existing empty sessions reveal the home surface without unmounting the retained
+  panes. Home hides and disables those panes within the same three-pane budget.
   Eviction releases the DOM, not the renderer-lifetime reading bookmark. On
   return, restore the bookmarked message and its viewport offset, loading a
   bounded historical range when necessary without search focus/highlighting. If
   the message is already loaded but outside the mounted row window, first restore
   the saved absolute scroll offset; the bounded window can then grow as the user
   scrolls toward the anchor.
+  A restored range keeps the saved mounted-row budget; only explicit search
+  mounts the full target range. A pending ordinary page retains its anchor and
+  resumes restoration after settlement. Only a missing anchor resets to latest;
+  read failure notifies while preserving the existing view.
   Restored ranges continue automatically near the visible lower boundary, in
   bounded pages and without a Load later messages button. Appending a page must
   preserve the viewport; hidden panes must not initiate continuation. Do not
