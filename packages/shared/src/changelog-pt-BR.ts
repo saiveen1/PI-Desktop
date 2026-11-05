@@ -2,6 +2,24 @@ import type { ChangelogEntry } from "./changelog.js";
 
 export const ptBREntries: ChangelogEntry[] = [
   {
+    version: "0.22.0",
+    date: "2026-11-05",
+    highlights: [
+      "Deixe o agente controlar opcionalmente sua área de trabalho: ele vê a tela, move e clica o cursor e digita — toda a área de trabalho é concedida de uma vez, com Stop como limite.",
+      "Escolha uma janela visível pela identidade real da janela, não pela forma, para acertar janelas sobrepostas ou redimensionadas.",
+      "Configure o pool de modelos uma única vez em Configurações: prioridades por finalidade, aprovação obrigatória e modelos alternativos autorizados para novas tentativas não assistidas.",
+      "Tente novamente diretamente um subagente com falha e mantenha seus pontos de controle para que a execução retomada continue de onde parou.",
+      "Selecione várias sessões de uma vez e mova-as para uma lixeira que você pode restaurar ou esvaziar.",
+      "Expanda as ações de arquivo do chat com Salvar como, e abra referências fora da raiz do projeto como caminhos absolutos.",
+      "Volte à resposta mais recente com rolagem suave enquanto o histórico antigo é pré-carregado em segundo plano, e mantenha sua posição de leitura entre sessões.",
+      "Leia os resumos de turno: os arquivos alterados de cada turno aparecem sob a resposta e grupos de atividade concluídos se dobram em uma linha rotulada.",
+      "Abra um menu de contexto radial opcional no fundo da conversa para ações de navegador, painel de trabalho e pasta do projeto.",
+      "Inicie aplicativos instalados no painel de trabalho: uma grade agrupada e pesquisável, com blocos fixáveis e rótulos totalmente traduzidos.",
+      "Envie /fast para usar a camada de serviço prioritária da OpenAI, e a chave de tarefas agendadas vem ativada por padrão.",
+      "Novas tentativas do agente agora classificam corretamente erros de faturamento, cota e chave de API, preservam imagens de ferramentas e recursos MCP delegados e recuperam sessões após chamadas de ferramenta malformadas.",
+    ],
+  },
+  {
     version: "0.21.0",
     date: "2026-10-24",
     highlights: [

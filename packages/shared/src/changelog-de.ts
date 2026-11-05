@@ -2,6 +2,24 @@ import type { ChangelogEntry } from "./changelog.js";
 
 export const deEntries: ChangelogEntry[] = [
   {
+    version: "0.22.0",
+    date: "2026-11-05",
+    highlights: [
+      "Überlassen Sie dem Agenten optional die Kontrolle über Ihren Desktop: er sieht den Bildschirm, bewegt und klickt den Zeiger und tippt — der gesamte Desktop wird einmalig freigegeben, Stop ist die Grenze.",
+      "Wählen Sie ein sichtbares Fenster über seine echte Fensteridentität statt über seine Form, sodass überlappende oder skalierte Fenster korrekt getroffen werden.",
+      "Konfigurieren Sie den Modellpool zentral in den Einstellungen: Prioritäten je Zweck, verpflichtende Freigabe und autorisierte Ersatzmodelle für unbeaufsichtigte Wiederholungen.",
+      "Wiederholen Sie einen fehlgeschlagenen Subagenten direkt; seine Prüfpunkte bleiben erhalten, sodass ein fortgesetzter Lauf dort ansetzt, wo er aufgehört hat.",
+      "Wählen Sie mehrere Sitzungen gleichzeitig aus und verschieben Sie sie in einen Papierkorb, den Sie wiederherstellen oder leeren können.",
+      "Erweiterte Dateiaktionen im Chat mit „Speichern unter“, und Dateiverweise außerhalb des Projektstamms öffnen sich als absolute Pfade.",
+      "Springen Sie mit weichem Scrollen zur neuesten Antwort zurück, während ältere Verläufe im Hintergrund vorgeladen werden, und behalten Sie Ihre Leseposition beim Sitzungswechsel.",
+      "Lesen Sie Rundenübersichten: die geänderten Dateien jeder Runde stehen unter der Antwort, abgeschlossene Aktivitätsgruppen falten sich zu einer beschrifteten Zeile.",
+      "Öffnen Sie ein optionales radiales Kontextmenü auf dem Gesprächshintergrund für Browser-, Arbeitsbereich- und Projektordner-Aktionen.",
+      "Starten Sie installierte Anwendungen aus dem Arbeitsbereich: ein gruppiertes, durchsuchbares Raster mit anheftbaren Kacheln und vollständig übersetzten Beschriftungen.",
+      "Senden Sie /fast für OpenAIs priorisierte Dienststufe, und der Schalter für geplante Aufgaben ist standardmäßig aktiv.",
+      "Agenten-Wiederholungen ordnen Abrechnungs-, Kontingent- und API-Schlüssel-Fehler jetzt korrekt zu, behalten Werkzeugbilder und MCP-Ressourcen von Delegierten und retten Sitzungen nach fehlerhaften Werkzeugaufrufen.",
+    ],
+  },
+  {
     version: "0.21.0",
     date: "2026-10-24",
     highlights: [

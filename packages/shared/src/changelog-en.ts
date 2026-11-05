@@ -2,6 +2,24 @@ import type { ChangelogEntry } from "./changelog.js";
 
 export const enEntries: ChangelogEntry[] = [
   {
+    version: "0.22.0",
+    date: "2026-11-05",
+    highlights: [
+      "Grant the agent optional control of your desktop: it sees the screen, moves and clicks the cursor, and types — with the whole desktop granted automatically and Stop as the boundary.",
+      "Pick a visible window by its real window identity instead of its shape, so overlapping or resized windows are targeted correctly.",
+      "Configure the model pool once in Settings: priorities by purpose, mandatory approval, and authorized fallback models for unattended retries.",
+      "Retry a failed subagent directly, and keep its checkpoints so a resumed run continues where it stopped.",
+      "Select multiple sessions at once and move them to a recycle bin you can restore or empty.",
+      "Expand chat file actions with Save as, and open file references outside the project root as absolute paths.",
+      "Jump back to the latest reply with a smooth scroll while older history prefetches in the background, and keep your reading position across session switches.",
+      "Read turn summaries: every turn's changed files are listed under the reply, and settled activity groups fold into one labeled row.",
+      "Open an opt-in radial context menu on the transcript background for browser, work panel, and project folder actions.",
+      "Launch installed applications from the work panel: a grouped, searchable grid with pinned tiles and full translated labels.",
+      "Send /fast to use OpenAI's priority service tier, and let the scheduled task feature switch default to on.",
+      "Agent retries now classify billing, quota, and API-key errors correctly, keep delegate tool images and MCP resources, and recover sessions after malformed tool calls.",
+    ],
+  },
+  {
     version: "0.21.0",
     date: "2026-10-24",
     highlights: [

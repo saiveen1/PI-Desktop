@@ -2,6 +2,24 @@ import type { ChangelogEntry } from "./changelog.js";
 
 export const esEntries: ChangelogEntry[] = [
   {
+    version: "0.22.0",
+    date: "2026-11-05",
+    highlights: [
+      "Cede opcionalmente el control de tu escritorio al agente: ve la pantalla, mueve y pulsa el cursor y escribe — con todo el escritorio autorizado de una vez y Stop como límite.",
+      "Elige una ventana visible por su identidad real y no por su forma, para acertar en ventanas superpuestas o redimensionadas.",
+      "Configura el grupo de modelos una sola vez en Ajustes: prioridades por uso, aprobación obligatoria y modelos alternativos autorizados para reintentos sin supervisión.",
+      "Reintenta directamente un subagente fallido y conserva sus puntos de control para que la ejecución reanudada continúe donde se detuvo.",
+      "Selecciona varias sesiones a la vez y muévelas a una papelera que puedes restaurar o vaciar.",
+      "Amplía las acciones de archivo del chat con Guardar como, y abre las referencias fuera de la raíz del proyecto como rutas absolutas.",
+      "Vuelve a la última respuesta con un desplazamiento suave mientras el historial anterior se precarga en segundo plano, y mantén tu posición de lectura al cambiar de sesión.",
+      "Consulta el resumen de cada turno: los archivos modificados aparecen bajo la respuesta y los grupos de actividad cerrados se pliegan en una fila etiquetada.",
+      "Abre un menú contextual radial opcional sobre el fondo de la conversación para acciones de navegador, panel de trabajo y carpeta del proyecto.",
+      "Inicia aplicaciones instaladas desde el panel de trabajo: una cuadrícula agrupada y con búsqueda, con mosaicos fijables y etiquetas totalmente traducidas.",
+      "Envía /fast para usar el nivel de servicio prioritario de OpenAI, y el interruptor de tareas programadas viene activado por defecto.",
+      "Los reintentos del agente ahora clasifican correctamente errores de facturación, cuota y clave de API, conservan las imágenes de herramientas y recursos MCP delegados y recuperan sesiones tras llamadas de herramienta malformadas.",
+    ],
+  },
+  {
     version: "0.21.0",
     date: "2026-10-24",
     highlights: [

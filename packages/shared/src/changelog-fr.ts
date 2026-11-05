@@ -2,6 +2,24 @@ import type { ChangelogEntry } from "./changelog.js";
 
 export const frEntries: ChangelogEntry[] = [
   {
+    version: "0.22.0",
+    date: "2026-11-05",
+    highlights: [
+      "Confiez éventuellement le contrôle de votre bureau à l'agent : il voit l'écran, déplace et clique le curseur et saisit — tout le bureau est accordé en une fois, Stop reste la limite.",
+      "Ciblez une fenêtre visible par sa véritable identité de fenêtre et non par sa forme, pour ne plus tromper sur les fenêtres superposées ou redimensionnées.",
+      "Configurez le pool de modèles une seule fois dans Paramètres : priorités par usage, approbation obligatoire et modèles de repli autorisés pour les relances sans surveillance.",
+      "Relancez directement un sous-agent en échec et conservez ses points de contrôle pour que la session reprise reprenne où elle s'est arrêtée.",
+      "Sélectionnez plusieurs sessions à la fois et déplacez-les dans une corbeille que vous pouvez restaurer ou vider.",
+      "Enrichissez les actions de fichier du chat avec Enregistrer sous, et ouvrez les références hors racine projet en chemins absolus.",
+      "Revenez à la dernière réponse par un défilement fluide pendant que l'historique plus ancien se précharge en arrière-plan, et gardez votre position de lecture entre les sessions.",
+      "Lisez les résumés de tour : les fichiers modifiés apparaissent sous la réponse et les groupes d'activité terminés se replient en une ligne libellée.",
+      "Ouvrez un menu contextuel radial optionnel sur le fond de la conversation pour les actions navigateur, panneau de travail et dossier projet.",
+      "Lancez des applications installées depuis le panneau de travail : une grille groupée et recherche, avec vignettes épinglables et libellés entièrement traduits.",
+      "Envoyez /fast pour utiliser le niveau de service prioritaire d'OpenAI, et l'interrupteur des tâches planifiées est activé par défaut.",
+      "Les relances de l'agent classent désormais correctement les erreurs de facturation, de quota et de clé API, conservent les images d'outils et les ressources MCP déléguées et récupèrent les sessions après des appels d'outil malformés.",
+    ],
+  },
+  {
     version: "0.21.0",
     date: "2026-10-24",
     highlights: [

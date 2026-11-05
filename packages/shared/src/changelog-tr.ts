@@ -2,6 +2,24 @@ import type { ChangelogEntry } from "./changelog.js";
 
 export const trEntries: ChangelogEntry[] = [
   {
+    version: "0.22.0",
+    date: "2026-11-05",
+    highlights: [
+      "Masaüstünüzün kontrolünü isteğe bağlı olarak agente bırakın: ekranı görür, imleci hareket ettirip tıklar ve yazar — tüm masaüstü tek seferde yetkilendirilir ve sınır Stop'tur.",
+      "Görünen bir pencereyi şekline göre değil gerçek pencere kimliğine göre seçin; üst üste binen veya yeniden boyutlanan pencereler doğru hedeflenir.",
+      "Model havuzunu Ayarlar'da tek yerden yapılandırın: amaça göre öncelikler, zorunlu onay ve gözetimsiz yeniden denemeler için yetkili yedek modeller.",
+      "Başarısız bir alt ajanı doğrudan yeniden deneyin; kontrol noktaları saklandığı için kaldığı yerden devam eder.",
+      "Aynı anda birden çok oturum seçin ve geri dönüşüm kutusuna taşıyın; istediğiniz zaman geri yükleyin veya boşaltın.",
+      "Sohbet dosya eylemleri Farklı kaydet ile genişler; proje kökü dışındaki dosya başvuruları mutlak yollarla açılır.",
+      "En son yanıta yumuşak bir kaydırmayla dönün, eski geçmiş arka planda önceden yüklenir ve oturum değişiminde okuma konumunuz korunur.",
+      "Tur özetlerini okuyun: her turun değiştirdiği dosyalar yanıtın altında listelenir, tamamlanan etkinlik grupları tek etiketli satıra katlanır.",
+      "Sohbet arka planında tarayıcı, çalışma paneli ve proje klasörü eylemleri için isteğe bağlı dairesel bağlam menüsünü açın.",
+      "Yüklü uygulamaları çalışma panelinden başlatın: gruplanmış, aranabilir bir ızgara; sabitlenebilir kutucuklar ve eksiksiz çevrilmiş etiketler.",
+      "OpenAI'nin öncelikli hizmet katmanı için /fast gönderin ve zamanlanmış görev özelliği varsayılan olarak açık gelsin.",
+      "Ajan yeniden denemeleri artık faturalandırma, kota ve API anahtarı hatalarını doğru sınıflandırır; temsilci araç görsellerini ve MCP kaynaklarını korur ve bozuk araç çağrılarından sonra oturumu kurtarır.",
+    ],
+  },
+  {
     version: "0.21.0",
     date: "2026-10-24",
     highlights: [
