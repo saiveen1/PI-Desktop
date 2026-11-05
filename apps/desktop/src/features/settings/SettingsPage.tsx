@@ -533,7 +533,6 @@ export function SettingsPage() {
 
           {tab === "ai" && settings && (
             <div className="settings-stack">
-              <ComputerUseSettings t={t} settings={settings} saveSettings={saveSettings} />
               <SettingsCard title={t("settings.permissions")}>
                 <SettingsRow
                   title={t("settings.permissionMode")}
@@ -635,6 +634,7 @@ export function SettingsPage() {
                 />
               </SettingsCard>
 
+              <ComputerUseSettings t={t} settings={settings} saveSettings={saveSettings} />
             </div>
           )}
 
