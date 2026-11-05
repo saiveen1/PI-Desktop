@@ -4,10 +4,12 @@ import test from "node:test";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { register } from "node:module";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const here = new URL(".", import.meta.url);
-register(pathToFileURL(new URL("helpers/ts-import-hooks.mjs", here).pathname));
+// fileURLToPath, not URL.pathname: pathname keeps the POSIX `/D:/...` shape on
+// Windows and produces a double-drive file URL here.
+register(pathToFileURL(fileURLToPath(new URL("helpers/ts-import-hooks.mjs", here))));
 const { migrateLegacyPromptEnhancementSettings } = await import(
   "../electron/main/plugin-prompt-enhancement-migration.ts"
 );

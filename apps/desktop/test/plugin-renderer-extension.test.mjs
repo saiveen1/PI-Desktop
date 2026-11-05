@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { register, registerHooks } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
+import { createLinkOrSkipSync } from "./helpers/link-fixture.mjs";
 
 // Electron is the boundary: the protocol module hands its request handler to
 // `protocol.handle`, and this stand-in keeps it for the tests to drive.
@@ -83,8 +84,8 @@ function pluginPackage(t) {
     mkdirSync(dirname(join(root, path)), { recursive: true });
     writeFileSync(join(root, path), content);
   }
-  symlinkSync(join(root, "secret.js"), join(dir, "renderer", "escape.js"));
-  symlinkSync(join(dir, "renderer", "lib", "chart.js"), join(dir, "renderer", "alias.js"));
+  createLinkOrSkipSync(t, join(root, "secret.js"), join(dir, "renderer", "escape.js"));
+  createLinkOrSkipSync(t, join(dir, "renderer", "lib", "chart.js"), join(dir, "renderer", "alias.js"));
   return { root, dir };
 }
 

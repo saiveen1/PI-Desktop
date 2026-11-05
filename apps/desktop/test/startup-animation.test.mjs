@@ -8,11 +8,12 @@
  * path is one transition; the bounds are the feature.
  */
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { createLinkOrSkip } from "./helpers/link-fixture.mjs";
 import {
   parseByteRange,
   STARTUP_ANIMATION_FIRST_FRAME_TIMEOUT_MS,
@@ -300,13 +301,13 @@ test("skipWhenReady reaches the descriptor the renderer reads", async () => {
   });
 });
 
-test("a symlink out of the folder is not served", async () => {
+test("a symlink out of the folder is not served", async (t) => {
   await withDataDir(async (dataDir) => {
     const directory = startupAnimationDirectory(dataDir);
     await mkdir(directory, { recursive: true });
     const outside = join(dataDir, "secrets.webm");
     await writeFile(outside, Buffer.alloc(16, 1));
-    await symlink(outside, join(directory, "intro.webm"));
+    await createLinkOrSkip(t, outside, join(directory, "intro.webm"));
     assert.equal(
       await resolveStartupAnimation({ dataDir, settings: null }),
       null,

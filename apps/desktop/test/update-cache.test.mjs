@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import test from "node:test";
 import { dirname, join as pathJoin } from "node:path";
 import { register } from "node:module";
@@ -41,11 +41,13 @@ test("default updater cache base mirrors electron-updater on supported platforms
   );
   assert.equal(
     defaultUpdateCacheBasePath({ platform: "win32", env: {}, home: "/home/a" }),
-    "/home/a/AppData/Local",
+    // The implementation joins with the host path module, exactly like
+    // electron-updater's getAppCacheDir does on the runtime platform.
+    join("/home/a", "AppData", "Local"),
   );
   assert.equal(
     defaultUpdateCacheBasePath({ platform: "darwin", env: {}, home: "/Users/a" }),
-    "/Users/a/Library/Caches",
+    join("/Users/a", "Library", "Caches"),
   );
   assert.equal(
     defaultUpdateCacheBasePath({
@@ -55,13 +57,17 @@ test("default updater cache base mirrors electron-updater on supported platforms
     }),
     "/mnt/cache",
   );
+  assert.equal(
+    defaultUpdateCacheBasePath({ platform: "linux", env: {}, home: "/home/a" }),
+    join("/home/a", ".cache"),
+  );
 });
 
 test("cache override requires an absolute path and uses app-update.yml's directory name", () => {
   assert.equal(resolveUpdateCacheOverride(undefined), null);
   assert.equal(resolveUpdateCacheOverride("  "), null);
   assert.equal(resolveUpdateCacheOverride("relative/cache"), null);
-  assert.equal(resolveUpdateCacheOverride("/mnt/PI cache"), "/mnt/PI cache");
+  assert.equal(resolveUpdateCacheOverride("/mnt/PI cache"), resolve("/mnt/PI cache"));
   assert.equal(
     readUpdaterCacheDirName("provider: github\nupdaterCacheDirName: '@pi-desktopdesktop-updater'\n"),
     "@pi-desktopdesktop-updater",
@@ -71,7 +77,7 @@ test("cache override requires an absolute path and uses app-update.yml's directo
   assert.equal(readUpdaterCacheDirName("updaterCacheDirName: nested/path"), null);
   assert.equal(
     updateCacheDirFor("/mnt/cache", "@pi-desktopdesktop-updater"),
-    "/mnt/cache/@pi-desktopdesktop-updater",
+    join("/mnt/cache", "@pi-desktopdesktop-updater"),
   );
   assert.equal(sameUpdateCacheDir("C:/Cache/UPDATER", "c:/cache/updater", "win32"), true);
   assert.equal(sameUpdateCacheDir("/Cache/UPDATER", "/cache/updater", "linux"), false);

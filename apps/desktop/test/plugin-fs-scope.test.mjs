@@ -7,7 +7,6 @@ import {
   mkdtempSync,
   realpathSync,
   readFileSync,
-  symlinkSync,
   utimesSync,
   writeFileSync,
 } from "node:fs";
@@ -15,6 +14,7 @@ import { register } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { createLinkOrSkipSync } from "./helpers/link-fixture.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const desktopRoot = join(here, "..");
@@ -355,8 +355,8 @@ test("a symlink inside the workspace cannot carry a read out of it", async (t) =
   const outside = mkdtempSync(join(tmpdir(), "pi-fs-scope-outside-"));
   writeFileSync(join(outside, "id_rsa"), "PRIVATE KEY", "utf8");
   const ws = makeWorkspace();
-  symlinkSync(join(outside, "id_rsa"), join(ws, "innocent.txt"));
-  symlinkSync(outside, join(ws, "elsewhere"));
+  createLinkOrSkipSync(t, join(outside, "id_rsa"), join(ws, "innocent.txt"));
+  createLinkOrSkipSync(t, outside, join(ws, "elsewhere"), "dir");
 
   const { runtime } = await harness(t, {
     id: "fs.read.symlink",
@@ -694,14 +694,17 @@ test("the project's other folders are not an escape hatch", async (t) => {
     "PERMISSION_DENIED",
     /never readable by plugins/,
   );
-  // A folder this project did not register is not a group folder.
+  // A folder this project did not register is not a group folder. The file
+  // exists but outside every root, so the resolver reports the escape rather
+  // than pretending the path is missing (matches resolveFsRequest's own
+  // comment: only an existing path outside the root is an escape).
   await refused(
     t,
     runtime.invokePanelBridge("fs.folders.guards", "fs.openDefault", {
       path: join(stranger, "notes.txt"),
     }),
-    "NOT_FOUND",
-    /path not found/,
+    "INVALID_ARGUMENT",
+    /escapes the plugin's root/,
   );
   assert.ok(
     audits.some((entry) => entry.api === "fs.read" && entry.ok === false),

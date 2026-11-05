@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { register } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { createLinkOrSkipSync } from "./helpers/link-fixture.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 register(pathToFileURL(join(here, "helpers/ts-import-hooks.mjs")));
@@ -92,15 +93,15 @@ test("dotfiles and credential-looking paths open like any other file", async () 
   }
 });
 
-test("symlinks and dot-dot spellings resolve to the real file", async () => {
+test("symlinks and dot-dot spellings resolve to the real file", async (t) => {
   const outside = tempTree("link", ["data/real.txt", "plain/readme.txt"]);
   const link = join(outside, "plain", "alias.txt");
-  symlinkSync(join(outside, "data", "real.txt"), link);
+  createLinkOrSkipSync(t, join(outside, "data", "real.txt"), link);
   assert.equal((await resolveExternalChatRef(link)).match?.absolutePath, join(outside, "data", "real.txt"));
   const dotted = `${join(outside, "plain")}/../data/real.txt`;
   assert.deepEqual(await resolveExternalFile(dotted), { kind: "file", path: join(outside, "data", "real.txt") });
   const dangling = join(outside, "plain", "dangling.txt");
-  symlinkSync(join(outside, "data", "gone.txt"), dangling);
+  createLinkOrSkipSync(t, join(outside, "data", "gone.txt"), dangling);
   assert.deepEqual(await resolveExternalFile(dangling), { kind: "missing" });
 });
 

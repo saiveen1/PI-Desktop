@@ -27,6 +27,14 @@ pub fn init_repo(path: &Path) -> PathBuf {
     git_cmd(path, &["config", "user.name", "PI Test"]);
     git_cmd(path, &["config", "user.email", "pi-test@example.invalid"]);
     git_cmd(path, &["config", "commit.gpgsign", "false"]);
+    // The fixtures assert exact file bytes, so checkouts must keep the bytes
+    // that were committed. A Windows install defaults `core.autocrlf` to
+    // `true` and rewrites every text file to CRLF on checkout, which turns
+    // these assertions into line-ending failures that say nothing about the
+    // worktree logic. Pin the repository instead of the process environment:
+    // git also honors per-install and system config.
+    git_cmd(path, &["config", "core.autocrlf", "false"]);
+    git_cmd(path, &["config", "core.eol", "lf"]);
     std::fs::write(path.join("README.md"), "init\n").unwrap();
     git_cmd(path, &["add", "README.md"]);
     git_cmd(path, &["commit", "-q", "-m", "init"]);

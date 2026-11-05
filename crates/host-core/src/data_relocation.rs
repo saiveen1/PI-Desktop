@@ -249,7 +249,13 @@ fn rewrite_capability_state(path: &Path, roots: &Roots) -> Result<()> {
                 .as_deref()
                 .and_then(|path| roots.remap(path))
             {
-                identity.project_path = Some(project);
+                // Store the same normalized spelling `CapabilityState` writes:
+                // its lookups normalize the query, so a raw `destination.join`
+                // (backslashes on Windows) would strand the override behind an
+                // unreachable key and hide identity collisions from the
+                // conflict check below.
+                identity.project_path =
+                    Some(crate::agent_capabilities::normalize_project_path(&project));
                 changed = true;
                 serde_json::to_string(&identity)?
             } else {

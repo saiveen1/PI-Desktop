@@ -344,7 +344,12 @@ fn handles_legacy_schema_without_upgrading_or_creating_missing_tables() {
     let path: String = database
         .query_row("SELECT path FROM projects", [], |row| row.get(0))
         .unwrap();
-    assert_eq!(path, destination.join("project").to_string_lossy());
+    // Relocation stores the canonical forward-slash form (db::normalize_project_path);
+    // build the expectation through the same normalization the implementation uses.
+    assert_eq!(
+        path,
+        crate::db::canonical_project_path(&destination.join("project").to_string_lossy()).unwrap()
+    );
     let tables: i64 = database
         .query_row(
             "SELECT count(*) FROM sqlite_master WHERE type='table'",
@@ -386,7 +391,10 @@ fn project_capability_overrides_follow_the_moved_project_without_changing_global
         .unwrap();
     copy_directory(&source, &destination);
     relocate(&source, &destination).unwrap();
-    let moved_project = destination.join("project").to_string_lossy().into_owned();
+    // Capability keys persist the canonical forward-slash project path, so the
+    // lookup must use the same normalization the capability store applies.
+    let moved_project =
+        crate::db::canonical_project_path(&destination.join("project").to_string_lossy()).unwrap();
     let restored = CapabilityState::new(&destination, "skills");
     assert!(!restored.enabled(
         "skills",

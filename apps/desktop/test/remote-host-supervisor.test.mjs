@@ -3,12 +3,21 @@ import test from "node:test";
 import { register } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { mkdtemp, mkdir, writeFile, readFile, symlink, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { spawn } from "node:child_process";
+import { createLinkOrSkip } from "./helpers/link-fixture.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 register(pathToFileURL(join(here, "helpers/ts-import-hooks.mjs")));
+// The supervisor drives a POSIX shell bootstrap: its script reads `ps -p`,
+// `/proc/self/fd` and an executable `bin/node` link. Git Bash provides none of
+// them, so the driving tests are explicitly skipped on Windows instead of
+// failing there (the pure readiness validation above still runs).
+const POSIX_ONLY =
+  process.platform === "win32"
+    ? "posix-only: supervisor bootstrap needs sh, ps -p, /proc and exec links"
+    : false;
 const { buildRemoteHostSupervisorScript, parseRemoteHostReady, ensureRemoteHostReady } = await import("../electron/main/remote/remote-host-supervisor.ts");
 const VERSION = "0.15.1-beta.5";
 const ready = { hostId: "durable-host", host: "127.0.0.1", port: 45678, version: VERSION };
@@ -75,7 +84,7 @@ server.listen(0, '127.0.0.1', () => console.log('PI_HOST_READY ' + JSON.stringif
   return { home, base, work, credentials, run };
 }
 
-test("stopped installed Host starts at a fresh port, then running reuse preserves PID and credentials", async t => {
+test("stopped installed Host starts at a fresh port, then running reuse preserves PID and credentials", { skip: POSIX_ONLY }, async t => {
   const f = await fixture(t);
   await writeFile(join(f.work, "pi-host.pid"), "99999999\n");
   await writeFile(join(f.work, "pi-host.log"), line(ready) + "PI_HOST_PAIRING_TOKEN historic-secret\n");
@@ -94,14 +103,14 @@ test("stopped installed Host starts at a fresh port, then running reuse preserve
   assert.ok((await readFile(join(f.work, "pi-host.log"), "utf8")).includes("historic-secret"));
 });
 
-test("legacy installed bundle can use system Node without installing", async t => {
+test("legacy installed bundle can use system Node without installing", { skip: POSIX_ONLY }, async t => {
   const f = await fixture(t, { legacy: true });
   const result = await f.run();
   assert.equal(result.code, 0, result.stderr);
   parseRemoteHostReady(result.stdout, { version: VERSION });
 });
 
-test("unrelated live PID is neither killed nor mistaken for an installed Host", async t => {
+test("unrelated live PID is neither killed nor mistaken for an installed Host", { skip: POSIX_ONLY }, async t => {
   const f = await fixture(t);
   await writeFile(join(f.work, "pi-host.pid"), String(process.pid));
   await writeFile(join(f.work, "pi-host.log"), line(ready));
@@ -111,9 +120,9 @@ test("unrelated live PID is neither killed nor mistaken for an installed Host", 
   assert.equal(await readFile(join(f.work, "pi-host.log"), "utf8"), line(ready));
 });
 
-test("symlinked stale log is rejected without truncating its target", async t => {
+test("symlinked stale log is rejected without truncating its target", { skip: POSIX_ONLY }, async t => {
   const f = await fixture(t);
-  await symlink(f.credentials, join(f.work, "pi-host.log"));
+  await createLinkOrSkip(t, f.credentials, join(f.work, "pi-host.log"));
   const result = await f.run();
   assert.equal(result.code, 1);
   assert.match(result.stderr, /unsafe-state-file/);

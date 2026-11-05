@@ -81,15 +81,13 @@ test("the arm expires on its own and has a single owner", () => {
   assert.match(skillsPageSource, /useArmedDelete\(\)/);
 });
 
-test("only session rows use the shared two-step delete arm", () => {
-  assert.match(
-    sidebarSource,
-    /import \{ useArmedDelete \} from "\.\.\/hooks\/use-armed-delete"/,
-  );
-  assert.match(
-    sidebarSource,
-    /const \{ armed: armedDelete, setArmed: setArmedDelete \} = useArmedDelete\(\)/,
-  );
+test("the armed delete stays in settings capability rows, not in the sidebar", () => {
+  // Session deletion left this hook when the recycle bin landed: trashing is
+  // recoverable, so a row no longer arms a confirmation (session-organization).
+  // The capability rows kept it, and they still share this one implementation
+  // through their layout instead of carrying a second copy with its own timer.
+  assert.doesNotMatch(sidebarSource, /useArmedDelete/);
+  assert.doesNotMatch(sidebarSource, /armedDelete/);
   assert.doesNotMatch(projectsSource, /useArmedDelete|armedDelete/);
 
   const projectRequest = handlerBlock(sidebarSource, "requestDeleteProject");
@@ -97,26 +95,20 @@ test("only session rows use the shared two-step delete arm", () => {
   assert.doesNotMatch(projectRequest, /armedDelete|deleteProjectAction/);
 });
 
-test("the session menu deletes on the second click, not the first", () => {
+test("the session menu trashes instead of deleting on a second click", () => {
   assert.match(sidebarSource, /id: "delete-session"/);
+  assert.match(sidebarSource, /label: t\("sessionOrganization\.moveToTrash"\)/);
   assert.match(sidebarSource, /onSelect: \(\) => requestDeleteSession\(session\),/);
-  // The item shows which click it is on, for the pointer and for the tests.
-  assert.match(
-    sidebarSource,
-    /label:[\s\S]*?armedDelete === session\.id[\s\S]*?t\("nav\.deleteTaskConfirm", \{ defaultValue: "Delete\?" \}\)[\s\S]*?t\("nav\.deleteTask", \{ defaultValue: "Delete" \}\)/,
-  );
 
+  // One click moves the session to the recycle bin; the arm is gone, so no
+  // "Delete?" label and no second-click state may come back to this item.
   const request = handlerBlock(sidebarSource, "requestDeleteSession");
-  assert.match(request, /if \(armedDelete !== session\.id\) \{/);
-  assert.match(request, /setArmedDelete\(session\.id\);\s*return;/);
-  assert.match(request, /setArmedDelete\(null\);\s*void deleteSession\(session\);/);
-  assert.ok(
-    request.indexOf("deleteSession(session)") > request.indexOf("setArmedDelete(session.id)"),
-    "the delete runs only behind the arm",
+  assert.match(request, /runSessionAction\("trash", \[session\.id\]\)/);
+  assert.doesNotMatch(request, /armedDelete|setArmedDelete/);
+  assert.doesNotMatch(
+    sidebarSource,
+    /label:[\s\S]*?armedDelete === session\.id[\s\S]*?t\("nav\.deleteTaskConfirm"/,
   );
-  // Nothing closes the menu on the first click, so the second one can land on
-  // the very same item.
-  assert.doesNotMatch(request, /closeMenus/);
 });
 
 test("the session delete label ships in every catalog", () => {

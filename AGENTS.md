@@ -653,6 +653,12 @@ and do not skip an applicable gate merely because narrower tests passed.
 
 Never report a skipped command as passing.
 
+Before chasing failures from a full suite run on a Windows (Git Bash) host,
+consult `docs/testing/windows-known-failures.md`: a fixed set of cases there
+fail by platform design (POSIX-only tooling, symlink privilege, unix sockets,
+macOS release machinery) and are covered on the Linux CI jobs instead. Only
+failures outside that ledger — or on Linux/macOS CI — indicate a regression.
+
 `verify:ui:*` starts or attaches to a Desktop instance and must only run
 when the user explicitly asks in the current task. UI / icon / style /
 main-renderer changes do not by themselves authorize it, and do not ask

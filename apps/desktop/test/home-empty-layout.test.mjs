@@ -54,11 +54,14 @@ test("empty home keeps the primary task surface focused", () => {
   // Anchor on the empty-state element itself rather than on the shape of the
   // surrounding ternary: the session-loading skeleton (D262) turned
   // `{!hasTranscript ? (` into `) : !hasTranscript ? (`, and a branch added
-  // later would break a source-text anchor again.
+  // later would break a source-text anchor again. The block now ends at the
+  // docked-composer fallback: retained session panes moved into their own
+  // `session-panes` container ahead of it, so `<SessionPane` is no longer the
+  // next sibling.
   const emptyStart = chatSurface.indexOf('data-testid="home-empty"');
   assert.notEqual(emptyStart, -1, "empty home block must exist");
-  const emptyEnd = chatSurface.indexOf("<SessionPane", emptyStart);
-  assert.notEqual(emptyEnd, -1, "the pane branch must follow the empty block");
+  const emptyEnd = chatSurface.indexOf("<StableComposer", emptyStart);
+  assert.notEqual(emptyEnd, -1, "the docked composer fallback must follow the empty block");
   const emptyBlock = chatSurface.slice(emptyStart, emptyEnd);
   const onboardingAt = emptyBlock.indexOf("<OnboardingChecklist />");
   const composerAt = emptyBlock.indexOf("home-composer-wrap");
