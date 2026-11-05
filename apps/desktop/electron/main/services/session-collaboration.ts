@@ -107,7 +107,11 @@ export function createSessionCollaborationService(deps: SessionCollaborationDepe
     try {
       const result = await deps.authorizeDelegation(request);
       if (signal?.aborted || result.decision === "cancel") fail("ABORTED", "Delegation cancelled");
-      return result.decision === "allow";
+      if (result.decision === "allow" && result.selectedModel
+        && (result.selectedModel.providerId !== request.providerId || result.selectedModel.modelId !== request.modelId)) {
+        fail("PERMISSION_DENIED", "Selected model cannot be applied to a session-collaboration dispatch");
+      }
+      return result;
     } finally { signal?.removeEventListener("abort", abort); }
   }
 
@@ -130,11 +134,17 @@ export function createSessionCollaborationService(deps: SessionCollaborationDepe
     if (!enabled) fail("PERMISSION_DENIED", "Target model is not enabled for delegation");
     if (!(approved?.providerId === target.providerId && approved.modelId === target.modelId && approved.task === content
       && approved.policy === JSON.stringify(settings.delegation))) {
-      const request = { sessionId, requestId: `session-message:${messageId}:${randomUUID()}`,
-        providerId: target.providerId, modelId: target.modelId, task: content };
+      const source = await host.call<{ message?: SessionCollaborationMessage }>("session.collaboration.message", { messageId });
+      checkCurrent(host);
+      if (!source.message || source.message.status !== "queued" || source.message.targetSessionId !== sessionId
+        || source.message.content !== content || !deps.isPluginLoaded(source.message.pluginId)) {
+        fail("ABORTED", "Session delivery was cancelled before approval");
+      }
+      const request: DelegationApprovalRequest = { sessionId: source.message.sourceSessionId, requestId: `session-message:${messageId}:${randomUUID()}`,
+        providerId: target.providerId, modelId: target.modelId, task: content, selection: "require" };
       dispatchApprovals.set(messageId, request);
       try {
-        if (!await authorize(request, dispatchSignals.get(messageId))) fail("PERMISSION_DENIED", "Target model delegation was skipped");
+        if ((await authorize(request, dispatchSignals.get(messageId))).decision !== "allow") fail("PERMISSION_DENIED", "Target model delegation was skipped");
       } finally { if (dispatchApprovals.get(messageId) === request) dispatchApprovals.delete(messageId); }
     }
     const latest = await host.call<{ session?: { providerId?: string; modelId?: string } }>("session.get", { id: sessionId });
@@ -365,11 +375,15 @@ export function createSessionCollaborationService(deps: SessionCollaborationDepe
               if (!isDelegationSettings(settings.delegation)) fail("PERMISSION_DENIED", "Invalid delegation policy");
               chosen = undefined;
               const candidates = orderDelegationModels(settings.delegation, { preferredKey: requested });
+              let automaticOnly = false;
               for (const candidate of candidates) {
                 const ready = models.find((item) => item.key === delegationModelKey(candidate) && item.availableForSubagents);
                 if (!ready) continue;
-                if (await authorize({ sessionId: source.sourceSessionId, requestId: randomUUID(),
-                  providerId: ready.providerId, modelId: ready.modelId, task: content! }, input.signal)) {
+                const authorization = await authorize({ sessionId: source.sourceSessionId, requestId: randomUUID(),
+                  providerId: ready.providerId, modelId: ready.modelId, task: content!, requestedModel: requested,
+                  ...(automaticOnly ? { automaticOnly: true } : {}) }, input.signal);
+                if (authorization.code === "timeout") automaticOnly = true;
+                if (authorization.decision === "allow") {
                   chosen = ready;
                   approvedPolicy = JSON.stringify(settings.delegation);
                   break;

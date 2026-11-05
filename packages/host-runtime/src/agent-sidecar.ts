@@ -2,7 +2,8 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { COMPUTER_CALL_TIMEOUT_MS, DEFAULT_RPC_TIMEOUT_MS, IMAGE_BATCH_TIMEOUT_MS, imageGenerationPrompts, readNdjsonLines, rpcTimeoutMs, rpcErrorFromWire, rpcErrorToWire } from "@pi-desktop/shared";
 import type { ProcessExitHandler, StderrHandler } from "./host-process.js";
-import type { DelegationApprovalRequest, DelegationApprovalDecision } from "@pi-desktop/shared";
+import type { DelegationApprovalRequest, DelegationApprovalDecision, DelegationPolicySnapshot } from "@pi-desktop/shared";
+import { delegationPolicySnapshot, isDelegationAuthorizationRequest } from "./delegation-boundary.js";
 
 export type DelegationAuthorizer = (request: DelegationApprovalRequest) => Promise<DelegationApprovalDecision>;
 export type DelegationApprovalCanceller = (request: Pick<DelegationApprovalRequest, "sessionId" | "requestId">) => void;
@@ -75,6 +76,7 @@ const HOST_PROXY_ALLOWED = new Set([
   "provider.resolveSubagentModel",
   "provider.authorizeDelegation",
   "provider.cancelDelegationApproval",
+  "provider.delegationSnapshot",
   "app.health",
   // Trusted extensions (D387): answered by the embedding host, plus the
   // session methods the ExtensionAPI reaches (spec 16 §10.1).
@@ -166,6 +168,7 @@ export class AgentSidecar {
   private trustedExtensionBridge: TrustedExtensionSidecarBridge | null = null;
   private delegationAuthorizer: DelegationAuthorizer | null = null;
   private delegationApprovalCanceller: DelegationApprovalCanceller | null = null;
+  private delegationSnapshotResolver: (() => Promise<DelegationPolicySnapshot>) | null = null;
   private delegationApprovals = new Map<string, Pick<DelegationApprovalRequest, "sessionId" | "requestId">>();
   // Vendor-account rows this session was launched with. The sidecar can only
   // ask for auth it is already using, and a session that never bound an OAuth
@@ -387,6 +390,7 @@ export class AgentSidecar {
     if (this.closed) return;
     if (this.host && this.host !== host) {
       for (const controller of this.localToolControllers.values()) controller.abort();
+      for (const request of this.delegationApprovals.values()) this.delegationApprovalCanceller?.(request);
     }
     this.host = host;
     this.unsubscribeHost?.();
@@ -406,6 +410,7 @@ export class AgentSidecar {
       this.writeToChild(payload);
     });
     this.unsubscribeHostExit = host.onExit(() => {
+      for (const request of this.delegationApprovals.values()) this.delegationApprovalCanceller?.(request);
       for (const controller of this.localToolControllers.values()) controller.abort();
       this.unsubscribeHost?.();
       this.unsubscribeHost = null;
@@ -442,12 +447,15 @@ export class AgentSidecar {
     this.delegationApprovalCanceller = cancel;
   }
 
+  setDelegationSnapshotResolver(resolver: () => Promise<DelegationPolicySnapshot>): void {
+    this.delegationSnapshotResolver = resolver;
+  }
+
   private async authorizeDelegation(params: Record<string, unknown>): Promise<DelegationApprovalDecision> {
-    const valid = [params.sessionId, params.requestId, params.providerId, params.modelId, params.task]
-      .every((value) => typeof value === "string" && value.trim().length > 0)
-      && (params.reason === undefined || typeof params.reason === "string");
-    if (!valid || !this.delegationAuthorizer) return { decision: "skip", reason: "Delegation authorization unavailable" };
-    const request = params as DelegationApprovalRequest;
+    if (!isDelegationAuthorizationRequest(params) || !this.delegationAuthorizer) {
+      return { decision: "skip", reason: "Delegation authorization unavailable", code: "unavailable" };
+    }
+    const request = structuredClone(params);
     const key = JSON.stringify([request.sessionId, request.requestId]);
     if (this.delegationApprovals.has(key)) return { decision: "skip", reason: "Duplicate delegation approval" };
     this.delegationApprovals.set(key, request);
@@ -545,6 +553,14 @@ export class AgentSidecar {
           this.writeToChild(
             JSON.stringify({ jsonrpc: "2.0", id: msg.id, result }) + "\n",
           );
+          return;
+        }
+        if (method === "provider.delegationSnapshot") {
+          if (!this.delegationSnapshotResolver) {
+            throw Object.assign(new Error("Delegation snapshot unsupported"), { code: -32601 });
+          }
+          const result = delegationPolicySnapshot(await this.delegationSnapshotResolver());
+          this.writeToChild(JSON.stringify({ jsonrpc: "2.0", id: msg.id, result }) + "\n");
           return;
         }
         if (method === "provider.authorizeDelegation" || method === "provider.cancelDelegationApproval") {

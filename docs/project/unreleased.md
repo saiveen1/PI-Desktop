@@ -1,5 +1,17 @@
 # Unreleased changes
 
+- Keep the parent conversation usable during a manual subagent retry. Retained
+  history and checkpoints continue the child work; steering leaves it running,
+  and its report returns through one parent continuation and turn completion.
+- Add a grouped delegation approval center with source navigation, asynchronous
+  arrivals, a full-task reader, exact model selection and explicit selected-item
+  actions. Failed submissions remain visible for retry; collapsing never rejects
+  work. New/default policies wait five minutes without rewriting saved waits;
+  explicit extension adds five minutes and expiry uses only authorized automatic
+  alternatives. Saved scheduling changes apply to later admissions and pending
+  approvals during the same turn while active children keep their starting
+  provider and execution settings. Phase-2 integration verification is pending.
+
 - Preserve subagent progress reports through cancellation and restart. Explicit
   resume reuses retained findings; long runs reserve a bounded report phase
   when their work budget is exhausted, and TaskWait can recover saved reports.

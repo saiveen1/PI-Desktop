@@ -972,11 +972,21 @@ their own context, in the background, and report back on demand.
 pairs, enabled state, priority 1–100 (lower first; ties allowed), `auto | ask`
 approval, and selection guidance up to 1000 characters. The pool contains at most
 128 unique pairs. `approvalTimeoutSeconds` is an integer 0–300; zero skips
-approval-required candidates for unattended work. Invalid settings are rejected
-by Host without overwriting the saved policy. Until the first save, the legacy
-opt-ins and definition defaults described below remain unchanged. After save,
+approval-required candidates for unattended work. New/default settings seed 300
+seconds; existing saved values, including zero, are never rewritten. Invalid
+settings are rejected by Host without overwriting the saved policy. Until the
+first save, legacy opt-ins and definition defaults remain unchanged. After save,
 the enabled pool governs defaults, explicit choices, pins, resume and fallback;
 the legacy model checkbox becomes a link to this single source of policy.
+
+Saved policy, catalog availability, descriptions and priorities apply to later
+Task admissions in the same long parent turn, later resumes, pending approvals
+and naturally triggered fallback. The additive `provider.delegationSnapshot`
+callback returns `DelegationPolicySnapshot` (`settings?`, opaque string `revision`,
+`modelKeys`); runtime resolves model keys independently. Refresh the parent-facing
+catalog at a provider-request boundary, never by rewriting an in-flight payload.
+Already-started children retain their provider and resolved execution policy;
+saving settings neither interrupts/recreates them nor forces a model switch.
 
 Task's tool declaration carries both role and model selection guidance on every
 provider request. `modelReason` explains specialist selection ahead of a preferred
@@ -987,20 +997,36 @@ Natural-language model choices continue through `Task.model`; when the chosen
 model requires approval, only the host's human UI decision grants it.
 
 The independent host model gate applies even in Auto mode and rereads policy
-before use and after waiting. Approval is scoped to this invocation and model;
-resume needs fresh authorization. Expiry/unavailable UI skips the candidate and
-permits an authorized alternative within the same Task. Approval prompts do not
-preselect an option, and clicking the backdrop leaves them pending. Closing the
-dialog, pressing Escape or Cancel, and choosing Cancel delegation all cancel the
-invocation; only the explicit Use another model option requests a fallback.
-Host retirement/expiry remains distinct from a user dismissal. Explicit
-cancellation and Stop never authorize fallback; stale approvals never revive work. Provider
-fallback keeps successful tool history and checks the next model before any
-request. `Task` results and settlement snapshots record requested model and
+before use and after waiting. Approval is scoped to this invocation and exact
+provider/model; resume needs fresh authorization. The dedicated core approval
+center exposes `allow` (displayed candidate once), `skip` (authorized alternative),
+`select` (exact picked provider/model), and `cancel` (end this invocation).
+Runtime independently resolves and validates a selected target against current
+authority and capabilities; failure never silently chooses another model, and
+`modelSelection: require` never permits substitution. Model-authored text cannot
+grant consent. Ordinary plugin/extension prompts cannot impersonate core consent.
+
+Each request has one host-owned deadline. Manual extension adds exactly 300
+seconds to that live deadline without changing settings. Viewing, scrolling,
+collapse or new arrivals never renew it. After expiry, only compatible candidates
+already authorized by `auto` may run in the same Task; otherwise return a clear
+timeout result, without starting another full approval wait. Runtime decisions
+carry an additive machine-readable `code` and optional `selectedModel` identity;
+reason prose is not used to distinguish consent, timeout or cancellation.
+Explicit cancellation and Stop never authorize fallback or same-task retry.
+Collapse/close/Escape only hide the center and send no denial. Host rechecks
+request state, deadline, revision and current eligibility before granting consent
+or extending; expired, cancelled, replaced or stale requests cannot revive work.
+
+Acknowledged approval is distinct from waiting for capacity or execution start.
+Provider fallback keeps successful tool history and checks the next model before
+any request. `Task` results and settlement snapshots record requested model and
 selection/skip reasons in additive `scheduling` details. Main conversation model
 selection and ordinary tool permissions are unchanged. Plugin collaboration
 uses the same model gate; an existing target session is not silently rebound.
-See [the scheduling ADR](../../adr/delegation-scheduling-and-approval.md).
+See [the scheduling ADR](../../adr/delegation-scheduling-and-approval.md),
+[core IPC](01-ipc-protocol.md#52c-delegation-model-approval) and
+[approval UX](../04-ux/03-permission-ux.md#9a-delegation-model-approval-center).
 
 The remaining legacy selection/fallback rules below apply when no unified
 policy has been saved; under a saved policy, its membership and approval rules
@@ -1014,8 +1040,9 @@ builtins shipped inline in `agent-runtime` (`explorer`, `code-reviewer`,
 the app-local enabled state before they reach the loader, and the shipped
 builtins are filtered by that same app-local state inside it (ADR 0270).
 Electron main loads
-`subagentProviders` in the sidecar params, so editing a definition takes effect
-on the next prompt. The catalog is capped at `MAX_SUBAGENT_DEFINITIONS` (16);
+`subagentProviders` in the sidecar params; definition edits take effect on the
+next catalog load. Saved scheduling guidance and model availability also refresh
+at the request/admission boundaries above. The catalog is capped at `MAX_SUBAGENT_DEFINITIONS` (16);
 a malformed or unreadable document becomes a launch diagnostic and never fails
 the launch.
 
@@ -1195,10 +1222,10 @@ are ignored by execution, omitted from resolved new task snapshots, and removed
 on the next settings save. Existing explicit call/time limits are preserved;
 changing defaults does not overwrite a user's saved budget.
 
-The next parent conversation turn loads the saved policy. Each new or resumed
-Task captures an immutable resolved snapshot. Active children keep their starting
-values; provider fallback does not reset them. A resumed Task uses the newly
-loaded settings, not the policy stored in an old checkpoint. Immediate Task,
+Each new or resumed Task captures an immutable resolved snapshot of the current
+saved policy at admission, including within an already-running parent turn.
+Active children keep their starting values; provider fallback does not reset
+them. A resumed Task uses current settings, not an old checkpoint's policy. Immediate Task,
 TaskList, TaskWait, settlement and checkpoint metadata carry the full effective
 `runPolicy`. The child detail tab renders that snapshot, never current global
 settings; missing/incomplete historical snapshots remain absent. The parent and
@@ -1337,7 +1364,12 @@ path and all existing authorization, worktree, history, and read-budget gates.
 The retry is available only for local failed delegations with retained history;
 running, missing-history, remote, and native sessions remain unavailable. A
 budget-exhausted run is a failed delegation and can use the same retry/resume
-path when its history remains available.
+path when its history remains available. While that child runs, the same durable
+turn accepts parent steering without cancelling it or starting a second parent
+loop. Child settlement delivers its report once to the parent continuation,
+which incorporates the result and finalizes the durable turn exactly once.
+Steering admitted during settlement is retained; explicit Stop still cancels
+the child and joins cleanup without starting a parent continuation.
 
 **Model pins.** `model: <provider>/<model>` in the frontmatter is resolved once
 per launch in Electron main, where credentials and the Pi catalog snapshot live, against

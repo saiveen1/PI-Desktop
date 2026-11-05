@@ -261,6 +261,10 @@ export const IPC = {
     plansPending: "pi-desktop/plans/pending",
     pendingInteractive: "pi-desktop/agent/pendingInteractive",
     plansResolve: "pi-desktop/plans/resolve",
+    /** Core model consent; independent from public trusted-extension prompts. */
+    delegationApprovalList: "pi-desktop/delegationApproval/list",
+    delegationApprovalRespond: "pi-desktop/delegationApproval/respond",
+    delegationApprovalExtend: "pi-desktop/delegationApproval/extend",
     /**
      * List every paired remote `pi-host` this desktop knows, redacted so no
      * device token reaches the renderer. See ADR 0286 (R2b pairing UX).
@@ -542,6 +546,7 @@ export const IPC = {
     notificationActivated: "pi-desktop/notification/event/activated",
     notificationSound: "pi-desktop/notification/event/sound",
     plansChanged: "pi-desktop/plans/event/changed",
+    delegationApprovalChanged: "pi-desktop/delegationApproval/event/changed",
     todosChanged: "pi-desktop/todos/event/changed",
     providersOauth: "pi-desktop/providers/oauth/event",
     mcpOauth: "pi-desktop/mcp/oauth/event",

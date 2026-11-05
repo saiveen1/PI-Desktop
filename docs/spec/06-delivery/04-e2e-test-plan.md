@@ -59,50 +59,85 @@
 
 ### E2E-DELEGATION-scheduling-and-model-approval
 
-- Preconditions: Isolated settings, synthetic providers and a local HTTP/SSE
-  model fixture; no paid provider or daily profile. Include two peers and a
-  lower-priority specialist requiring approval.
-- Steps: Open Settings → Subagents → Scheduling, import old opt-ins, add models,
-  save equal priorities, descriptions and approval wait. Reload and verify the
-  settings. Delegate by default, explicit model, pinned role and resume. Approve
-  once; then expire another request, cancel one, Stop while waiting and deliver
-  its stale answer. Exercise `modelSelection=require`, a provider failure after
-  one successful edit, and plugin collaboration spawn/send, including Send now
-  promotion of queued collaboration input into a running turn.
-  While approval is open, click its backdrop, then explicitly select and submit
-  each decision. Repeat with close, Escape, Cancel and a host retirement event.
-  In Scheduling, load 40 models in reverse priority order, including disabled,
-  unavailable and same-name/different-provider entries. Select with the keyboard,
-  edit priorities and descriptions, switch models/tabs, remove all and add again.
-  Exercise failed saves and reload. Measure wide/light and narrow/dark layouts.
-- Expected: Guidance remains in Task declarations; only enabled candidates are
-  eligible. No approved-model HTTP request occurs before consent, including
-  Auto mode. Timeout uses a compatible authorized alternate inside the same
-  Task. Cancellation/Stop never starts an alternate; late answers are inert.
-  Approval has no preselected option; backdrop clicks send no answer and leave
-  the prompt pending. Close/Escape/Cancel abort the invocation rather than
-  requesting another model. Only the explicit alternative option requests one;
-  host retirement sends no user answer. Ordinary extension dialogs are unchanged.
-  Exact selection never silently changes model. Resume requires fresh consent.
-  Fallback does not repeat the successful edit. Saved policies replace legacy
-  opt-in authority without changing main-session model selection.
-  The model selector is stably sorted by ascending priority without mutating
-  saved order. Only one detail form is mounted; reordering preserves selection,
-  focus and drafts. Add/remove selects a valid detail or empty state. The list
-  scrolls independently, stacks above the editor at narrow widths, and long
-  identities do not create horizontal overflow. Saving semantics are unchanged.
-- Traceability: runtime spec §5f; ADR `delegation-scheduling-and-approval`;
-  Shared policy contract and Host settings validation.
-- Coverage: `delegation-policy.test.ts`, `delegation-scheduler.test.ts`,
-  `delegation-user-path.test.ts`, `subagent-fallback.test.ts`, targeted Desktop
-  settings/approval/collaboration tests, Host settings round trips, and mounted
-  production dialog interactions via
-  `node scripts/test-dialog-overflow.mjs --extension-only`.
-  `subagent-scheduling-user-path.test.mjs` covers the model-editor workflow and
-  responsive geometry using production components, source styles and synthetic
-  settings; preload IPC is the only mocked application boundary.
-- Milestone: Product maintenance. Status: deterministic lower-layer and
-  component/transport automation; installed-Desktop manual acceptance separate.
+- Preconditions: Isolated settings, synthetic providers and controlled local
+  HTTP/SSE models; no paid provider, daily profile or installed-app validation.
+  Include peers, an ask-only specialist, auto candidates, long tasks/paths and
+  requests from multiple projects/sessions. Use controlled deadlines and ACKs.
+- Steps: Save/reload Scheduling model priorities, descriptions, approval wait and
+  the three execution fields. Leave one child active, then save another policy
+  during the same long parent turn. Admit later Tasks, manually resume a failed
+  retained chain, and trigger natural fallback after a successful edit. Steer
+  the parent while the retried child runs and during its settlement.
+  Append approvals while reading a task and while submitting an explicit batch.
+  Navigate to each source, collapse/reopen with close/Escape, read/copy the full
+  task at wide and narrow widths, and return with Back. Exercise Allow once,
+  authorized alternative, exact selected model and Cancel delegation separately.
+  Hold/inject failed ACKs and mixed batch outcomes; double-click and retry a live
+  failed item. Reload between events/list responses and deliver older snapshots.
+  Change policy/candidate eligibility before consent and extension. Explicitly
+  extend a live deadline; expire another, then deliver late answers to cancelled,
+  expired and replaced IDs. Repeat `modelSelection=require`, Stop, unavailable
+  exact targets and collaboration spawn/send/Send now. Exercise generic plugin
+  approval independently. In Scheduling, retain the existing 40-model sorted
+  selector, keyboard editing, failed-save and responsive-layout checks.
+- Expected: Retry retains history/checkpoints and completed tools. Parent input
+  stays usable without cancelling the child, one loop consumes accepted steering
+  and the child report once, and the durable turn finalizes exactly once. Stop
+  cancels/joins cleanup. Saved policy/catalog/description/priority affects future
+  admissions in that same turn, resumes, pending approvals and natural fallback;
+  active children retain provider/runPolicy, and in-flight requests are unchanged.
+  Parent catalog guidance refreshes at a request boundary. No child request uses
+  an ask model before consent, including Auto mode or plugin collaboration.
+  Exact picked identity is independently validated and never silently replaced;
+  require remains exact. Fallback never repeats the successful edit. Explicit
+  cancellation returns structured feedback with no same-task retry/alternative.
+  The single center groups sources and appends without stealing focus, moving
+  list/body scroll, resetting selection or adding arrivals to the submitted batch.
+  Collapse/close/Escape sends no answer. Per-item work proceeds independently;
+  only selected IDs/revisions are submitted, duplicate actions are disabled,
+  failures remain visible/retryable and partial success preserves failed items.
+  ACK, capacity wait and execution start remain distinct. Short headings never
+  contain the task body; source, requested/candidate identity and thinking are
+  visible, with scheduling facts separate from optional modelReason. Aliases
+  never prove the backend. The full task remains copyable/readable with fixed
+  actions/deadline, independent two-column scrolling, narrow details/Back and no
+  horizontal reading overflow. New/default waits are 300 seconds; saved 0–300
+  values stay intact. Manual extension adds exactly 300 seconds and a new revision;
+  viewing, scrolling, collapse and arrivals do not renew it. Expiry permits only
+  compatible auto candidates or a clear timeout, never a cascade of ask waits.
+  Stale task/candidate/policy revisions and terminal IDs cannot reuse consent or
+  be revived by list/ACK races. Generic plugin dialogs retain their behavior.
+  Scheduling sorting remains a stable presentation projection; drafts/selection
+  survive reorder/save failure and only one detail form is mounted.
+- Traceability: [runtime §5f](../03-runtime/02-agent-runtime.md#5f-subagent-delegation-d201-adr-0062-adr-0089),
+  [core IPC §5.2c](../03-runtime/01-ipc-protocol.md#52c-delegation-model-approval),
+  [approval UX §9a](../04-ux/03-permission-ux.md#9a-delegation-model-approval-center),
+  [Scheduling editor](../04-ux/06-settings-ia.md#subagent-scheduling-model-editor),
+  [scheduling ADR](../../adr/delegation-scheduling-and-approval.md).
+- Existing test entry points (paths verified; this scenario is not a test result):
+  `packages/shared/src/delegation-policy.test.ts`,
+  `packages/shared/src/delegation-approval.test.ts` and
+  `packages/shared/src/protocol.test.ts` cover policy/DTO/channel contracts.
+  `packages/agent-runtime/src/manual-recovery-user-path.test.ts` covers retry,
+  steering, report continuation and terminal cleanup;
+  `packages/agent-runtime/src/delegation-recovery-user-path.test.ts` covers restored
+  state and effective policy; `packages/agent-runtime/src/delegation-scheduler.test.ts`,
+  `packages/agent-runtime/src/delegation-user-path.test.ts` and
+  `packages/agent-runtime/src/subagent-fallback.test.ts` cover admission/consent,
+  exact selection, timeout and retained tools.
+  `packages/host-runtime/src/delegation-approval.test.ts` covers the sidecar boundary;
+  `apps/desktop/test/delegation-approval.test.mjs` is the host-service entry point;
+  `apps/desktop/test/delegation-approval-ui.test.mjs` mounts the production center
+  with controlled IPC for ACK/arrival/reader/layout interactions.
+  `apps/desktop/test/subagent-scheduling-user-path.test.mjs` covers the production
+  settings editor; `apps/desktop/test/delegation-send-now.test.mjs` and
+  `apps/desktop/test/session-collaboration-service.test.mjs` cover collaboration.
+- Milestone: Product maintenance. Status: manual-retry phase-1 verification is
+  recorded by its implementation owner; phase-2 integration/targeted test results
+  remain pending. Host stale/deadline/extension and full runtime/UI wiring must
+  pass the required cases above. Path existence or component fixture coverage does
+  not establish installed-Desktop acceptance. No tests or real app validation are
+  claimed by this documentation update.
 
 
 ### E2E-TRANSCRIPT-lossless-tool-images
@@ -11091,7 +11126,7 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
 | Acceptance | Scenarios |
 |---|---|
 | A / Data safety / Quality — Session multiselect and reversible deletion | E2E-SESSION-recycle-bin-and-multiselect |
-| C / E / Security / Quality — Unified delegation scheduling and model consent | E2E-DELEGATION-scheduling-and-model-approval |
+| C / E / Security / Quality — Live delegation policy, retry continuation and revision-bound grouped model consent | E2E-DELEGATION-scheduling-and-model-approval |
 | A / F / Quality — Self-managed daily release and isolated Dev | E2E-RELEASE-self-managed-daily-build |
 | A / F / Security — Explicit Dev data-directory inheritance | E2E-DEV-explicit-data-directory-inheritance |
 | C / E / Security / Quality — Gemini work setup | E2E-LIVE-VOICE-gemini-work-schema |

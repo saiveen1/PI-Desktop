@@ -1,3 +1,5 @@
+import type { SessionThinkingLevel } from "./types/models.js";
+
 /** Host-owned policy for every AI-initiated delegation. No credentials live here. */
 export type DelegationModel = {
   providerId: string;
@@ -80,6 +82,34 @@ export type DelegationSettings = {
   runPolicy?: Partial<DelegationRunPolicy>;
 };
 
+/** New and legacy-seeded settings wait five minutes; saved values stay intact. */
+export const DEFAULT_DELEGATION_APPROVAL_TIMEOUT_SECONDS = 300;
+
+export function resolveDelegationApprovalTimeoutSeconds(
+  settings?: Pick<DelegationSettings, "approvalTimeoutSeconds">,
+): number {
+  if (settings === undefined) return DEFAULT_DELEGATION_APPROVAL_TIMEOUT_SECONDS;
+  const stored = settings.approvalTimeoutSeconds;
+  if (!Number.isInteger(stored) || stored < 0 || stored > 300) {
+    throw new Error("Invalid delegation approval timeout");
+  }
+  return stored;
+}
+
+export type DelegationModelIdentity = { providerId: string; modelId: string };
+
+/** Runtime callback snapshot, not a persistence schema or credential container. */
+export type DelegationPolicySnapshot = {
+  settings?: DelegationSettings;
+  revision: string;
+  modelKeys: string[];
+};
+
+export type DelegationApprovalDecisionCode =
+  | "approved" | "selected" | "skipped" | "cancelled" | "timeout" | "declined"
+  | "unavailable" | "disabled" | "stale" | "invalidated" | "invalid";
+
+/** Optional runtime metadata preserves existing approval producers. */
 export type DelegationApprovalRequest = {
   sessionId: string;
   requestId: string;
@@ -87,11 +117,25 @@ export type DelegationApprovalRequest = {
   modelId: string;
   task: string;
   reason?: string;
+  agentName?: string;
+  description?: string;
+  /** Original model selector, not proof of a provider identity or human consent. */
+  requestedModel?: string;
+  thinkingLevel?: SessionThinkingLevel;
+  requiresImages?: boolean;
+  minContextWindow?: number;
+  selection?: DelegationSelection;
+  /** Restricts scheduling to auto-authorized candidates without prompting. */
+  automaticOnly?: boolean;
 };
 
+/** Machine-readable fields are additive; reason prose is never authorization. */
 export type DelegationApprovalDecision = {
   decision: "allow" | "skip" | "cancel";
   reason: string;
+  code?: DelegationApprovalDecisionCode;
+  /** Host returns only with allow; runtime independently validates this target. */
+  selectedModel?: DelegationModelIdentity;
 };
 
 export type DelegationSelection = "prefer" | "require";
@@ -126,14 +170,14 @@ export function isDelegationSettings(value: unknown): value is DelegationSetting
   return true;
 }
 
-/** Lazy migration: old installations keep their behavior until the user saves. */
+/** Lazy migration seeds opted-in models without rewriting saved settings. */
 export function legacyDelegationSettings(providers: readonly {
   id: string;
   models?: readonly { id: string; availableForSubagents?: boolean }[];
 }[]): DelegationSettings {
   return {
     version: 1,
-    approvalTimeoutSeconds: 60,
+    approvalTimeoutSeconds: DEFAULT_DELEGATION_APPROVAL_TIMEOUT_SECONDS,
     models: providers.flatMap((provider) => (provider.models ?? [])
       .filter((model) => model.availableForSubagents)
       .map((model) => ({ providerId: provider.id, modelId: model.id, enabled: true,

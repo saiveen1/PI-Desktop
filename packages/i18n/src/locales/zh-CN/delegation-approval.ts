@@ -1,0 +1,20 @@
+export const approvalCenter = {
+  maxThinking: "最大", defaultThinking: "服务商默认值",
+  center: "委派审批", requests: "待审批请求", hide: "收起审批 — 请求保持待处理",
+  selected: "已选 {{count}} 项用于批量操作", allowSelected: "批准所选", skipSelected: "跳过所选", cancelSelected: "取消所选委派",
+  selectRequest: "选择 {{agent}} 用于批量操作", delegate: "子代理", taskDetails: "任务详情", fullTask: "完整委派任务",
+  actualModel: "实际候选模型", requestedModel: "请求的模型", schedulingReason: "调度依据", thinking: "思考强度", deadline: "截止时间",
+  secondsLeft: "剩余 {{count}} 秒", skip: "跳过 / 自动备选", extend: "+300 秒", chooseModel: "选择确切模型…", confirmModel: "确认模型",
+  confirmTarget: "仅批准本次：{{provider}} / {{model}}", openSource: "打开来源：{{title}}", untitledSession: "未命名会话", noProject: "无项目",
+  back: "返回请求列表", copyTask: "复制完整任务", copied: "已复制完整任务。", copyFailed: "复制失败。可选中任务文本复制，或重试。",
+  empty: "没有待审批请求。", loading: "正在加载审批…", loadFailed: "无法加载审批。待处理请求未被取消。",
+  retry: "重试", navigationFailed: "无法打开来源会话，请重试。", results: "请求结果",
+  feedback: {
+    sending: "正在发送 — 等待主机确认…", approved: "已批准 — 尚未确认启动", skipped: "已跳过 — 已请求自动备选",
+    cancelled: "已取消委派", expired: "已过期 — 无法批准", invalidated: "请求已替换或不再可用",
+    extended: "截止时间已延长 300 秒", failed: "未收到确认。请求仍待处理，请重试操作。",
+    stale: "请求已变化，请检查最新候选模型后重试。", unavailable: "模型不可用，请检查或跳过此请求。",
+    invalid: "操作被拒绝，请重新加载审批后重试。", "not-found": "请求已不存在，请重新加载审批。", "not-pending": "请求已处理，请重新加载审批。",
+  },
+  thinkingLevels: { off: "关闭", minimal: "最低", low: "低", medium: "中", high: "高", xhigh: "极高" },
+};

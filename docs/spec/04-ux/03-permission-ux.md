@@ -175,6 +175,52 @@ before RPC service, offers no stale action, and never replays it. Expiry uses
 in Agent; the UI is not required to present its interrupted terminal snapshot
 after a full Host/app restart.
 
+## 9a. Delegation model approval center
+
+Model consent is a separate core-owned surface, not the tool-permission queue
+or a generic plugin dialog. One observable center groups requests by source
+project/session and offers explicit source navigation. Arrivals append
+asynchronously without taking focus, moving list/body scroll positions, changing
+selection or joining a batch already submitted. Hiding, closing or pressing
+Escape collapses the panel without answering; reopening restores its reader
+and selection. Only explicit Cancel delegation cancels a request, with structured
+feedback to the parent and no mandatory reason form or same-task retry/fallback.
+
+Keep the default list compact. Use a stable short heading/role and description,
+never the full task as a heading/title. Show source, requested selector, the
+app-known candidate provider/model identity and requested thinking metadata.
+Provider aliases do not establish a remote backend's true identity. Display
+deterministic scheduling facts separately from optional short `modelReason`;
+do not generate a reasoning essay. All strings use i18n.
+
+Opening task details expands horizontally into a two-column reader constrained
+to the window: approximately 320–360px for the left list, flexible full-task
+body on the right. List and body scroll independently; actions and the deadline
+remain visible while reading. Preserve the complete task with ordinary body
+type, paragraphs, selectable text, exact copy and wrapping for long paths/CJK.
+No horizontal scrolling is required to read it. Narrow windows use full-width
+details and Back, preserving selection and list/body positions. Keyboard focus,
+theme contrast and reduced-motion behavior remain usable.
+
+Per-item actions are Allow once, Use another authorized model, explicit exact
+model selection/confirmation, Cancel delegation, and Extend by five minutes.
+No alternative is preselected. Each eligible approval can proceed independently.
+Batch actions use an explicit selected ID/revision snapshot, never ambient
+approve-all; later arrivals stay unselected. Disable duplicate in-flight actions
+per item, wait for host acknowledgment, and retain failed items/errors for retry
+while live. Partial batch success never hides failed items. Distinguish consent
+acknowledgment from waiting for capacity and actual execution start.
+
+The visible countdown follows one host-owned `expiresAt`. New/default settings
+use five minutes; existing saved waits remain intact. Only explicit extension
+adds 300 seconds; arrival, viewing, scrolling and collapse do not renew it.
+Expiry permits only already-auto-authorized compatible alternatives, otherwise
+a clear timeout, never another full ask deadline. Reload subscribes before
+fetching the pending snapshot; stale revisions, terminal IDs and older ACKs/list
+results cannot restore consent. Task/candidate/policy changes require a fresh
+revision and invalidate affected selections. See
+[core IPC](../03-runtime/01-ipc-protocol.md#52c-delegation-model-approval).
+
 ## 10. Acceptance
 
 1. Plan and Goal deny Write/Edit/plugins in every permission mode
@@ -197,3 +243,6 @@ after a full Host/app restart.
 9. host restart interrupts pending/queued/running work without replay or stale
    action and keeps already-approved interrupted sessions in Agent; no terminal
    card restoration is required after restart
+10. delegation consent remains grouped and recoverable without hijacking focus;
+    per-item/batch acknowledgments, exact selection, host deadline and stale
+    rejection obey §9a without changing generic plugin approval behavior

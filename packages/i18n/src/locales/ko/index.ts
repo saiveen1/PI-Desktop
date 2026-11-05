@@ -1,3 +1,4 @@
+import { approvalCenter } from "./delegation-approval.js";
 import { en, type EnglishCatalog } from "../en/index.js";
 
 export const ko = {
@@ -14,6 +15,7 @@ export const ko = {
     processed: "세션 {{count}}개를 처리했습니다.", restored: "세션 {{count}}개를 복원했습니다.", permanentlyDeleted: "세션 {{count}}개를 영구 삭제했습니다.",
   },
   delegationApproval: {
+    ...approvalCenter,
     label: "위임 승인", title: "위임 모델 승인", reason: "선택 이유",
     allowOnce: "이번만 허용", useOther: "다른 모델 사용", cancel: "위임 취소",
   },

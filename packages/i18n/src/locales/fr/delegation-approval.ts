@@ -1,0 +1,20 @@
+export const approvalCenter = {
+  maxThinking: "Maximum", defaultThinking: "Valeur du fournisseur",
+  center: "Approbations de délégation", requests: "Demandes en attente", hide: "Masquer les approbations — les demandes restent en attente",
+  selected: "{{count}} sélectionnées pour le lot", allowSelected: "Autoriser la sélection", skipSelected: "Ignorer la sélection", cancelSelected: "Annuler la sélection",
+  selectRequest: "Sélectionner {{agent}} pour le lot", delegate: "Sous-agent", taskDetails: "Détails de la tâche", fullTask: "Tâche déléguée complète",
+  actualModel: "Modèle réel", requestedModel: "Demandé", schedulingReason: "Planification", thinking: "Raisonnement", deadline: "Échéance",
+  secondsLeft: "{{count}} s restantes", skip: "Ignorer / alternative auto", extend: "+300 secondes", chooseModel: "Choisir le modèle exact…", confirmModel: "Confirmer le modèle",
+  confirmTarget: "Autoriser une fois : {{provider}} / {{model}}", openSource: "Ouvrir la source : {{title}}", untitledSession: "Session sans titre", noProject: "Aucun projet",
+  back: "Retour aux demandes", copyTask: "Copier toute la tâche", copied: "Tâche complète copiée.", copyFailed: "Échec de la copie. Sélectionnez le texte et copiez-le, ou réessayez.",
+  empty: "Aucune approbation en attente.", loading: "Chargement des approbations…", loadFailed: "Impossible de charger les approbations. Les demandes en attente n’ont pas été annulées.",
+  retry: "Réessayer", navigationFailed: "Impossible d’ouvrir la session source. Réessayez.", results: "Résultats des demandes",
+  feedback: {
+    sending: "Envoi — en attente de confirmation de l’hôte…", approved: "Approuvée — démarrage non confirmé", skipped: "Ignorée — alternative automatique demandée",
+    cancelled: "Délégation annulée", expired: "Expirée — approbation impossible", invalidated: "Demande remplacée ou indisponible",
+    extended: "Échéance prolongée de 300 secondes", failed: "Sans confirmation. La demande reste en attente ; réessayez une action.",
+    stale: "Demande modifiée. Vérifiez le candidat actuel avant de réessayer.", unavailable: "Modèle indisponible. Vérifiez ou ignorez cette demande.",
+    invalid: "Action refusée. Rechargez les approbations et réessayez.", "not-found": "Cette demande n’existe plus. Rechargez les approbations.", "not-pending": "Demande déjà traitée. Rechargez les approbations.",
+  },
+  thinkingLevels: { off: "Désactivé", minimal: "Minimal", low: "Faible", medium: "Moyen", high: "Élevé", xhigh: "Très élevé" },
+};

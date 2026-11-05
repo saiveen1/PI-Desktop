@@ -82,6 +82,34 @@ async function fixture(options: {
 describe("subagent model fallback over real transport", () => {
   const chain = ["primary", "secondary", "third", "fourth", "unused"];
 
+  it("refreshes the fallback pool at the failure boundary and retains one completed edit and the starting runPolicy", async () => {
+    let latest = "stale";
+    const f = await fixture({ editFirst: true, onRequest: request => { if (request.model === "primary") latest = "fresh"; } });
+    const result = await f.run({
+      runPolicy: { maxToolCalls: 4 },
+      fallbackModels: [{ key: "stale/stale", provider: f.provider("stale") }],
+      refreshFallbackModels: async () => [{ key: `${latest}/${latest}`, provider: f.provider(latest) }],
+      authorizeModel: async () => true,
+    });
+    expect(result.status).toBe("completed");
+    expect(f.requests.map(request => request.model)).toEqual(["primary", "primary", "fresh"]);
+    expect(f.edits()).toBe(1);
+    expect(result.runPolicy?.maxToolCalls).toBe(4);
+    expect(f.requests.at(-1)?.messages.filter(message => message.role === "tool")).toHaveLength(1);
+  });
+
+  it("uses an exact host-selected provider during fallback without reasking or replaying the edit", async () => {
+    const f = await fixture({ editFirst: true });
+    let grants = 0;
+    const result = await f.run({ authorizeModel: async () => { grants++; return f.provider("selected"); } });
+    expect(result.status).toBe("completed");
+    expect(result.modelId).toBe("selected");
+    expect(grants).toBe(1);
+    expect(f.requests.map(request => request.model)).toEqual(["primary", "primary", "selected"]);
+    expect(f.headers.at(-1)).toBe("Bearer fixture-selected");
+    expect(f.edits()).toBe(1);
+  });
+
   it("skips an unapproved fallback without sending it a provider request or replaying work", async () => {
     const f = await fixture({ editFirst: true });
     const approved: string[] = [];

@@ -1,0 +1,20 @@
+export const approvalCenter = {
+  maxThinking: "Maximum", defaultThinking: "Anbieterstandard",
+  center: "Delegationsfreigaben", requests: "Offene Anfragen", hide: "Freigaben ausblenden — Anfragen bleiben offen",
+  selected: "{{count}} für Stapelaktion ausgewählt", allowSelected: "Auswahl erlauben", skipSelected: "Auswahl überspringen", cancelSelected: "Auswahl abbrechen",
+  selectRequest: "{{agent}} für Stapelaktion auswählen", delegate: "Unteragent", taskDetails: "Aufgabendetails", fullTask: "Vollständige delegierte Aufgabe",
+  actualModel: "Tatsächliches Modell", requestedModel: "Angefordert", schedulingReason: "Planung", thinking: "Denktiefe", deadline: "Frist",
+  secondsLeft: "Noch {{count}} s", skip: "Überspringen / Auto-Alternative", extend: "+300 Sekunden", chooseModel: "Exaktes Modell wählen…", confirmModel: "Modell bestätigen",
+  confirmTarget: "Einmal erlauben: {{provider}} / {{model}}", openSource: "Quelle öffnen: {{title}}", untitledSession: "Unbenannte Sitzung", noProject: "Kein Projekt",
+  back: "Zurück zu Anfragen", copyTask: "Ganze Aufgabe kopieren", copied: "Vollständige Aufgabe kopiert.", copyFailed: "Kopieren fehlgeschlagen. Aufgabentext auswählen und kopieren oder erneut versuchen.",
+  empty: "Keine offenen Freigaben.", loading: "Freigaben werden geladen…", loadFailed: "Freigaben konnten nicht geladen werden. Offene Anfragen wurden nicht abgebrochen.",
+  retry: "Erneut versuchen", navigationFailed: "Quellsitzung konnte nicht geöffnet werden. Erneut versuchen.", results: "Anfrageergebnisse",
+  feedback: {
+    sending: "Wird gesendet — Host-Bestätigung ausstehend…", approved: "Freigegeben — Start nicht bestätigt", skipped: "Übersprungen — automatische Alternative angefordert",
+    cancelled: "Delegation abgebrochen", expired: "Abgelaufen — keine Freigabe möglich", invalidated: "Anfrage ersetzt oder nicht mehr verfügbar",
+    extended: "Frist um 300 Sekunden verlängert", failed: "Nicht bestätigt. Anfrage bleibt offen; Aktion erneut versuchen.",
+    stale: "Anfrage geändert. Aktuellen Kandidaten vor erneutem Versuch prüfen.", unavailable: "Modell nicht verfügbar. Anfrage prüfen oder überspringen.",
+    invalid: "Aktion abgelehnt. Freigaben neu laden und erneut versuchen.", "not-found": "Anfrage existiert nicht mehr. Freigaben neu laden.", "not-pending": "Anfrage bereits abgeschlossen. Freigaben neu laden.",
+  },
+  thinkingLevels: { off: "Aus", minimal: "Minimal", low: "Niedrig", medium: "Mittel", high: "Hoch", xhigh: "Sehr hoch" },
+};

@@ -1,3 +1,4 @@
+import { approvalCenter } from "./delegation-approval.js";
 import { en, type EnglishCatalog } from "../en/index.js";
 
 export const es = {
@@ -14,6 +15,7 @@ export const es = {
     processed: "{{count}} sesiones procesadas.", restored: "{{count}} sesiones restauradas.", permanentlyDeleted: "{{count}} sesiones eliminadas definitivamente.",
   },
   delegationApproval: {
+    ...approvalCenter,
     label: "Aprobación de delegación", title: "Aprobar modelo delegado", reason: "Motivo de selección",
     allowOnce: "Permitir una vez", useOther: "Usar otro modelo", cancel: "Cancelar delegación",
   },

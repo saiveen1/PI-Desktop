@@ -83,6 +83,7 @@ import type { ComposerSuggestionAnswer } from "./services/composer-suggestion";
 import { wirePluginThemeRuntimeServices } from "./plugin-theme-services";
 import { createSessionCollaborationService } from "./services/session-collaboration";
 import { createDelegationApprovalService } from "./services/delegation-approval";
+import { refreshSavedDelegationPolicy } from "./services/delegation-policy-refresh";
 import {
   createApplicationLifecycle,
 } from "./bootstrap/app-lifecycle";
@@ -694,7 +695,14 @@ let emitAgentEvent: (envelope: AgentEventEnvelope) => void = () => undefined;
 
 const delegationApproval = createDelegationApprovalService({
   getHost,
-  requestUi: (request) => agentExtensions.requestUi(request),
+  listProviders: () => listRuntimeProviders(false),
+  modelCapabilities: (provider, modelId) => ({
+    supportsVision: enrichProvider(provider, modelId).supportsVision,
+    contextWindow: effectiveSubagentModelConfig(provider, modelId).modelConfig.contextWindow,
+    thinkingLevels: effectiveSubagentModelConfig(provider, modelId).capabilities.supportedThinkingLevels,
+  }),
+  publish: (event) => sendToRenderer(IPC.event.delegationApprovalChanged, event),
+  onError: (message) => logger.app("runtime", "warn", message),
 });
 
 const sessionCollaboration = createSessionCollaborationService({
@@ -822,6 +830,7 @@ const sidecarRuntime = createSidecarRuntime({
   currentNetworkProxy,
   authorizeDelegation: delegationApproval.authorize,
   cancelDelegationApproval: delegationApproval.cancel,
+  delegationSnapshot: delegationApproval.snapshot,
   computerCursorOverlay,
   publishComputerGrant,
 });
@@ -952,6 +961,11 @@ function registerIpc() {
     publishComputerGrant,
     getSidecar,
     getAgentHostBridge: () => mainState.agentHostBridge,
+    delegationApproval,
+    delegationSettingsWritten: () => refreshSavedDelegationPolicy({
+      approvals: delegationApproval, getSidecar,
+      log: (message) => logger.app("runtime", "warn", message),
+    }),
     getBackendRouter: () => startupState.backendRouter,
     getNotificationViewingSessionId: () => mainState.notificationViewingSessionId,
     setNotificationViewingSessionId: (sessionId: string | null) => {

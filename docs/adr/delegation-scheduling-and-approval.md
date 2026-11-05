@@ -32,26 +32,74 @@ request a lower-priority specialist with a reason. The scheduler applies enabled
 membership, deterministic tier ordering and declared capability requirements.
 Descriptions and AI explanations never grant permission.
 
-Approval lives in a focused Electron service shared with collaboration, using
-the existing Host UI prompt transport rather than an extension event handler.
-It rereads settings and provider availability, binds each decision to an exact
-request/session/model, and rechecks after waiting. Auto tool permissions do not
-participate. Approval allows only this delegate invocation; resume requires a
-new decision. Every fallback model is checked before its first provider request.
-Cancellation aborts the exact prompt and never authorizes an alternative. An
-expired/unavailable prompt skips the candidate; the scheduler can start the
-same work on another enabled, compatible, authorized model. Late replies cannot
-start a second task. A required exact model never silently substitutes another.
+Approval lives in a focused Electron service shared with collaboration. The
+amendment below uses dedicated core IPC through the existing renderer transport,
+separate from generic extension prompts. The service rereads settings and
+provider availability and rechecks exact request/session/revision/model after
+waiting. Auto tool permissions do not participate. Approval allows only this
+invocation; resume requires a new decision and every fallback is checked before
+its first request. Cancellation never authorizes an alternative. After expiry,
+only compatible candidates already authorized by `auto` remain eligible; no new
+full ask deadline is started. Late replies cannot start a second task. Exact
+requirements and user-picked identities never silently substitute another model.
 
-Natural-language model requests remain expressible through Task.model. The
-`modelSelection` parameter distinguishes a preference from an exact requirement;
-neither is evidence of human approval. Explicit approval uses the existing UI
-channel, and the runtime does not accept an AI-authored "user approved" flag.
+Natural-language requests remain expressible through Task.model.
+`modelSelection` distinguishes preference from exact requirement; neither is
+human approval. The runtime does not accept an AI-authored "user approved" flag.
 
 Keep successful tool history when a running delegate changes provider. Do not
 replay a task or completed tools to accomplish fallback. Record requested and
 actual models plus skipped/selected reasons in the existing Task result and
 settlement snapshots; existing usage and timing remain intact.
+
+### Amendment: live policy and recoverable consent center
+
+An asynchronous center is needed because independent requests arrive while the
+user reads another task or continues the parent conversation. One-request modal
+queues obscure pending work and make dismissal ambiguous; ambient approve-all
+would extend consent to requests the user never reviewed. Group live requests by
+source project/session, append without taking focus/scroll/selection, and freeze
+an explicit ID/revision snapshot for each selected batch. Each call has its own
+ACK/error; failed live items remain retryable. Collapse/close/Escape sends no
+decision. Only explicit cancellation ends the invocation, with structured parent
+feedback and no same-task retry or model switch.
+
+The compact list expands horizontally into a constrained two-column task reader
+(approximately 320–360px list plus flexible body), with independent scrolling,
+fixed actions/deadline and exact full-task copy. Narrow windows use details/Back
+without losing selection or scroll. Short identity/summary headings stay separate
+from the task body; source, requested/candidate model and thinking metadata are
+visible. Host scheduling facts and optional short modelReason remain distinct.
+App-known aliases never claim to establish the remote provider's true backend.
+
+Dedicated `delegationApproval` list/respond/extend/changed channels prevent a
+plugin identity or generic UI response from granting core model consent. Shared
+DTOs bind actions to a host-owned revision and deadline. Allow once, authorized
+alternative, exact selection and cancellation are distinct. Host and runtime
+revalidate authority/capabilities; changed task/candidate/policy revisions retire
+old consent. Subscribe-before-list and terminal tombstones prevent stale reloads
+or ACKs from reviving work. Acknowledgment means consent accepted, independently
+of capacity or execution start. Ordinary extension approvals retain their UX.
+
+New/default settings seed 300 seconds without rewriting saved 0–300 values.
+Explicit extension adds exactly 300 seconds to the live deadline and returns a
+new revision; no arrival, viewing or scroll renews it. Timeout restricts this
+invocation to compatible `auto` candidates or a clear timeout result.
+
+Current policy/catalog/description/priority applies to later admissions in the
+same long turn, later resumes, pending approvals and natural fallback. The
+additive `provider.delegationSnapshot` callback carries settings, opaque revision
+and available model keys; the parent catalog refreshes at a request boundary.
+An active child retains its provider and three-field `runPolicy`
+(`maxToolCalls`, `maxDurationSeconds`, `finalReportTimeoutSeconds`). Saved changes
+never interrupt/recreate work or rewrite an in-flight provider payload. Existing
+checkpoint compatibility remains intact.
+
+Manual retry preserves retained history/checkpoints and successful tools. While
+the child runs, the same durable turn accepts steering through one parent loop.
+Settlement feeds one parent continuation and exactly one durable finalization;
+Stop still cancels the child and joins cleanup. This keeps the conversation
+usable without duplicating child report delivery or parent execution.
 
 ## Alternatives
 
@@ -73,9 +121,12 @@ remain user-controlled, with no self-modifying ranking or claimed optimality.
 
 ## Verification
 
-Policy tests cover ties, escalation rationale, disabled membership, validation
-and legacy import. Runtime tests use local HTTP/SSE parent/child providers to
-verify no child request before consent, automatic alternatives, exact selection,
-resume reapproval and cancellation. Fallback tests assert request identity and
-that completed edits occur once. Host and renderer tests cover saved settings,
-policy revalidation, prompt retirement and the add/edit/save/reload user path.
+The acceptance map is
+[E2E-DELEGATION-scheduling-and-model-approval](../spec/06-delivery/04-e2e-test-plan.md#e2e-delegation-scheduling-and-model-approval).
+Policy/contracts cover candidate authority, action shapes and saved defaults;
+runtime user paths cover steering during retry, one continuation/finalization,
+exact selection, current-policy admission, auto-only timeout and retained tools.
+Host/IPC tests must prove deadline extension, stale consent rejection and
+retirement. Component fixtures cover asynchronous arrivals, per-item partial
+ACK/errors, source navigation, full-task reader and narrow layouts. This ADR
+states required acceptance, not a claim that every integration gate has run.

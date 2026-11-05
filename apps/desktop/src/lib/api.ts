@@ -1,3 +1,4 @@
+import type { DelegationApprovalSnapshot, DelegationApprovalActionRequest, DelegationApprovalActionResult, DelegationApprovalExtendRequest, DelegationApprovalChangedEvent } from "@pi-desktop/shared";
 import type { ReviewContextLines, ReviewContextResult, ReviewTurnsPage, ReviewChangesPage } from "@pi-desktop/shared";
 type ClipboardDirectoryPaste = {
   items: Array<{ kind: "directory"; path: string; name: string } | { kind: "file"; name: string }>;
@@ -1675,6 +1676,11 @@ export const api = {
     >(IPC.invoke.pluginImportExtension),
   runExtensionCommand: (input: { sessionId: string; name: string; args: string }) =>
     invoke<{ ok: boolean }>(IPC.invoke.extensionsCommandRun, input),
+  listDelegationApprovals: () => invoke<DelegationApprovalSnapshot>(IPC.invoke.delegationApprovalList),
+  respondDelegationApproval: (input: DelegationApprovalActionRequest) =>
+    invoke<DelegationApprovalActionResult>(IPC.invoke.delegationApprovalRespond, input),
+  extendDelegationApproval: (input: DelegationApprovalExtendRequest) =>
+    invoke<DelegationApprovalActionResult>(IPC.invoke.delegationApprovalExtend, input),
   respondExtensionPrompt: (response: TrustedExtensionUiPromptResponse) =>
     invoke<{ ok: boolean }>(IPC.invoke.extensionsUiRespond, response),
   searchCommands: (query: string) =>
@@ -2065,6 +2071,12 @@ export const api = {
     if (!window.piDesktop?.on) return () => undefined;
     return window.piDesktop.on(IPC.event.mcpOauth, (payload) =>
       listener(payload as McpOAuthLoginEvent),
+    );
+  },
+  onDelegationApprovalChanged: (listener: (event: DelegationApprovalChangedEvent) => void) => {
+    if (!window.piDesktop?.on) return () => undefined;
+    return window.piDesktop.on(IPC.event.delegationApprovalChanged, (payload) =>
+      listener(payload as DelegationApprovalChangedEvent),
     );
   },
   onExtensionPrompt: (listener: (prompt: TrustedExtensionUiPrompt) => void) => {

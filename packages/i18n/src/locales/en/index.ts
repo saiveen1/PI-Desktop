@@ -1,3 +1,4 @@
+import { approvalCenter } from "./delegation-approval.js";
 export const en = {
   sessionOrganization: {
     select: "Select sessions", selectVisible: "Select visible", selectSession: "Select {{title}}",
@@ -12,6 +13,7 @@ export const en = {
     processed: "Processed {{count}} sessions.", restored: "Restored {{count}} sessions.", permanentlyDeleted: "Permanently deleted {{count}} sessions.",
   },
   delegationApproval: {
+    ...approvalCenter,
     label: "Delegation approval", title: "Approve delegated model", reason: "Selection reason",
     allowOnce: "Allow once", useOther: "Use another model", cancel: "Cancel delegation",
   },

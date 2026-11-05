@@ -356,12 +356,84 @@ type AgentRetrySubagentResponse =
 `pi-desktop/agent/retry-subagent` is a local Desktop-only control for a
 settled `failed` delegation. Main creates a new durable turn, and the sidecar
 starts the equivalent of `Task(resume: delegationId)` directly; the parent
-model is not prompted and cannot veto the action. Existing delegation
+model is not asked to initiate or authorize the retry and cannot veto it. Existing delegation
 authorization, recorded model binding, history, read-budget, worktree, and
 permission checks still apply. The runtime emits a synthetic `Task` row so the
 retry and its child transcript remain auditable. Remote and native sessions,
 running delegations, cancellations, and chains without retained history are
 rejected or returned as `accepted: false`.
+
+While the resumed child runs, this same durable turn accepts parent steering
+without cancelling the child or opening a second parent loop. Its settlement
+report is consumed once by the parent continuation; the turn emits/finalizes
+its terminal outcome exactly once. Accepted steering at settlement is retained.
+Explicit Stop still cancels the child and joins cleanup.
+
+### 5.2c Delegation model approval
+
+Core model consent uses dedicated allowlisted channels, not generic extension
+UI responses or a trusted-looking extension ID. DTOs are exported by
+`@pi-desktop/shared` from `packages/shared/src/delegation-approval.ts`.
+
+| Constant | Channel | Input | Result / event |
+| --- | --- | --- | --- |
+| `IPC.invoke.delegationApprovalList` | `pi-desktop/delegationApproval/list` | no arguments | `DelegationApprovalSnapshot` |
+| `IPC.invoke.delegationApprovalRespond` | `pi-desktop/delegationApproval/respond` | `DelegationApprovalActionRequest` | `DelegationApprovalActionResult` |
+| `IPC.invoke.delegationApprovalExtend` | `pi-desktop/delegationApproval/extend` | `DelegationApprovalExtendRequest` | `DelegationApprovalActionResult` |
+| `IPC.event.delegationApprovalChanged` | `pi-desktop/delegationApproval/event/changed` | — | `DelegationApprovalChangedEvent` |
+
+The snapshot is `{ requests: DelegationApprovalPrompt[] }`; the event payload is
+`{ request: DelegationApprovalPrompt }` through the existing renderer transport,
+with no additional envelope. Subscribe before listing, including on reload, and
+reconcile by `(sessionId, requestId, revision)`. List returns live requests.
+Events may be terminal (`approved | skipped | cancelled | expired | invalidated`);
+remove those rows from the live set, retaining tombstones against stale list or
+ACK results. `pending` alone is actionable. Renderer history is not authority.
+
+Prompts contain identity, host-owned nonnegative safe-integer `revision`,
+`status`, canonical UTC ISO `createdAt`/`expiresAt`, full `task`, current
+`candidate` and nonempty unique `candidates` (at most 128 exact provider/model
+pairs). Optional metadata is `sessionTitle`, `projectTitle`, `projectPath`,
+`agentName`, short `description`, `requestedModel`, `modelReason` and
+`schedulingReason`. Models carry `providerId`, `providerName`, `modelId`, optional
+`modelLabel`/`thinkingLevel`, integer priority 1–100 and `approval: auto | ask`.
+Metadata is host-resolved and credential-free. `requestedModel` is the original
+selector string, not authorization or proof of a provider's actual backend.
+
+Every respond/extend input echoes `{ sessionId, requestId, revision }`. Respond
+adds one of `action: allow | skip | cancel` without model fields, or
+`action: select` with exact `providerId` and `modelId`. Allow approves the shown
+candidate once; skip requests authorized-alternative scheduling; select requires
+independent runtime eligibility validation; cancel ends this invocation and
+never authorizes an alternative. Unknown fields, ambient approve-all and batch
+payloads are rejected. Multi-select freezes explicit IDs/revisions and sends
+bounded individual calls; partial success is tracked independently per item.
+
+The result is `{ accepted, request?, code?, error? }`, with failure codes
+`not-found | not-pending | stale | expired | unavailable | invalid`. UI submission
+remains pending until acknowledgment; transport/per-item failures stay visible
+and retryable while the request is live. Accepted consent does not prove queue
+capacity or execution start. Changed task/candidates/policy invalidate prior
+consent: the host rechecks live state, deadline, revision and eligibility, and
+late replies cannot revive an expired, cancelled or replaced request.
+
+Extend accepts identity/revision only, never a duration or caller-authored
+deadline. `DELEGATION_APPROVAL_EXTENSION_SECONDS` is 300: an accepted explicit
+extension adds exactly 300 seconds to the live deadline and returns the updated
+request/revision. New/default settings use
+`DEFAULT_DELEGATION_APPROVAL_TIMEOUT_SECONDS = 300`; saved 0–300 values remain
+unchanged. Viewing or appending requests never renews a deadline. Timeout admits
+only compatible `auto` candidates, without cascading new approval deadlines.
+Generic plugin approvals and existing preload transport are unchanged.
+
+The additive runtime callback `provider.delegationSnapshot` returns
+`DelegationPolicySnapshot` (`settings?`, opaque string `revision`, `modelKeys`).
+Runtime authorization retains `{ decision: allow | skip | cancel, reason }`
+with additive `code` and optional exact `selectedModel` only for allow; legacy
+minimal producers remain valid. `automaticOnly` on `DelegationApprovalRequest`
+prevents another ask wait after expiry. See
+[runtime §5f](02-agent-runtime.md#5f-subagent-delegation-d201-adr-0062-adr-0089)
+and [approval UX](../04-ux/03-permission-ux.md#9a-delegation-model-approval-center).
 
 ### 5.3 abort
 

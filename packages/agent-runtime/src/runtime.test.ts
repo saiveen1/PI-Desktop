@@ -29,6 +29,7 @@ import {
   type RuntimeProviderConfig,
 } from "./runtime.js";
 import { estimateOutputCapInputTokens } from "./output-cap.js";
+import type { RuntimeHost } from "./host-client.js";
 
 import { COMPACTION_SUMMARY_MAX_RETRIES } from "./compaction-summary-input.js";
 import { loadInstructionChain, type ProjectInstructions } from "./project-instructions.js";
@@ -197,8 +198,10 @@ function createRuntime(
     onEvent: (envelope: unknown) => void;
   }> = {},
 ) {
+  const host = (overrides.host ?? { call: vi.fn(), onNotification: vi.fn(() => () => {}) }) as unknown as RuntimeHost;
   return new DesktopAgentRuntime({
-    host: (overrides.host ?? { call: vi.fn(), onNotification: vi.fn(() => () => {}) }) as never,
+    host: { ...host, call: <T>(method: string, ...args: [params?: unknown, timeout?: number]): Promise<T> =>
+      method === "provider.delegationSnapshot" ? Promise.resolve(undefined as T) : host.call(method, ...args) },
     sessionId: "session-1",
     mode: overrides.mode === "chat" ? "plan" : overrides.mode ?? "agent",
     jevApiKey: overrides.jevApiKey,
@@ -9886,7 +9889,12 @@ describe("DesktopAgentRuntime subagents", () => {
     subagentRuns.calls.length = 0;
     subagentRuns.deferred = false;
     try {
+      let entered!: () => void;
+      const resolving = new Promise<void>(resolve => { entered = resolve; });
+      host.call.mockImplementation((method: string) => method === "provider.resolveSubagentModel"
+        ? new Promise<RuntimeProviderConfig>(resolve => { resolveGrant = resolve; entered(); }) : Promise.resolve(undefined));
       const pending = taskTool(runtime).execute("pending", { agent: "explorer", task: "Search.", model: "new/new-model" });
+      await resolving;
       await runtime.prompt("A new turn.");
       resolveGrant({ ...provider, modelId: "new-model", modelConfig: undefined });
       const expired = await pending;
@@ -11408,7 +11416,7 @@ describe("DesktopAgentRuntime subagents", () => {
         await runtime.dispose();
       }
     });
-    it("force-retries a failed delegation without a parent model turn", async () => {
+    it("force-retries without a parent Task call, then continues the parent with the report", async () => {
       const onEvent = vi.fn();
       const runtime = createRuntime({
         subagents: [explorer],
@@ -11418,6 +11426,21 @@ describe("DesktopAgentRuntime subagents", () => {
         ],
         onEvent,
       });
+      const requests: string[] = [];
+      const internals = runtime as unknown as {
+        models: { streamSimple: (model: unknown, context: { messages: AgentMessage[] }) => ReturnType<typeof createAssistantMessageEventStream> };
+      };
+      internals.models = { streamSimple: (_model, context) => {
+        requests.push(JSON.stringify(context.messages));
+        const message = assistantMessage({ content: [{ type: "text", text: "Report incorporated." }], stopReason: "stop" }) as unknown as AssistantMessage;
+        const stream = createAssistantMessageEventStream();
+        queueMicrotask(() => {
+          stream.push({ type: "start", partial: message });
+          stream.push({ type: "done", reason: "stop", message });
+          stream.end(message);
+        });
+        return stream;
+      } };
       subagentRuns.calls.length = 0;
       subagentRuns.instances.length = 0;
       subagentRuns.deferred = true;
@@ -11428,6 +11451,7 @@ describe("DesktopAgentRuntime subagents", () => {
         expect(subagentRuns.calls[0].task).toContain("Continue the failed subagent task");
         expect(JSON.stringify(subagentRuns.calls[0].initialMessages)).toContain("reading src/app.ts");
         expect(runtime.getStatus().isRunning).toBe(true);
+        expect(requests).toEqual([]);
 
         subagentRuns.resolveRun?.({
           agentName: "explorer",
@@ -11437,6 +11461,8 @@ describe("DesktopAgentRuntime subagents", () => {
           toolCalls: 0,
         });
         await vi.waitFor(() => expect(runtime.getStatus().isRunning).toBe(false));
+        expect(requests).toHaveLength(1);
+        expect(requests[0]).toContain("finished");
         const events = onEvent.mock.calls.map(([envelope]) => envelope as AgentEventEnvelope);
         expect(events).toContainEqual(expect.objectContaining({
           event: expect.objectContaining({
@@ -11445,7 +11471,8 @@ describe("DesktopAgentRuntime subagents", () => {
             args: expect.objectContaining({ resume: "del-1" }),
           }),
         }));
-        expect(events.some((envelope) => envelope.event.type === "agent_end")).toBe(true);
+        expect(events.filter((envelope) => envelope.event.type === "agent_end")).toHaveLength(1);
+        expect(events.filter((envelope) => envelope.event.type === "turn_end")).toHaveLength(1);
       } finally {
         subagentRuns.deferred = false;
         await runtime.dispose();
@@ -11695,7 +11722,9 @@ describe("DesktopAgentRuntime subagents", () => {
 
     it("does not start a resumed delegate after Stop during authorization (#841)", async () => {
       let resolveGrant: (value: RuntimeProviderConfig) => void = () => {};
-      const host = { call: vi.fn().mockImplementation(() => new Promise<RuntimeProviderConfig>((resolve) => { resolveGrant = resolve; })) };
+      let entered!: () => void;
+      const resolving = new Promise<void>(resolve => { entered = resolve; });
+      const host = { call: vi.fn().mockImplementation(() => new Promise<RuntimeProviderConfig>((resolve) => { resolveGrant = resolve; entered(); })) };
       const runtime = createRuntime({ subagents: [explorer], host,
         history: [restartedTaskRow("task-1", "del-1", { status: "completed", modelId: provider.modelId }), delegateRow("child-1", "task-1")],
       });
@@ -11706,6 +11735,7 @@ describe("DesktopAgentRuntime subagents", () => {
       subagentRuns.calls.length = 0;
       try {
         const pending = startTask(runtime, "task-2", { agent: "explorer", task: "Continue.", resume: "del-1" });
+        await resolving;
         await runtime.abort();
         resolveGrant(provider);
         expect((await pending).details.error).toContain("parent turn ended");

@@ -1,0 +1,20 @@
+export const approvalCenter = {
+  maxThinking: "최대", defaultThinking: "공급자 기본값",
+  center: "위임 승인 센터", requests: "대기 중인 요청", hide: "승인 숨기기 — 요청은 대기 상태로 유지됩니다",
+  selected: "일괄 작업에 {{count}}개 선택됨", allowSelected: "선택 항목 허용", skipSelected: "선택 항목 건너뛰기", cancelSelected: "선택 항목 취소",
+  selectRequest: "일괄 작업에 {{agent}} 선택", delegate: "하위 에이전트", taskDetails: "작업 세부 정보", fullTask: "위임 작업 전문",
+  actualModel: "실제 모델", requestedModel: "요청 모델", schedulingReason: "스케줄링", thinking: "추론 수준", deadline: "마감 시간",
+  secondsLeft: "{{count}}초 남음", skip: "건너뛰기 / 자동 대안", extend: "+300초", chooseModel: "정확한 모델 선택…", confirmModel: "모델 확인",
+  confirmTarget: "이번만 승인: {{provider}} / {{model}}", openSource: "원본 열기: {{title}}", untitledSession: "제목 없는 세션", noProject: "프로젝트 없음",
+  back: "요청 목록으로", copyTask: "전체 작업 복사", copied: "전체 작업을 복사했습니다.", copyFailed: "복사 실패. 작업 텍스트를 선택해 복사하거나 다시 시도하세요.",
+  empty: "대기 중인 승인이 없습니다.", loading: "승인을 불러오는 중…", loadFailed: "승인을 불러오지 못했습니다. 대기 중인 요청은 취소되지 않았습니다.",
+  retry: "다시 시도", navigationFailed: "원본 세션을 열지 못했습니다. 다시 시도하세요.", results: "요청 결과",
+  feedback: {
+    sending: "전송 중 — 호스트 확인 대기…", approved: "승인됨 — 시작 여부 미확인", skipped: "건너뜀 — 자동 대안 요청됨",
+    cancelled: "위임 취소됨", expired: "만료됨 — 승인 불가", invalidated: "요청이 변경되었거나 더 이상 사용할 수 없음",
+    extended: "마감이 300초 연장되었습니다", failed: "확인되지 않았습니다. 요청은 대기 중이며 작업을 다시 시도할 수 있습니다.",
+    stale: "요청이 변경되었습니다. 최신 후보를 검토하고 다시 시도하세요.", unavailable: "모델을 사용할 수 없습니다. 요청을 검토하거나 건너뛰세요.",
+    invalid: "작업이 거부되었습니다. 승인을 새로 불러온 후 다시 시도하세요.", "not-found": "요청이 없습니다. 승인을 새로 불러오세요.", "not-pending": "이미 처리된 요청입니다. 승인을 새로 불러오세요.",
+  },
+  thinkingLevels: { off: "끄기", minimal: "최소", low: "낮음", medium: "중간", high: "높음", xhigh: "매우 높음" },
+};

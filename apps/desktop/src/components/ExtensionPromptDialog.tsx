@@ -8,6 +8,7 @@ import { useHostSafetySurface } from "../lib/host-safety-layer";
 import { useAppStore } from "../stores/app-store";
 import { OverlayBackdrop, Button, TooltipButton } from "./ui";
 import { IconClose, IconPlug } from "./icons";
+import { DelegationApprovalCenter } from "./delegation-approval/DelegationApprovalCenter";
 
 /**
  * Modal prompts raised by trusted extensions (`ui.confirm` / `ui.select` /
@@ -55,6 +56,7 @@ export function ExtensionPromptHost() {
 
   return (
     <>
+      <DelegationApprovalCenter onNavigate={(sessionId) => useAppStore.getState().selectSession(sessionId)} />
       {statusTexts.length ? (
         <div className="extension-status-line" role="status" aria-live="polite">
           {statusTexts.map((text, index) => (

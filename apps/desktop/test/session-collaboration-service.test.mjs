@@ -407,10 +407,13 @@ test("plugin sends gate the actual existing model and reject changes during appr
     if (method === "settings.get") return settings;
     if (method === "session.get") return { session: { providerId: "p", modelId } };
     if (method === "providers.list") return { providers: [{ id: "p", name: "P", authKind: "none", models: [{ id: "first" }, { id: "second" }] }] };
+    if (method === "session.collaboration.message") return { message: sessionMessage({ targetSessionId: "target", content: "Review" }) };
     return {};
   });
   const { service } = createService({ host, authorizeDelegation: async (request) => {
     requested.push(request.modelId);
+    assert.equal(request.sessionId, "source-session");
+    assert.equal(request.selection, "require");
     modelId = "first";
     return { decision: "allow", reason: "test" };
   } });
@@ -432,4 +435,19 @@ test("queued dispatch re-reads pool membership and absent settings preserve lega
   settings.delegation = delegationPolicy();
   settings.delegation.models[1].enabled = false;
   await assert.rejects(service.authorizeDispatch("target", "message", "Review"), /not enabled/);
+});
+
+test("plugin collaboration refuses a selected replacement before spending the old model", async () => {
+  const settings = { delegation: delegationPolicy() };
+  const host = createHost("host", (method) => {
+    if (method === "settings.get") return settings;
+    if (method === "session.get") return { session: { providerId: "p", modelId: "first" } };
+    if (method === "providers.list") return { providers: [{ id: "p", name: "P", authKind: "none", models: [{ id: "first" }, { id: "second" }] }] };
+    if (method === "session.collaboration.message") return { message: sessionMessage({ targetSessionId: "target", content: "Review" }) };
+    return {};
+  });
+  const { service } = createService({ host, authorizeDelegation: async () => ({ decision: "allow", reason: "selected",
+    selectedModel: { providerId: "p", modelId: "second" } }) });
+  await assert.rejects(service.authorizeDispatch("target", "message", "Review"), /Selected model cannot be applied/);
+  assert.equal(methodCalls(host, "session.configure").length, 0);
 });

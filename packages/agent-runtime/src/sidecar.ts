@@ -513,6 +513,17 @@ async function handle(method: string, params: any): Promise<unknown> {
       });
       return { accepted: true, turnId };
     }
+    case "agent.refreshDelegationPolicy": {
+      if (params?.sessionId !== undefined && (typeof params.sessionId !== "string" || !params.sessionId.trim())) {
+        throw new Error("Invalid delegation policy sessionId");
+      }
+      const targets = params?.sessionId === undefined ? [...runtimes.values()]
+        : [...runtimes.values()].filter(runtime => runtime.sessionId === params.sessionId);
+      const results = await Promise.allSettled(targets.map(runtime => runtime.refreshDelegationPolicy()));
+      const failed = results.find(result => result.status === "rejected");
+      if (failed?.status === "rejected") throw failed.reason;
+      return { refreshed: targets.length };
+    }
     case "agent.steeringContext":
     case "agent.steer": {
       const runtime = runtimes.get(String(params.sessionId ?? ""));

@@ -1,122 +1,239 @@
-import { catalogs, resolveLocale } from "@pi-desktop/i18n";
 import {
-  isDelegationSettings,
-  type AppSettings,
-  type DelegationApprovalRequest,
-  type DelegationApprovalDecision,
-  type TrustedExtensionUiRequestEnvelope,
-  type TrustedExtensionUiResponse,
+  DELEGATION_APPROVAL_EXTENSION_SECONDS, DEFAULT_DELEGATION_APPROVAL_TIMEOUT_SECONDS,
+  isDelegationApprovalActionRequest, isDelegationApprovalExtendRequest,
+  type DelegationApprovalActionResult, type DelegationApprovalChangedEvent,
+  type DelegationApprovalDecision, type DelegationApprovalPrompt, type DelegationApprovalRequest,
+  type DelegationApprovalSnapshot,
 } from "@pi-desktop/shared";
+import { isDelegationAuthorizationRequest } from "@pi-desktop/host-runtime";
+import { createDelegationCatalog, type DelegationCatalogDependencies } from "./delegation-catalog";
 
-type Host = { call<T>(method: string, params?: Record<string, unknown>): Promise<T> };
-type Provider = {
-  id: string; enabled?: boolean; hasSecret?: boolean; hasOauth?: boolean; authKind?: string;
-  defaultModelId?: string; models?: { id: string }[];
+type Dependencies = DelegationCatalogDependencies & {
+  publish: (event: DelegationApprovalChangedEvent) => void;
+  onError?: (message: string) => void;
+  now?: () => number;
 };
-type Dependencies = {
-  getHost: () => Host | null;
-  requestUi: (request: TrustedExtensionUiRequestEnvelope) => Promise<TrustedExtensionUiResponse>;
+type Entry = {
+  input: DelegationApprovalRequest;
+  created: number;
+  expires: number;
+  initialized: boolean;
+  operation: number;
+  fingerprint?: string;
+  prompt?: DelegationApprovalPrompt;
+  timer?: ReturnType<typeof setTimeout>;
+  resolve: (decision: DelegationApprovalDecision) => void;
 };
-const namespace = "core.delegation-approval";
-const identity = (request: { sessionId: string; requestId: string }) =>
-  JSON.stringify([request.sessionId, request.requestId]);
-const decision = (value: DelegationApprovalDecision["decision"], reason: string): DelegationApprovalDecision =>
-  ({ decision: value, reason });
+const identity = (value: { sessionId: string; requestId: string }) => JSON.stringify([value.sessionId, value.requestId]);
+const sameModel = (a: { providerId: string; modelId: string }, b: { providerId: string; modelId: string }) =>
+  a.providerId === b.providerId && a.modelId === b.modelId;
+const decision = (value: DelegationApprovalDecision["decision"], code: DelegationApprovalDecision["code"], reason: string): DelegationApprovalDecision =>
+  ({ decision: value, code, reason });
 
+/** Core-owned consent. It never accepts trusted-extension prompt responses. */
 export function createDelegationApprovalService(deps: Dependencies) {
-  const pending = new Map<string, { cancel: () => void }>();
+  const catalog = createDelegationCatalog(deps);
+  const pending = new Map<string, Entry>();
+  const now = deps.now ?? Date.now;
+  let revision = 0;
   let disposed = false;
-
-  async function read(request: DelegationApprovalRequest) {
-    const host = deps.getHost();
-    if (!host || disposed) throw new Error("Delegation host unavailable");
-    const [settings, listed] = await Promise.all([
-      host.call<AppSettings>("settings.get"),
-      host.call<{ providers: Provider[] }>("providers.list", { includeDisabled: false }),
-    ]);
-    if (deps.getHost() !== host || disposed) throw new Error("Delegation host changed");
-    const policy = settings.delegation;
-    if (policy === undefined) return { settings, policy, model: undefined };
-    if (!isDelegationSettings(policy)) throw new Error("Invalid delegation policy");
-    const provider = listed.providers.find((row) => row.id === request.providerId && row.enabled !== false);
-    const available = provider && (provider.hasSecret === true || provider.hasOauth === true || provider.authKind === "none")
-      && (provider.models?.length ? provider.models.some((row) => row.id === request.modelId) : provider.defaultModelId === request.modelId);
-    if (!available) throw new Error("Delegation model unavailable");
-    const model = policy?.models.find((row) => row.providerId === request.providerId && row.modelId === request.modelId && row.enabled);
-    if (policy && !model) throw new Error("Delegation model disabled");
-    return { settings, policy, model };
+  const report = (message: string) => (deps.onError ?? console.error)(message);
+  const live = (entry: Entry) => !disposed && pending.get(identity(entry.input)) === entry;
+  function publish(entry: Entry) {
+    if (!entry.prompt) return;
+    try { deps.publish({ request: structuredClone(entry.prompt) }); }
+    catch { report("Delegation approval event delivery failed; pending approvals remain available through list"); }
   }
-
-  function cancel(request: { sessionId: string; requestId: string }) {
-    pending.get(identity(request))?.cancel();
-  }
-
-  async function authorize(request: DelegationApprovalRequest): Promise<DelegationApprovalDecision> {
-    if (!request || [request.sessionId, request.requestId, request.providerId, request.modelId, request.task]
-      .some((value) => typeof value !== "string" || !value.trim())
-      || (request.reason !== undefined && typeof request.reason !== "string")) {
-      return decision("skip", "Invalid delegation request");
+  /**
+   * Terminal row keeps the identity the action produced. `select` acknowledges
+   * the alternative it granted instead of the originally proposed candidate,
+   * while `requestedModel`/`modelReason` still describe the original request.
+   */
+  function settle(entry: Entry, result: DelegationApprovalDecision, status: DelegationApprovalPrompt["status"],
+    selected?: { providerId: string; modelId: string }) {
+    if (pending.get(identity(entry.input)) !== entry) return;
+    pending.delete(identity(entry.input));
+    if (entry.timer) clearTimeout(entry.timer);
+    entry.operation++;
+    if (entry.prompt) {
+      const chosen = selected && entry.prompt.candidates.find(row => sameModel(row, selected));
+      entry.prompt = { ...entry.prompt, status, revision: ++revision, schedulingReason: result.reason,
+        ...(chosen ? { candidate: { ...chosen } } : {}) };
+      publish(entry);
     }
-    const key = identity(request);
-    if (disposed || pending.has(key)) return decision("skip", "Delegation request unavailable");
-    let cancelled = false;
-    let finish!: (result: DelegationApprovalDecision) => void;
-    const interrupted = new Promise<DelegationApprovalDecision>((resolve) => { finish = resolve; });
-    const dismiss = () => {
-      void deps.requestUi({ sessionId: request.sessionId, extensionId: namespace, extensionLabel: namespace,
-        request: { kind: "cancel", requestId: request.requestId } }).catch(() => undefined);
+    entry.resolve(result);
+  }
+  function expire(entry: Entry) {
+    settle(entry, decision("skip", "timeout", "Delegation approval timeout"), "expired");
+  }
+  function arm(entry: Entry) {
+    if (entry.timer) clearTimeout(entry.timer);
+    const deadline = entry.expires;
+    entry.timer = setTimeout(() => {
+      if (live(entry) && entry.expires === deadline) expire(entry);
+    }, Math.max(0, deadline - now()));
+  }
+  async function load(entry: Entry) {
+    const [current, source] = await Promise.all([catalog.read(), catalog.source(entry.input.sessionId)]);
+    if (deps.getHost() !== current.host) throw new Error("Delegation host changed");
+    return { current, source };
+  }
+  function reconcile(entry: Entry, loaded: Awaited<ReturnType<typeof load>>, automatic = true) {
+    if (!live(entry)) return;
+    const { current, source } = loaded;
+    if (!entry.initialized) {
+      entry.initialized = true;
+      entry.expires = entry.created + (current.policy?.approvalTimeoutSeconds || DEFAULT_DELEGATION_APPROVAL_TIMEOUT_SECONDS) * 1000;
+      arm(entry);
+    }
+    if (now() >= entry.expires) { expire(entry); return; }
+    if (!current.policy) {
+      settle(entry, entry.input.automaticOnly
+        ? decision("skip", "declined", "Automatic delegation requires an explicit saved auto policy")
+        : decision("allow", "approved", "Legacy delegation policy"), entry.input.automaticOnly ? "skipped" : "approved");
+      return;
+    }
+    const candidates = catalog.candidates(current, entry.input);
+    const candidate = candidates.find(row => sameModel(row, entry.input));
+    if (!candidate) {
+      settle(entry, decision("skip", "invalidated", "Delegation model is disabled, unavailable or incompatible"), "invalidated");
+      return;
+    }
+    if (candidate.approval === "auto" && automatic) {
+      settle(entry, decision("allow", "approved", "Automatically allowed by saved delegation policy"), "approved");
+      return;
+    }
+    if (entry.input.automaticOnly || current.policy.approvalTimeoutSeconds === 0) {
+      settle(entry, decision("skip", entry.input.automaticOnly ? "declined" : "timeout", "Delegation requires approval; automatic alternatives only"), "skipped");
+      return;
+    }
+    const fingerprint = JSON.stringify([current.snapshot.revision, source]);
+    if (entry.prompt && entry.fingerprint === fingerprint) return;
+    entry.fingerprint = fingerprint;
+    entry.prompt = {
+      sessionId: entry.input.sessionId, requestId: entry.input.requestId, revision: ++revision,
+      status: "pending", createdAt: new Date(entry.created).toISOString(), expiresAt: new Date(entry.expires).toISOString(),
+      ...source, task: entry.input.task, candidate, candidates,
+      ...(entry.input.agentName !== undefined ? { agentName: entry.input.agentName } : {}),
+      ...(entry.input.description !== undefined ? { description: entry.input.description } : {}),
+      ...(entry.input.requestedModel !== undefined ? { requestedModel: entry.input.requestedModel } : {}),
+      ...(entry.input.reason !== undefined ? { modelReason: entry.input.reason } : {}),
     };
-    const entry = { cancel: () => { cancelled = true; finish(decision("cancel", "Delegation cancelled")); dismiss(); } };
-    pending.set(key, entry);
-    let timer: ReturnType<typeof setTimeout> | undefined;
+    publish(entry);
+  }
+  async function refreshEntry(entry: Entry) {
+    const operation = ++entry.operation;
     try {
-      const operation = async (): Promise<DelegationApprovalDecision> => {
-        const current = await read(request);
-        if (cancelled) return decision("cancel", "Delegation cancelled");
-        if (!current.policy) return decision("allow", "Legacy delegation policy");
-        if (current.model?.approval === "auto") return decision("allow", "Automatically allowed by delegation policy");
-        if (current.policy.approvalTimeoutSeconds === 0) return decision("skip", "Delegation approval timeout");
-        const strings = catalogs[resolveLocale(current.settings.language ?? "auto")].delegationApproval;
-        const t = (key: keyof typeof strings, options: { defaultValue: string }) => strings?.[key] ?? options.defaultValue;
-        const allow = t("allowOnce", { defaultValue: "Allow once" });
-        const skip = t("useOther", { defaultValue: "Use another model" });
-        const stop = t("cancel", { defaultValue: "Cancel delegation" });
-        // The deadline includes time queued behind another host prompt.
-        timer = setTimeout(() => { finish(decision("skip", "Delegation approval timeout")); dismiss(); },
-          current.policy.approvalTimeoutSeconds * 1000);
-        let response: TrustedExtensionUiResponse;
-        try {
-          response = await deps.requestUi({ sessionId: request.sessionId, requestId: request.requestId,
-            extensionId: namespace, extensionLabel: t("label", { defaultValue: "Delegation approval" }),
-            request: { kind: "select", title: `${t("title", { defaultValue: "Approve delegated model" })}: ${request.providerId}/${request.modelId}\n${request.task.slice(0, 2000)}${request.reason ? `\n${t("reason", { defaultValue: "Selection reason" })}: ${request.reason.slice(0, 1000)}` : ""}`,
-              options: [allow, skip, stop] } });
-        } catch { return decision("skip", "Delegation approval UI unavailable"); }
-        if (cancelled) return decision("cancel", "Delegation cancelled");
-        if (response.kind !== "select" || response.cancelled) return decision("skip", "Delegation approval dismissed or expired");
-        // Renderer dismissal is an explicit cancellation, not consent to fallback.
-        if (response.value === undefined || response.value === stop) return decision("cancel", "Delegation cancelled");
-        if (response.value === skip) return decision("skip", "Alternative model requested");
-        if (response.value !== allow) return decision("skip", "Invalid delegation approval response");
-        const latest = await read(request);
-        if (cancelled || disposed) return decision("cancel", "Delegation cancelled");
-        if (latest.policy && latest.model?.approval === "ask" && latest.policy.approvalTimeoutSeconds === 0) {
-          return decision("skip", "Delegation approval disabled while waiting");
-        }
-        return decision("allow", "User approved this delegation once");
-      };
-      return await Promise.race([operation(), interrupted]);
-    } catch { return decision("skip", "Delegation policy or model unavailable"); }
-    finally {
-      if (timer) clearTimeout(timer);
-      if (pending.get(key) === entry) pending.delete(key);
-      cancelled = true;
-      dismiss();
+      const loaded = await load(entry);
+      if (!live(entry) || entry.operation !== operation) return;
+      reconcile(entry, loaded);
+    } catch {
+      if (!live(entry) || entry.operation !== operation) return;
+      report(entry.prompt
+        ? "Delegation policy/source refresh failed; the live request remains available for retry"
+        : "Delegation policy/source initialization failed before a prompt could be shown");
+      if (!entry.prompt) settle(entry, decision("skip", "unavailable", "Delegation policy or source unavailable"), "invalidated");
     }
   }
-
-  return { authorize, cancel, dispose() {
-    disposed = true;
-    for (const entry of pending.values()) entry.cancel();
-    pending.clear();
-  } };
+  function authorize(input: DelegationApprovalRequest): Promise<DelegationApprovalDecision> {
+    if (!isDelegationAuthorizationRequest(input)) return Promise.resolve(decision("skip", "invalid", "Invalid delegation request"));
+    if (disposed || pending.has(identity(input))) return Promise.resolve(decision("skip", "unavailable", "Delegation request unavailable"));
+    let resolve!: Entry["resolve"];
+    const result = new Promise<DelegationApprovalDecision>(done => { resolve = done; });
+    const created = now();
+    const entry: Entry = { input: structuredClone(input), created,
+      expires: created + DEFAULT_DELEGATION_APPROVAL_TIMEOUT_SECONDS * 1000,
+      initialized: false, operation: 0, resolve };
+    pending.set(identity(input), entry);
+    arm(entry); // Also bounds an unavailable host/source read before the first row exists.
+    void refreshEntry(entry);
+    return result;
+  }
+  function lookup(input: { sessionId: string; requestId: string; revision: number }): Entry | DelegationApprovalActionResult {
+    const entry = pending.get(identity(input));
+    if (!entry?.prompt) return { accepted: false, code: "not-found" };
+    if (now() >= entry.expires) {
+      expire(entry);
+      return { accepted: false, code: "expired", request: structuredClone(entry.prompt) };
+    }
+    if (entry.prompt.revision !== input.revision) return { accepted: false, code: "stale", request: structuredClone(entry.prompt) };
+    return entry;
+  }
+  async function respond(input: unknown): Promise<DelegationApprovalActionResult> {
+    if (!isDelegationApprovalActionRequest(input)) return { accepted: false, code: "invalid", error: "Invalid delegation approval action" };
+    const found = lookup(input);
+    if (!("input" in found)) return found;
+    const entry = found;
+    if (input.action === "skip" || input.action === "cancel") {
+      settle(entry, input.action === "cancel" ? decision("cancel", "cancelled", "Delegation cancelled by user")
+        : decision("skip", "skipped", "Alternative model requested by user"), input.action === "cancel" ? "cancelled" : "skipped");
+      return { accepted: true, request: structuredClone(entry.prompt) };
+    }
+    if (input.action === "select" && (!entry.prompt!.candidates.some(row => sameModel(row, input))
+      || (entry.input.selection === "require" && !sameModel(entry.input, input)))) {
+      return { accepted: false, code: "invalid", error: "Selected model is not an allowed replacement" };
+    }
+    const operation = entry.operation;
+    try {
+      const loaded = await load(entry);
+      if (!live(entry)) return { accepted: false, code: "not-pending", request: entry.prompt && structuredClone(entry.prompt) };
+      if (entry.operation !== operation || entry.prompt?.revision !== input.revision) return { accepted: false, code: "stale", request: structuredClone(entry.prompt) };
+      reconcile(entry, loaded, false);
+      if (!live(entry)) return { accepted: false, code: now() >= entry.expires ? "expired" : "unavailable", request: entry.prompt && structuredClone(entry.prompt) };
+      if (entry.prompt?.revision !== input.revision) return { accepted: false, code: "stale", request: structuredClone(entry.prompt) };
+      const selected = input.action === "select" ? entry.prompt!.candidates.find(row => sameModel(row, input)) : entry.prompt!.candidate;
+      if (!selected) return { accepted: false, code: "unavailable" };
+      // No await between current revision/deadline/eligibility checks and the one grant.
+      const result = decision("allow", input.action === "select" ? "selected" : "approved", "User approved this delegation once");
+      if (input.action === "select") result.selectedModel = { providerId: selected.providerId, modelId: selected.modelId };
+      settle(entry, result, "approved");
+      return { accepted: true, request: structuredClone(entry.prompt) };
+    } catch {
+      report("Delegation approval submission failed during policy/source revalidation");
+      return { accepted: false, code: "unavailable", error: "Delegation revalidation failed", request: entry.prompt && structuredClone(entry.prompt) };
+    }
+  }
+  async function extend(input: unknown): Promise<DelegationApprovalActionResult> {
+    if (!isDelegationApprovalExtendRequest(input)) return { accepted: false, code: "invalid", error: "Invalid delegation approval extension" };
+    const found = lookup(input);
+    if (!("input" in found)) return found;
+    const entry = found;
+    const operation = ++entry.operation;
+    try {
+      const loaded = await load(entry);
+      if (!live(entry)) return { accepted: false, code: "not-pending", request: entry.prompt && structuredClone(entry.prompt) };
+      if (entry.operation !== operation || entry.prompt?.revision !== input.revision) return { accepted: false, code: "stale", request: structuredClone(entry.prompt) };
+      reconcile(entry, loaded);
+      if (!live(entry)) return { accepted: false, code: now() >= entry.expires ? "expired" : "unavailable", request: entry.prompt && structuredClone(entry.prompt) };
+      if (entry.prompt?.revision !== input.revision) return { accepted: false, code: "stale", request: structuredClone(entry.prompt) };
+      entry.expires += DELEGATION_APPROVAL_EXTENSION_SECONDS * 1000;
+      entry.prompt = { ...entry.prompt!, expiresAt: new Date(entry.expires).toISOString(), revision: ++revision };
+      arm(entry);
+      publish(entry);
+      return { accepted: true, request: structuredClone(entry.prompt) };
+    } catch {
+      report("Delegation approval extension failed during policy/source revalidation");
+      return { accepted: false, code: "unavailable", error: "Delegation revalidation failed", request: entry.prompt && structuredClone(entry.prompt) };
+    }
+  }
+  function cancel(input: Pick<DelegationApprovalRequest, "sessionId" | "requestId">) {
+    const entry = pending.get(identity(input));
+    if (entry) settle(entry, decision("cancel", "cancelled", "Delegation stopped"), "cancelled");
+  }
+  return {
+    authorize, respond, extend, cancel,
+    list(): DelegationApprovalSnapshot {
+      for (const entry of pending.values()) if (now() >= entry.expires) expire(entry);
+      return { requests: [...pending.values()].flatMap(entry => entry.prompt ? [structuredClone(entry.prompt)] : []) };
+    },
+    snapshot: catalog.snapshot,
+    async refresh() {
+      catalog.invalidate();
+      await Promise.all([...pending.values()].map(refreshEntry));
+    },
+    dispose() {
+      disposed = true;
+      for (const entry of pending.values()) settle(entry, decision("cancel", "cancelled", "Delegation approval disposed"), "cancelled");
+    },
+  };
 }

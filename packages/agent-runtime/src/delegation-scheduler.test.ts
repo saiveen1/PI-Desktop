@@ -85,4 +85,46 @@ describe("delegation scheduling", () => {
     expect(authorize).toHaveBeenCalledTimes(1);
     expect(scheduler.decisions[0].reason).toBe("No image support");
   });
+  it("uses an exact host-selected alternative once, not the proposed candidate", async () => {
+    const authorize = vi.fn(async (): Promise<DelegationApprovalDecision> => ({ decision: "allow", reason: "Selected once",
+      selectedModel: { providerId: "account", modelId: "cheap" }, code: "selected" }));
+    const scheduler = create({ authorize, agentName: "worker", description: "Review fixture", requestedModel: "requested alias",
+      thinkingLevel: "high", requiresImages: true, minContextWindow: 4096 });
+    expect((await scheduler.select()).provider.modelId).toBe("cheap");
+    expect(authorize).toHaveBeenCalledTimes(1);
+    expect(authorize.mock.calls[0]).toEqual([expect.objectContaining({ agentName: "worker", description: "Review fixture",
+      requestedModel: "requested alias", thinkingLevel: "high", requiresImages: true, minContextWindow: 4096 })]);
+  });
+  it("never substitutes an invalid, incompatible or require-mismatched selected target", async () => {
+    for (const options of [
+      { target: "hidden" }, { target: "cheap", compatible: (candidate: RuntimeProviderConfig) => candidate.modelId === "cheap" ? "No images" : undefined },
+      { target: "cheap", selection: "require" as const, preferredKey: "account/expensive" },
+    ]) {
+      const authorize = vi.fn(async (): Promise<DelegationApprovalDecision> => ({ decision: "allow", reason: "Selected",
+        selectedModel: { providerId: "account", modelId: options.target } }));
+      await expect(create({ ...options, authorize }).select()).rejects.toThrow(/selected model/i);
+      expect(authorize).toHaveBeenCalledTimes(1);
+    }
+  });
+  it("switches to automaticOnly after timeout and never waits on a second ask", async () => {
+    const settings: DelegationSettings = { ...policy, models: [policy.models[0], { ...policy.models[0], modelId: "another-ask", priority: 2 },
+      { ...policy.models[1], priority: 3 }] };
+    const authorize = vi.fn(async (request): Promise<DelegationApprovalDecision> => request.modelId === "expensive"
+      ? { decision: "skip", reason: "not a prose trigger", code: "timeout" } : allow());
+    expect((await create({ settings, authorize }).select()).provider.modelId).toBe("cheap");
+    expect(authorize.mock.calls.map(([request]) => [request.modelId, request.automaticOnly])).toEqual([["expensive", undefined], ["cheap", true]]);
+  });
+  it("re-reads current candidates after a policy change while keeping attempted identities spent", async () => {
+    let settings = policy;
+    const authorize = vi.fn(async (request): Promise<DelegationApprovalDecision> => {
+      if (request.modelId === "expensive") {
+        settings = { ...policy, models: [policy.models[0], { ...policy.models[1], modelId: "new" }] };
+        return { decision: "skip", reason: "Expired", code: "timeout" };
+      }
+      return allow();
+    });
+    const scheduler = create({ authorize, currentPolicy: async () => ({ settings }) });
+    expect((await scheduler.select()).provider.modelId).toBe("new");
+    expect(authorize.mock.calls.map(([request]) => request.modelId)).toEqual(["expensive", "new"]);
+  });
 });

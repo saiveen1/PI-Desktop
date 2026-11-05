@@ -25,6 +25,8 @@ import { registerProviderIpc } from "./provider-ipc";
 import { registerScheduledIpc } from "./scheduled-ipc";
 import { registerSessionIpc } from "./session-ipc";
 import { registerSettingsIpc } from "./settings-ipc";
+import { registerDelegationApprovalIpc } from "./delegation-approval-ipc";
+import type { createDelegationApprovalService } from "../services/delegation-approval";
 import { registerStorageIpc } from "../storage/ipc";
 import { registerConfigSyncIpc } from "./config-sync-ipc";
 import { registerBackgroundTasksIpc } from "./background-tasks-ipc";
@@ -78,6 +80,8 @@ export type RegisterIpcDependencies = {
   /** Host activation plus the inline-visualization switch, for runtime consumers. */
   runtimeDisabledBuiltinSkills: () => Promise<string[]>;
   completionNoticeTurns: Set<string>;
+  delegationApproval: ReturnType<typeof createDelegationApprovalService>;
+  delegationSettingsWritten: () => Promise<void>;
   liveCallService?: LiveCallService;
   liveVoiceWidget?: LiveVoiceWidget;
   restartForStorage: () => void;
@@ -238,6 +242,7 @@ export function registerIpcHandlers(dependencies: RegisterIpcDependencies) {
       wrap(() => fn(event, ...args)),
     );
   };
+
   const assertMainWindowSender = (event: IpcMainInvokeEvent): void => {
     if (event.sender.id !== getMainWindow()?.webContents.id) {
       throw Object.assign(new Error("renderer is not the main window"), {
@@ -265,6 +270,7 @@ export function registerIpcHandlers(dependencies: RegisterIpcDependencies) {
     handleWithEvent,
     assertMainWindowSender,
   };
+  registerDelegationApprovalIpc({ registrar, approvals: dependencies.delegationApproval });
 
   registerAppIpc({
     registrar,
@@ -317,6 +323,7 @@ export function registerIpcHandlers(dependencies: RegisterIpcDependencies) {
     applyUpdatePreference: (preference) => updater.setPreference(preference),
     resolveEffectiveCommandShell,
     liveCallService,
+    delegationSettingsWritten: dependencies.delegationSettingsWritten,
   });
   registerConfigSyncIpc({
     registrar,

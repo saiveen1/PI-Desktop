@@ -1,0 +1,20 @@
+export const approvalCenter = {
+  maxThinking: "最大", defaultThinking: "服務商預設值",
+  center: "委派核准", requests: "待核准請求", hide: "收合核准 — 請求維持待處理",
+  selected: "已選 {{count}} 項用於批次操作", allowSelected: "核准所選", skipSelected: "略過所選", cancelSelected: "取消所選委派",
+  selectRequest: "選擇 {{agent}} 用於批次操作", delegate: "子代理", taskDetails: "任務詳情", fullTask: "完整委派任務",
+  actualModel: "實際候選模型", requestedModel: "要求的模型", schedulingReason: "排程依據", thinking: "思考強度", deadline: "截止時間",
+  secondsLeft: "剩餘 {{count}} 秒", skip: "略過 / 自動備選", extend: "+300 秒", chooseModel: "選擇確切模型…", confirmModel: "確認模型",
+  confirmTarget: "僅核准本次：{{provider}} / {{model}}", openSource: "開啟來源：{{title}}", untitledSession: "未命名對話", noProject: "無專案",
+  back: "返回請求清單", copyTask: "複製完整任務", copied: "已複製完整任務。", copyFailed: "複製失敗。可選取任務文字複製，或重試。",
+  empty: "沒有待核准請求。", loading: "正在載入核准…", loadFailed: "無法載入核准。待處理請求未被取消。",
+  retry: "重試", navigationFailed: "無法開啟來源對話，請重試。", results: "請求結果",
+  feedback: {
+    sending: "正在傳送 — 等待主機確認…", approved: "已核准 — 尚未確認啟動", skipped: "已略過 — 已要求自動備選",
+    cancelled: "已取消委派", expired: "已過期 — 無法核准", invalidated: "請求已替換或不再可用",
+    extended: "截止時間已延長 300 秒", failed: "未收到確認。請求仍待處理，請重試操作。",
+    stale: "請求已變更，請檢查最新候選模型後重試。", unavailable: "模型無法使用，請檢查或略過此請求。",
+    invalid: "操作遭拒，請重新載入核准後重試。", "not-found": "請求已不存在，請重新載入核准。", "not-pending": "請求已處理，請重新載入核准。",
+  },
+  thinkingLevels: { off: "關閉", minimal: "最低", low: "低", medium: "中", high: "高", xhigh: "極高" },
+};

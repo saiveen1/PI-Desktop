@@ -1,0 +1,20 @@
+export const approvalCenter = {
+  maxThinking: "En yüksek", defaultThinking: "Sağlayıcı varsayılanı",
+  center: "Görevlendirme onayları", requests: "Bekleyen istekler", hide: "Onayları gizle — istekler beklemede kalır",
+  selected: "Toplu işlem için {{count}} seçildi", allowSelected: "Seçilenlere izin ver", skipSelected: "Seçilenleri atla", cancelSelected: "Seçilenleri iptal et",
+  selectRequest: "Toplu işlem için {{agent}} seç", delegate: "Alt aracı", taskDetails: "Görev ayrıntıları", fullTask: "Görevlendirilen tam görev",
+  actualModel: "Gerçek model", requestedModel: "İstenen", schedulingReason: "Zamanlama", thinking: "Düşünme", deadline: "Son tarih",
+  secondsLeft: "{{count}} sn kaldı", skip: "Atla / otomatik alternatif", extend: "+300 saniye", chooseModel: "Tam modeli seç…", confirmModel: "Modeli onayla",
+  confirmTarget: "Bir kez onayla: {{provider}} / {{model}}", openSource: "Kaynağı aç: {{title}}", untitledSession: "Adsız oturum", noProject: "Proje yok",
+  back: "İsteklere dön", copyTask: "Tam görevi kopyala", copied: "Tam görev kopyalandı.", copyFailed: "Kopyalanamadı. Görev metnini seçip kopyalayın veya yeniden deneyin.",
+  empty: "Bekleyen onay yok.", loading: "Onaylar yükleniyor…", loadFailed: "Onaylar yüklenemedi. Bekleyen istekler iptal edilmedi.",
+  retry: "Yeniden dene", navigationFailed: "Kaynak oturum açılamadı. Yeniden deneyin.", results: "İstek sonuçları",
+  feedback: {
+    sending: "Gönderiliyor — ana makine onayı bekleniyor…", approved: "Onaylandı — başlatıldığı doğrulanmadı", skipped: "Atlandı — otomatik alternatif istendi",
+    cancelled: "Görevlendirme iptal edildi", expired: "Süresi doldu — onaylanamaz", invalidated: "İstek değiştirildi veya artık kullanılamıyor",
+    extended: "Son tarih 300 saniye uzatıldı", failed: "Onay alınamadı. İstek hâlâ bekliyor; işlemi yeniden deneyin.",
+    stale: "İstek değişti. Yeniden denemeden önce güncel adayı inceleyin.", unavailable: "Model kullanılamıyor. İsteği inceleyin veya atlayın.",
+    invalid: "İşlem reddedildi. Onayları yeniden yükleyip deneyin.", "not-found": "İstek artık yok. Onayları yeniden yükleyin.", "not-pending": "İstek zaten sonuçlandı. Onayları yeniden yükleyin.",
+  },
+  thinkingLevels: { off: "Kapalı", minimal: "En az", low: "Düşük", medium: "Orta", high: "Yüksek", xhigh: "Çok yüksek" },
+};

@@ -1,3 +1,4 @@
+import { approvalCenter } from "./delegation-approval.js";
 import { en, type EnglishCatalog } from "../en/index.js";
 
 export const zhCN = {
@@ -14,6 +15,7 @@ export const zhCN = {
     processed: "已处理 {{count}} 个任务。", restored: "已恢复 {{count}} 个任务。", permanentlyDeleted: "已永久删除 {{count}} 个任务。",
   },
   delegationApproval: {
+    ...approvalCenter,
     label: "子代理模型审批", title: "批准本次使用的模型", reason: "选择理由",
     allowOnce: "仅允许本次", useOther: "改用其他模型", cancel: "取消本次委派",
   },

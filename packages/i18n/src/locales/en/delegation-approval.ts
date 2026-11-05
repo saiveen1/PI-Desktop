@@ -1,0 +1,20 @@
+export const approvalCenter = {
+  maxThinking: "Maximum", defaultThinking: "Provider default",
+  center: "Delegation approvals", requests: "Pending requests", hide: "Hide approvals — requests stay pending",
+  selected: "{{count}} selected for batch", allowSelected: "Allow selected", skipSelected: "Skip selected", cancelSelected: "Cancel selected",
+  selectRequest: "Select {{agent}} for batch", delegate: "Delegate", taskDetails: "Task details", fullTask: "Full delegated task",
+  actualModel: "Actual model", requestedModel: "Requested", schedulingReason: "Scheduling", thinking: "Thinking", deadline: "Deadline",
+  secondsLeft: "{{count}}s left", skip: "Skip / auto alternative", extend: "+300 seconds", chooseModel: "Choose exact model…", confirmModel: "Confirm model",
+  confirmTarget: "Approve once: {{provider}} / {{model}}", openSource: "Open source: {{title}}", untitledSession: "Untitled session", noProject: "No project",
+  back: "Back to requests", copyTask: "Copy full task", copied: "Full task copied.", copyFailed: "Copy failed. Select the task text and copy, or retry.",
+  empty: "No pending approvals.", loading: "Loading approvals…", loadFailed: "Could not load approvals. Pending requests have not been cancelled.",
+  retry: "Retry", navigationFailed: "Could not open the source session. Try again.", results: "Request results",
+  feedback: {
+    sending: "Sending — awaiting host acknowledgement…", approved: "Approved — startup not confirmed", skipped: "Skipped — automatic alternative requested",
+    cancelled: "Delegation cancelled", expired: "Expired — cannot approve", invalidated: "Request replaced or no longer available",
+    extended: "Deadline extended by 300 seconds", failed: "Not acknowledged. Your request is still pending; retry an action.",
+    stale: "Request changed. Review the latest candidate before retrying.", unavailable: "Model unavailable. Review or skip this request.",
+    invalid: "Action rejected. Reload approvals and try again.", "not-found": "Request no longer exists. Reload approvals.", "not-pending": "Request already resolved. Reload approvals.",
+  },
+  thinkingLevels: { off: "Off", minimal: "Minimal", low: "Low", medium: "Medium", high: "High", xhigh: "Extra high" },
+};

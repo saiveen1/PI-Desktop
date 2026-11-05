@@ -1,0 +1,20 @@
+export const approvalCenter = {
+  maxThinking: "Máximo", defaultThinking: "Predeterminado del proveedor",
+  center: "Aprobaciones de delegación", requests: "Solicitudes pendientes", hide: "Ocultar aprobaciones — las solicitudes siguen pendientes",
+  selected: "{{count}} seleccionadas para el lote", allowSelected: "Permitir seleccionadas", skipSelected: "Omitir seleccionadas", cancelSelected: "Cancelar seleccionadas",
+  selectRequest: "Seleccionar {{agent}} para el lote", delegate: "Subagente", taskDetails: "Detalles de la tarea", fullTask: "Tarea delegada completa",
+  actualModel: "Modelo real", requestedModel: "Solicitado", schedulingReason: "Planificación", thinking: "Razonamiento", deadline: "Vencimiento",
+  secondsLeft: "Quedan {{count}} s", skip: "Omitir / alternativa automática", extend: "+300 segundos", chooseModel: "Elegir modelo exacto…", confirmModel: "Confirmar modelo",
+  confirmTarget: "Permitir una vez: {{provider}} / {{model}}", openSource: "Abrir origen: {{title}}", untitledSession: "Sesión sin título", noProject: "Sin proyecto",
+  back: "Volver a solicitudes", copyTask: "Copiar tarea completa", copied: "Tarea completa copiada.", copyFailed: "Error al copiar. Selecciona el texto y cópialo o reintenta.",
+  empty: "No hay aprobaciones pendientes.", loading: "Cargando aprobaciones…", loadFailed: "No se pudieron cargar las aprobaciones. Las solicitudes pendientes no se han cancelado.",
+  retry: "Reintentar", navigationFailed: "No se pudo abrir la sesión de origen. Reintenta.", results: "Resultados de solicitudes",
+  feedback: {
+    sending: "Enviando — esperando confirmación del host…", approved: "Aprobada — inicio no confirmado", skipped: "Omitida — alternativa automática solicitada",
+    cancelled: "Delegación cancelada", expired: "Vencida — no se puede aprobar", invalidated: "Solicitud reemplazada o ya no disponible",
+    extended: "Plazo ampliado en 300 segundos", failed: "Sin confirmación. La solicitud sigue pendiente; reintenta una acción.",
+    stale: "La solicitud cambió. Revisa el candidato actual antes de reintentar.", unavailable: "Modelo no disponible. Revisa u omite esta solicitud.",
+    invalid: "Acción rechazada. Recarga las aprobaciones y reintenta.", "not-found": "La solicitud ya no existe. Recarga las aprobaciones.", "not-pending": "Solicitud ya resuelta. Recarga las aprobaciones.",
+  },
+  thinkingLevels: { off: "Desactivado", minimal: "Mínimo", low: "Bajo", medium: "Medio", high: "Alto", xhigh: "Muy alto" },
+};

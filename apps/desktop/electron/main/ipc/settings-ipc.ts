@@ -28,6 +28,7 @@ export type SettingsIpcDependencies = {
   applyKeepAwakeWhileRunning: (settings?: { keepAwakeWhileRunning?: unknown } | null) => void;
   applyUpdatePreference: (preference: UpdatePreference) => void;
   resolveEffectiveCommandShell: () => Promise<unknown>;
+  delegationSettingsWritten?: () => Promise<void>;
   liveCallService?: Pick<LiveCallService, "beginSettingsWrite" | "settingsWritten">;
 };
 
@@ -49,6 +50,7 @@ export function registerSettingsIpc({
   applyUpdatePreference,
   resolveEffectiveCommandShell,
   liveCallService,
+  delegationSettingsWritten,
 }: SettingsIpcDependencies): void {
   let host: HostProcess | null = null;
   let sidecar: AgentSidecar | null = null;
@@ -81,6 +83,7 @@ export function registerSettingsIpc({
     let result: AppSettings;
     try {
       result = await host.call<AppSettings>("settings.set", validatedSettings);
+      await delegationSettingsWritten?.();
       await liveCallService?.settingsWritten(result);
     } finally {
       releaseSettingsWrite?.();

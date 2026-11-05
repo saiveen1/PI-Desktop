@@ -37,6 +37,22 @@ describe("Browser recovery IPC", () => {
   });
 });
 
+describe("Core delegation approval IPC", () => {
+  it("allowlists dedicated per-request channels without changing protocol versions", () => {
+    const channels = [
+      [IPC.invoke.delegationApprovalList, "pi-desktop/delegationApproval/list"],
+      [IPC.invoke.delegationApprovalRespond, "pi-desktop/delegationApproval/respond"],
+      [IPC.invoke.delegationApprovalExtend, "pi-desktop/delegationApproval/extend"],
+      [IPC.event.delegationApprovalChanged, "pi-desktop/delegationApproval/event/changed"],
+    ];
+    for (const [channel, expected] of channels) {
+      expect(channel).toBe(expected);
+      expect(IPC_WHITELIST.has(channel)).toBe(true);
+    }
+    expect(new Set(channels.map(([channel]) => channel)).size).toBe(4);
+  });
+});
+
 describe("Plan protocol contracts", () => {
   it("uses protocol v11/schema v16 and exposes the plan, schedule, and shell channels", () => {
     expect(PROTOCOL_VERSION).toBe(11);

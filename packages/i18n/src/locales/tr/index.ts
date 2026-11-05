@@ -1,3 +1,4 @@
+import { approvalCenter } from "./delegation-approval.js";
 import { en, type EnglishCatalog } from "../en/index.js";
 
 export const tr = {
@@ -14,6 +15,7 @@ export const tr = {
     processed: "{{count}} oturum işlendi.", restored: "{{count}} oturum geri yüklendi.", permanentlyDeleted: "{{count}} oturum kalıcı olarak silindi.",
   },
   delegationApproval: {
+    ...approvalCenter,
     label: "Yetkilendirme onayı", title: "Görevlendirilen modeli onayla", reason: "Seçim nedeni",
     allowOnce: "Bir kez izin ver", useOther: "Başka model kullan", cancel: "Görevlendirmeyi iptal et",
   },

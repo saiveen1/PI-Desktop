@@ -1,0 +1,20 @@
+export const approvalCenter = {
+  maxThinking: "Máximo", defaultThinking: "Padrão do provedor",
+  center: "Aprovações de delegação", requests: "Solicitações pendentes", hide: "Ocultar aprovações — as solicitações continuam pendentes",
+  selected: "{{count}} selecionadas para o lote", allowSelected: "Permitir selecionadas", skipSelected: "Ignorar selecionadas", cancelSelected: "Cancelar selecionadas",
+  selectRequest: "Selecionar {{agent}} para o lote", delegate: "Subagente", taskDetails: "Detalhes da tarefa", fullTask: "Tarefa delegada completa",
+  actualModel: "Modelo real", requestedModel: "Solicitado", schedulingReason: "Agendamento", thinking: "Raciocínio", deadline: "Prazo",
+  secondsLeft: "Restam {{count}} s", skip: "Ignorar / alternativa automática", extend: "+300 segundos", chooseModel: "Escolher modelo exato…", confirmModel: "Confirmar modelo",
+  confirmTarget: "Permitir uma vez: {{provider}} / {{model}}", openSource: "Abrir origem: {{title}}", untitledSession: "Sessão sem título", noProject: "Sem projeto",
+  back: "Voltar às solicitações", copyTask: "Copiar tarefa completa", copied: "Tarefa completa copiada.", copyFailed: "Falha ao copiar. Selecione o texto e copie, ou tente novamente.",
+  empty: "Nenhuma aprovação pendente.", loading: "Carregando aprovações…", loadFailed: "Não foi possível carregar as aprovações. As solicitações pendentes não foram canceladas.",
+  retry: "Tentar novamente", navigationFailed: "Não foi possível abrir a sessão de origem. Tente novamente.", results: "Resultados das solicitações",
+  feedback: {
+    sending: "Enviando — aguardando confirmação do host…", approved: "Aprovada — início não confirmado", skipped: "Ignorada — alternativa automática solicitada",
+    cancelled: "Delegação cancelada", expired: "Expirada — não é possível aprovar", invalidated: "Solicitação substituída ou indisponível",
+    extended: "Prazo prorrogado em 300 segundos", failed: "Sem confirmação. A solicitação continua pendente; tente uma ação novamente.",
+    stale: "A solicitação mudou. Revise o candidato atual antes de tentar novamente.", unavailable: "Modelo indisponível. Revise ou ignore esta solicitação.",
+    invalid: "Ação rejeitada. Recarregue as aprovações e tente novamente.", "not-found": "A solicitação não existe mais. Recarregue as aprovações.", "not-pending": "Solicitação já resolvida. Recarregue as aprovações.",
+  },
+  thinkingLevels: { off: "Desativado", minimal: "Mínimo", low: "Baixo", medium: "Médio", high: "Alto", xhigh: "Muito alto" },
+};

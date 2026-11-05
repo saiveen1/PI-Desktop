@@ -1,3 +1,4 @@
+export { isDelegationAuthorizationRequest, delegationPolicySnapshot } from "./delegation-boundary.js";
 export * from "./host-process.js";
 export * from "./agent-sidecar.js";
 export * from "./runtime-supervisor.js";

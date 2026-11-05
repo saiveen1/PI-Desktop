@@ -1,4 +1,5 @@
 import { IPC, isDelegationSettings, type AppSettings, type DelegationApprovalRequest, type DelegationApprovalDecision, type AgentEventEnvelope, type ComputerGrantView, type UiMessage } from "@pi-desktop/shared";
+import type { DelegationPolicySnapshot } from "@pi-desktop/shared";
 import {
   findSubagentProviderSource,
   modelConfigWithBinding,
@@ -71,6 +72,7 @@ export type SidecarRuntimeDependencies = {
   currentNetworkProxy: () => any;
   authorizeDelegation: (request: DelegationApprovalRequest) => Promise<DelegationApprovalDecision>;
   cancelDelegationApproval: (request: Pick<DelegationApprovalRequest, "sessionId" | "requestId">) => void;
+  delegationSnapshot: () => Promise<DelegationPolicySnapshot>;
   /** The agent's drawn cursor. Visualization only (ADR 0342 §10). */
   computerCursorOverlay: Pick<ComputerCursorOverlay, "apply">;
   /** Push the live computer-use grant to the renderer's indicator. */
@@ -108,6 +110,7 @@ export function createSidecarRuntime({
   currentNetworkProxy,
   authorizeDelegation,
   cancelDelegationApproval,
+  delegationSnapshot,
   computerCursorOverlay,
   publishComputerGrant,
 }: SidecarRuntimeDependencies): {
@@ -199,6 +202,7 @@ export function createSidecarRuntime({
   };
   const wireSidecar = (s: AgentSidecar) => {
   s.setDelegationAuthorizer(authorizeDelegation, cancelDelegationApproval);
+  s.setDelegationSnapshotResolver(delegationSnapshot);
 
   s.onNotification((method, params) => {
     if (method === "native.agent.event") {

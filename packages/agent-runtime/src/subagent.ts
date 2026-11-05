@@ -175,8 +175,10 @@ export type SubagentRunOptions = {
   thinkingLevel: SubagentThinkingLevel;
   /** User-owned definition pins only, in configured order. Missing bindings fail visibly. */
   fallbackModels?: Array<{ key: string; provider?: RuntimeProviderConfig }>;
-  /** Mandatory per-model authorization before a fallback sends any request. */
-  authorizeModel?: (provider: RuntimeProviderConfig, signal: AbortSignal) => Promise<boolean>;
+  /** Refresh candidates only at a provider-failure switch boundary. */
+  refreshFallbackModels?: () => Promise<Array<{ key: string; provider?: RuntimeProviderConfig }>>;
+  /** Authorization may return the exact selected provider rather than a boolean. */
+  authorizeModel?: (provider: RuntimeProviderConfig, signal: AbortSignal) => Promise<boolean | RuntimeProviderConfig>;
   /** Original parent thinking selection, before primary-model clamping. */
   inheritedThinkingLevel?: SubagentThinkingLevel;
   onModelChange?: (provider: RuntimeProviderConfig, thinkingLevel: SubagentThinkingLevel) => void;
@@ -287,7 +289,6 @@ export class SubagentRun {
   private providerRateLimitRetryAttempt = 0;
   private provider: RuntimeProviderConfig;
   private thinkingLevel: SubagentThinkingLevel;
-  private fallbackIndex = 0;
   private readonly attemptedModels = new Set<string>();
   private readonly modelFailures: NonNullable<SubagentRunResult["modelFailures"]> = [];
   private readonly runPolicy: Readonly<DelegationRunPolicy>;
@@ -596,52 +597,51 @@ export class SubagentRun {
 
   /** Continue the same agent at the failed request; never replay completed tools. */
   private async useNextModel(): Promise<boolean> {
-    // An aborted turn never continues, whether the signal flipped yet or the
-    // cancel was only visible on the settled message.
     if (this.finalizing || this.budgetExceeded || this.runSignal().aborted || this.turnAborted || !this.streamError || this.streamError.code === "TURN_ABORTED") return false;
-    if (!this.opts.fallbackModels?.length) return false;
     const failed = this.agent.state.messages.at(-1);
-    // Only a provider's terminal assistant error permits fallback. Host/tool
-    // failures, cancellation, and unexpected internal exceptions do not.
-    if (failed?.role !== "assistant" || failed.stopReason !== "error") return false;
-    if (readLocalRequestErrorDetails(failed)) return false;
+    // Only terminal provider errors permit switching. Host/tool errors never do.
+    if (failed?.role !== "assistant" || failed.stopReason !== "error" || readLocalRequestErrorDetails(failed)) return false;
+    let fallbacks = this.opts.refreshFallbackModels ? await this.opts.refreshFallbackModels() : this.opts.fallbackModels ?? [];
+    if (!fallbacks.length || this.runSignal().aborted) return false;
     this.recordModelFailure(`${this.provider.id}/${this.provider.modelId}`, this.streamError);
-    // What an alternative would actually carry: the current context minus the
-    // failed assistant row (ADR 0299 decision 6 re-evaluates it against each
-    // alternative's own window before switching).
     const carried = this.agent.state.messages.slice(0, -1);
-    while (this.fallbackIndex < this.opts.fallbackModels.length) {
-      const next = this.opts.fallbackModels[this.fallbackIndex++];
+    while (this.attemptedModels.size < 128) {
+      const next = fallbacks.find(row => !this.attemptedModels.has(row.provider ? `${row.provider.id}/${row.provider.modelId}` : row.key));
+      if (!next || this.runSignal().aborted) return false;
+      const identity = next.provider ? `${next.provider.id}/${next.provider.modelId}` : next.key;
+      this.attemptedModels.add(identity);
       if (!next.provider) {
-        this.recordModelFailure(next.key, {
-          code: "MODEL_NOT_CONFIGURED",
-          message: "The configured fallback model could not be resolved.",
-        });
+        this.recordModelFailure(next.key, { code: "MODEL_NOT_CONFIGURED", message: "The configured fallback model could not be resolved." });
         continue;
       }
-      const identity = `${next.provider.id}/${next.provider.modelId}`;
-      if (this.attemptedModels.has(identity)) continue;
-      this.attemptedModels.add(identity);
       const requested = this.opts.definition.thinkingLevel ?? this.opts.inheritedThinkingLevel ?? this.opts.thinkingLevel;
-      const thinking = requested === "omit" ? "omit" : clampThinkingLevel(next.provider, requested);
-      const binding = this.bindingFor(next.provider, thinking);
-      // An alternative whose window cannot hold the carried context would fail
-      // identically to the model it replaces; skip it with the reason recorded
-      // instead of burning the slot on the same overflow.
+      let provider = next.provider;
+      let thinking = requested === "omit" ? "omit" : clampThinkingLevel(provider, requested);
+      let binding = this.bindingFor(provider, thinking);
       const budget = contextBudgetFor(binding.model, carried);
       if (budget.tokens >= budget.hardLimit) {
-        this.recordModelFailure(identity, {
-          code: "SUBAGENT_CONTEXT_OVERFLOW",
-          message: `The carried context (~${budget.tokens} tokens) does not fit this model's safe budget (${budget.hardLimit} tokens).`,
-        });
+        this.recordModelFailure(identity, { code: "SUBAGENT_CONTEXT_OVERFLOW",
+          message: `The carried context (~${budget.tokens} tokens) does not fit this model's safe budget (${budget.hardLimit} tokens).` });
         continue;
       }
-      if (this.opts.authorizeModel && !await this.opts.authorizeModel(next.provider, this.runSignal())) {
+      const admitted = this.opts.authorizeModel ? await this.opts.authorizeModel(provider, this.runSignal()) : true;
+      if (!admitted) {
         this.recordModelFailure(identity, { code: "MODEL_NOT_AUTHORIZED", message: "The alternative model was not authorized for this delegation." });
+        fallbacks = this.opts.refreshFallbackModels ? await this.opts.refreshFallbackModels() : fallbacks;
         continue;
+      }
+      if (typeof admitted === "object") {
+        provider = admitted;
+        const selectedKey = `${provider.id}/${provider.modelId}`;
+        if (selectedKey !== identity && this.attemptedModels.has(selectedKey)) throw new Error("The selected model was already attempted; no substitute was started.");
+        this.attemptedModels.add(selectedKey);
+        thinking = requested === "omit" ? "omit" : clampThinkingLevel(provider, requested);
+        binding = this.bindingFor(provider, thinking);
+        const selectedBudget = contextBudgetFor(binding.model, carried);
+        if (selectedBudget.tokens >= selectedBudget.hardLimit) throw new Error("The selected model cannot hold the carried context; no substitute was started.");
       }
       if (this.runSignal().aborted) return false;
-      this.provider = next.provider;
+      this.provider = provider;
       this.thinkingLevel = thinking;
       this.agent.state.model = binding.model;
       this.agent.state.thinkingLevel = binding.agentThinkingLevel;
