@@ -442,7 +442,7 @@ See E2E-146a.
 
 ### 5e.2. Continue an unfinished current-task checklist
 
-Settings → AI → Defaults exposes `autoContinueUnfinishedTodos`, enabled when
+Settings → Behavior → Execution exposes `autoContinueUnfinishedTodos`, enabled when
 absent and disabled only by an explicit `false`. Main passes the resolved
 preference to both new and reused Desktop runtimes on the next user turn.
 Native Pi sessions and delegated agents do not use this guard.

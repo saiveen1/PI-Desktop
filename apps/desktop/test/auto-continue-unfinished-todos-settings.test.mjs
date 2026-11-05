@@ -1,6 +1,6 @@
 /**
  * The unfinished-TodoWrite continuation safeguard switch
- * (Settings → AI → Defaults).
+ * (Settings → Behavior → Execution).
  *
  * What the user gets: the row is on in a fresh install, turning it off writes
  * an explicit `false`, and the value survives a read-modify-write at both
@@ -126,26 +126,25 @@ test("turning the safeguard off then on persists each choice across the boundari
     );
   }));
 
-test("the row is indexed in Settings → AI beside the provider retry switch", () => {
-  const ai = SETTINGS_NAV.find((entry) => entry.id === "ai");
-  assert.ok(ai, "AI settings entry is registered");
-  const at = ai.keywordKeys.indexOf("settings.autoContinueUnfinishedTodos");
-  assert.ok(at >= 0, "the row title is searchable in AI");
+test("the row is indexed in Settings → Behavior beside the provider retry switch", () => {
+  const behavior = SETTINGS_NAV.find((entry) => entry.id === "behavior");
+  assert.ok(behavior, "Behavior settings entry is registered");
+  const at = behavior.keywordKeys.indexOf("settings.autoContinueUnfinishedTodos");
+  assert.ok(at >= 0, "the row title is searchable in Behavior");
   assert.equal(
-    ai.keywordKeys[at + 1],
+    behavior.keywordKeys[at + 1],
     "settings.autoContinueUnfinishedTodosDesc",
     "the description is indexed right after the title",
   );
   assert.ok(
-    ai.keywordKeys.indexOf("settings.infiniteProviderRetry") >= 0,
+    behavior.keywordKeys.indexOf("settings.infiniteProviderRetry") >= 0,
     "the neighbouring safeguard stays indexed",
   );
-  assert.equal(
-    SETTINGS_NAV.find((entry) => entry.id === "general").keywordKeys.includes(
-      "settings.autoContinueUnfinishedTodos",
-    ),
-    false,
-    "the row does not also appear under General",
+  assert.deepEqual(
+    SETTINGS_NAV.filter((entry) => entry.keywordKeys.includes("settings.autoContinueUnfinishedTodos"))
+      .map((entry) => entry.id),
+    ["behavior"],
+    "only the owning destination indexes the row",
   );
 });
 
@@ -184,7 +183,7 @@ test("the English and Chinese copy explains the one-shot continuation and its co
   }
 });
 
-test("searching for the safeguard lands on the AI destination", () => {
+test("searching for the safeguard lands on the Behavior destination", () => {
   const en = catalogs.en;
   const flat = (value, prefix = "", out = {}) => {
     for (const [key, child] of Object.entries(value)) {
@@ -206,10 +205,10 @@ test("searching for the safeguard lands on the AI destination", () => {
     assert.ok(
       hits.some(
         (hit) =>
-          hit.tab === "ai" &&
+          hit.tab === "behavior" &&
           hit.rowKey === "settings.autoContinueUnfinishedTodos",
       ),
-      `${query} must find the row under AI, got ${JSON.stringify(hits)}`,
+      `${query} must find the row under Behavior, got ${JSON.stringify(hits)}`,
     );
   }
   assert.ok(en.settings.autoContinueUnfinishedTodos);
