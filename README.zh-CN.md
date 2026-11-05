@@ -1,3 +1,9 @@
+> [!NOTE]
+> **这是个人维护的 fork，不是 PI-Desktop 官方发行版。**
+> 本仓库由 [saiveen1](https://github.com/saiveen1/PI-Desktop) 维护，基于
+> [vastsa/PI-Desktop](https://github.com/vastsa/PI-Desktop)，保留原项目署名和[许可证](LICENSE)。
+> 下方的发布徽章、官方下载和社区链接均指向上游项目。
+
 <div align="center">
 
 <img src="docs/image/readme/logo.png" alt="PI-Desktop" width="108" />
@@ -22,7 +28,7 @@
 
 <br />
 
-**[立即下载](https://github.com/vastsa/PI-Desktop/releases/latest)** ·
+**[下载上游官方版本](https://github.com/vastsa/PI-Desktop/releases/latest)** ·
 [使用文档](https://pi-docs.aiuo.net/) ·
 [插件开发](docs/plugin-development.md) ·
 [界面预览](docs/guide/screenshots.md) ·
@@ -37,6 +43,23 @@
 **你的项目留在本地 · 你的模型由你选择 · 你的工作台由你组装**
 
 </div>
+
+## 个人版的主要差异
+
+相对于当前跟踪的上游基线，本 fork 主要包含以下新增和调整：
+
+- **子代理增强**：模型优先级、分组审批和策略热更新；保留检查点并显式重试/恢复；可配置执行预算和最终报告时限。
+- **会话管理**：会话多选、批量归档/取消归档，以及支持恢复和明确确认后永久删除的回收站。
+- **文件操作**：扩展聊天文件菜单，增加打开方式、另存为、复制文件内容和在文件夹中显示等操作。
+- **未完成任务续跑**：本轮任务清单尚未完成时，按设置最多自动续跑一次；仍可随时停止。
+- **个人 Windows 构建**：固定的 Windows x64 NSIS 安装包构建流程，个人安装包禁用官方自动更新。
+
+个人新增功能由本 fork 独立维护，部分新增委派流程仍在进行集成验证。
+详情见[变更记录](docs/project/unreleased.md)；该文件也包含上游项目的变更。
+
+**下载与反馈**：本 fork 尚未在 GitHub Releases 发布安装包。
+本地个人安装包请使用 `pnpm dist:personal`，并遵循[个人构建说明](docs/spec/06-delivery/07-personal-release-runbook.md)。
+本 fork 当前未启用 Issues；下方的上游社区入口属于原项目。
 
 ---
 

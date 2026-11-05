@@ -1,3 +1,10 @@
+> [!NOTE]
+> **Personal fork, not an official PI-Desktop release.** Maintained by
+> [saiveen1](https://github.com/saiveen1/PI-Desktop), based on
+> [vastsa/PI-Desktop](https://github.com/vastsa/PI-Desktop). Original project
+> credits and the [license](LICENSE) are retained. The release badges,
+> official downloads and community links below refer to upstream.
+
 <div align="center">
 
 <img src="docs/image/readme/logo.png" alt="PI-Desktop" width="108" />
@@ -21,7 +28,7 @@ Local-first · Model-agnostic · Plugin-powered · macOS / Windows / Linux
 
 <br />
 
-**[Download](https://github.com/vastsa/PI-Desktop/releases/latest)** ·
+**[Official upstream download](https://github.com/vastsa/PI-Desktop/releases/latest)** ·
 [Documentation](https://pi-docs.aiuo.net/) ·
 [Build a Plugin](docs/plugin-development.md) ·
 [Screenshots](docs/guide/screenshots.md) ·
@@ -38,6 +45,33 @@ Local-first · Model-agnostic · Plugin-powered · macOS / Windows / Linux
 </div>
 
 > **Current release line: 0.22.x (Early Preview).**
+
+## Personal fork highlights
+
+This fork carries the following additions and changes relative to its tracked
+upstream baseline:
+
+- **Subagents:** Model priorities, grouped model approvals and live policy
+  updates; retained checkpoints and explicit retry/resume; configurable
+  execution budgets and final-report timing.
+- **Sessions:** Multi-selection, batch archive/unarchive, and a recycle bin
+  with restore and explicitly confirmed permanent deletion.
+- **Files:** Expanded chat-file actions, including Open with, Save as,
+  copying file contents, and revealing files in their folder.
+- **Task continuation:** A configurable follow-up for an unfinished
+  current-task checklist, at most once per user turn; Stop remains effective.
+- **Personal Windows builds:** An installer-only Windows x64 NSIS workflow
+  with official automatic updates disabled for personal installers.
+
+Personal additions are maintained independently; some new delegation flows
+remain under integration verification. See the [change notes](docs/project/unreleased.md)
+for details; that file also contains upstream entries.
+
+**Downloads and feedback:** No installer has been published in this fork's
+GitHub Releases yet. For a local personal installer, use `pnpm dist:personal`
+and the [personal build runbook](docs/spec/06-delivery/07-personal-release-runbook.md).
+This fork's Issues are currently disabled; the upstream community links below
+belong to the original project.
 
 ---
 
