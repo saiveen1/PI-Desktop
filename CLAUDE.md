@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Policy-Sync: 2026-11-06.personal-build.2
+Policy-Sync: 2026-11-06.personal-build.3
 
 Instructions for Claude Code CLI and Claude Cowork on PI-Desktop.
 

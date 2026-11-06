@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Policy-Sync: 2026-11-06.personal-build.2
+Policy-Sync: 2026-11-06.personal-build.3
 
 Mandatory rules for AI coding agents working in PI-Desktop.
 
@@ -99,13 +99,19 @@ Common scoped rules:
 
 | Area | Rules |
 | --- | --- |
-| Electron main process | `apps/desktop/electron/AGENTS.md` |
 | Renderer & UI | `apps/desktop/src/AGENTS.md` |
-| Rust host-core | `crates/host-core/AGENTS.md` |
 | Node agent runtime | `packages/agent-runtime/AGENTS.md` |
-| Plugin SDK | `packages/plugin-sdk/AGENTS.md` |
-| Shared contracts | `packages/shared/AGENTS.md` |
-| IPC surface | `apps/desktop/electron/ipc/AGENTS.md` |
+| Electron main process | `docs/spec/03-runtime/07-process-model.md` |
+| IPC surface | `docs/spec/03-runtime/01-ipc-protocol.md`, `docs/spec/03-runtime/06-host-rpc-protocol.md` |
+| Rust host-core | `docs/spec/03-runtime/05-host-core-rust.md`, `docs/spec/03-runtime/04-data-storage.md` |
+| Shared contracts | `docs/spec/02-architecture/03-repo-structure.md` §`packages/shared` |
+| Plugin SDK | `docs/spec/07-plugins/03-plugin-api.md` |
+
+A rule that only makes sense for one package belongs in that package's
+`AGENTS.md`, not in this table — create the file when the rule exists, as
+`apps/desktop/src` and `packages/agent-runtime` already do. Never reference a
+scoped-rules path here that does not exist on disk; this is enforced by
+`pnpm check:agent-policy`, which resolves every referenced `.md` path.
 
 Directories without a local `AGENTS.md` follow this file, the package
 README, existing tests, and current code patterns.

@@ -23,7 +23,7 @@
  *   - bump the `Policy-Sync:` token in BOTH files to the same new value;
  *   - run `pnpm check:agent-policy`.
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
@@ -182,6 +182,27 @@ if (agentsRaw && claudeRaw) {
     failures.push(
       `Policy-Sync token mismatch: AGENTS.md has \`${agentsToken}\`, CLAUDE.md has \`${claudeToken}\`. Update both mirrors and set the same new token.`,
     );
+  }
+
+  // Every repository path referenced as `<x>.md` must exist on disk. A policy
+  // file that routes agents to a missing document silently costs every agent
+  // the time to rediscover where the rules actually live.
+  const exists = (relPath) => existsSync(path.join(root, relPath));
+  const policyFiles = [
+    ["AGENTS.md", agentsRaw],
+    ["CLAUDE.md", claudeRaw],
+  ];
+  for (const [label, raw] of policyFiles) {
+    const refs = raw.match(/`([^`\n]+\.md)`/g) ?? [];
+    const missing = [...new Set(refs.map((ref) => ref.slice(1, -1)))].filter(
+      (refPath) => !exists(refPath),
+    );
+    if (missing.length > 0) {
+      failures.push(
+        `${label}: referenced document(s) do not exist: ${missing.join(", ")}. ` +
+          "Update the path, or create the scoped rules file before referencing it.",
+      );
+    }
   }
 
   requireContains(
