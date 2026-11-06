@@ -4,20 +4,27 @@
 
 - **Preconditions**: Synthetic folders/files with spaces, Unicode and XML-significant names.
 - **Steps**: Copy and paste single/multiple folders and mixed files in home and
-  session composers. Remove cards by mouse/keyboard, undo/redo and restore drafts
+  session composers with text on both sides of the caret. Remove cards by
+  mouse/keyboard and restore drafts
   from history. Edit or switch sessions while metadata resolves; delete the owner.
-  Send and steer with folder cards. Repeat ordinary text/image/file pastes.
-- **Expected**: Localized folder cards expose full paths and removal. Selection
+  Send and steer with folder cards, then activate a card in the sent message.
+  Repeat ordinary text/image/file pastes.
+- **Expected**: Folder cards wrap above the text, fit short names and expose
+  full paths and removal. The sent user bubble shows the directory cards and
+  only the user text. Local cards reveal the referenced directory in the
+  system file manager. Selection
   order and source ownership survive, preserving newer edits. Removed cards send
   no hint. Both send paths carry escaped dir markers and one inspect/read-as-needed
   instruction. No directory arrayBuffer, traversal, recursive copy, Project change
   or filesystem grant occurs. Unavailable paths fail without partial references.
 - **Status**: Parser/handler/editor/serialization tests cover deterministic cases.
-  `pnpm test:e2e:composer-paste -- --directories-only` uses synthetic file-list
-  metadata to verify folder insertion/removal across the Electron preload bridge
-  and absence of attachment writes. The default invocation retains the full
-  paste, video-open and history suite; its video-open scenarios require file
-  symbolic-link support. Native OS clipboard verification remains a manual scenario.
+  `pnpm test:e2e:composer-paste` uses synthetic file-list metadata to verify
+  folder placement, removal, transcript rendering and reveal IPC across the
+  Electron preload bridge. `--directories-only` runs just the directory subset
+  and asserts that no attachment bytes are written and nothing is opened; the
+  default invocation retains the full paste, video-open and history suite, whose
+  video-open scenarios require file symbolic-link support. Native OS clipboard
+  and file-manager display are manual scenarios.
 
 
 > Scope: MVP acceptance scenarios plus current shipped product increments for PI-Desktop
@@ -5050,13 +5057,12 @@ window; opening a normal panel afterward must still work.
 - **Preconditions**: One catalogued reasoning model, one non-reasoning model,
   and one unknown free-form model id.
 - **Steps**: 1) Open the Composer model × reasoning chip. 2) Confirm the root
-  contains the Model and Reasoning level entries with current values, plus a
-  slider with one track dot per supported level on a rail directly beneath the
-  Reasoning level entry; confirm every level keeps a visible label under the
-  rail, each centered on its track dot. 3) Drag and click the slider across
-  multiple supported levels and click a tick label, confirming the chip
-  updates while the menu stays at the root and the selected track dot sits
-  under the thumb. 4) Open Model, search for a model, and select a
+  contains the model list plus a segmented reasoning control in the footer
+  with one labeled column per supported level; confirm every level keeps a
+  visible label, each centered in its column. 3) Drag and click the control
+  across multiple supported levels and click a label, confirming the chip
+  updates while the menu stays open and the raised pill sits under the
+  selected label. 4) Open Model, search for a model, and select a
   model from a provider group; confirm the menu remains open at the root.
   5) Open Reasoning level and choose a level from the radio list. 6) Repeat
   with a non-reasoning provider and an unknown free-form model id; exercise
@@ -9703,6 +9709,30 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
   `apps/desktop/test/composer-deep-file-search-user-path.test.mjs` in a real
   Electron renderer. The full desktop journey against a large real tree is
   Draft (run only in a capable environment when this surface changes).
+
+#### E2E-102k: `@agent` mention delegates to a named subagent
+
+- **Preconditions**: An Agent session in a project with the builtin
+  `explorer` subagent enabled and no workspace-root entry named `explorer`.
+- **Steps**: Type `look @expl`, accept the `@explorer` row from the **Agents**
+  group, finish the sentence and send. Repeat in Plan mode. Add a root file
+  named `explorer` and type `@` again.
+- **Expected**: The chip is atomic; the user row shows the typed text with
+  `@explorer` chipped; the model is instructed to call `Task` with
+  `explorer` and a Task card appears. Plan mode lists no Agents group and sends
+  the text literally. A same-named root file hides the agent row. Stop before
+  any reply restores the typed text, not the model instruction.
+- **Spec**: `04-ux/08-component-spec.md` §11.8, ADR 0346
+- **Acceptance**: C (conversation & stream)
+- **Milestone**: M5
+- **Status**: The renderer journey (group, shadowing, Plan omission, chip,
+  serialization) runs in `apps/desktop/test/composer-agent-mention-user-path.test.mjs`
+  in a real Electron renderer; send-time rewriting, mode gating, file
+  precedence and Skill composition in `composer-agent-mention.test.mjs`;
+  transcript chips in `session-message-presentation.test.mjs`; persistence in
+  `host-core` `agent_mentions_round_trip_through_record_meta`; Stop restoration
+  in `composer-smart-stop.test.mjs`. The live Task card against a real
+  provider is Draft (requires a configured model).
 
 #### E2E-102b: Unanswered Stop restores compact file-reference drafts
 
@@ -17549,6 +17579,12 @@ plugin-form fixtures in an isolated temporary directory at runtime.
 
 #### E2E-AGENT-alt-enter-steers-active-turn: Enter follows up and Alt+Enter steers the active turn
 
+Steer a long-running local foreground command. Verify cancellation, partial
+output and the waiting status, and require confirmed settlement before the next
+model request. Repeat with delayed settlement beyond the Stop grace period, an
+unconfirmed shell failure, a remote tool, parallel and queued calls, a background
+command, a delegate, and an explicit Stop. Accepted input is delivered once.
+
 - **Preconditions**: A session with a configured model and a controllable
   streaming response/tool; an image-capable model for the attachment case.
 - **Steps**:
@@ -19426,14 +19462,17 @@ host-created files. The full app's file-preview viewer is covered separately.
 ## Composer recent chat models
 
 - Send accepted messages using four distinct configured chat models across providers. Open the combined
-  model menu: exactly the latest three available pairs appear in recency order,
-  with provider labels. Select an older recent row: order stays unchanged until
+  model menu: the Recent source is selected and lists the latest available pairs
+  (up to six) in recency order, with provider labels. Select an older recent row: order stays unchanged until
   a message is accepted, at which point that model moves first.
-- Search immediately without expanding Other models; choose using keyboard
-  navigation. Expand Other models inline and verify no duplicate recent rows.
-  Move from the third recent row to Other models, and tab out of search after
-  arrow navigation: no stale keyboard highlight remains on a model row.
-  Without history, all configured models are directly visible. Verify thinking
+- Search immediately; results span every provider and the rail selection is
+  released; choose using keyboard navigation. Choose a provider in the source
+  rail and verify each of its models appears once. Move from a recent row to the
+  rail, and tab out of search after arrow navigation: no stale keyboard
+  highlight remains on a model row. Without history and with one provider, the
+  rail is hidden and all configured models are directly visible. With a
+  search typed, Escape clears it and keeps the menu open; a second Escape
+  closes the menu. Verify thinking
   defaults still follow the selected binding and manual same-model levels survive.
 - Create a new chat: it inherits the last actually used model. Reload local preferences
   and create another chat: the same binding is restored. An existing chat keeps
@@ -19625,7 +19664,9 @@ host-created files. The full app's file-preview viewer is covered separately.
   header shows only the count badge by default; the activity rail is off.
   Running and permission-waiting counts are separate figures and never merge
   into one number. The remote host group shows the same default. Turning on the
-  activity rail displays it alongside the badge. The master switch removes
+  activity rail displays it alongside the badge, while the counts stay in the
+  badge alone; with the badge switched off the rail takes them over, so no
+  group ever shows the same figure twice. The master switch removes
   both affordances at once and leaves the two sub-switches disabled while
   retaining their stored value, so
   re-enabling the master restores the previous choice. Each sub-switch hides
@@ -19999,6 +20040,8 @@ their separate platform acceptance.
   8. Paste 500 characters of garbage into the search field.
   9. Pin an application, quit, restart, and reopen the launcher with an empty
      input.
+ 10. Install a plugin whose name matches an installed application (for example
+     `Calculator`) and open the launcher with an empty input.
 - **Expected**: Step 1 shows `Recently used` with two rows of eight tiles and
   `Pinned` with one row of eight once the user has pins; the recents header
   reports the true number of remembered items and offers `Show all {count} →`
@@ -20013,8 +20056,10 @@ their separate platform acceptance.
   plugin from recents, pins, and matches while every other tile still opens.
   Step 8 keeps the panel responsive (no frozen input, no unhandled error) and
   reports no match, because input longer than 256 characters is never matched
-  against a trigger. Step 9 still shows the pinned application in the `Pinned`
-  row.
+  row. Step 10 lists both entries with the identical 48px rounded square and the
+  same name line — the source is only in the hover title — and opening the plugin
+  row still lands in the plugin panel while the application row launches the
+  program.
 - **Automation**: `pnpm --filter @pi-desktop/desktop test` runs the offline
   coverage for these rules: `launcher-search.test.mjs` (ranking order, section
   caps, overflow total, trigger whole-input matching, the 256-character limit
@@ -20379,3 +20424,26 @@ Scenario: E2E-REVIEW-ROUNDS (local desktop, implemented)
   `subagent-recovery.test.ts` and `delegation-recovery-user-path.test.ts`, shared
   policy validation in `delegation-policy.test.ts`, and Host settings RPC
   save/reopen/rejected-write tests in `delegation_settings_rpc_tests.rs`.
+
+
+### E2E-TOOLS-session-background-jobs
+
+- Entry: build shared/agent-runtime/host-runtime and Host, then run
+  `PI_DESKTOP_HOST_BIN=<candidate-host> node scripts/e2e-session-background-jobs.mjs`.
+- Environment: isolated Host data and workspace, production runtime and pi tool
+  loop, deterministic localhost HTTP provider. No external model account.
+- Sequence: start a background test, list it, wait for failure and Unicode
+  output tails; start a service, time out waiting, call default stop, then
+  explicitly stop and wait for the same job.
+- Expected: correct exit code and both final tails, per-stream UTF-8 limits,
+  cross-session list/read/stop isolation, timeout and default stop preserve Bash,
+  explicit stop reaches terminal state, repeated reads and desktop output agree.
+  Plan-mode access is rejected.
+- Runtime tests cover new input/parent abort during a pending Host wait, late
+  Host rejection, old Host/remote capability behavior, mixed selector rejection,
+  existing delegation controls and registration without a subagent catalog.
+- Host tests cover pre-settled observation, repeatable output, Unicode clipping,
+  ownership lookup, idempotent stop and stop acknowledgement before termination.
+  Existing Windows child/grandchild cleanup tests remain required; record native
+  failures separately from protocol success.
+- Exercise a late stop with an already reaped child before the supervisor drains the pipes. Verify the original exit outcome, final output and stable elapsed time across reads. Stall capability discovery or the first Host observation to exercise the overall wait deadline. The Electron transcript fixture renders a pending Bash stop and a mixed job list.
