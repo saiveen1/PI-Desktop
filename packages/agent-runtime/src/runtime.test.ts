@@ -14754,3 +14754,95 @@ describe("background Bash job waits in the production runtime", () => {
     }
   });
 });
+
+describe("delegation job selector user path", () => {
+  it("recovers from conflicting selectors and rereads the same completed task without restarting it", async () => {
+    const explorer: SubagentDefinition = { name: "explorer", description: "Inspect", tools: ["Read"], prompt: "Inspect", source: "builtin" };
+    subagentRuns.calls.length = 0;
+    subagentRuns.instances.length = 0;
+    subagentRuns.deferred = true;
+    subagentRuns.result = undefined;
+    const completed = { agentName: "explorer", status: "completed", report: "Selector fixture inspected.", turns: 1, toolCalls: 0 };
+    const events: AgentEventEnvelope[] = [];
+    let delegationId = "";
+    const host = { call: vi.fn(async (method: string) => {
+      if (method === "tools.fileBatchCapabilities") return { version: 1, supported: false };
+      if (method === "provider.delegationSnapshot" || method === "session.appendMessage") return undefined;
+      if (method === "todos.get") return { sessionId: "session-1", todos: [] };
+      if (method === "backgroundJobs.capabilities") return { version: 1, supported: false };
+      throw new Error(`Unexpected Host RPC: ${method}`);
+    }) };
+    const runtime = createRuntime({ host, subagents: [explorer], onEvent: value => {
+      const envelope = value as AgentEventEnvelope;
+      events.push(envelope);
+      const event = envelope.event;
+      if (event.type === "tool_end" && event.toolCallId === "start-selector" &&
+          event.result && typeof event.result === "object" && "details" in event.result) {
+        const details = event.result.details;
+        if (details && typeof details === "object" && "delegationId" in details && typeof details.delegationId === "string") {
+          delegationId = details.delegationId;
+        }
+      }
+      if (event.type === "status" && event.status.activity?.phase === "waiting-subagents") {
+        queueMicrotask(() => subagentRuns.resolveRun?.(completed));
+      }
+    } });
+    const requests: AgentMessage[][] = [];
+    const internal = runtime as unknown as {
+      models: { streamSimple: (model: unknown, context: { messages: AgentMessage[] }) => ReturnType<typeof createAssistantMessageEventStream> };
+    };
+    internal.models = { streamSimple: (_model, context) => {
+      requests.push([...context.messages]);
+      const round = requests.length;
+      // Let the old implementation settle too, so its regression is an assertion rather than a hung fixture.
+      if (round === 5) subagentRuns.resolveRun?.(completed);
+      const job = { kind: "delegation", id: delegationId };
+      const content: AssistantMessage["content"] = round === 1
+        ? [{ type: "toolCall", id: "start-selector", name: "Task", arguments: { agent: "explorer", task: "Inspect the selector fixture." } }]
+        : round === 2 || round === 6
+          ? [{ type: "toolCall", id: `list-selector-${round}`, name: "TaskList", arguments: {} }]
+          : round === 3
+            ? [{ type: "toolCall", id: "conflicting-selector", name: "TaskWait", arguments: { job, delegationIds: ["different"], timeoutSeconds: 1 } }]
+            : round === 4 || round === 5
+              ? [{ type: "toolCall", id: `wait-selector-${round}`, name: "TaskWait", arguments: {
+                  job, delegationIds: [delegationId], mode: round === 4 ? "any" : "all", minCompleted: 1, timeoutSeconds: 1,
+                } }]
+              : [{ type: "text", text: "Inspection completed." }];
+      const toolUse = round <= 6;
+      const message = assistantMessage({ content, stopReason: toolUse ? "toolUse" : "stop" }) as unknown as AssistantMessage;
+      const stream = createAssistantMessageEventStream();
+      queueMicrotask(() => {
+        stream.push({ type: "start", partial: message });
+        stream.push({ type: "done", reason: toolUse ? "toolUse" : "stop", message });
+        stream.end(message);
+      });
+      return stream;
+    } };
+    try {
+      await runtime.prompt("Inspect once and read the result.", "selector-user", "selector-turn");
+      const results = events.flatMap(({ event }) => event.type === "tool_end" ? [event] : []);
+      expect(results.find(row => row.toolCallId === "conflicting-selector")).toMatchObject({ isError: true });
+      expect(JSON.stringify(results.find(row => row.toolCallId === "conflicting-selector")?.result)).toContain("Retry with");
+      for (const round of [4, 5]) {
+        const result = results.find(row => row.toolCallId === `wait-selector-${round}`);
+        expect(result?.isError).toBeFalsy();
+        expect(result?.result).toMatchObject({ details: {
+          status: "completed", delegations: [{ delegationId, status: "completed", report: completed.report }],
+        } });
+      }
+      expect(results.find(row => row.toolCallId === "list-selector-2")?.result).toMatchObject({
+        details: { delegations: [{ delegationId, status: "running" }] },
+      });
+      expect(results.find(row => row.toolCallId === "list-selector-6")?.result).toMatchObject({
+        details: { delegations: [{ delegationId, status: "completed" }] },
+      });
+      expect(subagentRuns.calls).toHaveLength(1);
+      expect(host.call.mock.calls.some(([method]) => method === "backgroundJobs.stop" || method === "backgroundJobs.wait")).toBe(false);
+      expect(runtime.getStatus().isRunning).toBe(false);
+    } finally {
+      await runtime.abort();
+      await runtime.dispose();
+      subagentRuns.deferred = false;
+    }
+  });
+});

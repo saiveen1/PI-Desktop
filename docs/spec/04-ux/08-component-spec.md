@@ -2698,8 +2698,12 @@ never summarizes from its own arguments:
   it scans as belonging with the card it reports on.
 - **Its body is the roster as a named table**, one line per subagent with status,
   runtime and turns, led by the joined reports as a notice — never the raw
-  `delegations[]` JSON. A lifecycle row has no brief of its own, so the ids it
-  was called with do not reappear as an argument block.
+  `delegations[]` JSON. A successful lifecycle row has no brief of its own, so
+  its arguments do not reappear as an input block. If the tool call itself
+  fails (`toolStatus: error`), its expanded body also includes the actual
+  arguments after the error/output so conflicting selectors can be corrected.
+  A failed child reported by a successful lifecycle call does not enable this
+  diagnostic input block; the roster remains the source of child outcomes.
 
 ```text
 [flow] Subagent completed   1 subagent · 1/1 finished · 40s        [›]

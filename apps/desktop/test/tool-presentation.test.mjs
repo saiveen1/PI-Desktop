@@ -691,6 +691,21 @@ test("a lifecycle row's body is a named roster, not raw JSON (D268)", () => {
   );
 });
 
+for (const toolName of ["TaskWait", "TaskList", "TaskStop"]) {
+  test(`${toolName} keeps failed lifecycle arguments visible for correction`, () => {
+    const blocks = buildToolPresentation({
+      toolName,
+      toolArgs: { job: { kind: "delegation", id: "selected" }, delegationIds: ["different"] },
+      toolStatus: "error",
+      toolResult: { content: [{ type: "text", text: "Conflicting job selectors." }], details: {} },
+    }, { hideSummaryArg: true });
+    assert.equal(byRole(blocks, "output").text, "Conflicting job selectors.");
+    const input = JSON.stringify(blocks.filter(block => block.role === "input"));
+    assert.match(input, /selected/);
+    assert.match(input, /different/);
+  });
+}
+
 test("TaskStop renders its `stopped` roster the same way", () => {
   const blocks = buildToolPresentation({
     toolName: "TaskStop",

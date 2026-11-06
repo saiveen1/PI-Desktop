@@ -2166,8 +2166,15 @@ remain available. TaskList preserves `delegations` and `resumable` and adds
 `backgroundJobs: {supported, tasks}`. Delegation summaries also include job
 references. Bash summaries contain no logs and bound command text to 1 KiB.
 
-TaskWait and TaskStop accept one explicit `job`. Combining it with
-`delegationIds`, `mode` or `minCompleted` is an error. Omitting it preserves
+TaskWait and TaskStop accept one explicit `job`. A delegation job may also
+carry `delegationIds` only when it is exactly `[job.id]`; the redundant
+selectors then identify the same single delegation. TaskWait's `mode` and
+`minCompleted` continue to apply to that delegation. Empty, different,
+multi-target or malformed identifier lists are rejected before dispatch,
+with a job-only retry example; the runtime never guesses which target wins.
+A Bash job cannot be combined with `delegationIds`, `mode` or `minCompleted`.
+The provider-facing descriptions state these rules without requiring
+provider-specific cross-field schema extensions. Omitting `job` preserves
 the existing delegation defaults, including stop-all-delegates. A Bash job
 never joins those implicit target sets. A legacy backgroundTaskId can be
 addressed as `{kind: "bash", id: backgroundTaskId}`.

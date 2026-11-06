@@ -746,6 +746,11 @@ export function buildToolPresentation(
   const blocks = resultBlocks(action, message, args, payload, options);
   if (!args) return blocks;
 
+  // Failed lifecycle calls need their selectors visible so the next call can correct them.
+  if (message.toolStatus === "error" && delegationLifecycleKind(message.toolName)) {
+    return [...blocks, codeBlock("input", safeJson(args), "json")];
+  }
+
   // Arguments are worth showing when the result blocks did not already carry
   // them (Read content, Bash command) and for opaque tools whose arguments are
   // the interesting part. A delegation places its own brief, so it opts out.

@@ -20444,10 +20444,21 @@ Scenario: E2E-REVIEW-ROUNDS (local desktop, implemented)
   explicit stop reaches terminal state, repeated reads and desktop output agree.
   Plan-mode access is rejected.
 - Runtime tests cover new input/parent abort during a pending Host wait, late
-  Host rejection, old Host/remote capability behavior, mixed selector rejection,
+  Host rejection, old Host/remote capability behavior, rejection of ambiguous
+  or Bash/delegation mixed selectors, redundant same-delegation selectors,
   existing delegation controls and registration without a subagent catalog.
 - Host tests cover pre-settled observation, repeatable output, Unicode clipping,
   ownership lookup, idempotent stop and stop acknowledgement before termination.
   Existing Windows child/grandchild cleanup tests remain required; record native
   failures separately from protocol success.
 - Exercise a late stop with an already reaped child before the supervisor drains the pipes. Verify the original exit outcome, final output and stable elapsed time across reads. Stall capability discovery or the first Host observation to exercise the overall wait deadline. The Electron transcript fixture renders a pending Bash stop and a mixed job list.
+- Delegation selector regression: in `runtime.test.ts` (`delegation job selector
+  user path`), start one delegate, list its running state, reject a genuinely
+  conflicting selector set, correct it to matching `job`/`delegationIds` plus
+  wait options, then reread the completed report and list the final state.
+  Assert only one delegate started and no Bash wait/stop RPC was dispatched.
+  `background-job-tools.test.ts` covers both wait modes, explicit stop, rejected
+  empty/multiple/different selectors and corrective errors. The presentation
+  tests require failed lifecycle rows to show arguments while successful rows
+  retain their roster-only presentation. No real-provider or live Desktop
+  execution is implied by these deterministic tests.

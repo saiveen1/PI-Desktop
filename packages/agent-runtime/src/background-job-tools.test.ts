@@ -9,7 +9,14 @@ afterEach(() => vi.useRealTimers());
 function fixture(remote = false) {
   const delegate = (name: string): AgentTool => ({
     name, label: name, description: name,
-    parameters: Type.Object({ delegationIds: Type.Optional(Type.Array(Type.String())) }),
+    parameters: Type.Object({
+      delegationIds: Type.Optional(Type.Array(Type.String())),
+      ...(name === "TaskWait" ? {
+        mode: Type.Optional(Type.Union([Type.Literal("all"), Type.Literal("any")])),
+        minCompleted: Type.Optional(Type.Number({ minimum: 1 })),
+        timeoutSeconds: Type.Optional(Type.Number({ minimum: 1, maximum: 900 })),
+      } : {}),
+    }),
     execute: vi.fn(async () => ({ content: [{ type: "text" as const, text: "delegate report" }], details: { delegations: [] } })),
   });
   const delegates = { wait: delegate("TaskWait"), list: delegate("TaskList"), stop: delegate("TaskStop") };
@@ -46,6 +53,46 @@ describe("session job controls", () => {
     expect(delegates.wait.execute).toHaveBeenLastCalledWith("one", { job: undefined, delegationIds: ["delegate"], timeoutSeconds: 12 }, undefined, undefined);
     await stop.execute("one", { job: { kind: "delegation", id: "delegate" } });
     expect(delegates.stop.execute).toHaveBeenLastCalledWith("one", { delegationIds: ["delegate"] }, undefined, undefined);
+  });
+
+  it.each(["all", "any"] as const)("accepts redundant delegation selectors with %s wait options", async mode => {
+    const { wait, dispatch, delegates } = fixture();
+    const args = { job: { kind: "delegation", id: "delegate" }, delegationIds: ["delegate"], mode, minCompleted: 1, timeoutSeconds: 1 };
+    await wait.execute("redundant", args);
+    expect(delegates.wait.execute).toHaveBeenCalledWith("redundant", {
+      ...args, job: undefined,
+    }, undefined, undefined);
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(wait.description).toContain("same single delegation");
+  });
+
+  it.each(["all", "any"] as const)("preserves %s wait options with a delegation job alone", async mode => {
+    const { wait, delegates, dispatch } = fixture();
+    await wait.execute("one", { job: { kind: "delegation", id: "delegate" }, mode, minCompleted: 1 });
+    expect(delegates.wait.execute).toHaveBeenCalledWith("one", {
+      job: undefined, delegationIds: ["delegate"], mode, minCompleted: 1,
+    }, undefined, undefined);
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it("stops only the same explicitly selected delegation when both selectors are present", async () => {
+    const { stop, delegates, dispatch } = fixture();
+    await stop.execute("one", { job: { kind: "delegation", id: "delegate" }, delegationIds: ["delegate"] });
+    expect(delegates.stop.execute).toHaveBeenCalledWith("one", { delegationIds: ["delegate"] }, undefined, undefined);
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(stop.description).toContain("same single delegation");
+  });
+
+  it.each([{ ids: [] }, { ids: ["other"] }, { ids: ["delegate", "other"] }, { ids: "delegate" }, { ids: null }])("rejects conflicting delegation selectors before dispatch ($ids)", async ({ ids: delegationIds }) => {
+    const { wait, stop, delegates, dispatch } = fixture();
+    const args = { job: { kind: "delegation", id: "delegate" }, delegationIds };
+    for (const tool of [wait, stop]) {
+      await expect(tool.execute("conflict", args)).rejects.toThrow("same single delegation");
+      await expect(tool.execute("conflict", args)).rejects.toThrow('Retry with {"job":{"kind":"delegation","id":"delegate"}}');
+    }
+    expect(delegates.wait.execute).not.toHaveBeenCalled();
+    expect(delegates.stop.execute).not.toHaveBeenCalled();
+    expect(dispatch).not.toHaveBeenCalled();
   });
 
   it.each(["delegationIds", "mode", "minCompleted"])("rejects mixed selectors before dispatch (%s)", async key => {
