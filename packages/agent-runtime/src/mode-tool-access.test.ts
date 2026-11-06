@@ -83,6 +83,10 @@ it.each([
     host: { call: async <T>(method: string): Promise<T> => {
       if (method === "tools.fileBatchCapabilities") return { version: 1, supported: false } as T;
       if (method === "session.appendMessage") return undefined as T;
+      // The runtime refreshes the session delegation policy before every
+      // request. An older Host without this RPC answers undefined, which keeps
+      // the launch policy; the probe must still run (and stay deny-only).
+      if (method === "provider.delegationSnapshot") return undefined as T;
       hostCalls.push(method); throw new Error("blocked tools must never reach the host");
     }, onNotification: () => () => {} },
     onEvent: (event) => { events.push(event); },

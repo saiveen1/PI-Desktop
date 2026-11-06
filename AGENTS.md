@@ -659,6 +659,19 @@ fail by platform design (POSIX-only tooling, symlink privilege, unix sockets,
 macOS release machinery) and are covered on the Linux CI jobs instead. Only
 failures outside that ledger — or on Linux/macOS CI — indicate a regression.
 
+Read that file's "How to use this file" section **before** analysing any
+failure, and follow it exactly:
+
+1. capture the full failure list once,
+2. map all failing names to files in one pass,
+3. compare that file set against the ledger once.
+
+Do not walk failures one at a time, do not re-derive "is this really platform
+only?" per case, and do not re-run suites to build a baseline the ledger already
+records. Comparing by failing **file set** is enough; case counts drift with
+locales and fixtures. `packages/agent-runtime` (`vitest`) is *not* covered by
+any platform exemption: a failure there is a real defect.
+
 `verify:ui:*` starts or attaches to a Desktop instance and must only run
 when the user explicitly asks in the current task. UI / icon / style /
 main-renderer changes do not by themselves authorize it, and do not ask

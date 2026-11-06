@@ -94,6 +94,15 @@ Environment:
 
 If a required suite cannot run, report `NOT RUN` with reason, alternative validation, and remaining risk. Never report a skipped command as passing.
 
+On a Windows (Git Bash) host, read `docs/testing/windows-known-failures.md`
+**before** analysing any suite failure, and follow its "How to use this file"
+section: capture the full failure list once, map every failing name to its file
+in one pass, then compare that file set against the ledger once. Do not walk
+failures individually, do not re-derive per-case whether something is really
+platform-only, and do not rebuild a baseline the ledger already records. The
+ledger exempts nothing in `packages/agent-runtime` (`vitest`): a failure there
+is a real defect.
+
 ### E2E environment reuse
 
 Task-candidate E2E uses the existing environment in the current checkout.

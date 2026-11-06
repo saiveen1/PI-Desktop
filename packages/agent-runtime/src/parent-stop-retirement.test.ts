@@ -57,7 +57,12 @@ function response(content: AssistantMessage["content"], stopReason: "stop" | "to
 }
 const finalResponse = () => response([{ type: "text", text: "Finished the requested work." }]);
 const runtimes: DesktopAgentRuntime[] = [];
-function fixture(call = vi.fn(async (_method: string, _params?: any): Promise<any> => ({ ok: true, content: {} }))) {
+// The runtime refreshes the session delegation policy before every request.
+// An older Host without this RPC answers undefined and the launch policy stands.
+const hostCall = async (method: string, params?: unknown): Promise<unknown> => (
+  method === "provider.delegationSnapshot" ? undefined : { ok: true, content: {} }
+);
+function fixture(call = vi.fn(hostCall)) {
   const events: AgentEventEnvelope[] = [];
   const runtime = new DesktopAgentRuntime({
     host: { call, onNotification: () => () => {} } as never,
