@@ -102,6 +102,8 @@ function fixture(steps: Step[], retryAfterMs = 1) {
       async call<T>(method: string): Promise<T> {
         if (method === "tools.fileBatchCapabilities") return { version: 1, supported: false } as T;
         if (method === "session.appendMessage") return undefined as T;
+        if (method === "provider.delegationSnapshot") return undefined as T;
+        if (method === "todos.get") return { sessionId: "fixture-session", todos: [] } as T;
         if (method !== "tools.execute")
           throw new Error(`Unexpected host method: ${method}`);
         reads++;
@@ -338,4 +340,90 @@ describe("provider recovery through real agent loops (#699)", () => {
       await f.runtime.dispose();
     }
   });
+});
+
+describe("main-turn diagnostics through real provider recovery", () => {
+  it("retains retries across tool requests, freezes the final snapshot and resets the next turn", async () => {
+    vi.useFakeTimers();
+    const f = fixture(["rate-limit", "tool", "stream", "success", "success"]);
+    const startedAt = Date.now();
+    try {
+      await settle(f.runtime.prompt("Read, then report.", undefined, "diagnostic-turn-a"));
+      const final = f.runtime.getStatus().runDiagnostics;
+      expect(final).toMatchObject({
+        turnId: "diagnostic-turn-a", startedAt, requestCount: 2, attemptCount: 4,
+        requestAttempt: 2, retryCount: 2, rateLimitRetries: 1, transientRetries: 1,
+        lastRetry: { code: "STREAM_FAILED" },
+      });
+      expect(final?.endedAt).toBeTypeOf("number");
+      expect(final?.lastTextAt).toBeTypeOf("number");
+      expect(final?.inputTokens).toBeGreaterThan(0);
+      expect(final?.retryWaitMs).toBeGreaterThan(0);
+      expect(f.events.some(({ event }) => event.type === "status" && event.status.runDiagnostics?.phase === "tool")).toBe(true);
+      const refresh = f.events.filter(({ event }) => event.type === "message_update" &&
+        event.message.runDiagnostics?.endedAt !== undefined).at(-1);
+      expect(refresh?.event).toMatchObject({ type: "message_update", message: {
+        content: "Recovered", status: "complete", runDiagnostics: final,
+      } });
+      expect(f.events.filter(({ event }) => event.type === "message_end" &&
+        event.message.role === "assistant")).toHaveLength(2);
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(f.runtime.getStatus().runDiagnostics).toEqual(final);
+      await settle(f.runtime.prompt("Report again.", undefined, "diagnostic-turn-b"));
+      expect(f.runtime.getStatus().runDiagnostics).toMatchObject({
+        turnId: "diagnostic-turn-b", requestCount: 1, attemptCount: 1,
+        requestAttempt: 1, retryCount: 0, rateLimitRetries: 0, transientRetries: 0,
+      });
+      expect(f.runtime.getStatus().runDiagnostics?.lastRetry).toBeUndefined();
+    } finally { await f.runtime.dispose(); }
+  });
+
+  it("cancels backoff with actual elapsed wait and no extra attempt", async () => {
+    vi.useFakeTimers();
+    const f = fixture(["rate-limit"], 30_000);
+    try {
+      const prompt = f.runtime.prompt("Report.").catch(error => error);
+      await vi.waitFor(() => expect(f.runtime.getStatus().activity?.phase).toBe("retrying"));
+      const retrySince = f.runtime.getStatus().activity?.since ?? 0;
+      await vi.advanceTimersByTimeAsync(137);
+      await f.runtime.abort();
+      await settle(prompt);
+      const final = f.runtime.getStatus().runDiagnostics;
+      expect(final?.retryWaitMs).toBe((final?.endedAt ?? 0) - retrySince);
+      expect(final?.retryWaitMs).toBeLessThan(30_000);
+      expect(final).toMatchObject({ requestCount: 1, attemptCount: 1, retryCount: 1 });
+      expect(f.requests()).toBe(1);
+    } finally { await f.runtime.dispose(); }
+  });
+
+  it("does not invent an event or answer timestamp before the provider responds", async () => {
+    vi.useFakeTimers();
+    const f = fixture(["stall"]);
+    try {
+      const startedAt = Date.now();
+      const prompt = f.runtime.prompt("Wait.").catch(error => error);
+      await vi.waitFor(() => expect(f.requests()).toBe(1));
+      expect(f.runtime.getStatus().runDiagnostics).toMatchObject({ startedAt, requestCount: 1, attemptCount: 1 });
+      expect(f.runtime.getStatus().runDiagnostics?.lastEventAt).toBeUndefined();
+      expect(f.runtime.getStatus().runDiagnostics?.lastTextAt).toBeUndefined();
+      await f.runtime.abort();
+      await settle(prompt);
+    } finally { await f.runtime.dispose(); }
+  });
+});
+
+it("a local idle watchdog does not fabricate a recent model event", async () => {
+  vi.useFakeTimers();
+  vi.stubEnv("PI_DESKTOP_STREAM_IDLE_TIMEOUT_MS", "30000");
+  const f = fixture(["stall"]);
+  try {
+    const prompt = f.runtime.prompt("Wait.").catch(error => error);
+    await vi.waitFor(() => expect(f.requests()).toBe(1));
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(f.runtime.getStatus().activity?.phase).toBe("retrying");
+    expect(f.runtime.getStatus().runDiagnostics?.lastEventAt).toBeUndefined();
+    expect(f.runtime.getStatus().runDiagnostics?.lastTextAt).toBeUndefined();
+    await f.runtime.abort();
+    await settle(prompt);
+  } finally { await f.runtime.dispose(); }
 });

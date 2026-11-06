@@ -18,12 +18,12 @@ const [store, transcript, messagesStyles, chatShellStyles, proseStyles, en, zh] 
 
 test("active turns show immediate and phase-specific feedback without a progress card", () => {
   assert.match(transcript, /function WorkingIndicator\(/);
-  assert.match(transcript, /data-testid="working-indicator"/);
+  assert.match(transcript, /"working-indicator"/);
   assert.match(transcript, /role="status"/);
   assert.match(transcript, /className="working-indicator-mark" aria-hidden="true"/);
   assert.match(transcript, /className="working-indicator-label"/);
   assert.match(transcript, /function RunActivityIndicator\(/);
-  assert.match(transcript, /data-testid="run-activity-indicator"/);
+  assert.match(transcript, /"run-activity-indicator"/);
   assert.doesNotMatch(transcript, /tool-activity-current|currentStatus|activityItemStatus/);
   assert.match(transcript, /waiting-model/);
   assert.match(transcript, /waitingForSubagents/);
@@ -34,15 +34,15 @@ test("active turns show immediate and phase-specific feedback without a progress
   assert.match(transcript, /recoveringTurn/);
   assert.match(transcript, /retryingModel/);
   assert.match(transcript, /function runActivityLabel\(/);
-  assert.match(transcript, /activity\.error/);
-  assert.match(transcript, /run-activity-error-popover message-error/);
-  assert.match(transcript, /role="tooltip"/);
-  assert.match(transcript, /aria-describedby=\{retryErrorDetailsId\}/);
+  assert.match(transcript, /activity\?\.phase === "retrying" \? activity\.error/);
+  assert.match(transcript, /run-status-error/);
+  assert.match(transcript, /role="dialog"/);
+  assert.match(transcript, /aria-controls=\{open \? panelId : undefined\}/);
   assert.match(transcript, /state\.agentStatuses\[sessionId\]\?\.activity/);
   assert.match(transcript, /const specializedActivity = agentActivity/);
   assert.match(transcript, /!hasSpecializedActivity/);
   assert.match(transcript, /const showWorking =/);
-  assert.match(transcript, /\{showWorking \? <WorkingIndicator \/> : null\}/);
+  assert.match(transcript, /\{showWorking \? <WorkingIndicator diagnostics=\{runDiagnostics\}/);
   assert.match(transcript, /function PlanningIndicator\(/);
   assert.match(transcript, /data-testid="planning-indicator"/);
   assert.match(transcript, /const showPlanning =/);
@@ -74,64 +74,17 @@ test("active turns show immediate and phase-specific feedback without a progress
   assert.match(messagesStyles, /\.run-activity-indicator\[data-phase="compacting"\]/);
   assert.match(messagesStyles, /\.run-activity-indicator\[data-phase="recovering"\]/);
   assert.match(messagesStyles, /\.run-activity-indicator\[data-phase="retrying"\]/);
-  assert.match(messagesStyles, /\.run-activity-error-popover\.message-error/);
-  assert.match(
-    messagesStyles,
-    /\.run-activity-error-popover\.message-error \{[\s\S]*?background:\s*color-mix\(in oklab,\s*var\(--ds-error\)[^;]*var\(--ds-bg-elevated-opaque\)/,
-  );
-  assert.match(
-    messagesStyles,
-    /\.run-activity-retry-reason:hover[\s\S]*\.run-activity-error-popover/,
-  );
-  // The retry plate hangs above the tail row inside `.thread-scroll`, whose
-  // `overflow: auto` clips it at the scrollport edge, and the conversation bar
-  // paints over the same band one stacking level higher. An unbounded plate
-  // therefore lost the first lines of a long provider message, so the plate is
-  // bounded to the room the tail row leaves and the rest scrolls.
-  const popoverRule =
-    messagesStyles.match(/\.run-activity-error-popover\.message-error \{[\s\S]*?\n\}/)?.[0] ??
-    "";
-  assert.match(
-    popoverRule,
-    /max-height: calc\(100vh - var\(--ds-toolbar-height, 46px\) - var\(--composer-dock-height, 228px\) - 70px\);/,
-  );
-  assert.match(
-    popoverRule,
-    /max-height: var\(--run-activity-error-max-height, calc\(100dvh - var\(--ds-toolbar-height, 46px\) - var\(--composer-dock-height, 228px\) - 70px\)\);/,
-  );
-  // The room depends on where the tail row sits, so the component measures it
-  // against the conversation bar and republishes it on resize and scroll.
-  assert.match(transcript, /--run-activity-error-max-height/);
-  assert.match(
-    transcript,
-    /closest\("\.thread-scroll"\)[\s\S]*?addEventListener\("scroll", measure/,
-  );
-  // The plate clips; only the body scrolls, so no scrollbar crosses the radius.
-  assert.match(popoverRule, /overflow: hidden;/);
-  const bodyRule =
-    messagesStyles.match(/\.run-activity-error-message \{[\s\S]*?\n\}/)?.[0] ?? "";
-  assert.match(
-    bodyRule,
-    /max-height: var\(--run-activity-error-body-max-height, none\);/,
-  );
-  assert.match(bodyRule, /overflow-y: auto;/);
-  assert.match(bodyRule, /overscroll-behavior-y: contain;/);
-  assert.match(transcript, /--run-activity-error-body-max-height/);
-  // A bounded plate only helps if the revealed state can take the pointer.
-  const retryRevealRule =
-    messagesStyles.match(/\.run-activity-retry-reason:hover[\s\S]*?\n\}/)?.[0] ?? "";
-  assert.match(retryRevealRule, /pointer-events: auto;/);
-  // The plate sits one gap above the trigger, and that band belongs to the
-  // indicator row: without a bridge on the trigger the pointer loses `:hover`
-  // while travelling to the plate's scrollbar and the message closes mid-reach.
-  assert.match(
-    messagesStyles,
-    /\.run-activity-retry-reason::before \{[\s\S]*?height: var\(--run-activity-error-gap\);[\s\S]*?\n\}/,
-  );
-  assert.match(popoverRule, /bottom: calc\(100% \+ var\(--run-activity-error-gap\)\);/);
-  // Leaving keeps the plate for one short beat so the trip is recoverable.
-  assert.match(popoverRule, /visibility 0s linear calc\(var\(--motion-duration-fast\) \+ 240ms\);/);
-  assert.doesNotMatch(retryRevealRule, /pointer-events: none;/);
+  // The shared details portal escapes the transcript scrollport and uses
+  // measured placement; pointer/keyboard behavior is covered by the real fixture.
+  const popoverRule = messagesStyles.match(/\.run-status-popover \{[\s\S]*?\n\}/)?.[0] ?? "";
+  assert.match(popoverRule, /position: fixed;/);
+  assert.match(popoverRule, /background: var\(--ds-bg-elevated-opaque\);/);
+  assert.match(popoverRule, /max-height: calc\(100dvh - 32px\);/);
+  assert.match(popoverRule, /overflow-y: auto;/);
+  assert.match(transcript, /portalToBody\(/);
+  assert.match(transcript, /placeContextInspector\(/);
+  assert.match(transcript, /new ResizeObserver\(updatePosition\)/);
+  assert.match(transcript, /window.addEventListener\("scroll", updatePosition, true\)/);
   assert.match(messagesStyles, /\.run-activity-indicator\[data-phase="waiting-subagents"\]/);
   assert.match(messagesStyles, /\.working-indicator-mark > span\s*\{[\s\S]*?animation:\s*working-indicator-dot\s+1s/);
   assert.doesNotMatch(proseStyles, /\.working-indicator\s*\{|\.shimmer-text\s*\{/);

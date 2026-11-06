@@ -1,3 +1,4 @@
+import { latestRunDiagnostics } from "../../../lib/run-diagnostics";
 import { memo, useCallback, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 import type { PlanningState, RadialMenuAction, UiMessage } from "@pi-desktop/shared";
@@ -163,6 +164,8 @@ function TranscriptBody({
   const agentActivity = useAppStore((state) =>
     sessionId ? state.agentStatuses[sessionId]?.activity : undefined,
   );
+  const runStatus = useAppStore((state) => sessionId ? state.agentStatuses[sessionId] : undefined);
+  const runDiagnostics = useMemo(() => latestRunDiagnostics(runStatus, messages), [runStatus, messages]);
   const compactions = useAppStore((state) =>
     sessionId ? state.sessionCompactions[sessionId] : undefined,
   );
@@ -516,10 +519,10 @@ function TranscriptBody({
           {runtimeStatusLane ? (
             <div className="transcript-runtime-status">
               {showRunActivity && specializedActivity ? (
-                <RunActivityIndicator activity={specializedActivity} />
+                <RunActivityIndicator activity={specializedActivity} diagnostics={runDiagnostics} />
               ) : null}
               {showPlanning ? <PlanningIndicator kind={planningKind} /> : null}
-              {showWorking ? <WorkingIndicator /> : null}
+              {showWorking ? <WorkingIndicator diagnostics={runDiagnostics} /> : null}
             </div>
           ) : null}
         </div>

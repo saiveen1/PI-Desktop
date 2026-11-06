@@ -492,117 +492,77 @@
   white-space: nowrap;
 }
 
-.run-activity-retry-reason {
-  position: relative;
-  /* The plate hangs this far above the trigger; the bridge below covers it. */
-  --run-activity-error-gap: 8px;
+.run-status-trigger.btn {
   display: inline-flex;
   min-width: 0;
   align-items: center;
-  cursor: help;
-  outline: none;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 7px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
 }
 
-/* The pointer has to cross the gap between the trigger and the plate to reach
-   the plate's scrollbar. That band belongs to the indicator row, not to the
-   trigger, so `:hover` dropped there and the plate closed mid-reach. The bridge
-   is part of the trigger, which keeps the path hovered. */
-.run-activity-retry-reason::before {
-  content: "";
-  position: absolute;
-  top: calc(-1 * var(--run-activity-error-gap));
-  left: 0;
-  right: 0;
-  height: var(--run-activity-error-gap);
+.run-status-trigger:focus-visible {
+  outline: 2px solid var(--ds-accent);
+  outline-offset: 3px;
 }
 
-.run-activity-retry-reason:focus-visible {
-  border-radius: var(--radius-2xs);
-  box-shadow: 0 0 0 2px color-mix(in oklab, var(--ds-accent) 80%, transparent);
+.run-status-retries {
+  color: var(--ds-warning);
+  font-size: var(--text-xs-plus);
 }
 
-/* The retry reason borrows the assistant error card's hierarchy without
-   adding a second transcript row. It is hover/focus-only so the active row
-   remains compact at rest. The in-flow `.message-error` wash is transparent;
-   this floating tooltip mixes the same tint over an opaque elevated plate.
-   The plate hangs above the tail status row inside `.thread-scroll`, whose
-   `overflow: auto` clips it at the scrollport edge, and the conversation bar
-   paints over the same band one stacking level higher, so an unbounded plate
-   lost the first lines of a long provider message (ADR 0196) - the part a
-   reader needs. Cap it to the room the tail row leaves: the window minus the
-   conversation bar, minus the composer reserve `.thread-content` already
-   holds (16px above `--composer-dock-height`), minus the 46px status row and
-   this plate's own 8px gap. The remainder scrolls, the way
-   `.message-error-details pre` already handles long error text. */
-.run-activity-error-popover.message-error {
-  position: absolute;
-  bottom: calc(100% + var(--run-activity-error-gap));
-  left: 0;
-  z-index: 8;
-  display: block;
-  width: min(360px, calc(100vw - 32px));
-  padding: 10px 12px;
-  max-height: calc(100vh - var(--ds-toolbar-height, 46px) - var(--composer-dock-height, 228px) - 70px);
-  /* RunActivityIndicator measures the room the tail row actually leaves and
-     publishes it here; the calc is only the first-paint fallback. */
-  max-height: var(--run-activity-error-max-height, calc(100dvh - var(--ds-toolbar-height, 46px) - var(--composer-dock-height, 228px) - 70px));
-  /* The plate itself does not scroll: Chromium paints a scrollbar outside a
-     rounded corner, so the bar crossed the radius. The body below the heading
-     owns the scrolling instead. */
-  overflow: hidden;
-  background: color-mix(in oklab, var(--ds-error) 10%, var(--ds-bg-elevated-opaque));
-  box-shadow: var(--ds-shadow-dialog);
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(4px);
-  visibility: hidden;
-  /* Leaving the trigger keeps the plate for one short beat, so a reader
-     reaching for the scrollbar is not punished for the trip. */
-  transition:
-    opacity var(--motion-duration-fast) var(--motion-ease-out) 240ms,
-    transform var(--motion-duration-fast) var(--motion-ease-out) 240ms,
-    visibility 0s linear calc(var(--motion-duration-fast) + 240ms);
+.run-status-summary {
+  margin-top: 6px;
+  color: var(--ds-text-muted);
+  font-size: var(--text-xs-plus);
 }
 
-.run-activity-retry-reason:hover .run-activity-error-popover,
-.run-activity-retry-reason:focus-visible .run-activity-error-popover {
-  opacity: 1;
-  /* The capped plate is scrollable, so the revealed state has to take the
-     pointer. Hovering the plate keeps this trigger's `:hover` alive - the
-     plate is its child - so a long provider message can be scrolled and
-     selected instead of losing its first lines above the scrollport. */
-  pointer-events: auto;
-  transform: translateY(0);
-  visibility: visible;
-  transition-delay: 0s;
-}
-
-.run-activity-error-message {
-  display: block;
-  margin: 9px 0 0 24px;
-  color: var(--ds-text-secondary);
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  line-height: var(--leading-normal);
-  overflow-wrap: anywhere;
-  /* Body-only scrolling (measured by RunActivityIndicator): the heading above
-     stays put while a long provider message scrolls inside the plate. */
-  max-height: var(--run-activity-error-body-max-height, none);
+.run-status-popover {
+  position: fixed;
+  z-index: 60;
+  box-sizing: border-box;
+  width: min(420px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
   overflow-y: auto;
-  overscroll-behavior-y: contain;
+  overscroll-behavior: contain;
+  padding: 12px 14px;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--radius-md);
+  background: var(--ds-bg-elevated-opaque);
+  box-shadow: var(--ds-shadow-dialog);
+  color: var(--ds-text-primary);
+  font-size: var(--text-xs-plus);
+  line-height: var(--leading-normal);
+  visibility: hidden;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .run-activity-error-popover.message-error {
-    transition: none;
-  }
+.run-status-popover.is-open { visibility: visible; }
+.run-status-popover dl { margin: 10px 0; }
+.run-status-popover dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 6px 0;
 }
+.run-status-popover dt { flex-shrink: 0; color: var(--ds-text-muted); }
+.run-status-popover dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
+.run-status-note { margin: 8px 0 0; color: var(--ds-text-muted); }
+.run-status-error { color: var(--ds-error); overflow-wrap: anywhere; }
+.run-status-error p { margin: 6px 0; white-space: pre-wrap; }
 
-@media (max-width: 560px) {
-  .run-activity-error-popover.message-error {
-    left: auto;
-    right: 0;
-  }
+.run-status-announcement {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .working-indicator-mark {

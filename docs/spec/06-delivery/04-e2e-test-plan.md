@@ -20462,3 +20462,26 @@ Scenario: E2E-REVIEW-ROUNDS (local desktop, implemented)
   tests require failed lifecycle rows to show arguments while successful rows
   retain their roster-only presentation. No real-provider or live Desktop
   execution is implied by these deterministic tests.
+
+## E2E-RUN-DIAGNOSTICS-AND-LOCAL-TIME
+
+- Send a main-session turn, observe ordinary waiting/thinking, trigger a
+  deterministic provider retry and recovery, then execute a tool and complete.
+  Whole-turn elapsed time never restarts; request and provider-attempt counts
+  remain distinct. Retry totals and the latest stable error survive recovery.
+  Model event and answer-text ages differ when only thinking/search arrives.
+  Backoff records actual elapsed waits, including cancellation, not planned delay.
+- Hover/focus the real status trigger, pin with click, enter with ArrowDown,
+  dismiss with Escape/outside click, and switch turns. The opaque portal stays
+  within narrow viewport bounds and no old turn's clock or panel leaks across.
+  Reload the completed transcript: its final diagnostics remain frozen. Legacy
+  messages without metadata remain readable with no fabricated measurements.
+- Render sessions updated seconds, minutes and hours ago, including across local
+  midnight and DST transitions. Never show zero days within 24 hours. Exercise
+  old-year dates, invalid values and future clock skew; visible ages refresh.
+  Message clock and full local date/time/timezone title describe the same instant
+  with 00–23 hours. Stored ISO values are unchanged.
+- Deterministic renderer fixtures, runtime/provider-boundary tests and Rust
+  metadata round-trip tests cover their respective layers. Installed Desktop,
+  native hover rendering and real-provider acceptance remain separate manual
+  checks; these fixtures do not claim those checks.

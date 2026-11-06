@@ -1,3 +1,4 @@
+import { RunStatusIndicator } from "./RunStatusIndicator";
 import {
   memo,
   useMemo,
@@ -437,6 +438,10 @@ export const AssistantTurn = memo(function AssistantTurn({
             responseOutputTokens={responseOutputTokens}
             responseOutputEstimated={summary.responseOutputEstimated}
           />
+        ) : null}
+        {!isActive && metaMessage?.runDiagnostics ? (
+          <RunStatusIndicator key={metaMessage.runDiagnostics.turnId} diagnostics={metaMessage.runDiagnostics}
+            summary label={t("chat.runDetails.title")} />
         ) : null}
         {complete && actionMessage ? (
           <div className="message-actions">

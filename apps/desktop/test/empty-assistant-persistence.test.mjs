@@ -29,6 +29,7 @@ function fixture() {
   const enqueued = [];
   const steeringReplies = new Set();
   const completionNoticeTurns = new Set();
+  const usageCalls = [];
   const persistence = createEventPersistence({
     runtimeState: { host: null },
     steeringReplies,
@@ -54,7 +55,7 @@ function fixture() {
       },
       flush: async () => undefined,
     },
-    addActiveTurnUsage() {},
+    addActiveTurnUsage(...args) { usageCalls.push(args); },
     logger: { app() {} },
     finishTurn: () => Promise.resolve(),
     isStaleTerminalEvent: coordination.isStaleTerminalEvent,
@@ -100,7 +101,7 @@ function fixture() {
       ts: 1,
       event: { type: "agent_end", messageIds: [] },
     });
-  return { activeTurns, coordination, enqueued, steeringReplies, completionNoticeTurns, persistAssistant, persistSteering, persistAgentEnd };
+  return { activeTurns, coordination, enqueued, steeringReplies, completionNoticeTurns, persistAssistant, persistSteering, persistAgentEnd, persistence, usageCalls };
 }
 
 test("an empty complete assistant message is not persisted", () => {
@@ -235,4 +236,27 @@ test("a non-empty complete assistant message is persisted", () => {
   const f = fixture();
   f.persistAssistant({ id: "m6", content: "done", status: "complete" });
   assert.equal(f.enqueued.length, 1);
+});
+
+test("a final diagnostic refresh upserts the settled row without settling usage twice", () => {
+  const f = fixture();
+  const message = { id: "diagnostic-answer", role: "assistant", content: "done", status: "complete",
+    createdAt: "2026-11-06T00:00:00Z", usage: { inputTokens: 4, outputTokens: 2, totalTokens: 6 } };
+  f.persistAssistant(message);
+  const runDiagnostics = { turnId: TURN, startedAt: 1000, endedAt: 3000,
+    requestCount: 1, attemptCount: 2, requestAttempt: 2, retryCount: 1,
+    rateLimitRetries: 1, transientRetries: 0, retryWaitMs: 500 };
+  f.persistence.persistAgentEvent({ sessionId: SESSION, turnId: TURN, ts: 3000,
+    event: { type: "message_update", message: { ...message, runDiagnostics } } });
+  const rows = f.enqueued.filter(entry => entry.message);
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].key, rows[1].key);
+  assert.deepEqual(rows[1].message.runDiagnostics, runDiagnostics);
+  assert.deepEqual(rows[1].message.usage, message.usage);
+  assert.equal(f.usageCalls.length, 1);
+  f.activeTurns.set(SESSION, "new-turn");
+  f.coordination.recordTurnStart(SESSION, "new-turn");
+  f.persistence.persistAgentEvent({ sessionId: SESSION, turnId: TURN, ts: 4000,
+    event: { type: "message_update", message: { ...message, runDiagnostics } } });
+  assert.equal(f.enqueued.filter(entry => entry.message).length, 2);
 });

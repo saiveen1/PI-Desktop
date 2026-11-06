@@ -13,15 +13,17 @@ function response(): AssistantMessage {
 describe("physical request accounting", () => {
   it("reports once across iteration and result and preserves unknown price through replay", async () => {
     const reports: MessageUsage[] = [];
+    const observedEvents: string[] = [];
     const stream = accountModelStream({ id: "physical", provider: "openai" }, () => {
       const inner = createAssistantMessageEventStream();
       inner.push({ type: "done", reason: "stop", message: response() });
       inner.end();
       return inner;
-    }, { providerId: "account-1", onUsage: (usage) => reports.push(usage) });
+    }, { providerId: "account-1", onUsage: (usage) => reports.push(usage), onEvent: event => observedEvents.push(event.type) });
     for await (const _event of stream) { /* Consume the actual Pi stream. */ }
     const result = await stream.result();
     expect(reports).toHaveLength(1);
+    expect(observedEvents).toEqual(["done"]);
     expect(reports[0]).toMatchObject({ providerId: "account-1", modelId: "physical", usageOrigin: "pi", costStatus: "unknown" });
     expect(reports[0]?.cost).toBeUndefined();
     expect(usageFromPi(result.usage)?.operationId).toBe(reports[0]?.operationId);

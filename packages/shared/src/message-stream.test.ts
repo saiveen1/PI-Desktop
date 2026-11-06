@@ -205,3 +205,21 @@ describe("deltaStreamPayloadFits", () => {
     ).toBe(false);
   });
 });
+
+it("preserves the newest run diagnostic snapshot through delta projection and coalescing", () => {
+  const diagnostics = { turnId: "turn", startedAt: 1000, requestCount: 1,
+    attemptCount: 1, requestAttempt: 1, retryCount: 0, rateLimitRetries: 0,
+    transientRetries: 0, retryWaitMs: 0, lastEventAt: 1100 };
+  const original = assistant({ id: "diagnostics", content: "a", runDiagnostics: diagnostics });
+  const first = toWireMessageUpdate({ type: "message_update", message: original, deltaText: "a" });
+  const newer = { ...diagnostics, attemptCount: 2, retryCount: 1, lastEventAt: 1200 };
+  const second = toWireMessageUpdate({ type: "message_update",
+    message: { ...original, content: "ab", runDiagnostics: newer }, deltaText: "b" });
+  const merged = mergeMessageUpdates(first, second);
+  const restored = applyMessageUpdate(undefined, merged);
+  expect(restored.content).toBe("ab");
+  expect(restored.runDiagnostics).toEqual(newer);
+  expect(streamingMessageIdentity(original).runDiagnostics).toEqual(diagnostics);
+  const legacyDelta = { ...second, message: { ...second.message, runDiagnostics: undefined } };
+  expect(applyMessageUpdate(restored, legacyDelta).runDiagnostics).toEqual(newer);
+});

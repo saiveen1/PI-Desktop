@@ -17,6 +17,22 @@ test("sidebar renders global pins once, outside project folding and history limi
     esbuild: { jsx: "automatic" },
     appType: "custom",
     optimizeDeps: { noDiscovery: true, include: [] },
+    plugins: [
+      {
+        name: "sidebar-notification-center-stub",
+        enforce: "pre",
+        resolveId(source, importer) {
+          return source === "./NotificationCenter" && importer?.endsWith("/src/components/Sidebar.tsx")
+            ? "\u0000sidebar-notification-center"
+            : null;
+        },
+        load(id) {
+          return id === "\u0000sidebar-notification-center"
+            ? "export const NotificationCenter = () => null;"
+            : null;
+        },
+      },
+    ],
   });
   try {
     const { Sidebar } = await server.ssrLoadModule("/src/components/Sidebar.tsx");
@@ -153,7 +169,7 @@ test("sidebar renders global pins once, outside project folding and history limi
     const datedGroup =
       unpinned.match(/data-sidebar-project-group="\/dated"[\s\S]*?<\/section>/)?.[0] ?? "";
     assert.deepEqual(rows(datedGroup), ["date-row"]);
-    assert.match(datedGroup, /class="thread-item-meta(?: is-menu-open)?"[\s\S]*?class="thread-item-last-reply">Jan 1<\/span>/);
+    assert.match(datedGroup, /class="thread-item-meta(?: is-menu-open)?"[\s\S]*?<time class="thread-item-last-reply" dateTime="2020-01-01T00:00:00Z" title="[^"]+">Jan 1, 2020<\/time>/);
 
     // A retained project with no sessions is the empty state, and it has to sit
     // in the same list layer so the fold animates it away too.

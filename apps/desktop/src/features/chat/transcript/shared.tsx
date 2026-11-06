@@ -37,6 +37,10 @@ import {
   turnUsageBreakdown,
 } from "../../../lib/context-usage";
 import { useAppStore } from "../../../stores/app-store";
+import {
+  formatLocalDateTime,
+  formatPreciseLocalDateTime,
+} from "../../../lib/local-date-time";
 import { Markdown, useCopy } from "../../../components/Markdown";
 import {
   IconArchive,
@@ -81,44 +85,47 @@ export function useMessageRevealRequest(messageId: string) {
 
 /**
  * Format a message timestamp for the toolbar.
- * Today → HH:mm:ss; other days → YYYY-MM-DD HH:mm:ss.
+ * Today → HH:mm:ss; other days → localized date and time.
  */
-function formatMessageTime(iso: string, locale: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-  const now = new Date();
+function formatMessageTime(date: Date, locale: string, now = new Date()): string {
+  if (!Number.isFinite(date.getTime())) return "";
   const isToday =
     date.getFullYear() === now.getFullYear() &&
     date.getMonth() === now.getMonth() &&
     date.getDate() === now.getDate();
-  if (isToday) {
-    return date.toLocaleTimeString(locale, {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12: false,
-    });
-  }
-  return date.toLocaleString(locale, {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  });
+  return formatLocalDateTime(
+    date,
+    locale,
+    isToday
+      ? {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hourCycle: "h23",
+        }
+      : {
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hourCycle: "h23",
+        },
+  );
 }
 
 export function MessageTimestamp({ createdAt }: { createdAt?: string }) {
   const { i18n } = useTranslation();
   if (!createdAt) return null;
-  const display = formatMessageTime(createdAt, i18n.language);
-  if (!display) return null;
+  const date = new Date(createdAt);
+  const display = formatMessageTime(date, i18n.language);
+  const tooltip = formatPreciseLocalDateTime(date, i18n.language);
+  if (!display || !tooltip) return null;
   return (
-    <span className="message-timestamp" title={createdAt}>
+    <time className="message-timestamp" dateTime={createdAt} title={tooltip}>
       {display}
-    </span>
+    </time>
   );
 }
 

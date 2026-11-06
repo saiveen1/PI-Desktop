@@ -1,4 +1,5 @@
 /** Shared public types grouped by the owning application domain. */
+import type { AgentRunDiagnostics } from "../run-diagnostics.js";
 import type { RemoteWorkspace } from "./workspace.js";
 import type { Mode } from "./common.js";
 import type { SessionThinkingLevel, ThinkingLevel } from "./models.js";
@@ -185,6 +186,8 @@ export type AgentStatus = {
   planningState?: PlanningState;
   pendingPlanId?: string;
   activity?: AgentActivity;
+  /** Bounded main-turn evidence while the runtime waits for the model. */
+  runDiagnostics?: AgentRunDiagnostics;
 };
 
 /** Bounded provider diagnostics shown while the runtime waits before retrying. */

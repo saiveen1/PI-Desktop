@@ -57,6 +57,7 @@ import {
   Type,
   type Api,
   type AssistantMessage,
+  type AssistantMessageEvent,
   type ImageContent,
   type Model,
   type Models,
@@ -137,6 +138,10 @@ import {
   withoutReasoningReplayPlaceholder,
 } from "@pi-desktop/shared";
 import { createStreamCoalescer, type StreamCoalescer } from "./stream-coalescer.js";
+import {
+  RunDiagnosticsTracker,
+  type RunDiagnosticsProviderEvent,
+} from "./run-diagnostics-tracker.js";
 import { checkGenUiFragment, genUiFragmentCheckNote, isGenUiFragmentPath } from "./gen-ui-fragment-check.js";
 import type { RuntimeHost } from "./host-client.js";
 import { classifyAgentError } from "./agent-errors.js";
@@ -1164,6 +1169,28 @@ function messageRequestsTools(message: unknown): boolean {
   );
 }
 
+function runDiagnosticsProviderEvent(event: AssistantMessageEvent): RunDiagnosticsProviderEvent {
+  switch (event.type) {
+    case "thinking_start":
+    case "thinking_delta":
+    case "thinking_end":
+      return { kind: "thinking" };
+    case "text_start":
+    case "text_end":
+      return { kind: "text" };
+    case "text_delta":
+      return { kind: "text", hasNewText: event.delta.length > 0 };
+    case "hosted_search_update":
+      return { kind: "search" };
+    case "toolcall_start":
+    case "toolcall_delta":
+    case "toolcall_end":
+      return { kind: "tool" };
+    default:
+      return { kind: "other" };
+  }
+}
+
 const PROGRESS_FORWARD_INTENT_PATTERNS = [
   /\b(?:about to|going to|will|next|then|still(?: need| have to)?|remaining|left to|working on|writing|reading|updating|implementing|checking|running|creating|fixing|reviewing|proceed(?:ing)?|continu(?:e|ing)|starting|moving on)\b/i,
   /(?:接下来|下一步|还需要|仍需|剩下|正在|将要|继续|开始)/i,
@@ -1841,6 +1868,9 @@ export class DesktopAgentRuntime {
   private customSystemPrompt?: CustomSystemPrompt;
   private planningState: PlanningState;
   private pendingPlanId?: string;
+  /** Main-turn-only diagnostic owner; delegate/compaction streams never use it. */
+  private runDiagnostics?: RunDiagnosticsTracker;
+  private runDiagnosticMessage?: UiMessage;
   private currentAssistant?: UiMessage;
   private pluginTools: PluginToolDef[];
   private pluginSkills: PluginSkillDef[];
@@ -2200,7 +2230,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     this.agent = new Agent({
       identity: DESKTOP_AGENT_IDENTITY,
       streamFn: (m, context, options) => {
-        this.setAgentActivity({ phase: "waiting-model", since: Date.now() });
+        const requestAt = Date.now();
         this.providerResponseStatus = undefined;
         this.providerRetryHeaders = undefined;
         this.providerRequestBytes = undefined;
@@ -2291,12 +2321,22 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           // both consume an estimate that under-counts CJK text (issue B).
           maxTokens: clampOutputToContext(m, requestContext, hookedOptions.maxTokens),
         };
+        const diagnostics = this.runDiagnostics;
+        if (!this.providerRetryInProgress) {
+          diagnostics?.startRequest({
+            at: requestAt,
+            inputTokens: estimateOutputCapInputTokens(requestContext, m),
+            contextWindow: effectiveModelContextWindow(m),
+          });
+        }
         const usageTurnId = this.turnId;
+        let diagnosticAttempt: number | undefined;
         const retryStream = createProviderRetryStream(
           m,
           requestContext,
           attemptOptions,
           (retryOptions) => {
+            const attempt = diagnosticAttempt;
             // Each network attempt owns its idle clock and abort signal.
             // Deliberate backoff must not look like a stalled provider stream.
             const stallAbort = new AbortController();
@@ -2314,18 +2354,37 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
                 providerId: this.provider.id,
                 nativeCost: this.provider.modelConfig?.nativeCost,
                 onUsage: (usage) => this.emit({ type: "usage", usage }, usageTurnId),
+                onEvent: (event) => {
+                  if (!diagnostics || diagnostics !== this.runDiagnostics || attempt === undefined || event.type === "error") return;
+                  diagnostics.observeProviderEvent(attempt, runDiagnosticsProviderEvent(event), Date.now());
+                },
               });
-            return withStreamIdleTimeout(stream, m, streamIdleTimeoutMs(), () => stallAbort.abort());
+            return withStreamIdleTimeout(
+              stream,
+              m,
+              streamIdleTimeoutMs(),
+              () => stallAbort.abort(),
+            );
           },
           {
             claim: (error, phase) => this.claimProviderRetry(error, phase),
             headers: () => this.providerRetryHeaders,
             status: () => this.providerResponseStatus,
             failure: () => this.providerFetchFailure,
+            onAttemptStart: () => {
+              if (diagnostics !== this.runDiagnostics) return undefined;
+              const now = Date.now();
+              diagnosticAttempt = diagnostics?.startAttempt(now);
+              this.setAgentActivity({ phase: "waiting-model", since: now });
+              return diagnosticAttempt;
+            },
             onRetry: ({ error, attempt, delayMs }) => {
+              const now = Date.now();
+              if (diagnostics !== this.runDiagnostics) return;
+              this.recordDiagnosticRetry(error, now);
               this.setAgentActivity({
                 phase: "retrying",
-                since: Date.now(),
+                since: now,
                 attempt,
                 ...(this.infiniteProviderRetry ? { infinite: true } : {}),
                 retryDelayMs: delayMs,
@@ -6122,7 +6181,9 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     }
 
     this.retainPendingSteering();
+    const runStartedAt = Date.now();
     this.turnId = turnId;
+    this.startRunDiagnostics(turnId, runStartedAt);
     const controller = new AbortController();
     this.manualDelegationTurn = { turnId, controller };
     this.acceptingSteering = true;
@@ -6132,7 +6193,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     this.pendingUserMessageId = undefined;
     this.turnEpoch += 1;
     this.resetRunRecoveryState();
-    this.requestStartedAt = Date.now();
+    this.requestStartedAt = runStartedAt;
     this.rebuildToolCatalog();
     this.setAgentTools(this.activeTools());
 
@@ -6806,7 +6867,41 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     };
   }
 
+  private startRunDiagnostics(turnId: string, startedAt: number): void {
+    this.runDiagnosticMessage = undefined;
+    this.runDiagnostics = new RunDiagnosticsTracker({
+      turnId,
+      startedAt,
+      infiniteRetry: this.infiniteProviderRetry,
+    });
+  }
+
+  private finishRunDiagnostics(turnId: string | undefined, now: number): void {
+    const current = this.runDiagnostics?.snapshot(now);
+    if (!current || current.turnId !== turnId || current.endedAt !== undefined) return;
+    const final = this.runDiagnostics!.finish(now);
+    const message = this.runDiagnosticMessage;
+    if (message && message.status !== "streaming") {
+      this.emit({ type: "message_update", message: { ...message, runDiagnostics: final } }, turnId, now);
+    }
+  }
+
+  private recordDiagnosticRetry(error: ReturnType<typeof classifyAgentError>, at: number): void {
+    const { code, providerStatus, networkCode } = this.retryActivityError(error);
+    this.runDiagnostics?.recordRetry({ at, code, providerStatus, networkCode });
+  }
+
   private emit(event: AgentEventEnvelope["event"], turnId?: string, ts = Date.now()) {
+    const owner = turnId ?? this.turnId;
+    if (event.type === "agent_end" || event.type === "error") this.finishRunDiagnostics(owner, ts);
+    if ((event.type === "message_start" || event.type === "message_update" || event.type === "message_end") &&
+      event.message.role === "assistant" && !event.message.parentToolCallId) {
+      const diagnostics = this.runDiagnostics?.snapshot(ts);
+      if (diagnostics?.turnId === owner) {
+        event = { ...event, message: { ...event.message, runDiagnostics: diagnostics } };
+        this.runDiagnosticMessage = event.message;
+      }
+    }
     this.onEvent({
       sessionId: this.sessionId,
       turnId: turnId ?? this.turnId,
@@ -7045,6 +7140,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     this.providerRetryInProgress = true;
     this.requestStartedAt = Date.now();
     this.providerRetryAbort = new AbortController();
+    // The recovery re-issues the same logical request; the next streamFn call records attempts only.
     try {
       const delayMs =
         retryError.code === "PROVIDER_RATE_LIMITED"
@@ -7060,9 +7156,11 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
               undefined,
               this.providerRetryHeaders,
             );
+      const retryAt = Date.now();
+      this.recordDiagnosticRetry(retryError, retryAt);
       this.setAgentActivity({
         phase: "retrying",
-        since: Date.now(),
+        since: retryAt,
         attempt: retryAttempt,
         ...(this.infiniteProviderRetry ? { infinite: true } : {}),
         retryDelayMs: delayMs,
@@ -9079,7 +9177,9 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       }
       case "tool_execution_start": {
         const startedAt = Date.now();
+        this.runDiagnostics?.startTool();
         this.clearAgentActivity();
+        this.emit({ type: "status", status: this.getStatus() });
         this.activeToolCalls.set(event.toolCallId, {
           toolName: event.toolName,
           args: event.args,
@@ -9352,7 +9452,9 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     // Claims are message-scoped: a later prompt must observe edited or newly
     // created instruction files instead of reusing a previous chain.
     this.pathInstructionClaims.clear();
+    const runStartedAt = Date.now();
     this.turnId = durableTurnId;
+    this.startRunDiagnostics(durableTurnId, runStartedAt);
     this.acceptingSteering = true;
     this.pendingUserMessageId = undefined;
     this.gracefulStopRequested = false;
@@ -9361,7 +9463,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     this.turnEpoch += 1;
     this.abortDelegationsFromPreviousTurns();
     this.currentAssistant = undefined;
-    this.requestStartedAt = Date.now();
+    this.requestStartedAt = runStartedAt;
     this.setMode("agent");
     this.autonomousExecution = true;
 
@@ -9472,7 +9574,9 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       : input;
     this.retainPendingSteering();
     const nextTurnId = durableTurnId;
+    const runStartedAt = Date.now();
     this.turnId = nextTurnId;
+    this.startRunDiagnostics(nextTurnId, runStartedAt);
     this.acceptingSteering = true;
     this.gracefulStopRequested = false;
     this.runCancelled = false;
@@ -9493,8 +9597,8 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       Boolean(origin.messageId?.trim() && origin.replyToMessageId?.trim());
     this.turnEpoch += 1;
     this.abortDelegationsFromPreviousTurns();
-    this.requestStartedAt = Date.now();
-    this.setAgentActivity({ phase: "starting", since: Date.now() });
+    this.requestStartedAt = runStartedAt;
+    this.setAgentActivity({ phase: "starting", since: runStartedAt });
     try {
       // Publish turn ownership before the first await. Status polling and Stop
       // must include capability negotiation, not observe a falsely idle turn.
@@ -9758,6 +9862,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     this.acceptingSteering = false;
     this.gracefulStopRequested = false;
     this.runCancelled = true;
+    this.runDiagnostics?.stopRetryWait(Date.now());
     this.steeringWaitAbort?.abort();
     this.extensionRunner?.cancelPending();
     this.resolvePendingAskTools();
@@ -9799,6 +9904,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       throw error;
     }
     return result.finally(() => {
+      this.finishRunDiagnostics(turnId, Date.now());
       if (this.activeTurnSettlements.get(turnId) === settlement) {
         this.activeTurnSettlements.delete(turnId);
       }
@@ -9832,6 +9938,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       planningState: this.planningState,
       ...(this.pendingPlanId ? { pendingPlanId: this.pendingPlanId } : {}),
       ...(this.agentActivity ? { activity: this.agentActivity } : {}),
+      ...(this.runDiagnostics ? { runDiagnostics: this.runDiagnostics.snapshot(Date.now()) } : {}),
     };
   }
 

@@ -293,6 +293,7 @@ fn parse_message(
         usage: None,
         response_duration_ms: None,
         response_output_tokens: None,
+        run_diagnostics: None,
         error: None,
         revision_root_id: None,
         revision_count: None,

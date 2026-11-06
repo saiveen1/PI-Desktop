@@ -187,6 +187,25 @@ and clears it when assistant or tool activity starts, or when the turn
 terminates. This is observability only; it does not add a second agent loop or
 a completion percentage.
 
+Main-session statuses and assistant snapshots may carry `runDiagnostics`.
+The runtime owns this factual snapshot: turn identity/start/end, logical request
+count, actual provider attempts, cumulative rate-limit/transient retries, and
+actual elapsed retry waits (including only elapsed time when cancelled). A new
+provider attempt clears its recent-event timestamp, while the most recent new
+answer-text timestamp remains turn-scoped. Thinking/search events are not answer
+text and do not prove useful progress. Context size is the current request's
+estimate, not accumulated billing usage. The last retry stores stable sanitized
+codes/status only, never provider bodies or prompts. Final snapshots are frozen
+and persisted with the assistant row; legacy rows omit them. Stale attempts and
+delegated runs must not overwrite the main turn. This metadata does not change
+retry budgets, watchdogs, cancellation, or model-report policy, and adds no
+dedicated timing log stream (ADR 0212).
+The event clock observes the raw provider stream before the local idle watchdog;
+synthetic timeout/abort errors never masquerade as a recent model update. The
+terminal full `message_update` refreshes the last settled assistant row before
+the existing end/error event, without repeating `message_end` or usage. Host
+persistence rejects a refresh belonging to a different active turn.
+
 The runtime constructs exactly one pi `Agent` per durable session. Plan does
 not select a second model, planner service, permission implementation, or
 runtime. The same Agent changes its planning state and tool registry after a

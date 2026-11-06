@@ -20,13 +20,16 @@ details: the stable error code, the already-redacted and length-limited provider
 message, and the HTTP status when known. The runtime supplies the details for
 both request-setup and mid-stream retries.
 
-The renderer keeps the existing compact retry row at rest. Hovering or focusing
-its retry label reveals a small error-styled tooltip that reuses the assistant
-error card's hierarchy: icon, localized summary, stable code/status, and the
-provider message. The trigger is keyboard-focusable and exposes the same reason
-through its accessible name. The tooltip closes when the activity phase clears;
-the final assistant error and outcome surfaces remain the only terminal error
-presentation.
+The renderer keeps a compact retry row at rest. Run diagnostics now share one
+neutral opaque, portaled details dialog across ordinary running, retrying and
+completed summaries. Hover/focus reveals it, click pins it, and Escape or an
+outside click dismisses it; ArrowDown enters the details action. During backoff
+the dialog retains the localized error summary, stable code/status and bounded
+provider message. After recovery, cumulative retry counts and the latest stable
+failure code remain available without retaining provider prose. The final
+assistant error and outcome surfaces remain the only terminal error presentation.
+This supersedes the original retry-only error-tinted tooltip without changing
+runtime retry policy or adding intermediate transcript errors.
 
 ## Consequences
 

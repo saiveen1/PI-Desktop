@@ -26,6 +26,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { api } from "../lib/api";
 import { formatSessionLastReplyDate } from "../lib/sidebar-session-date";
+import { formatPreciseLocalTimestamp } from "../lib/local-date-time";
 import { SessionHoverCard } from "../features/sessions/SessionHoverCard";
 import { useSessionHoverCard } from "../features/sessions/useSessionHoverCard";
 import { useSessionSelection } from "../features/sessions/useSessionSelection";
@@ -282,6 +283,7 @@ export function Sidebar({
   const canNavBack = useAppStore((s) => s.canNavBack);
   const page = useAppStore((s) => s.page);
   const settings = useAppStore((s) => s.settings);
+  const showLastReplyDate = settings?.sidebarSessionTime === true;
   // Project headers must answer "is anything running under here?" while the
   // group is collapsed, so both affordances are resolved once per render
   // rather than re-derived per row.
@@ -312,6 +314,7 @@ export function Sidebar({
   const setSettingsAnchor = useAppStore((s) => s.setSettingsAnchor);
   const update = useUpdateState();
 
+  const [lastReplyNow, setLastReplyNow] = useState(Date.now);
   const [sortOpen, setSortOpen] = useState(false);
   const [sessionMenu, setSessionMenu] = useState<string | null>(null);
   const [renameFor, setRenameFor] = useState<SessionSummary | null>(null);
@@ -343,6 +346,12 @@ export function Sidebar({
   const [draggingProjectKey, setDraggingProjectKey] = useState<string | null>(null);
   const [dropIndicator, setDropIndicator] = useState<{ key: string; insertAfter: boolean } | null>(null);
   const [windowFocused, setWindowFocused] = useState(true);
+  useEffect(() => {
+    if (!showLastReplyDate) return;
+    setLastReplyNow(Date.now());
+    const timer = window.setInterval(() => setLastReplyNow(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, [showLastReplyDate]);
 
   const menuTriggerRef = useRef<HTMLButtonElement | null>(null);
   const menuFirstItemRef = useRef<HTMLButtonElement | null>(null);
@@ -1894,12 +1903,16 @@ export function Sidebar({
       outcome: sessionOutcomes[session.id],
       hasPendingPermission,
     });
+    const lastReplyLocale = i18n.resolvedLanguage ?? i18n.language;
     const lastReplyDate = options?.showLastReplyDate
       ? formatSessionLastReplyDate(
           session.updatedAt,
-          new Date(),
-          i18n.resolvedLanguage ?? i18n.language,
+          new Date(lastReplyNow),
+          lastReplyLocale,
         )
+      : "";
+    const lastReplyTimestamp = lastReplyDate
+      ? formatPreciseLocalTimestamp(session.updatedAt, lastReplyLocale)
       : "";
     return (
       <div
@@ -1993,7 +2006,13 @@ export function Sidebar({
           )}
         >
           {lastReplyDate ? (
-            <span className="thread-item-last-reply">{lastReplyDate}</span>
+            <time
+              className="thread-item-last-reply"
+              dateTime={session.updatedAt}
+              title={lastReplyTimestamp || undefined}
+            >
+              {lastReplyDate}
+            </time>
           ) : null}
           <TooltipButton
             type="button"

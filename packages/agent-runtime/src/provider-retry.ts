@@ -146,6 +146,8 @@ export type ProviderRetryController = {
     attempt: number;
     delayMs: number;
   }) => void;
+  /** Observes each actual provider attempt without changing retry policy. */
+  onAttemptStart?: () => void;
   /** Test hook; production uses the abortable timer below. */
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
 };
@@ -439,6 +441,7 @@ export function createProviderRetryStream(
     let limitRepairTried = false;
     for (;;) {
       if (options.signal?.aborted) throw requestAbortedError();
+      controller.onAttemptStart?.();
       const inner = createStream({
         ...(limitRepairTried ? withoutDerivedOutputLimit(options) : options),
         maxRetries: 0,

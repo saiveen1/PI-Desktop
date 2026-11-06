@@ -45,6 +45,7 @@ export function streamingMessageIdentity(message: UiMessage): UiMessage {
       : {}),
     ...(message.agentName ? { agentName: message.agentName } : {}),
     ...(message.hostedSearch ? { hostedSearch: message.hostedSearch } : {}),
+    ...(message.runDiagnostics ? { runDiagnostics: message.runDiagnostics } : {}),
   };
 }
 
@@ -177,6 +178,11 @@ export function applyMessageUpdate(
       ? { hostedSearch: event.message.hostedSearch }
       : seed.hostedSearch
         ? { hostedSearch: seed.hostedSearch }
+        : {}),
+    ...(event.message.runDiagnostics
+      ? { runDiagnostics: event.message.runDiagnostics }
+      : seed.runDiagnostics
+        ? { runDiagnostics: seed.runDiagnostics }
         : {}),
   };
 }

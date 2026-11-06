@@ -1,5 +1,12 @@
 # Unreleased changes
 
+- Show recent session updates in seconds, minutes or hours instead of zero days,
+  and align message clocks with full local date/time/timezone details without
+  rewriting stored timestamps. Running statuses expose a shared details dialog
+  with stable whole-turn elapsed time, cumulative retry counts, actual backoff,
+  separate model-event/answer-text ages and current context estimates. Final
+  diagnostics remain available on completed replies without changing retry policy.
+
 - Keep the parent conversation usable during a manual subagent retry. Retained
   history and checkpoints continue the child work; steering leaves it running,
   and its report returns through one parent continuation and turn completion.

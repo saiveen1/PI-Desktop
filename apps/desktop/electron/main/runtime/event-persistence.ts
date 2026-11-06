@@ -116,9 +116,20 @@ function subagentTagged(message: UiMessage, envelope: AgentEventEnvelope): UiMes
 
 
 function persistAgentEvent(envelope: AgentEventEnvelope): UiMessage | undefined {
-  const event = envelope.event;
+  const incoming = envelope.event;
+  // A settled diagnostic refresh upserts the row, without a second public end
+  // event or usage settlement (accounting still reads the original envelope).
+  const diagnosticRefresh = incoming.type === "message_update" && incoming.stream !== "delta" &&
+    incoming.message.role === "assistant" && !envelope.parentToolCallId &&
+    incoming.message.status !== "streaming" && incoming.message.runDiagnostics?.endedAt !== undefined
+      ? incoming.message : undefined;
+  const event = diagnosticRefresh ? { type: "message_end" as const, message: diagnosticRefresh } : incoming;
   if (transcriptRewrite.deferTranscriptEvent(envelope)) return;
   const activeTurnId = activeTurns.get(envelope.sessionId);
+  if (diagnosticRefresh && (
+    (activeTurnId && diagnosticRefresh.runDiagnostics?.turnId !== activeTurnId) ||
+    (envelope.turnId && diagnosticRefresh.runDiagnostics?.turnId !== envelope.turnId)
+  )) return;
   if (transcriptRewrite.isStaleTranscriptEvent(envelope, activeTurnId)) {
     if (envelope.turnId) completionNoticeTurns.delete(envelope.turnId);
     return;

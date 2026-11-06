@@ -235,6 +235,9 @@ pub struct UiMessage {
     /// Partial output estimate used when a user stops before final usage arrives.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub response_output_tokens: Option<i64>,
+    /// Optional, bounded runtime timing and retry evidence; absent in older transcripts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_diagnostics: Option<Value>,
     /// Structured AppError for an assistant turn that failed.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<Value>,
@@ -442,6 +445,9 @@ pub(crate) fn ui_to_record(message: &UiMessage) -> (MessageRecord, Option<String
     if let Some(usage) = &message.usage {
         meta_obj.insert("usage".into(), json!(usage));
     }
+    if let Some(diagnostics) = &message.run_diagnostics {
+        meta_obj.insert("runDiagnostics".into(), diagnostics.clone());
+    }
     if let Some(duration) = message.response_duration_ms {
         meta_obj.insert("responseDurationMs".into(), json!(duration));
     }
@@ -632,6 +638,7 @@ pub(crate) fn record_to_ui(record: MessageRecord) -> UiMessage {
     let error = meta.get("error").cloned();
     let response_duration_ms = meta.get("responseDurationMs").and_then(|v| v.as_i64());
     let response_output_tokens = meta.get("responseOutputTokens").and_then(|v| v.as_i64());
+    let run_diagnostics = meta.get("runDiagnostics").cloned();
     let revision_root_id = meta
         .get("revisionRootId")
         .and_then(|v| v.as_str())
@@ -728,6 +735,7 @@ pub(crate) fn record_to_ui(record: MessageRecord) -> UiMessage {
             usage,
             response_duration_ms,
             response_output_tokens,
+            run_diagnostics,
             error,
             revision_root_id,
             revision_count,
@@ -784,6 +792,7 @@ pub(crate) fn record_to_ui(record: MessageRecord) -> UiMessage {
             usage,
             response_duration_ms,
             response_output_tokens,
+            run_diagnostics,
             error,
             revision_root_id,
             revision_count,
@@ -4447,6 +4456,30 @@ mod tests {
     }
 
     #[test]
+    fn run_diagnostics_round_trip_without_changing_legacy_messages() {
+        let diagnostics = json!({
+            "turnId": "turn-a", "startedAt": 1000, "endedAt": 9000,
+            "requestCount": 2, "attemptCount": 5, "requestAttempt": 3,
+            "retryCount": 3, "rateLimitRetries": 1, "transientRetries": 2,
+            "retryWaitMs": 1200, "lastRetry": { "at": 3000, "code": "PROVIDER_ERROR", "providerStatus": 503 }
+        });
+        let mut wire =
+            serde_json::to_value(user_msg("a1", "answer", "2026-11-06T00:00:00Z")).unwrap();
+        wire["role"] = json!("assistant");
+        wire["runDiagnostics"] = diagnostics.clone();
+        let message: UiMessage = serde_json::from_value(wire).unwrap();
+        let (record, _) = ui_to_record(&message);
+        assert_eq!(record.meta.as_ref().unwrap()["runDiagnostics"], diagnostics);
+        let restored = serde_json::to_value(record_to_ui(record)).unwrap();
+        assert_eq!(restored["runDiagnostics"], diagnostics);
+        let (legacy, _) = ui_to_record(&user_msg("legacy", "plain", "2026-01-01T00:00:00Z"));
+        assert!(serde_json::to_value(record_to_ui(legacy))
+            .unwrap()
+            .get("runDiagnostics")
+            .is_none());
+    }
+
+    #[test]
     fn agent_mentions_round_trip_through_record_meta() {
         let mut message = user_msg("u1", "Call the `Task` tool", "2026-01-01T00:00:00Z");
         message.command = Some("look @explorer here".into());
@@ -4487,6 +4520,7 @@ mod tests {
             usage: None,
             response_duration_ms: None,
             response_output_tokens: None,
+            run_diagnostics: None,
             error: None,
             revision_root_id: None,
             revision_count: None,
@@ -5452,6 +5486,7 @@ mod tests {
             usage: None,
             response_duration_ms: None,
             response_output_tokens: None,
+            run_diagnostics: None,
             error: None,
             revision_root_id: None,
             revision_count: None,
@@ -6256,6 +6291,7 @@ mod tests {
             }),
             response_duration_ms: Some(2_000),
             response_output_tokens: Some(34),
+            run_diagnostics: None,
             error: None,
             revision_root_id: None,
             revision_count: None,
@@ -6397,6 +6433,7 @@ mod tests {
             usage: None,
             response_duration_ms: None,
             response_output_tokens: None,
+            run_diagnostics: None,
             error: None,
             revision_root_id: None,
             revision_count: None,

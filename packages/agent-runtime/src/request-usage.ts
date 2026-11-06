@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { Api, AssistantMessage, AssistantMessageEventStream, Model } from "@earendil-works/pi-ai";
+import type { Api, AssistantMessage, AssistantMessageEvent, AssistantMessageEventStream, Model } from "@earendil-works/pi-ai";
 import type { MessageUsage, UsageProvenance } from "@pi-desktop/shared";
 import { usageFromPi, usageToPi } from "./agent-messages.js";
 
@@ -38,7 +38,7 @@ export function accountModelResult(
 export function accountModelStream(
   model: Pick<Model<Api>, "id" | "provider">,
   createStream: () => AssistantMessageEventStream,
-  options: { providerId?: string; costStatus?: UsageProvenance["costStatus"]; nativeCost?: Model<Api>["cost"]; onUsage?: UsageObserver } = {},
+  options: { providerId?: string; costStatus?: UsageProvenance["costStatus"]; nativeCost?: Model<Api>["cost"]; onUsage?: UsageObserver; onEvent?: (event: AssistantMessageEvent) => void } = {},
 ): AssistantMessageEventStream {
   const costStatus = options.costStatus === "reported" ? "reported"
     : nativeCostStatus(options.nativeCost) ?? options.costStatus;
@@ -56,6 +56,7 @@ export function accountModelStream(
       if (property === "result") return async () => account(await target.result());
       if (property === Symbol.asyncIterator) return async function* () {
         for await (const event of target) {
+          options.onEvent?.(event);
           if (event.type === "done") account(event.message);
           if (event.type === "error") account(event.error);
           yield event;

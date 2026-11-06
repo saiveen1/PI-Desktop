@@ -292,6 +292,15 @@ per message; `seq` is implied by line order:
 {"type":"compaction","id":"cp1","summary":"…","firstKeptMessageId":"m2","throughMessageId":"m3","tokensBefore":917000,"retainedTail":[…],"providerId":"…","modelId":"…","createdAt":"…"}
 ```
 
+Assistant rows may also carry `meta.runDiagnostics`, projected as optional
+`UiMessage.runDiagnostics`: the runtime's turn-scoped timing, request/attempt and
+retry counters, recent event/text timestamps, context estimate and stable latest
+failure code/status. It contains no prompt, answer, thinking or provider payload.
+The final snapshot freezes elapsed time across reload. The existing metadata
+container round-trips it without a schema migration; legacy and plugin-imported
+rows may omit it and render without invented diagnostics. Stored message ISO
+timestamps remain unchanged; local timezone conversion is presentation only.
+
 Internal system-state rows use role `system`, empty visible content, and optional
 `meta.modelSystem = { version: 1, messageJson, beforeMessageId?, afterMessageId? }`.
 `messageJson` is validated JSON text of a Pi system message with sections and tool

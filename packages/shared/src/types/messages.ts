@@ -1,5 +1,6 @@
 import type { AppError } from "../errors.js";
 /** Shared public types grouped by the owning application domain. */
+import type { AgentRunDiagnostics } from "../run-diagnostics.js";
 import type { SessionMessageOrigin } from "../session-collaboration.js";
 import type { PlanHistoryEntry } from "./plans.js";
 
@@ -127,6 +128,8 @@ export type UiMessage = {
   responseOutputTokens?: number;
   /** Structured failure attached to the assistant turn that failed. */
   error?: AppError;
+  /** Bounded main-turn diagnostics captured when this assistant row settled. */
+  runDiagnostics?: AgentRunDiagnostics;
   /** Stable regenerate-family key shared across rewritten user prompts. */
   revisionRootId?: string;
   /** Total regenerate variants for this user root turn. */
