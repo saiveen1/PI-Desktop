@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Policy-Sync: 2026-11-04.personal-build.1
+Policy-Sync: 2026-11-06.personal-build.2
 
 Mandatory rules for AI coding agents working in PI-Desktop.
 
