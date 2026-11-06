@@ -48,7 +48,11 @@ function fixture(execute: AgentTool["execute"], extra: Partial<SubagentRunOption
   });
 }
 
-describe("subagent recovery through the real loop", () => {
+// These cases drive the real subagent loop through 130 tool calls and budget
+// deadlines. Vitest's default 5 s per-test limit is shorter than that work under
+// a loaded machine (for example the full suite), where they timed out while
+// passing in isolation. Declare a budget consistent with the loop they run.
+describe("subagent recovery through the real loop", { timeout: 60_000 }, () => {
   it("saves findings while a tool is running and retains them after cancellation", async () => {
     const controller = new AbortController();
     const entered = deferred();

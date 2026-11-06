@@ -41,7 +41,11 @@ function onePixelPng() {
   ]);
 }
 
-it("bundles a runnable image-resize worker and its Photon WASM asset", async () => {
+// The case runs the real bundle script, then a worker thread that loads the
+// emitted asset. Vitest's default 5 s per-test limit is shorter than one such
+// child-process round trip, so it timed out whenever the machine was busy (for
+// example under the full suite). Declare a budget consistent with that work.
+it("bundles a runnable image-resize worker and its Photon WASM asset", { timeout: 60_000 }, async () => {
   const root = await mkdtemp(join(tmpdir(), "pi-runtime-image-resize-"));
   const bundle = join(root, "bundle");
 
