@@ -89,3 +89,11 @@
   .delegation-request { animation: none; }
   .delegation-center .btn { transition: none; }
 }
+/* Keep the recoverable entry clear of the composer, including narrow windows. */
+.delegation-center.is-collapsed {
+  inset: 56px 16px auto auto;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  box-shadow: none;
+}
+.delegation-center.is-collapsed .delegation-center-head { padding: 4px; }

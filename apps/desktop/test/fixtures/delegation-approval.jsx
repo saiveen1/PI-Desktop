@@ -157,6 +157,12 @@ window.delegationLayoutProbe = async () => {
     const width = document.querySelector(".delegation-list-column").getBoundingClientRect().width;
     check(width >= 320 && width <= 360, "Wide list is 320–360px");
   }
+  click(text("hide")); await paint();
+  const collapsed = center.getBoundingClientRect();
+  check(collapsed.top >= 40 && collapsed.bottom < innerHeight / 2, "Collapsed approval entry must stay away from the bottom composer");
+  check(collapsed.width < Math.min(320, innerWidth - 32), "Collapsed approval entry must size to its contents, not keep the panel width");
+  check(collapsed.right <= innerWidth && collapsed.left >= 0, "Collapsed approval entry stays inside the viewport");
+  flushSync(() => toggle().click()); await paint();
   return { width: innerWidth, bodyHeight: b.height, actionsBottom: a.bottom, reducedMotion: getComputedStyle(row("layout")).animationName };
 };
 window.delegationLocaleProbe = async () => {
@@ -225,6 +231,22 @@ window.delegationLifecycleProbe = async () => {
   emit({ ...live, status: "expired" }); emit({ ...sameA, status: "invalidated" });
   await until(() => document.querySelector(".delegation-empty"));
   check(document.querySelector(".delegation-empty").textContent === text("empty"), "Resolved requests expose the empty state");
+  const callsBeforeHide = calls.length;
+  click(text("hide"));
+  check(!document.querySelector(".delegation-center"), "Dismissed results must not leave a zero-count floating panel");
+  const arriving = request("after-dismiss", { expiresAt: new Date(clock + 1000).toISOString() });
+  emit(arriving);
+  check(toggle()?.getAttribute("aria-expanded") === "false", "New live requests restore the compact entry without reopening the panel");
+  flushSync(() => toggle().click());
+  check(row("after-dismiss") && document.querySelector(".delegation-results"), "Reopening retains results and exposes the new request");
+  click(text("hide"));
+  clock += 2000; flushSync(() => { for (const tick of clockTicks) tick(); });
+  check(!document.querySelector(".delegation-center"), "Local deadline expiry removes an idle collapsed entry before the host event");
+  const settling = request("settle-collapsed"); emit(settling);
+  check(toggle(), "A later live request restores the entry after expiry");
+  emit({ ...settling, status: "approved" });
+  check(!document.querySelector(".delegation-center"), "Host settlement removes the collapsed entry");
+  check(calls.length === callsBeforeHide, "Dismissal, reappearance and expiry must not submit any approval action");
   flushSync(() => root.render(null));
   check(listeners.size === 0 && clockTicks.size === 0, "Unmount releases subscriptions and deadline clock");
   return { hydrationRace: true, replyRace: true, transportRetry: true, cleanup: true };

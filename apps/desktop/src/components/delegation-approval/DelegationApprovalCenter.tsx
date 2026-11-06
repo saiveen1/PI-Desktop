@@ -65,7 +65,7 @@ export function DelegationApprovalCenter({ onNavigate }: { onNavigate: (sessionI
     try { await state.batch(action); } finally { setBatchBusy(false); }
   };
 
-  if (!state.loading && !state.loadError && !state.requests.length) return null;
+  if (!state.loading && !state.loadError && (!state.requests.length || (!expanded && !liveCount))) return null;
   return portalOverlay(<aside className={`delegation-center ${opened ? "has-reader" : ""} ${!expanded ? "is-collapsed" : ""}`}
     aria-label={t("delegationApproval.center")}>
     <header className="delegation-center-head">

@@ -185,6 +185,12 @@ selection or joining a batch already submitted. Hiding, closing or pressing
 Escape collapses the panel without answering; reopening restores its reader
 and selection. Only explicit Cancel delegation cancels a request, with structured
 feedback to the parent and no mandatory reason form or same-task retry/fallback.
+The collapsed entry sizes to its label/count at the upper-right below the window
+controls, not across the bottom composer. Once loading succeeds, no live pending
+requests means no collapsed entry, even when terminal or locally expired records
+remain. An expanded panel keeps results readable until dismissed. A later live
+request restores the compact entry without auto-expanding or sending a decision;
+loading failures remain reachable for retry.
 
 Keep the default list compact. Use a stable short heading/role and description,
 never the full task as a heading/title. Show source, requested selector, the

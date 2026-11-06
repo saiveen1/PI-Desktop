@@ -93,8 +93,14 @@
   cancellation returns structured feedback with no same-task retry/alternative.
   The single center groups sources and appends without stealing focus, moving
   list/body scroll, resetting selection or adding arrivals to the submitted batch.
-  Collapse/close/Escape sends no answer. Per-item work proceeds independently;
-  only selected IDs/revisions are submitted, duplicate actions are disabled,
+  Collapse/close/Escape sends no answer.
+  At wide/narrow widths the collapsed entry is content-sized at the upper-right,
+  clear of the bottom composer. Dismiss all settled results; no zero-count entry
+  remains. Repeat with host settlement and local expiry while collapsed, then
+  deliver a new live request: the compact entry returns without auto-expanding,
+  losing retained results or submitting an approval action.
+  Per-item work proceeds independently; only selected IDs/revisions are submitted,
+  duplicate actions are disabled,
   failures remain visible/retryable and partial success preserves failed items.
   ACK, capacity wait and execution start remain distinct. Short headings never
   contain the task body; source, requested/candidate identity and thinking are
