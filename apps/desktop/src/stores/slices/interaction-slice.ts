@@ -236,7 +236,7 @@ export function createInteractionSlice({
       set((state) => {
         const kept = state.toasts.filter(
           (item) => item.message !== message || item.variant !== variant ||
-            item.sessionId !== options?.sessionId,
+            item.sessionId !== options?.sessionId || item.notificationId !== options?.notificationId,
         );
         const next = [
           ...kept,
@@ -247,6 +247,8 @@ export function createInteractionSlice({
             duration,
             sound: options?.sound !== false,
             sessionId: options?.sessionId,
+            notificationTarget: options?.notificationTarget,
+            notificationId: options?.notificationId,
           },
         ];
         return { toasts: next.slice(-TOAST_STACK_LIMIT) };

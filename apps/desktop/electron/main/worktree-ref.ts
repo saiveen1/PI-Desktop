@@ -1,5 +1,6 @@
 import { stat } from "node:fs/promises";
 import { isAbsolute, resolve } from "node:path";
+import { normalizeChatRefPath } from "@pi-desktop/host-runtime";
 
 /**
  * The two roots a chat reference can mean for an isolated session: the checkout
@@ -25,9 +26,10 @@ export async function rebaseWorktreeRef(
   context: WorktreeRefContext | null,
   isFile: (path: string) => Promise<boolean> = defaultIsFile,
 ): Promise<string> {
-  if (!context || !isAbsolute(ref)) return ref;
-  if (relativeWithin(context.worktree, ref) !== null) return ref;
-  const relativePath = relativeWithin(context.parent, ref);
+  const path = normalizeChatRefPath(ref);
+  if (!context || !isAbsolute(path)) return ref;
+  if (relativeWithin(context.worktree, path) !== null) return ref;
+  const relativePath = relativeWithin(context.parent, path);
   if (!relativePath) return ref;
   const candidate = resolve(context.worktree, ...relativePath.split("/"));
   return (await isFile(candidate)) ? candidate : ref;

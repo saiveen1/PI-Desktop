@@ -16,6 +16,7 @@ export type SettingsTabId =
   | "chat"
   | "shortcuts"
   | "voice"
+  | "notifications"
   | "behavior"
   | "agent"
   | "instructions"
@@ -178,6 +179,12 @@ export const SETTINGS_NAV: SettingsNavEntry[] = [
     ],
   },
   {
+    id: "notifications", labelKey: "notificationSettings.title", titleKey: "notificationSettings.title",
+    group: "preferences",
+    keywordKeys: ["notificationSettings.enabled", "notificationSettings.channel", "notificationSettings.sound",
+      "notificationSettings.volumeLabel", "notificationSettings.needsAction", "notificationSettings.failures", "notificationSettings.completions"],
+  },
+  {
     id: "behavior",
     labelKey: "settings.nav.behavior",
     titleKey: "settings.agentBehavior",
@@ -304,6 +311,9 @@ export const SETTINGS_NAV: SettingsNavEntry[] = [
       "extensions.subagents.presetFixerName",
       "extensions.subagents.presetUiDesignerName",
       "extensions.subagents.tools",
+      "notificationSettings.delegation",
+      "notificationSettings.inherit",
+      "notificationSettings.repeat",
     ],
   },
   {

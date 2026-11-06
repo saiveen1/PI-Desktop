@@ -73,9 +73,13 @@ Must show:
 6. actions: Allow once / Allow for session / Deny
 
 The card is rendered inline only in its originating session's transcript.
-Background requests remain pending without opening an overlay, changing the
-active page/project/session, or moving keyboard focus. Opening that session
-reveals its still-pending card.
+Background requests remain pending without opening an approval overlay, changing
+the active page/project/session, or moving keyboard focus. Core preferences may
+deliver an app-wide reminder, sound or native request. The bell exposes a live
+Needs action section separate from durable task outcomes. Clicking a reminder
+rechecks liveness and opens the exact existing card; it never approves or
+resubmits the request. Disabling reminders and history read/clear leave pending
+consent untouched. Delegation repeats are opt-in and never extend deadlines.
 
 Resolving a request never initiates navigation. Any resulting tool artifact is
 recorded in the same session's retained work-panel context. If that session is

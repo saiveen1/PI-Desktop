@@ -61,6 +61,8 @@ export type StartupAnimationSettings = {
 export type AppSettings = {
   /** Unified AI delegation policy. Absent preserves legacy model opt-ins and pins. */
   delegation?: import("../delegation-policy.js").DelegationSettings;
+  /** Installation-local core notification delivery preferences. */
+  notifications?: import("../notification-settings.js").NotificationSettings;
   imageGeneration?: import("../image-generation.js").ImageGenerationBinding | null;
   /** All models marked for image generation; absent falls back to imageGeneration. */
   imageGenerationModels?: import("../image-generation.js").ImageGenerationBinding[] | null;

@@ -6,6 +6,7 @@ import { I18nextProvider } from "react-i18next";
 import { catalogs } from "@pi-desktop/i18n";
 import { IPC } from "@pi-desktop/shared";
 import { DelegationApprovalCenter } from "../../src/components/delegation-approval/DelegationApprovalCenter";
+import { notificationUserPath } from "./notification-user-path";
 import "../../src/styles/tokens.css";
 import "../../src/styles/ui-kit.css";
 
@@ -117,6 +118,10 @@ window.delegationWorkflowProbe = async () => {
   flushSync(() => row("late").querySelector("input").click());
   emit({ ...extended, revision: 3, candidate: alternative });
   check(!row("late").querySelector("input").checked && row("late").querySelector("select").value === "", "Replacement candidate/revision invalidates both selections");
+  flushSync(() => row("late").querySelector("input").click());
+  emit({ ...extended, revision: 3, candidate: { ...alternative, modelId: "same-revision-replacement" } });
+  check(!row("late").querySelector("input").checked, "A same-revision candidate replacement also invalidates consent selection");
+  emit({ ...extended, revision: 3, candidate: alternative });
   const currentSelect = row("late").querySelector("select");
   flushSync(() => { currentSelect.value = JSON.stringify([candidate.providerId, candidate.modelId]); currentSelect.dispatchEvent(new Event("change", { bubbles: true })); });
   click(text("confirmModel"), row("late"));
@@ -251,3 +256,4 @@ window.delegationLifecycleProbe = async () => {
   check(listeners.size === 0 && clockTicks.size === 0, "Unmount releases subscriptions and deadline clock");
   return { hydrationRace: true, replyRace: true, transportRetry: true, cleanup: true };
 };
+window.notificationWorkflowProbe = () => notificationUserPath({ root, i18next, until, paint });

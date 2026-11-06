@@ -16,6 +16,7 @@ import {
 } from "../../lib/settings-search";
 import { pluginViewIcon } from "../../lib/plugin-view-icons";
 import {
+  IconBell,
   IconArchive,
   IconBookOpen,
   IconBot,
@@ -51,6 +52,8 @@ import { AgentBehaviorSettings } from "./pages/AgentBehaviorSettings";
 import { AppearanceSettings } from "./pages/AppearanceSettings";
 import { ConversationSettings } from "./pages/ConversationSettings";
 import { SystemSettings } from "./pages/SystemSettings";
+import { NotificationSettings } from "./pages/NotificationSettings";
+import { settingsWriter } from "./save-settings";
 
 type SettingsTab = ReturnType<typeof useAppStore.getState>["settingsTab"];
 
@@ -204,9 +207,7 @@ export function SettingsPage() {
 
   const saveSettings = async (patch: Partial<AppSettings>) => {
     if (!settings) return;
-    const nextSettings = { ...settings, ...patch };
-    await api.setSettings(nextSettings);
-    useAppStore.setState({ settings: nextSettings });
+    await settingsWriter.save(patch);
     await refreshProviders();
   };
 
@@ -224,6 +225,7 @@ export function SettingsPage() {
       chat: <IconChat size={14} />,
       shortcuts: <IconKeyboard size={14} />,
       voice: <IconMic size={14} />,
+      notifications: <IconBell size={14} />,
       behavior: <IconSliders size={14} />,
       agent: <IconBot size={14} />,
       instructions: <IconFileText size={14} />,
@@ -444,6 +446,7 @@ export function SettingsPage() {
             />
           )}
 
+          {tab === "notifications" && settings && <NotificationSettings />}
           {tab === "voice" && !tabHidden && settings && (
             <VoiceSettingsSection
               t={t}

@@ -119,6 +119,9 @@ test("delegation approval production component: selected-only ACK user path, wid
     assert.equal(await evaluate("window.delegationEscapeProbe()"), true);
     const lifecycle = await evaluate("window.delegationLifecycleProbe()");
     assert.deepEqual(lifecycle, { hydrationRace: true, replyRace: true, transportRetry: true, cleanup: true });
+    const notifications = await evaluate("window.notificationWorkflowProbe()");
+    assert.deepEqual(notifications, { settings: true, failureRecovery: true, inheritance: true, exactCard: true, lateClick: true, locales: 9 });
+    console.log("CORE_NOTIFICATION_UI_PROBE " + JSON.stringify(notifications));
     console.log("DELEGATION_UI_PROBE " + JSON.stringify({ workflow, layouts, lifecycle, locales: 9, keyboard: true }));
   } finally {
     if (cdp) { try { await cdp.send("Browser.close"); } catch { /* Closing the owned browser closes its socket. */ } cdp.close(); }

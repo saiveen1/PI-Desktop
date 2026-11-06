@@ -1,4 +1,4 @@
-import { DelegationScheduler, type DelegationDecisionRecord } from "./delegation-scheduler.js";
+import { DelegationAdmissionError, DelegationScheduler, type DelegationDecisionRecord } from "./delegation-scheduler.js";
 import { DelegationPolicyState } from "./delegation-policy-state.js";
 import { subagentTaskDeclaration } from "./delegation-tool.js";
 import { resolveDelegationRunPolicy, describeDelegationRunPolicy, isDelegationRunPolicySnapshot, type DelegationRunPolicy, describeDelegationModels, type DelegationSettings, type DelegationApprovalDecision } from "@pi-desktop/shared";
@@ -4741,11 +4741,12 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
   private subagentToolError(
     toolCallId: string,
     text: string,
+    metadata?: { code: string; scheduling: { requestedModel?: string; decisions: readonly DelegationDecisionRecord[] } },
   ): AgentToolResult<unknown> {
     this.failedHostToolCalls.add(toolCallId);
     return {
       content: [{ type: "text", text }],
-      details: { error: text },
+      details: { error: text, ...metadata },
     };
   }
 
@@ -5110,7 +5111,9 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           scheduled = await scheduler.select(signal);
           provider = scheduled.provider;
         } catch (error) {
-          return this.subagentToolError(toolCallId, error instanceof Error ? error.message : "Delegation scheduling failed; no task started.");
+          return this.subagentToolError(toolCallId, error instanceof Error ? error.message : "Delegation scheduling failed; no task started.",
+            error instanceof DelegationAdmissionError ? { code: error.code,
+              scheduling: { requestedModel: scheduler.requestedModel, decisions: error.decisions } } : undefined);
         }
         if (this.disposed || this.runCancelled || this.turnHadError || resumeEpoch !== this.turnEpoch) {
           return this.subagentToolError(toolCallId, "The parent turn ended before delegation could resume.");

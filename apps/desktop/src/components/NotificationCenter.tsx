@@ -23,6 +23,8 @@ import {
   IconTrash,
 } from "./icons";
 import { TooltipButton } from "./ui";
+import { PendingNotificationList } from "./PendingNotificationList";
+import { usePendingNotifications } from "../stores/runtime/notification-runtime";
 
 type NotificationFilter = "all" | "unread";
 
@@ -66,6 +68,7 @@ export function NotificationCenter({
   onBeforeOpen?: () => void;
 }) {
   const { t, i18n } = useTranslation();
+  const pendingNotifications = usePendingNotifications();
   const storedNotifications = useAppStore((state) => state.notifications);
   // Successful completions are hidden here; they still drive the sidebar
   // outcome badge and native notifications from the unfiltered store.
@@ -74,8 +77,8 @@ export function NotificationCenter({
     [storedNotifications],
   );
   const unreadCount = useMemo(
-    () => inboxUnreadCount(storedNotifications),
-    [storedNotifications],
+    () => inboxUnreadCount(storedNotifications) + pendingNotifications.length,
+    [storedNotifications, pendingNotifications.length],
   );
   const allUnreadCount = useAppStore((state) => state.unreadNotificationCount);
   const refreshNotifications = useAppStore((state) => state.refreshNotifications);
@@ -290,6 +293,8 @@ export function NotificationCenter({
               </TooltipButton>
             </div>
           </header>
+          <PendingNotificationList items={pendingNotifications} onNavigate={() => closePopover(false)}
+            onError={() => showToast(t("notifications.actionFailed"), { variant: "error", sound: false })} />
 
           <div
             className="notification-filters"
@@ -368,7 +373,7 @@ export function NotificationCenter({
                 );
               })}
             </ul>
-          ) : (
+          ) : pendingNotifications.length === 0 ? (
             <div className="notification-empty" role="status">
               <IconBell size={22} aria-hidden />
               <strong>
@@ -386,7 +391,7 @@ export function NotificationCenter({
                 )}
               </span>
             </div>
-          )}
+          ) : null}
             </div>,
           )
         : null}

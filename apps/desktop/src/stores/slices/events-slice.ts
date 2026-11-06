@@ -57,11 +57,6 @@ export type EventsSliceDependencies = StoreAccess & {
     openWorkPanelTabForSession: AppState["openWorkPanelTabForSession"],
     pluginViews: AppState["pluginViews"],
   ) => void;
-  notifyInteractivePrompt: (
-    sessionId: string,
-    kind: "ask" | "permission" | "plan",
-    payload?: { question?: string; toolName?: string },
-  ) => void;
   flushPendingSessionConfiguration: (sessionId: string) => Promise<void>;
   assistantErrorMessage: (error: {
     code: string;
@@ -104,7 +99,6 @@ export function createEventsSlice({
   withoutRecordKey,
   sessionModeForPlanningState,
   openPlanArtifact,
-  notifyInteractivePrompt,
   flushPendingSessionConfiguration,
   assistantErrorMessage,
   withCompactionMark,
@@ -427,7 +421,6 @@ export function createEventsSlice({
             );
           }
           void get().restorePendingPlan(envelope.sessionId);
-          notifyInteractivePrompt(envelope.sessionId, "plan");
         }
         if (event.state !== "awaiting_approval") {
           void get().refreshQueuedPrompts(envelope.sessionId);
@@ -499,16 +492,10 @@ export function createEventsSlice({
               ...event.request,
             }),
           }));
-          notifyInteractivePrompt(envelope.sessionId, "permission", {
-            toolName: event.request.toolName,
-          });
         } else if (event.type === "asktool_request") {
           set((state) => ({
             pendingAsks: enqueueAsk(state.pendingAsks, event.request),
           }));
-          notifyInteractivePrompt(envelope.sessionId, "ask", {
-            question: event.request.questions?.[0]?.question,
-          });
         } else if (event.type === "agent_end") {
           void get().refreshSessions();
         } else if (event.type === "planning_state") {
@@ -675,17 +662,11 @@ export function createEventsSlice({
               ...event.request,
             }),
           }));
-          notifyInteractivePrompt(envelope.sessionId, "permission", {
-            toolName: event.request.toolName,
-          });
           break;
         case "asktool_request":
           set((state) => ({
             pendingAsks: enqueueAsk(state.pendingAsks, event.request),
           }));
-          notifyInteractivePrompt(envelope.sessionId, "ask", {
-            question: event.request.questions?.[0]?.question,
-          });
           break;
         case "error": {
           const aborted = event.error.code === "TURN_ABORTED";

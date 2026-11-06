@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn delegation_settings_sync_keeps_local_cost_policy_and_legacy_flags_separate() -> Result<()> {
+fn delegation_settings_sync_keeps_local_cost_and_notification_settings_separate() -> Result<()> {
     let directory = tempfile::tempdir()?;
     let mut state = AppState::open(directory.path())?;
     let (header, key) = create_vault("fixture-password", "fixture-vault")?;
@@ -47,17 +47,19 @@ fn delegation_settings_sync_keeps_local_cost_policy_and_legacy_flags_separate() 
             "priority": 100, "approval": "ask", "description": "Keep explicit cost approval"}]),
         json!([]),
     ] {
+        let notifications = json!({"version": 1, "enabled": false, "channel": "in-app",
+            "sound": false, "delegation": {"repeatIntervalSeconds": 30}});
         let policy = json!({"version": 1, "approvalTimeoutSeconds": 0, "models": models});
         state.db.set_setting(
             "app",
-            &json!({"delegation": policy, "theme": "dark", "unrelated": "keep"}),
+            &json!({"delegation": policy, "notifications": notifications, "theme": "dark", "unrelated": "keep"}),
         )?;
         // Application imports must neither remove an omitted local policy nor
         // accept an unsynchronized permissive/null replacement from a peer.
         for remote in [
             json!({"theme": "light"}),
-            json!({"theme": "light", "delegation": null}),
-            json!({"theme": "light", "delegation": {"version": 1,
+            json!({"theme": "light", "delegation": null, "notifications": null}),
+            json!({"theme": "light", "notifications": {"version": 1, "enabled": true, "channel": "system"}, "delegation": {"version": 1,
                 "approvalTimeoutSeconds": 300, "models": [{"providerId": "provider-a",
                     "modelId": "expensive", "enabled": true, "priority": 1,
                     "approval": "auto", "description": "Remote automatic permission"}]}}),
@@ -70,6 +72,7 @@ fn delegation_settings_sync_keeps_local_cost_policy_and_legacy_flags_separate() 
             )?;
             let saved = state.db.get_setting("app")?.unwrap();
             assert_eq!(saved["delegation"], policy);
+            assert_eq!(saved["notifications"], notifications);
             assert_eq!(saved["theme"], "light");
             assert_eq!(saved["unrelated"], "keep");
         }
@@ -115,6 +118,13 @@ fn delegation_settings_sync_keeps_local_cost_policy_and_legacy_flags_separate() 
             );
             assert!(provider.payload.get("delegation").is_none());
         }
+        let mut deletion = entity(domains::DOMAIN_APPLICATION, "application", json!({}));
+        deletion.deleted = true;
+        apply_entity(&mut state, &mut config, &bundle, &deletion)?;
+        let saved = state.db.get_setting("app")?.unwrap();
+        assert_eq!(saved["notifications"], notifications);
+        assert_eq!(saved["delegation"], policy);
+        assert!(saved.get("theme").is_none());
     }
     Ok(())
 }

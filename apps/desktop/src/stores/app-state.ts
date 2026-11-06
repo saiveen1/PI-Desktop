@@ -7,6 +7,7 @@ import type {
   AgentStatus,
   AppNotification,
   AppSettings,
+  NotificationTarget,
   AppVersionInfo,
   AskToolResolution,
   ContextCompactionMark,
@@ -66,6 +67,8 @@ export type ToastItem = {
   sound: boolean;
   /** Optional conversation opened when the user activates the toast. */
   sessionId?: string;
+  notificationTarget?: NotificationTarget;
+  notificationId?: string;
 };
 
 export type ToastOptions = {
@@ -76,6 +79,8 @@ export type ToastOptions = {
   sound?: boolean;
   /** Make the toast message an explicit conversation-navigation action. */
   sessionId?: string;
+  notificationTarget?: NotificationTarget;
+  notificationId?: string;
 };
 
 export type AgentTurnResult = {

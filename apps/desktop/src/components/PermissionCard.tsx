@@ -60,6 +60,8 @@ export function PermissionCard({
   return (
     <section
       className={`permission-card risk-${risk}`}
+      data-notification-request-id={permission.requestId}
+      tabIndex={-1}
       role="region"
       aria-label={t("permission.title")}
     >

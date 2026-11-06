@@ -22,6 +22,7 @@ import {
   playNotificationChime,
   shouldPlayToastSound,
 } from "../lib/notification-sound";
+import { activateNotificationTarget } from "../stores/runtime/notification-runtime";
 
 const VARIANT_ICON: Record<ToastVariant, typeof IconInfo> = {
   info: IconInfo,
@@ -96,7 +97,10 @@ function ToastCard({ item }: { item: ToastItem }) {
             // Dragging to copy the question is not a navigation gesture.
             const selection = window.getSelection();
             if (!selection?.isCollapsed && selection?.containsNode(event.currentTarget, true)) return;
-            void useAppStore.getState().selectSession(sessionId).then(() => {
+            const navigation = item.notificationTarget
+              ? activateNotificationTarget(item.notificationTarget)
+              : useAppStore.getState().selectSession(sessionId);
+            void navigation.then(() => {
               dismissToast(item.id);
             }).catch((error) => {
               useAppStore.getState().showToast(error instanceof Error ? error.message : String(error), {

@@ -522,16 +522,16 @@ shared capability contract:
   inbox row. A result shown in the visible, focused current chat and every
   `aborted` turn append none. Background sessions and any turn finishing while
   the window is unfocused still append. The sidebar footer bell lists only
-  `task.failed` rows and its badge counts only unread failures; successful
+  `task.failed` history rows; its badge adds current live Needs action requests to unread failures. Successful
   completions stay in the durable record for the sidebar outcome badge and
   native notification but never appear in the inbox (D295). Selecting a row
   marks it read and activates its bound project/session.
-  Electron additionally presents a native task notification only when the
-  app window is unfocused, and clicking it focuses the window before activating
-  the same session (D117). Interactive ask/permission/plan prompts use their
-  separate native path and may alert for a focused background session. Receiving
-  either durable or native notification events never navigates by itself; only
-  explicit activation does.
+  Core delivery uses Settings → Notifications: Automatic is in-app while the
+  app is focused and native otherwise; In-app only never requests native delivery;
+  System may request it for a foreground background-session source. A separate
+  live Needs action section projects asks, permissions, plans and delegation
+  approvals without durable rows. Read/clear never settles consent. Arrival never
+  navigates; explicit activation rechecks liveness and locates existing controls.
 - Backend degraded → status capsule (restarting) or fatal banner with Open
   logs (D080); composer submits are rejected with readable errors while down.
   - Plan/Goal checkpoint → the originating session shows only the structured title

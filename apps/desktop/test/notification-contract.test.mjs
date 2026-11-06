@@ -36,6 +36,7 @@ const eventsSource = readStoreModuleSync("slices/events-slice.ts");
 const catalogSource = readStoreModuleSync("slices/catalog-slice.ts");
 const catalogRuntimeSource = readStoreModuleSync("runtime/catalog-runtime.ts");
 const notificationIpcSource = readMainModuleSync("ipc/notification-ipc.ts");
+const notificationRuntimeSource = readStoreModuleSync("runtime/notification-runtime.ts");
 const desktopServicesSource = readMainModuleSync("services/desktop-services.ts");
 
 test("notification IPC stays behind the shared preload allowlist", () => {
@@ -46,6 +47,8 @@ test("notification IPC stays behind the shared preload allowlist", () => {
     "notificationMarkAllRead",
     "notificationClear",
     "notificationShowNative",
+    "notificationDismissNative",
+    "notificationDeliveryFailed",
     "notificationSetViewingSession",
     "notificationChanged",
     "notificationActivated",
@@ -66,10 +69,10 @@ test("terminal notifications flow from host completion to the renderer", () => {
   assert.match(mainSource, /IPC\.event\.notificationChanged/);
   assert.match(storeSource, /receiveNotification:/);
   assert.match(storeSource, /unreadNotificationCount/);
-  assert.match(appSource, /api\.onNotificationChanged/);
+  assert.match(notificationRuntimeSource, /api\.onNotificationChanged/);
   assert.match(sidebarSource, /<NotificationCenter onBeforeOpen=\{\(\) => closeMenus\(false\)\} \/>/);
   assert.doesNotMatch(appSource, /<NotificationCenter \/>/);
-  const changedHandler = appSource.match(
+  const changedHandler = notificationRuntimeSource.match(
     /api\.onNotificationChanged[\s\S]*?\n\s*\}\);/,
   )?.[0] ?? "";
   assert.match(changedHandler, /receiveNotification/);
@@ -119,11 +122,11 @@ test("task and interactive native notifications keep separate visibility rules",
   assert.match(mainSource, /new SystemNotification/);
   assert.match(mainSource, /IPC\.event\.notificationActivated/);
   assert.match(notificationIpcSource, /window\.restore\(\)/);
-  assert.match(appSource, /showNativeNotification/);
-  assert.match(appSource, /kind: "task"/);
-  assert.match(storeSource, /kind: "interactive"/);
+  assert.match(notificationRuntimeSource, /showNativeNotification/);
+  assert.match(notificationRuntimeSource, /kind: entry\.target\.kind\.startsWith\("task\."\) \? "task" : "interactive"/);
+  assert.match(shellRuntimeSource, /useEffect\(startCoreNotifications, \[\]\)/);
   assert.match(mainSource, /input\.kind === "interactive"/);
-  assert.match(appSource, /openNotification\(id\)/);
+  assert.match(notificationRuntimeSource, /store\.openNotification\(id\)/);
   assert.match(
     storeSource,
     /await get\(\)\.selectSession\(notification\.sessionId,\s*\{\s*navigationIntent: intent/,
@@ -166,7 +169,7 @@ test("task native notifications are idempotent by durable notification id", () =
   );
   assert.ok(
     notificationIpcSource.indexOf("existingTaskNotification") <
-      notificationIpcSource.indexOf("new SystemNotification"),
+      notificationIpcSource.lastIndexOf("new SystemNotification"),
     "duplicate guard must run before constructing a native object",
   );
 });

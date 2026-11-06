@@ -4,6 +4,7 @@ mod config_sync_rpc;
 mod delegation_settings;
 mod file_batches;
 mod gen_ui;
+mod notification_settings;
 mod plugin_reviews_rpc;
 mod remote_tools;
 mod review_actions_rpc;
@@ -17,6 +18,8 @@ mod worktree_rpc;
 
 #[cfg(test)]
 mod delegation_settings_rpc_tests;
+#[cfg(test)]
+mod notification_settings_rpc_tests;
 #[cfg(test)]
 mod plugin_reviews_rpc_tests;
 #[cfg(test)]
@@ -1036,6 +1039,8 @@ fn effective_command_shell_id(settings: Option<&Value>) -> Option<String> {
 
 fn validate_settings_value(value: &Value) -> Result<(), JsonRpcError> {
     delegation_settings::validate(value)
+        .map_err(|message| rpc_err(1002, message, "INVALID_PARAMS"))?;
+    notification_settings::validate(value)
         .map_err(|message| rpc_err(1002, message, "INVALID_PARAMS"))?;
     let Some(object) = value.as_object() else {
         return Ok(());

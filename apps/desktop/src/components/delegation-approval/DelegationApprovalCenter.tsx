@@ -8,6 +8,7 @@ import { useBlockingOverlay } from "../../lib/blocking-overlay";
 import { ApprovalControls, ApprovalMetadata, modelKey } from "./ApprovalControls";
 import { approvalIsLive, approvalKey, useDelegationApprovals } from "./useDelegationApprovals";
 import "./delegation-approval.css";
+import { isNotificationTarget } from "@pi-desktop/shared";
 
 function SafetySurface() { useHostSafetySurface(); useBlockingOverlay(); return null; }
 const controlsKey = (request: DelegationApprovalPrompt) => `${approvalKey(request)}:${request.revision}:${modelKey(request.candidate)}`;
@@ -40,6 +41,19 @@ export function DelegationApprovalCenter({ onNavigate }: { onNavigate: (sessionI
     ++copyGeneration.current; setCopyStatus(null);
     return () => { ++copyGeneration.current; };
   }, [openKey, opened?.revision]);
+
+  useEffect(() => {
+    const openTarget = (event: Event) => {
+      const target: unknown = (event as CustomEvent<unknown>).detail;
+      if (!isNotificationTarget(target) || target.kind !== "delegation-approval") return;
+      const request = state.requests.find(row => row.sessionId === target.sessionId && row.requestId === target.requestId);
+      if (!request || !approvalIsLive(request, Date.now())) return;
+      setExpanded(true); setOpenKey(approvalKey(request));
+      requestAnimationFrame(() => readerRef.current?.focus());
+    };
+    window.addEventListener("pi-desktop:notification-target", openTarget);
+    return () => window.removeEventListener("pi-desktop:notification-target", openTarget);
+  }, [state.requests]);
 
   const copyTask = async (request: DelegationApprovalPrompt) => {
     const generation = ++copyGeneration.current;

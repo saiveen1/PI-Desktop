@@ -75,6 +75,17 @@ test("Live Voice is reachable in every build without developer mode", () => {
   );
 });
 
+test("Notifications follows Voice and remains searchable in every build", () => {
+  for (const developerMode of [false, true]) for (const includeDevelopmentOnly of [false, true]) {
+    const nav = visibleSettingsNav(developerMode, includeDevelopmentOnly);
+    assert.equal(nav.findIndex(entry => entry.id === "notifications"), nav.findIndex(entry => entry.id === "voice") + 1);
+    assert.equal(isSettingsDestinationHidden("notifications", developerMode, includeDevelopmentOnly), false);
+    for (const query of ["notificationSettings.title", "notificationSettings.sound", "notificationSettings.needsAction"]) {
+      assert.ok(searchSettings(query, identity, { developerMode, includeDevelopmentOnly }).some(hit => hit.tab === "notifications"));
+    }
+  }
+});
+
 test("Cloud sync is Experimental and available in every build", () => {
   for (const developerMode of [false, true]) {
     for (const includeDevelopmentOnly of [false, true]) {

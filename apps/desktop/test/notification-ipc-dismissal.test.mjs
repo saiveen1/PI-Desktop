@@ -3,6 +3,7 @@ import { EventEmitter } from "node:events";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import ts from "typescript";
+import { createCoreNativeNotifications } from "../electron/main/core-native-notifications.ts";
 
 const IPC = {
   invoke: {
@@ -12,8 +13,9 @@ const IPC = {
     notificationClear: "notification.clear",
     notificationSetViewingSession: "notification.setViewingSession",
     notificationShowNative: "notification.showNative",
+    notificationDismissNative: "notification.dismissNative",
   },
-  event: { notificationActivated: "notification.activated" },
+  event: { notificationActivated: "notification.activated", notificationDeliveryFailed: "notification.deliveryFailed" },
 };
 
 class FakeNotification extends EventEmitter {
@@ -53,6 +55,7 @@ function loadNotificationIpc() {
     (id) => {
       if (id === "electron") return { Notification: FakeNotification };
       if (id === "@pi-desktop/shared") return { IPC };
+      if (id === "../core-native-notifications") return { createCoreNativeNotifications };
       if (id === "../notification-policy") {
         return { shouldShowNativeNotification: () => true };
       }
@@ -69,6 +72,7 @@ function harness({ hostCall } = {}) {
   const handlers = new Map();
   const calls = [];
   const events = [];
+  const windowEvents = new Map();
   const host = {
     call: async (method, input) => {
       calls.push({ method, input });
@@ -76,6 +80,7 @@ function harness({ hostCall } = {}) {
     },
   };
   const mainWindow = {
+    once: (event, listener) => { windowEvents.set(event, listener); },
     isDestroyed: () => false,
     isVisible: () => true,
     isFocused: () => false,
@@ -95,6 +100,9 @@ function harness({ hostCall } = {}) {
   });
   return {
     handlers,
+    mainWindow,
+    closeWindow: () => windowEvents.get("closed")?.(),
+    dismiss: (id, retire = true) => handlers.get(IPC.invoke.notificationDismissNative)({ id, retire }),
     calls,
     events,
     show: (input) => handlers.get(IPC.invoke.notificationShowNative)(input),
@@ -215,4 +223,60 @@ test("a failed host acknowledgement does not dismiss a task banner prematurely",
   await h.show(input);
   await assert.rejects(h.markRead(input.id), /host unavailable/);
   assert.equal(FakeNotification.instances[0].closed, false);
+});
+
+const coreRequest = (id = "core", source = "delegation-approval") => ({
+  id, sessionId: "session-1", title: "Needs attention", body: "Source session",
+  target: { kind: source, sessionId: "session-1", requestId: "request" },
+});
+test("typed core delivery validates targets and enforces current device preferences", async () => {
+  let notifications = { version: 1, enabled: false };
+  const h = harness({ hostCall: async () => ({ notifications }) });
+  assert.equal((await h.show(coreRequest())).reason, "disabled");
+  notifications = { version: 1, channel: "in-app" };
+  assert.equal((await h.show(coreRequest())).reason, "in-app");
+  notifications = { version: 1, channel: "system" };
+  const malformed = coreRequest(); malformed.target.sessionId = "different";
+  assert.equal((await h.show(malformed)).reason, "failed");
+  assert.equal(FakeNotification.instances.length, 0);
+  h.mainWindow.isFocused = () => true;
+  assert.equal((await h.show(coreRequest())).reason, "requested");
+  assert.equal(FakeNotification.instances[0].options.silent, true);
+  assert.equal((await h.show(coreRequest())).reason, "duplicate");
+});
+test("typed reminders retire on settlement, allow opt-in repeats, and ignore late native clicks", async () => {
+  const h = harness();
+  await h.show(coreRequest());
+  const first = FakeNotification.instances[0];
+  await h.dismiss("core", false); assert.equal(first.closed, true);
+  assert.equal((await h.show(coreRequest())).reason, "requested");
+  const second = FakeNotification.instances[1];
+  await h.dismiss("core"); second.emit("click");
+  assert.equal(h.events.length, 0);
+  assert.equal((await h.show(coreRequest())).reason, "stale");
+});
+test("dismissal while settings are loading blocks late native construction", async () => {
+  let release;
+  const h = harness({ hostCall: () => new Promise(resolve => { release = resolve; }) });
+  const pending = h.show(coreRequest());
+  await h.dismiss("core"); release({});
+  assert.equal((await pending).reason, "stale");
+  assert.equal(FakeNotification.instances.length, 0);
+});
+test("native failure is explicit and async failures report a typed fallback without activation", async () => {
+  const h = harness(); await h.show(coreRequest());
+  FakeNotification.instances[0].emit("failed");
+  assert.equal(h.events[0].channel, IPC.event.notificationDeliveryFailed);
+  assert.deepEqual(h.events[0].payload.target, coreRequest().target);
+  const show = FakeNotification.prototype.show;
+  FakeNotification.prototype.show = () => { throw new Error("native failure"); };
+  try { assert.equal((await h.show(coreRequest("sync-failure"))).reason, "failed"); }
+  finally { FakeNotification.prototype.show = show; }
+});
+
+test("closing the Main owner releases core objects and blocks late construction", async () => {
+  const h = harness();
+  await h.show(coreRequest()); h.closeWindow();
+  assert.equal(FakeNotification.instances.at(-1).closed, true);
+  assert.equal((await h.show(coreRequest("after-close"))).reason, "stale");
 });

@@ -508,6 +508,26 @@ test("file menu user path opens, saves, copies and reveals the same resolved fil
   assert.deepEqual(calls.toasts.map(([message]) => message), ["chat.fileSaved:", "chat.copied:"]);
 });
 
+test("a slash-prefixed drive Markdown link uses the resolved native path for every menu action", async () => {
+  const absolutePath = "D:/data/scratch/earlier-session/dist/plugin.piplug";
+  const href = `/${absolutePath}`;
+  const target = chatLinks.markdownLinkFileTarget(href, "C:/project", undefined);
+  assert.ok(target);
+  reset({ root: "scratch", relativePath: "earlier-session/dist/plugin.piplug",
+    absolutePath, matchedBy: "exact-absolute" });
+  const items = menuFor(target);
+  for (const id of ["copy-full-path", "open-file", "open-with-default-application", "save-as", "reveal-in-folder"]) {
+    await choose(items, id);
+  }
+  assert.deepEqual(calls.resolved, Array(5).fill(href));
+  assert.deepEqual(copied, [absolutePath]);
+  assert.equal(calls.files[0][0], absolutePath);
+  assert.deepEqual(calls.defaultBrowsers, [[absolutePath, undefined, "session-1"]]);
+  assert.deepEqual(calls.saves, [[absolutePath, "session-1"]]);
+  assert.deepEqual(calls.reveals, [[absolutePath, "session-1"]]);
+  assert.ok(calls.toasts.every(([, options]) => options.variant === "success"));
+});
+
 test("Open file from a positioned link preserves its source position", async () => {
   reset(projectMatch());
   await choose(menuFor({ path: "a.ts", line: 12, column: 3 }), "open-file");

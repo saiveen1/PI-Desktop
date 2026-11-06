@@ -1,3 +1,4 @@
+import type { CoreNotificationRequest, NotificationDeliveryResult, NotificationTarget } from "@pi-desktop/shared";
 import type { DelegationApprovalSnapshot, DelegationApprovalActionRequest, DelegationApprovalActionResult, DelegationApprovalExtendRequest, DelegationApprovalChangedEvent } from "@pi-desktop/shared";
 import type { ReviewContextLines, ReviewContextResult, ReviewTurnsPage, ReviewChangesPage } from "@pi-desktop/shared";
 type ClipboardDirectoryPaste = {
@@ -766,15 +767,10 @@ export const api = {
     invoke<{ ok: boolean }>(IPC.invoke.notificationMarkAllRead),
   clearNotifications: () =>
     invoke<{ ok: boolean }>(IPC.invoke.notificationClear),
-  showNativeNotification: (input: {
-    id: string;
-    sessionId: string;
-    kind: "task" | "interactive";
-    title: string;
-    body: string;
-    /** Durable task timestamp used by Main to reject pre-dismissal replays. */
-    createdAt?: string;
-  }) => invoke<{ shown: boolean }>(IPC.invoke.notificationShowNative, input),
+  showNativeNotification: (input: CoreNotificationRequest) =>
+    invoke<NotificationDeliveryResult>(IPC.invoke.notificationShowNative, input),
+  dismissNativeNotification: (input: { id: string; retire?: boolean }) =>
+    invoke<{ ok: boolean }>(IPC.invoke.notificationDismissNative, input),
   setNotificationViewingSession: (sessionId: string | null) =>
     invoke<{ ok: boolean }>(IPC.invoke.notificationSetViewingSession, {
       sessionId,
@@ -2198,12 +2194,19 @@ export const api = {
       ),
     );
   },
+  onNotificationDeliveryFailed: (
+    listener: (event: { id: string; sessionId: string; target?: NotificationTarget }) => void,
+  ) => {
+    if (!window.piDesktop?.on) return () => undefined;
+    return window.piDesktop.on(IPC.event.notificationDeliveryFailed, payload =>
+      listener(payload as { id: string; sessionId: string; target?: NotificationTarget }));
+  },
   onNotificationActivated: (
-    listener: (event: { id: string; sessionId: string }) => void,
+    listener: (event: { id: string; sessionId: string; target?: NotificationTarget }) => void,
   ) => {
     if (!window.piDesktop?.on) return () => undefined;
     return window.piDesktop.on(IPC.event.notificationActivated, (payload) =>
-      listener(payload as { id: string; sessionId: string }),
+      listener(payload as { id: string; sessionId: string; target?: NotificationTarget }),
     );
   },
   onUpdateState: (listener: (state: UpdateState) => void) => {

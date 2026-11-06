@@ -940,14 +940,29 @@ setup so a fast completion cannot beat the viewing-context update. Electron
 combines this hint with Main-owned window visibility/focus at the terminal event
 boundary. Missing, null, or mismatched context fails safe to notification. It
 also invokes
-`pi-desktop/notification/showNative({ id, sessionId, kind, title, body, createdAt? })`
-after localizing a new record, where `kind` is `"task" | "interactive"` and
+`pi-desktop/notification/showNative({ id, sessionId, kind?, title, body?, createdAt?, target? })`
+after localizing a safe source summary. `kind` is `"task" | "interactive"` and
 `createdAt` is the durable task timestamp when available. Main keeps a
 `dismissedBefore` watermark for successful mark-all-read/clear actions and
 rejects task deliveries at or before that timestamp; individual acknowledgements
 use the durable id as a tombstone. This prevents a delayed renderer or host
 replay from resurfacing an already acknowledged banner. This Electron-only
 request never crosses into the host RPC domain.
+
+The optional strict `NotificationTarget` carries `kind`, `sessionId`, optional
+`requestId`, `hostKey` and nonnegative safe-integer `revision`. Source kinds are
+`ask`, `permission`, `plan`, `delegation-approval`, `task.failed`, `task.completed`,
+`delegation.failed` and `test`. Main rejects unknown fields, invalid source values
+and a target/envelope session mismatch. Current saved device preferences are
+checked at the native boundary. Results are `{ shown, reason? }`, with reason
+`requested | in-app | disabled | unavailable | failed | duplicate | stale`.
+`requested` means API acceptance only, not visible OS delivery.
+
+`pi-desktop/notification/dismissNative({ id, retire? })` closes a typed core native
+object. Default `retire: true` tombstones settled requests against late delivery;
+`false` closes the current reminder while permitting an explicitly configured
+repeat. This presentation action never changes Host request/consent state.
+Legacy requests without a target and session-only activation remain supported.
 
 ```ts
 type AppNotification = {
@@ -973,6 +988,7 @@ type NotificationChangedEvent = {
 type NotificationActivatedEvent = {
   id: string;
   sessionId: string;
+  target?: NotificationTarget;
 };
 
 type SessionsChangedEvent = {
@@ -982,7 +998,7 @@ type SessionsChangedEvent = {
 };
 ```
 
-Main sends two events:
+Main sends the following notification events:
 
 - `pi-desktop/notification/event/changed` after `session.endTurn` returns a
   newly inserted record. Renderer merges the record into its bounded local list
@@ -996,6 +1012,10 @@ Main sends two events:
 - `pi-desktop/notification/event/activated` after the user clicks Electron's
   native system notification. Renderer follows its existing session-selection
   path, including project activation for a project-bound session.
+- `pi-desktop/notification/event/deliveryFailed` carries `{ id, sessionId, target? }`
+  for an explicit asynchronous typed-core native failure. Renderer rechecks
+  source liveness and current policy before a silent in-app fallback. It neither
+  retries the task nor plays a second chime. DND suppression is not detectable.
 - `pi-desktop/notification/event/sound` is a payload-free, one-way cue for a
   plugin-native notification that Electron successfully showed. Renderer plays
   the shared soft chime; the event carries no notification content and creates
@@ -1022,14 +1042,15 @@ Bootstrap and provider-refresh snapshots remain independent reads.
 
 Electron owns the native surface while the renderer derives localized
 title/body text from the structured record. Electron accepts `showNative` only
-for a valid notification/session pair. For `kind: "task"`, it shows a native
-notification only while the main window is unfocused; for `kind: "interactive"`,
-it preserves the exact-visible-session suppression while allowing a focused
-background session to alert. In both cases the platform API is best-effort,
-and a shown notification restores/shows and focuses the window before emitting
-`activated`. No permission, scheduled-reminder, or plugin source enters the
-task notification contract. Native delivery is best-effort; the durable
-inbox remains authoritative when the OS suppresses a banner. On Windows,
+for a valid notification/session pair. Typed core delivery follows current
+preferences: Automatic is in-app while visible/focused and native otherwise;
+In-app only never requests native delivery; System may request native delivery
+for foreground background-session sources. Exact-visible task results remain
+suppressed. Legacy target-less requests retain the earlier task/interactive
+visibility rules. A native click may restore/focus Main and emits `activated`;
+renderer rechecks pending liveness around asynchronous navigation. No click can
+grant approval, revive or resubmit a request. Pending consent and plugin sources
+never enter durable task history. OS delivery is best-effort. On Windows,
 Electron Main registers `net.aiuo.pi-desktop` as the process AppUserModelID
 before readiness and before any window is created. The ID matches the NSIS
 package identity so notification attribution, notification settings, taskbar
@@ -2102,8 +2123,11 @@ Renderer IPC kept for the Plan-safe preview facade and URL fallback:
   that answered); `sessionId` selects the
   session whose scratch store is searched. Completes a file reference the agent
   printed in chat, because the renderer cannot see the session's own scratch
-  store: an absolute reference only matches that exact file inside a known
-  root, and an `attachments/<sha256>` blob resolves against the
+  store. On Windows, a slash-prefixed drive reference such as `/D:/dir/file`
+  is normalized to `D:/dir/file` before worktree rebasing, exact-path and
+  containment checks; all file actions receive the resolved native drive path.
+  POSIX and UNC spellings are unchanged. An absolute reference only matches
+  that exact file inside a known root, and an `attachments/<sha256>` blob resolves against the
   attachment store directly; otherwise the roots are searched in priority order
   — the open project first, the session's own scratch store
   (`<data_dir>/scratch/<sessionId>/`, ADR 0124) second, the attachment store

@@ -482,6 +482,7 @@ test("settings nav keeps a flat searchable index with titled visual groups", () 
     "chat",
     "shortcuts",
     "voice",
+    "notifications",
     "behavior",
     "agent",
     "instructions",

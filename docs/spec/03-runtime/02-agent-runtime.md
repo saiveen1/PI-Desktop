@@ -1252,6 +1252,18 @@ child model instructions also describe the effective policy. These execution
 limits apply to Task delegates; other delegation routes retain their execution
 behavior and continue to use the independent model authorization policy.
 
+### Delegation admission failure reminders
+
+Exhaustion of authorized compatible models returns one failed Task result with
+additive `details.code: "DELEGATION_NO_AUTHORIZED_MODEL"` and
+`details.scheduling: { requestedModel?, decisions }`. Decisions preserve the
+scheduler's existing reason/selection metadata. Explicit Stop/cancellation has
+no such classification. Selection order, approvals, deadlines and automatic
+fallback behavior remain unchanged; no child provider request starts on failed
+admission. The application observes this structured result once and applies
+core notification preferences. Agents gain no notification tool, retry or todo
+obligation, and notification failures never resubmit a Task or provider request.
+
 The child-only
 `TaskReport({ report })` tool accepts up to 32000 characters describing findings,
 evidence, checked scope, remaining work, and next steps. It grants no general

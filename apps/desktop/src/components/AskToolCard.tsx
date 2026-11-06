@@ -144,7 +144,8 @@ export function AskToolCard({ request, queued = 0 }: { request: PendingAsk; queu
   };
 
   return (
-    <section className="asktool-card" role="region" aria-label={t("askTool.title")}>
+    <section className="asktool-card" role="region" aria-label={t("askTool.title")}
+      data-notification-request-id={request.requestId} tabIndex={-1}>
       <div className="asktool-card-header">
         <div className="asktool-card-header-main">
           <span className="asktool-card-title" role="status" aria-live="polite">

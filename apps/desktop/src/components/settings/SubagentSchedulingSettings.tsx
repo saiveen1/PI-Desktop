@@ -14,6 +14,7 @@ import { SettingsCard, SettingsRow } from "../../features/settings/primitives";
 import { Button, Field, Input, SettingsToggle, Textarea } from "../ui";
 import { SettingsMenuSelect } from "./SettingsMenuSelect";
 import { SubagentRunPolicySettings } from "./SubagentRunPolicySettings";
+import { NotificationPreferences } from "./NotificationPreferences";
 import "../../styles/subagent-scheduling.css";
 
 const referenceId = (model: Pick<DelegationModel, "providerId" | "modelId">) =>
@@ -236,6 +237,7 @@ export function SubagentSchedulingSettings({ saveSettings }: {
       <Button variant="primary" disabled={saving || !settings || !valid} onClick={() => void save()}>
         {t(saving ? "common.saving" : "common.save")}
       </Button>
+      <NotificationPreferences scope="delegation" />
     </div>
   );
 }

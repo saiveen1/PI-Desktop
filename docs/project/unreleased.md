@@ -7,6 +7,15 @@
   separate model-event/answer-text ages and current context estimates. Final
   diagnostics remain available on completed replies without changing retry policy.
 
+- Add installation-local Notifications settings for delivery channels, categories,
+  sound and volume, plus inheritable delegation reminder overrides. Questions,
+  permissions, plans, delegation approvals and structured admission failures use
+  application-owned reminders and safe source navigation. The bell separates
+  live Needs action from durable task history; read/clear never settles consent.
+  Repeats are opt-in and stop with the request. Existing model authorization and
+  fallback rules are unchanged; no extra model requests or notification tools.
+  Native API acceptance is reported as a request, not proof of an OS banner.
+
 - Keep the parent conversation usable during a manual subagent retry. Retained
   history and checkpoints continue the child work; steering leaves it running,
   and its report returns through one parent continuation and turn completion.

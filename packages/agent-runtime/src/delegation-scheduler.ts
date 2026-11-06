@@ -17,6 +17,14 @@ export type DelegationDecisionRecord = {
   reason: string;
 };
 
+export class DelegationAdmissionError extends Error {
+  readonly code = "DELEGATION_NO_AUTHORIZED_MODEL";
+  constructor(readonly decisions: readonly DelegationDecisionRecord[]) {
+    super(`No authorized compatible delegation model is available. ${decisions.map(row => `${row.model}: ${row.reason}`).join("; ")}`);
+    this.name = "DelegationAdmissionError";
+  }
+}
+
 type Candidate = { key: string; provider?: RuntimeProviderConfig };
 type Options = {
   settings?: DelegationSettings;
@@ -123,7 +131,7 @@ export class DelegationScheduler {
       const provider = await this.admit(candidate.provider, signal);
       if (provider) return { provider, fallbacks: candidates.filter(row => !this.attempted.has(row.key) && row.key !== this.key(provider)) };
     }
-    throw new Error(`No authorized compatible delegation model is available. ${this.decisions.map(row => `${row.model}: ${row.reason}`).join("; ")}`);
+    throw new DelegationAdmissionError(this.decisions.map(row => ({ ...row })));
   }
 
   /** Compatibility surface for existing callers that only accept the proposed identity. */

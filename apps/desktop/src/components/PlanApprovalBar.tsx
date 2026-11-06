@@ -178,6 +178,8 @@ export function PlanApprovalBar({ proposal }: { proposal: PlanProposal }) {
   return (
     <section
       className="plan-approval-bar"
+      data-notification-request-id={proposal.id}
+      tabIndex={-1}
       role="region"
       aria-label={copy("approvalRegion")}
       aria-busy={busy}

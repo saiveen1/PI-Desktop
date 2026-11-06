@@ -8,7 +8,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 register(pathToFileURL(join(here, "helpers/ts-import-hooks.mjs")));
-const { isChatRefOutsideRoots, parseChatRef, resolveChatFileRef } = await import(
+const { isChatRefOutsideRoots, normalizeChatRefPath, parseChatRef, resolveChatFileRef } = await import(
   "../../../packages/host-runtime/src/chat-ref-resolve.ts"
 );
 
@@ -100,6 +100,35 @@ test("an exact absolute path with spaces resolves only inside an allowed root", 
   assert.equal(await resolve(join(dirname(workspace), "page.md"), { workspace }), null);
   assert.equal(await isChatRefOutsideRoots(absolute, roots({ workspace })), false);
   assert.equal(await isChatRefOutsideRoots(join(dirname(workspace), "page.md"), roots({ workspace })), true);
+});
+
+test("drive-prefix normalization preserves ordinary paths and is Windows-only", () => {
+  for (const ref of ["/usr/local/file.md", "D:/dir/file.md", "relative/file.md",
+    "//server/share/file.md", "\\\\server\\share\\file.md", "/D:relative/file.md", "//D:/dir/file.md"]) {
+    assert.equal(normalizeChatRefPath(ref), ref);
+  }
+  const ref = "/D:/dir/file.md";
+  assert.equal(normalizeChatRefPath(ref), process.platform === "win32" ? ref.slice(1) : ref);
+});
+
+test("slash-prefixed Windows drive references resolve inside managed roots", {
+  skip: process.platform !== "win32",
+}, async () => {
+  const workspace = tempTree("drive-prefix", ["artifacts/生成 包.piplug"]);
+  const target = join(workspace, "artifacts", "生成 包.piplug");
+  const ref = `/${target.replaceAll("\\", "/")}`;
+  for (const options of [
+    { workspace },
+    { scratch: workspace },
+    { containment: [{ kind: "scratch", path: workspace }] },
+  ]) {
+    assert.equal(await isChatRefOutsideRoots(ref, roots(options)), false);
+    const expected = await resolve(target, options);
+    assert.ok(expected);
+    for (const decorated of [ref, `${ref}:12:3`, `@"${ref}"`, `/${target}`]) {
+      assert.deepEqual(await resolve(decorated, options), expected, decorated);
+    }
+  }
 });
 
 test("an absolute realpath alias resolves under the same registered root", async () => {

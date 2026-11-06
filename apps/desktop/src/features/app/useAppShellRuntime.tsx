@@ -20,6 +20,7 @@ import { composerSuggestion } from "../chat/composer/plugins/suggestion-bridge";
 import { usePluginBrowseState } from "../plugins/browse-state";
 import { subscribeRemoteInteractions } from "../../lib/remote-interactions";
 import { playNotificationChime } from "../../lib/notification-sound";
+import { startCoreNotifications } from "../../stores/runtime/notification-runtime";
 import {
   clampSidebarWidth,
   loadSidebarWidth,
@@ -775,34 +776,6 @@ export function useAppShellRuntime() {
         useAppStore.setState({ isRunning: false });
       }
     });
-    const offNotificationChanged = api.onNotificationChanged((notification) => {
-      const accepted = useAppStore.getState().receiveNotification(notification);
-      // A host replay, renderer reload, or post-clear delayed event may refer
-      // to a row that is already present/acknowledged. Do not surface a native
-      // banner for an event the store intentionally rejected.
-      if (!accepted) return;
-      playNotificationChime();
-      const failed = notification.kind === "task.failed";
-      const title = t(
-        failed ? "notifications.failedTitle" : "notifications.completedTitle",
-        { sessionTitle: notification.sessionTitle },
-      );
-      const body = failed
-        ? notification.errorCode
-          ? t("notifications.failedBodyWithCode", { code: notification.errorCode })
-          : t("notifications.failedBody")
-        : t("notifications.completedBody");
-      void api
-        .showNativeNotification({
-          id: notification.id,
-          sessionId: notification.sessionId,
-          kind: "task",
-          title,
-          body,
-          createdAt: notification.createdAt,
-        })
-        .catch(() => undefined);
-    });
     const offRemoteInteractions = subscribeRemoteInteractions();
     const offSessionsChanged = api.onSessionsChanged((event) => {
       const store = useAppStore.getState();
@@ -836,31 +809,6 @@ export function useAppShellRuntime() {
         })
         .catch(() => undefined);
     });
-    const offNotificationActivated = api.onNotificationActivated(
-      ({ id, sessionId }) => {
-        const store = useAppStore.getState();
-        const matched = store.notifications.find((item) => item.id === id);
-        if (matched) {
-          void store.openNotification(id).catch((activationError) =>
-            showToast(
-              activationError instanceof Error
-                ? activationError.message
-                : String(activationError),
-              { variant: "error" },
-            ),
-          );
-        } else if (sessionId) {
-          void store.selectSession(sessionId).catch((activationError) =>
-            showToast(
-              activationError instanceof Error
-                ? activationError.message
-                : String(activationError),
-              { variant: "error" },
-            ),
-          );
-        }
-      },
-    );
     const onKey = (e: KeyboardEvent) => {
       const modifierOnly = MODIFIER_ONLY_KEYS.has(e.key);
       if (modifierOnly || e.isComposing || e.keyCode === 229) return;
@@ -976,11 +924,9 @@ export function useAppShellRuntime() {
       offBrowserState();
       offPluginViewReveal();
       offHostStatus();
-      offNotificationChanged();
       offComposerSuggestion();
       offSessionsChanged();
       offRemoteInteractions();
-      offNotificationActivated();
       window.removeEventListener("keydown", onKey);
     };
   }, [
@@ -999,6 +945,7 @@ export function useAppShellRuntime() {
   ]);
 
   useEffect(() => installRendererApi(), []);
+  useEffect(startCoreNotifications, []);
 
   useEffect(() => {
     if (!ready) return;

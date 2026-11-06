@@ -6223,8 +6223,8 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
   outstanding task-native object, a repeated durable id produces no second
   banner or row, and a delayed pre-clear event cannot resurrect the cleared
   item; a genuinely new post-clear turn still produces exactly one row and
-  banner. Each newly accepted task notification plays one soft in-app chime;
-  duplicate, delayed, and historical rows do not replay it. On Windows, the
+  reminder when enabled by saved preferences. Enabled sounds use the configured
+  soft chime gain; duplicates, delayed and historical rows do not replay it. On Windows, the
   taskbar overlay is a smooth black circular badge with a centered white system-font numeral. Its visual weight matches common
   Windows taskbar badges for both single- and two-digit counts. A success-only
   outcome increments the taskbar badge without adding a bell row or bell
@@ -6240,9 +6240,9 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
 - **Milestone**: M5
 - **Status**: Draft
 
-#### E2E-065: Native task notifications are unfocused-only and activate sessions
+#### E2E-065: Automatic native task delivery is unfocused-only and activates sessions
 
-- **Preconditions**: Native notifications are supported; sessions A and B
+- **Preconditions**: Core preferences are enabled, Automatic, sound on; native notifications are supported; sessions A and B
   exist; the main window can be focused, unfocused, hidden, and minimized. A
   Windows run uses the NSIS-installed app or the standard development command.
 - **Steps**: 1) Keep the app focused on A and complete a turn in A. 2) While
@@ -6256,9 +6256,9 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
   menu shortcut. 9) Deliver the same durable id twice, then mark it read and
   clear the inbox while its native object is still pending in the OS.
 - **Expected**: Focused-current A creates neither inbox row, terminal sidebar mark, nor native banner.
-  Focused-background B creates an inbox row without a native banner. Unfocused
-  current A and the minimized failure each create one durable row and one
-  localized, silent native notification plus one soft in-app chime. Clicking
+  Focused-background B creates an inbox row and an app-wide in-app reminder,
+  without a native banner. Unfocused current A and the minimized failure each
+  create one durable row and request a localized, silent native notification with one configured chime. Clicking
   restores, shows, and focuses the main window before activating the matching
   session, including after the notification has moved to Windows Action Center;
   no event opens the wrong currently selected session. Abort shows neither surface. OS suppression does
@@ -6282,9 +6282,9 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
 - **Steps**: 1) Trigger info, success, warning, and error toasts. 2) Complete or
   fail a background task. 3) Trigger an asktool request and a permission or plan
   approval request. 4) Replay a durable notification id and refresh the inbox.
-- **Expected**: Each newly presented app toast, task notification, interactive
-  prompt, and successfully shown plugin-native notification plays one short,
-  low-volume chime. Rapid events coalesce; duplicate or historical notification
+- **Expected**: Enabled core reminders play one short soft chime at the saved
+  gain; master/category/sound-off settings suppress the corresponding feedback.
+  Ordinary toast and permission-gated plugin feedback remain unchanged. Rapid events coalesce; duplicate or historical notification
   rows do not replay it. Asktool's toast does not add a second chime, and native
   banners stay silent to prevent a second, platform-dependent sound. If Web
   Audio is unavailable or blocked, visual notifications still work and no app
@@ -6292,6 +6292,53 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
 - **Specs linked**: `03-runtime/17-asktool-questions.md`
 - **Acceptance**: C (notification feedback), Accessibility
 - **Status**: Unit/source-contract covered; audible desktop check Draft
+
+#### E2E-065B: Unified core notification preferences and live pending navigation
+
+- **Preconditions**: Isolated production-component fixtures, synthetic Host/runtime
+  events, controlled clocks and mocked native/audio boundaries; no live provider
+  or daily Desktop profile. Existing delegation approval rules are unchanged.
+- **Steps / expected**:
+  1. Save channel/audio/categories, leave and reopen. Values persist; failed
+     saves retain the editable draft without publishing invalid settings.
+  2. Add a delegation override, change globals, return to inheritance. Effective
+     policy follows the shared resolver; model eligibility, consent and budgets
+     remain byte-for-byte unchanged. Concurrent saves retain newer fields.
+  3. While B or Settings is visible, deliver A's question/permission/plan/model
+     approval. App-wide reminder and live bell entry appear without stealing
+     focus; click locates A's exact existing request.
+  4. Automatic requests native only while unfocused/hidden/minimized; In-app only
+     sends zero native requests; System permits foreground-background delivery.
+  5. Replay events, overlap snapshots, remount, switch pages and extend approval:
+     one initial reminder, no reset of the authoritative deadline.
+  6. Configure a repeat, then resolve/cancel/expire/invalidate/fallback or dispose:
+     timers and native objects retire; late clicks cannot revive work. Slow
+     native responses never overlap repeats or resurrect settled reminders.
+  7. Explicit native unsupported/failure and audio failure retain usable source
+     controls and in-app state; async native failure adds no second chime.
+  8. Disable master/category/sound: no unintended reminder/audio/repeat; pending
+     requests and task history remain. Read-all/clear never settles consent.
+  9. Preserve outcome read/clear/idempotency, failure-only history filtering and
+     exact focused-current result suppression regardless of channel. Cancellation
+     never becomes an admission-failure reminder.
+  10. Exhaust authorized compatible delegation candidates: one structured
+      failure reminder, one Task call, zero child-provider requests, no retry.
+- **Automated acceptance mapping**:
+  - Preferences/DTO validation: shared `notification-settings.test.ts`; Rust
+    `notification_settings` filtered tests (validation, RPC reopen/invalid writes,
+    config-sync export/import/deletion preserves installation-local settings).
+  - Paths 1–3: `notification-settings-save.test.mjs`, production
+    `delegation-approval-ui.test.mjs` / `fixtures/notification-user-path.jsx`, and
+    `subagent-scheduling-user-path.test.mjs` (9 locales, narrow layout, failed save,
+    inheritance, exact real question card and late-click navigation).
+  - Paths 3–9: `core-notification-user-path.test.mjs`,
+    `notification-delivery.test.mjs`, `notification-pending.test.mjs`,
+    `delegation-approval-state.test.mjs`, notification policy/inbox/center/sound/
+    IPC-dismissal/contract tests. Clocks and native/audio are synthetic.
+  - Path 10: agent-runtime `delegation-scheduler.test.ts` and
+    `delegation-user-path.test.ts`, including unchanged explicit cancellation.
+- **Status**: Automated candidate coverage; actual Windows Action Center,
+  Do Not Disturb, physical audio and packaged activation remain unverified.
 
 #### E2E-066: Provider model catalog survives restart and offline refresh
 
@@ -14623,19 +14670,32 @@ are withdrawn with ADR 0165.
   example `[readme.md](<C:\workspace with spaces\readme.md>)`. 3) Click a
   relative path whose middle directory contains a space, then a first-segment
   spaced path using an explicit `@"..."` reference. 4) Click the outside
-  absolute path.
+  absolute path. 5) On Windows, repeat a Markdown link to an existing project,
+  session-scratch, earlier-session scratch, and external file using `/C:/...`
+  (also with spaces, Unicode and `:line:column`). Use Copy full path, Open file,
+  and Show in folder. Repeat with a missing path whose leaf name exists in the
+  project.
 - **Expected**: Every allowed reference opens the exact file in the existing
   side file view; no path is truncated to its suffix or redirected to the
   same-name file. The Windows Markdown link keeps a valid sanitized address
   and reaches the existing file opener with the original drive path. The outside
   path opens that exact file in the host file view (ADR 0339), dotfile folders
   such as `.ssh` included, while a missing file reports that no file matches.
+  Slash-prefixed Windows drive references resolve to the same exact native
+  path as `C:/...` for clicks and all file-menu actions. Existing containment
+  and external-file rules still apply; a missing absolute file never falls
+  back to another same-name file. A parent-checkout reference still rebases to
+  the isolated session's worktree copy. POSIX, UNC and relative references keep
+  their existing meaning.
 - **Specs linked**: `03-runtime/01-ipc-protocol.md` § fs,
   `04-ux/08-component-spec.md` §8.3.
 - **Acceptance**: C (conversation & stream), D (workspace), Quality
 - **Milestone**: M5
 - **Status**: Unit/component-covered (`chat-links.test.mjs`,
-  `chat-ref-resolve.test.mjs`, `tool-row-file-refs.test.mjs`); full UI journey Draft.
+  `chat-ref-resolve.test.mjs`, `chat-ref-external.test.mjs`,
+  `chat-file-open-with-menu.test.mjs`, `worktree-ref-rebase.test.mjs`,
+  `tool-row-file-refs.test.mjs`);
+  full UI journey Draft.
 
 #### E2E-CHAT-file-ref-opens-the-surface-that-owns-it
 

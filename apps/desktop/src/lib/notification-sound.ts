@@ -32,10 +32,12 @@ function browserAudioContext(): NotificationAudioContext | undefined {
 export function createNotificationChime(
   createContext: NotificationAudioContextFactory = browserAudioContext,
   now: () => number = Date.now,
-): () => void {
+): (volume?: number) => void {
   let lastPlayedAt = Number.NEGATIVE_INFINITY;
 
-  return () => {
+  return (volume = 100) => {
+    if (!Number.isFinite(volume) || volume <= 0) return;
+    const peakGain = CHIME_PEAK_GAIN * Math.min(volume, 100) / 100;
     const playedAt = now();
     if (playedAt - lastPlayedAt < MIN_CHIME_INTERVAL_MS) return;
     const context = createContext();
@@ -58,7 +60,7 @@ export function createNotificationChime(
         oscillator.type = "sine";
         oscillator.frequency.setValueAtTime(CHIME_FREQUENCY_HZ, startAt);
         gain.gain.setValueAtTime(0.0001, startAt);
-        gain.gain.linearRampToValueAtTime(CHIME_PEAK_GAIN, startAt + 0.012);
+        gain.gain.linearRampToValueAtTime(peakGain, startAt + 0.012);
         gain.gain.exponentialRampToValueAtTime(
           0.0001,
           startAt + CHIME_DURATION_SECONDS,

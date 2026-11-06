@@ -420,10 +420,9 @@ titles are host-owned. The editor closes if the active session changes.
 ### 2.6 MVP constraints
 
 - No search field in topbar (deferred)
-- Notification history is the bounded D117 inbox; scheduled reminders,
-  durable permission-request history, and notification preferences remain out
-  of scope. Interactive prompt notifications are native-only and do not enter
-  the inbox.
+- Notification history remains the bounded durable task inbox. Core reminder
+  preferences belong to Settings → Notifications; pending consent is a separate
+  live Needs action projection, never durable task-history rows.
 
 ---
 
@@ -4396,8 +4395,8 @@ Sidebar footer                                        Popover (360px max)
   duplicate. A compact badge renders `1`–`99` and `99+`; its accessible label
   retains the exact count (the durable store is capped at 200).
 - Popover: width `min(360px, calc(100vw - 24px))`, opens above and to the right
-  of the footer, and is no taller than the available window, with one internally
-  scrollable row list.
+  of the footer, and is no taller than the available window. Live Needs action
+  and durable task history have bounded, independently scrollable row lists.
 - Header: localized title, `All` / `Unread` segmented filter, Lucide
   `CheckCheck` mark-all-read button, and Lucide `Trash2` clear button. Icon-only
   actions carry localized tooltips and accessible names.
@@ -4407,6 +4406,11 @@ Sidebar footer                                        Popover (360px max)
   (D297), not cards and not hairline-separated.
 - Display title/body are derived at render time from `kind`, `sessionTitle`,
   and optional `errorCode`; no localized title/body string is persisted.
+- A separate live Needs action section projects current questions, permissions,
+  plans and delegation approvals. Bell count includes these live requests plus
+  unread visible task failures; completions remain hidden by the existing filter.
+  Selecting a pending row locates its exact live request using existing controls.
+  It never grants consent. Settlement removes the row; read/clear do not affect it.
 
 ### 20.3 States
 
@@ -4445,14 +4449,15 @@ Sidebar footer                                        Popover (360px max)
   activation path as a row click.
 - Completion/failure enters the durable inbox unless the main window is
   visible/focused and the exact finishing session is the current chat. A
-  focused background session still enters the inbox without a native banner;
-  an unfocused current session enters the inbox and receives a native banner.
-  Clicking the banner restores/shows and focuses the main window before
-  emitting `notification.activated` for the matching session.
-- Aborted turns, interactive permission/ask/Plan prompts, scheduled reminders,
-  and plugin notifications do not enter this inbox. Interactive prompts may
-  use the source-aware native surface while the app is focused on a different
-  session.
+  focused background session still enters the inbox. Core delivery follows the
+  saved policy: Automatic uses in-app reminders in a focused visible app and
+  native requests otherwise; In-app only never requests native delivery; System
+  may request it for a foreground background-session source. Exact-visible task
+  results remain suppressed regardless of channel. Banner clicks may restore
+  and focus the app, then navigate after checking current request state.
+- Aborted turns, pending consent and plugin notifications never enter durable
+  task history. Explicit native unsupported/failure results retain in-app
+  presentation. Arrival itself never changes focus, page, project or session.
 
 ### 20.5 Accessibility
 
@@ -4475,10 +4480,11 @@ Sidebar footer                                        Popover (360px max)
 - The list contains only `task.completed` and `task.failed` records produced
   from unseen terminal agent turns. Visible-current results and `aborted` turns
   are intentionally silent.
-- At most 200 newest rows are retained globally. There is no pagination,
-  scheduled notification source, durable permission-notification source,
-  preferences page, notification permission prompt, or cloud sync. Interactive
-  prompt banners are transient native surfaces outside the inbox.
+- At most 200 newest durable rows are retained globally, without pagination.
+  Pending consent has no new history schema. Notification preferences are
+  device-local; plugin-native delivery keeps its existing permission-gated API.
+  Native API acceptance is not proof of visible OS delivery. Reminders stop on
+  settlement/expiry/disposal; opt-in repeats never reset source deadlines.
 
 ---
 

@@ -1,5 +1,6 @@
 import { Notification as SystemNotification } from "electron";
-import { IPC } from "@pi-desktop/shared";
+import { IPC, type AppSettings } from "@pi-desktop/shared";
+import { createCoreNativeNotifications } from "../core-native-notifications";
 import type { HostProcess } from "../host-process";
 import {
   shouldShowNativeNotification,
@@ -89,6 +90,35 @@ export function registerNotificationIpc({
   sendToRenderer,
 }: NotificationIpcDependencies): void {
   const { handle } = registrar;
+  const createCore = () => createCoreNativeNotifications({
+    settings: async () => {
+      const host = getHost();
+      if (!host) throw new Error("host unavailable");
+      return host.call<AppSettings>("settings.get");
+    },
+    window: getMainWindow, viewingSession: getViewingSessionId,
+    supported: () => SystemNotification.isSupported(),
+    create: options => new SystemNotification(options),
+    activate: ({ id, sessionId, target }) => sendToRenderer(IPC.event.notificationActivated, { id, sessionId, target }),
+    failed: ({ id, sessionId, target }) => sendToRenderer(IPC.event.notificationDeliveryFailed, { id, sessionId, target }),
+  });
+  let core = createCore();
+  let coreOwner: Electron.BrowserWindow | null = null;
+  const currentCore = () => {
+    const window = getMainWindow();
+    if (window && window !== coreOwner) {
+      if (coreOwner) { core.dispose(); core = createCore(); core.dismissTasks(dismissedBefore); }
+      coreOwner = window;
+      const owned = core;
+      window.once("closed", () => owned.dispose());
+    }
+    return core;
+  };
+  handle(IPC.invoke.notificationDismissNative, async (input: { id?: unknown; retire?: unknown } = {}) => {
+    if (typeof input.id !== "string" || !input.id || input.id.length > 2048
+      || input.retire !== undefined && typeof input.retire !== "boolean") throw new Error("Invalid notification dismissal");
+    return core.dismiss(input.id, input.retire !== false);
+  });
 
   handle(
     IPC.invoke.notificationList,
@@ -105,6 +135,7 @@ export function registerNotificationIpc({
     const id = typeof input.id === "string" ? input.id.trim() : "";
     const result = await host.call<{ ok?: boolean }>("notification.markRead", input);
     if (id && result?.ok !== false) dismissTaskNativeNotification(id);
+    if (id && result?.ok !== false) core.dismissTasks(0, id);
     return result;
   });
 
@@ -116,6 +147,7 @@ export function registerNotificationIpc({
     if (result?.ok === false) return result;
     dismissedBefore = Math.max(dismissedBefore, requestedAt);
     dismissAllTaskNativeNotifications();
+    core.dismissTasks(requestedAt);
     return result;
   });
 
@@ -127,6 +159,7 @@ export function registerNotificationIpc({
     if (result?.ok === false) return result;
     dismissedBefore = Math.max(dismissedBefore, requestedAt);
     dismissAllTaskNativeNotifications();
+    core.dismissTasks(requestedAt);
     return result;
   });
 
@@ -149,7 +182,12 @@ export function registerNotificationIpc({
       title?: string;
       body?: string;
       createdAt?: string;
+      target?: unknown;
     } = {}) => {
+      if (Object.prototype.hasOwnProperty.call(input, "target")) {
+        if (input.kind === "task" && typeof input.id === "string" && dismissedTaskNotificationIds.has(input.id)) return { shown: false, reason: "stale" };
+        return currentCore().show(input);
+      }
       const mainWindow = getMainWindow();
       if (
         !mainWindow ||

@@ -52,17 +52,18 @@ Settings is a **full-window page** that replaces the app sidebar + main chrome (
   2. **Conversation / 对话** — Lucide `MessageSquare` (transcript presentation and composer input)
   3. **Shortcuts / 快捷键** — Lucide `Keyboard` (keyboard shortcuts)
   4. **Voice / 语音** — Lucide `Mic` (Live Voice enablement and provider bindings)
-  5. **Behavior / 行为** — Lucide `SlidersHorizontal` (session defaults, execution, computer use)
-  6. **Models / 模型** — Lucide `Bot` (providers and default model)
-  7. **Instructions / 指令** — Lucide `FileText` (global and project instruction files)
-  8. **Skills / 技能** — Lucide `BookOpen` (reusable agent instructions)
-  9. **MCP** — Lucide `Server` (agent connections)
-  10. **Subagents / 子智能体** — Lucide `Sparkles` (built-in and personal parallel agents)
-  11. **Projects / 项目** — Lucide `Archive` (durable project index)
-  12. **System / 系统** — Lucide `Monitor` (network, storage, power, window close behavior)
-  13. **Cloud sync / 云同步** — Lucide `CloudDownload` (encrypted portable configuration backup and bidirectional sync; Experimental, all builds)
-  14. **Remote Hosts / 远程主机** — Lucide `Globe` (experimental SSH hosts, sessions, and explicit model copy)
-  15. **Info / 信息** — Lucide `Info` (versions, logs, updates, developer)
+  5. **Notifications** — Lucide `Bell` (installation-local reminder channels, categories and audio)
+  6. **Behavior / 行为** — Lucide `SlidersHorizontal` (session defaults, execution, computer use)
+  7. **Models / 模型** — Lucide `Bot` (providers and default model)
+  8. **Instructions / 指令** — Lucide `FileText` (global and project instruction files)
+  9. **Skills / 技能** — Lucide `BookOpen` (reusable agent instructions)
+  10. **MCP** — Lucide `Server` (agent connections)
+  11. **Subagents / 子智能体** — Lucide `Sparkles` (built-in and personal parallel agents)
+  12. **Projects / 项目** — Lucide `Archive` (durable project index)
+  13. **System / 系统** — Lucide `Monitor` (network, storage, power, window close behavior)
+  14. **Cloud sync / 云同步** — Lucide `CloudDownload` (encrypted portable configuration backup and bidirectional sync; Experimental, all builds)
+  15. **Remote Hosts / 远程主机** — Lucide `Globe` (experimental SSH hosts, sessions, and explicit model copy)
+  16. **Info / 信息** — Lucide `Info` (versions, logs, updates, developer)
   Rail icons are decorative (`aria-hidden` via the SVG default) and stay
   monochrome with the rail label, except on the selected row, where the glyph
   takes the accent alongside the row's accent-tinted pill; do not reuse
@@ -75,7 +76,7 @@ Settings is a **full-window page** that replaces the app sidebar + main chrome (
   search results.
 - The directory remains a flat searchable list in the same exact order. For
   scanability, the destinations are shown in four titled visual clusters:
-  `Preferences` / `偏好` (Appearance, Conversation, Shortcuts, Voice),
+  `Preferences` / `偏好` (Appearance, Conversation, Shortcuts, Voice, Notifications),
   `Agent` / `智能体` (Behavior, Models, Instructions, Skills, MCP, Subagents),
   `Workspace` / `工作区` (Projects), and `System` / `系统` (System, Cloud sync,
   Remote Hosts, Info; Cloud sync and Remote Hosts are Experimental destinations
@@ -126,6 +127,32 @@ Settings is a **full-window page** that replaces the app sidebar + main chrome (
   fixed rail and pane gutters, and resizes continuously with the window.
 
 ## 2. Section contents
+
+### Notifications
+
+This regular Preferences destination follows Voice in every build. Controls are
+the core master switch, Automatic / In-app only / System channel, sound, 0–100%
+volume and preview, and Needs action / Failures / Completions delivery switches.
+Defaults are enabled, Automatic, sound on at the existing soft chime level,
+all categories enabled, and no automatic repeat. Opening the page never writes
+defaults. A test uses saved preferences and distinguishes in-app presentation,
+native delivery requested, disabled delivery and explicit failure; OS banner
+visibility and Do Not Disturb cannot be inferred from API acceptance.
+
+`AppSettings.notifications` is optional, strict version 1 and installation-local.
+Preferences change reminders only, not execution, consent, source visibility,
+history retention or read state. Native copy is a short localized category/source
+summary, never a full question, task, arguments or raw error.
+
+Subagents → Scheduling has a separate Delegation notifications section. It
+inherits by default; custom enabled/channel/sound/volume and a repeat interval
+(0 or an integer 10–300 seconds) live only in `notifications.delegation`.
+Overrides cover delegation approvals and admission-failure reminders; the global
+master always wins. Repeats only run while a request is live, never extend an
+approval deadline, and stop on settlement, fallback, cancellation or expiry.
+The shortcut opens global Notifications. Both entry points serialize saves
+against the latest settings; global writes retain newer overrides, override
+writes retain newer global/model settings, and failed saves retain the draft.
 
 ### Appearance
 

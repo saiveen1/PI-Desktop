@@ -144,6 +144,20 @@ describe("delegation user path through real parent and child transports", () => 
     } finally { await f.close(); }
   });
 
+  it("classifies exhausted admission once without launching a child or asking the parent to retry", async () => {
+    const f = await fixture({ authorize: async () => ({ decision: "skip", code: "timeout", reason: "Fixture approval expired" }) });
+    try {
+      await f.prompt();
+      const tasks = f.rows.filter(row => row.toolName === "Task");
+      expect(tasks).toHaveLength(1);
+      const result = tasks[0]?.toolResult as { details?: { code?: string; scheduling?: { decisions: unknown[] } } };
+      expect(result.details?.code).toBe("DELEGATION_NO_AUTHORIZED_MODEL");
+      expect(result.details?.scheduling?.decisions).toHaveLength(2);
+      expect(f.requests.every(row => row.model === "parent")).toBe(true);
+      expect(f.errors).toEqual([]);
+    } finally { await f.close(); }
+  });
+
   it.each(["cancel", "require"])("does not start an alternative on %s", async (mode) => {
     const f = await fixture({ args: { model: "fixture/expensive", ...(mode === "require" ? { modelSelection: "require" } : {}) },
       authorize: async () => ({ decision: mode === "cancel" ? "cancel" : "skip", reason: "User decision" }) });
@@ -152,6 +166,7 @@ describe("delegation user path through real parent and child transports", () => 
       expect(f.requests.every((row) => row.model === "parent")).toBe(true);
       const result = f.rows.find((row) => row.toolName === "Task")?.toolResult as { details?: { error?: string } } | undefined;
       expect(result?.details?.error).toContain(mode === "cancel" ? "cancelled by the user" : "No authorized");
+      if (mode === "cancel") expect(result?.details).not.toHaveProperty("code");
     } finally { await f.close(); }
   });
 

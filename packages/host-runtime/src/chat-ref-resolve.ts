@@ -97,7 +97,14 @@ function cleanRef(raw: string): string {
   let value = stripRefDecorations(String(raw ?? ""));
   if (value.includes("\0")) return "";
   value = value.replace(/(?::\d+(?::\d+|-\d+)?|#L\d+(?:-L?\d+)?)$/i, "");
-  return value;
+  return normalizeChatRefPath(value);
+}
+
+/** Markdown links may spell a Windows drive path as `/D:/...`. */
+export function normalizeChatRefPath(value: string): string {
+  return process.platform === "win32" && /^\/[A-Za-z]:[\\/]/.test(value)
+    ? value.slice(1)
+    : value;
 }
 
 function stripRefDecorations(raw: string): string {

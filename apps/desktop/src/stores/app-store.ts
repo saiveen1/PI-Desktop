@@ -67,7 +67,6 @@ import {
   isDefaultSessionTitle,
   untitledTaskTitle,
 } from "../lib/session-title-utils";
-import { createInteractivePromptNotifier } from "./runtime/notification-runtime";
 import { createTranscriptReadingRuntime } from "./runtime/transcript-reading-runtime";
 export type {
   AgentTurnResult,
@@ -124,9 +123,6 @@ const runtimeStoreAccess: StoreAccess = {
 const sessionRuntime: SessionRuntime = createSessionRuntime(runtimeStoreAccess);
 const catalogRuntime: CatalogRuntime = createCatalogRuntime();
 const interactionRuntime: InteractionRuntime = createInteractionRuntime();
-const notifyInteractivePrompt = createInteractivePromptNotifier(
-  runtimeStoreAccess.get,
-);
 const sessionCoordination: SessionCoordination = createSessionCoordination({
   ...runtimeStoreAccess,
   runtime: sessionRuntime,
@@ -222,7 +218,6 @@ export const useAppStore = create<AppState>((set, get) => {
     withoutRecordKey,
     sessionModeForPlanningState,
     openPlanArtifact,
-    notifyInteractivePrompt,
     flushPendingSessionConfiguration,
     assistantErrorMessage,
     withCompactionMark,

@@ -62,6 +62,21 @@ test("a parent-checkout path resolves to the branch copy in the worktree", async
   }
 });
 
+test("a slash-prefixed Windows parent path still opens the worktree copy", {
+  skip: process.platform !== "win32",
+}, async () => {
+  const { root, parent, worktree } = await fixture();
+  try {
+    const ref = `/${join(parent, "docs", "branch-note.md").replaceAll("\\", "/")}`;
+    assert.equal(
+      await rebaseWorktreeRef(ref, { parent, worktree }),
+      join(worktree, "docs", "branch-note.md"),
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("a parent-only file keeps its original path when the branch lacks it", async () => {
   const { root, parent, worktree } = await fixture();
   try {

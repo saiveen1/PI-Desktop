@@ -531,28 +531,29 @@ may be retained while exactly one workspace supplies the visible shell context.
    inserted durable row so the bell badge and currently open inbox refresh.
    Renderer delivery is keyed by the durable `id`: duplicate ids and delayed
    events for rows already acknowledged or cleared are ignored.
-4. For a task result, a focused main window produces no native banner. If
-   it is unfocused and native notifications are supported, Electron shows one
-   platform notification derived from the event kind and session title. The
-   separate interactive ask/permission/plan path may alert for a focused
-   background session while suppressing the exact visible session. On
-   Windows, the banner is attributed to the canonical PI-Desktop
+4. Core delivery follows installation-local preferences: Automatic presents an
+   app-wide in-app reminder while focused/visible and requests native delivery
+   otherwise. In-app only never requests native delivery; System permits it for
+   foreground background-session sources. Exact-visible task outcomes stay
+   suppressed. Explicit native failure falls back in-app. On Windows, a native
+   banner is attributed to the canonical PI-Desktop
    AppUserModelID shared with the NSIS package and taskbar identity. Electron
    retains at most one task-native object per durable id; successful read,
    mark-all-read, and clear actions close the matching objects and retain a
    tombstone against late/replayed delivery.
 5. Clicking the native notification shows/restores and focuses the main
-   window, then emits `notification.activated { sessionId }`.
+   window, then emits `notification.activated { id, sessionId, target? }`.
 6. Renderer activation selects the bound project when present, loads the
    session, and focuses the transcript/composer using the same path as an inbox
    row click. Native and in-app activation must not diverge.
 
 #### Popover behavior
 
-- The list shows `task.failed` rows only and the bell badge counts only
-  unread failures. `task.completed` rows are still persisted and still drive
-  the sidebar outcome badge and the native notification, but the inbox hides
-  them so failures are not buried under routine completions (D295).
+- Durable history shows `task.failed` rows only; completions remain persisted
+  for existing sidebar/taskbar outcome behavior. The bell adds a separate live
+  Needs action section for pending questions, permissions, plans and delegation
+  approvals. Its badge combines unread visible failures and live pending actions.
+  Bulk read/clear affects durable history only, never consent.
 - Bell click toggles the non-modal popover; a second click, Escape, or outside
   press closes it. Escape restores focus to the bell.
 - Opening preserves the most recently selected `All` / `Unread` filter for the
@@ -1985,9 +1986,10 @@ This does not prevent state changes — it makes them instant.
     aborted turns never appear
 18. All/Unread, mark-all-read, clear, row activation, Escape/focus restore, and
     arrow/Home/End keyboard navigation behave as documented in §1.7
-19. Native task notifications appear only while the main window is unfocused;
-    interactive prompt notifications may alert for a focused background session.
-    Activation focuses the window and opens the corresponding session
+19. Automatic uses in-app core reminders while focused and native requests
+    otherwise; In-app only and System follow their saved channel policy.
+    Exact-visible task outcomes stay suppressed; activation rechecks pending
+    liveness and locates existing controls without granting consent.
 20. Streamed message updates stay within the chat render boundary; shell
     navigation, composer, completed rows, and work-panel content do not rerender
     solely because the current assistant message appended content

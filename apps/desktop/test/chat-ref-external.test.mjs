@@ -60,6 +60,23 @@ test("an exact absolute path outside every root resolves to that file", async ()
   assert.equal(withAnchor.match?.absolutePath, join(outside, "notes", "report.md"));
 });
 
+test("slash-prefixed Windows drive references keep exact external-file semantics", {
+  skip: process.platform !== "win32",
+}, async () => {
+  const workspace = tempTree("drive-prefix-ws", ["生成 包.piplug", "missing.piplug"]);
+  const outside = tempTree("drive-prefix-external", ["生成 包.piplug"]);
+  const target = join(outside, "生成 包.piplug");
+  const ref = `/${target.replaceAll("\\", "/")}`;
+  const roots = projectRoots(workspace);
+  assert.equal(await isChatRefOutsideRoots(ref, roots), true);
+  assert.equal(await resolveChatFileRef(ref, roots), null);
+  assert.deepEqual(await resolveExternalChatRef(ref), await resolveExternalChatRef(target));
+  assert.equal((await resolveExternalChatRef(ref)).match?.absolutePath, target);
+  const missing = `/${join(outside, "missing.piplug").replaceAll("\\", "/")}`;
+  assert.equal(await resolveChatFileRef(missing, roots), null);
+  assert.deepEqual(await resolveExternalChatRef(missing), { match: null });
+});
+
 test("a missing external file is a miss, not an access limit", async () => {
   const outside = tempTree("missing", ["here.txt"]);
   assert.deepEqual(await resolveExternalChatRef(join(outside, "gone.txt")), { match: null });

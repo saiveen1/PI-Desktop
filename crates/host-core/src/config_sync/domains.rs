@@ -28,6 +28,8 @@ pub const DOMAIN_PLUGINS: &str = "plugins";
 pub const DOMAIN_AUTOMATION: &str = "automation";
 pub const DOMAIN_MEMORY: &str = "memory";
 
+// Notifications are installation-local, like delegation consent and window state.
+// Keep them out of both capture and the remote-application allowlist.
 pub(crate) const PORTABLE_APPLICATION_FIELDS: &[&str] = &[
     "theme",
     "language",
@@ -121,6 +123,7 @@ pub const DOMAIN_ADAPTERS: &[DomainAdapterSpec] = &[
             "developer mode",
             "onboarding state",
             "permission mode",
+            "notification preferences",
         ],
         identity: "application",
         references: &["provider ids", "model ids"],
