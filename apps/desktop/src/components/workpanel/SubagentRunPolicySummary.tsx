@@ -15,6 +15,10 @@ export function SubagentRunPolicySummary({ payload }: { payload: unknown }) {
             <dd>{policy[key] === 0 ? t("settings.delegationRunUnlimited") : policy[key] + " " + t(unit)}</dd>
           </div>
         ))}
+        {policy.reportRecoveryAttempts !== undefined ? <div className="flex flex-wrap justify-between gap-x-4">
+          <dt>{t("settings.delegationRunReportRecovery")}</dt>
+          <dd>{t(policy.reportRecoveryAttempts === 1 ? "settings.delegationRunReportRecoveryOnce" : "settings.delegationRunReportRecoveryOff")}</dd>
+        </div> : null}
       </dl>
     </section>
   );

@@ -39,6 +39,7 @@ import type { AssistantMessage } from "@earendil-works/pi-ai";
 import {
   addUsage,
   resolveDelegationRunPolicy,
+  resolveUnknownUpstreamRetryLimit,
   describeDelegationRunPolicy,
   type DelegationRunPolicy,
   cumulativeDelta,
@@ -68,12 +69,19 @@ import { contextBudgetFor } from "./context-budget.js";
 import { convertToLlm } from "./pi-runtime-messages.js";
 import {
   delegateRetentionMode,
+  delegateContextBudgetFor,
   delegateSummaryModels,
   prepareDelegateTurnContext,
   subagentContextOverflowError,
   type DelegateTurnUpdate,
 } from "./subagent-context.js";
 import { SubagentProgress, SUBAGENT_REPORT_TOOL, SUBAGENT_FINAL_REPORT_PROMPT } from "./subagent-progress.js";
+import {
+  readSubagentTerminalResponse,
+  subagentReportOutcome,
+  type SubagentTerminalDiagnostics,
+  type SubagentTerminalResponse,
+} from "./subagent-terminal.js";
 import {
   dedupeToolCallMessages,
   createToolCallIdentity,
@@ -86,6 +94,7 @@ import {
   PROVIDER_RATE_LIMIT_MAX_RETRIES,
   PROVIDER_TRANSIENT_MAX_RETRIES,
   isTransientProviderRetryCode,
+  isUnknownUpstreamBadRequest,
   providerRateLimitDelayMs,
   providerSetupRetryDelayMs,
 } from "./provider-retry.js";
@@ -103,6 +112,7 @@ export const SUBAGENT_STOP_TOOL_NAME = "TaskStop";
 export const MAX_SUBAGENT_REPORT_CHARS = 12_000;
 
 export type SubagentRunStatus = SharedSubagentRunStatus;
+export type { SubagentTerminalDiagnostics } from "./subagent-terminal.js";
 
 export type SubagentRunResult = {
   agentName: string;
@@ -131,6 +141,7 @@ export type SubagentRunResult = {
   /** Checkpoint persistence failure; the in-memory result remains available. */
   checkpointError?: string;
   partial?: boolean;
+  terminal?: SubagentTerminalDiagnostics;
   runPolicy?: Readonly<DelegationRunPolicy>;
   error?: {
     code: string;
@@ -165,6 +176,8 @@ export type SubagentRunOptions = {
   initialReport?: string;
   /** Publish live checkpoint locations through the owning Task record. */
   onCheckpoint?: (paths: { checkpointPath?: string; reportPath?: string; error?: string }) => void;
+  /** Live child counters; never forwarded as parent turn lifecycle events. */
+  onProgress?: (progress: { turns: number; toolCalls: number }) => void;
   /** The delegated instruction, written by the parent model. */
   task: string;
   /** Provider resolved by Electron main (the definition's pin, or the
@@ -172,6 +185,7 @@ export type SubagentRunOptions = {
   provider: RuntimeProviderConfig;
   /** Inherited session policy for retrying transient provider failures. */
   infiniteProviderRetry?: boolean;
+  unknownUpstreamRetryLimit?: number;
   thinkingLevel: SubagentThinkingLevel;
   /** User-owned definition pins only, in configured order. Missing bindings fail visibly. */
   fallbackModels?: Array<{ key: string; provider?: RuntimeProviderConfig }>;
@@ -266,8 +280,9 @@ export class SubagentRun {
   private readonly agent: Agent;
   private readonly opts: SubagentRunOptions;
   private currentAssistant?: UiMessage;
+  /** Retained progress is useful on failure, never proof of terminal delivery. */
   private lastReportText = "";
-  private lastReportTruncated = false;
+  private terminalResponse?: SubagentTerminalResponse;
   private turns = 0;
   private toolCalls = 0;
   private usage?: MessageUsage;
@@ -287,6 +302,8 @@ export class SubagentRun {
   private providerRetryInProgress = false;
   private providerTransientRetryAttempt = 0;
   private providerRateLimitRetryAttempt = 0;
+  private providerUnknownRetryAttempt = 0;
+  private readonly unknownUpstreamRetryLimit: number;
   private provider: RuntimeProviderConfig;
   private thinkingLevel: SubagentThinkingLevel;
   private readonly attemptedModels = new Set<string>();
@@ -296,15 +313,26 @@ export class SubagentRun {
   private budgetExceeded?: { code: "SUBAGENT_BUDGET_EXHAUSTED"; message: string };
   private readonly retryState: SubagentProviderRetryState = {
     claim: (error, phase) => this.claimProviderRetry(error, phase),
+    allowOutputLimitRepair: () => !this.finalizing,
+    onRetry: ({ error, attempt, delayMs }) => this.publishProviderRetry(error, attempt, delayMs),
+    onAttemptStart: () => this.emit({ type: "status", status: {
+      sessionId: this.opts.sessionId, isRunning: true, pendingToolConfirmations: 0,
+      ...(this.opts.turnId ? { currentTurnId: this.opts.turnId } : {}),
+      activity: { phase: "waiting-model", since: Date.now() },
+    } }),
   };
   private runAbortController = new AbortController();
   private readonly progress: SubagentProgress;
   private admittedToolCalls = 0;
   private finalizing = false;
+  private reportRecoveryAttempt = 0;
+  private reportTimedOut = false;
+  private providerRetries = 0;
 
   constructor(opts: SubagentRunOptions) {
     this.opts = opts;
     this.runPolicy = resolveDelegationRunPolicy(opts.runPolicy);
+    this.unknownUpstreamRetryLimit = resolveUnknownUpstreamRetryLimit(opts.unknownUpstreamRetryLimit);
     const initialMessages = recoverMalformedToolCalls(opts.initialMessages ?? []);
     this.uniqueToolCalls = createToolCallIdentity(initialMessages);
     this.provider = opts.provider;
@@ -437,7 +465,12 @@ export class SubagentRun {
         caughtError = classifyAgentError(error);
       }
       this.finalizeCurrentAssistant();
-      if (this.budgetExceeded && !signal?.aborted) await this.finalizeBudgetReport();
+      if (this.budgetExceeded && !signal?.aborted) await this.finalizeReport();
+      else if (!signal?.aborted && !this.turnAborted && !caughtError && !this.streamError && !this.mutationTermination &&
+          this.runPolicy.reportRecoveryAttempts === 1 && subagentReportOutcome(this.terminalResponse) !== "delivered") {
+        this.reportRecoveryAttempt = 1;
+        await this.finalizeReport();
+      }
     } finally {
       signal?.removeEventListener("abort", onAbort);
       this.clearBudgetTimer();
@@ -446,14 +479,11 @@ export class SubagentRun {
     // User cancellation always wins over a simultaneous runtime limit.
     if (signal?.aborted) return this.result("aborted", this.lastReportText);
     if (this.budgetExceeded) return this.result("failed", this.lastReportText, this.budgetExceeded);
-    if (this.turnAborted || caughtError?.code === "TURN_ABORTED") return this.result("aborted", this.lastReportText);
+    if (!this.reportTimedOut && (this.turnAborted || caughtError?.code === "TURN_ABORTED")) return this.result("aborted", this.lastReportText);
     const error = this.mutationTermination ?? caughtError ?? this.streamError;
     if (error) return this.result("failed", this.lastReportText, this.terminalError(error));
-    if (!this.lastReportText.trim()) return this.result("failed", "", {
-      code: "SUBAGENT_NO_REPORT", message: "The subagent finished without writing a final report.",
-    });
-    if (this.lastReportTruncated) {
-      const produced = this.lastReportText.length;
+    if (subagentReportOutcome(this.terminalResponse) === "truncated") {
+      const produced = this.terminalResponse?.text.length ?? 0;
       const hint = this.opts.delegationId ? ` Resume this delegation with Task(resume: "${this.opts.delegationId}").` : "";
       return this.result("failed", this.lastReportText, {
         code: "SUBAGENT_OUTPUT_TRUNCATED",
@@ -462,11 +492,15 @@ export class SubagentRun {
         charactersProduced: produced,
       });
     }
-    return this.result("completed", this.lastReportText);
+    if (subagentReportOutcome(this.terminalResponse) !== "delivered") return this.result("failed", "", {
+      code: "SUBAGENT_NO_REPORT", message: "The subagent finished without writing a final report.",
+    });
+    return this.result("completed", this.terminalResponse?.text ?? "");
   }
 
-  /** One fresh, tool-free report request after the exploration loop has retired. */
-  private async finalizeBudgetReport(): Promise<void> {
+  /** One tool-free request, shared by budget closure and opt-in report recovery. */
+  private async finalizeReport(): Promise<void> {
+    if (this.opts.signal?.aborted) return;
     this.finalizing = true;
     this.clearBudgetTimer();
     this.runAbortController = new AbortController();
@@ -474,6 +508,8 @@ export class SubagentRun {
     this.streamError = undefined;
     this.turnAborted = false;
     this.budgetTimer = setTimeout(() => {
+      this.reportTimedOut = true;
+      this.streamError = { code: "SUBAGENT_REPORT_TIMEOUT", message: "The final report request reached its configured deadline; retained progress is available." };
       this.runAbortController.abort();
       this.agent.abort();
     }, this.runPolicy.finalReportTimeoutSeconds * 1000);
@@ -481,9 +517,12 @@ export class SubagentRun {
     try {
       await this.agent.prompt(SUBAGENT_FINAL_REPORT_PROMPT);
       await this.agent.waitForIdle();
-    } catch {
+    } catch (error) {
       // The pre-existing checkpoint remains the partial result if reporting fails.
       this.progress.error = { code: "SUBAGENT_FINAL_REPORT_FAILED", message: "The reserved report request did not finish; retained progress is available." };
+      if (!this.streamError && !this.opts.signal?.aborted) this.streamError = classifyAgentError(error);
+    } finally {
+      this.clearBudgetTimer();
     }
   }
 
@@ -551,6 +590,15 @@ export class SubagentRun {
     turn: PrepareNextTurnContext,
     signal?: AbortSignal,
   ): Promise<AgentLoopTurnUpdate | undefined> {
+    if (this.finalizing) {
+      const budget = delegateContextBudgetFor(this.agent.state.model, this.agent.state.messages, [],
+        `${this.agent.state.systemPrompt}\n${SUBAGENT_FINAL_REPORT_PROMPT}`, []);
+      if (budget.tokens >= budget.hardLimit) {
+        this.pendingContextOverflow = subagentContextOverflowError(this.provider.modelId);
+        throw new Error(this.pendingContextOverflow.message);
+      }
+      return undefined;
+    }
     const outcome = await prepareDelegateTurnContext({
       messages: this.agent.state.messages,
       systemPrompt: this.agent.state.systemPrompt,
@@ -651,7 +699,9 @@ export class SubagentRun {
       this.streamError = undefined;
       this.providerTransientRetryAttempt = 0;
       this.providerRateLimitRetryAttempt = 0;
+      this.providerUnknownRetryAttempt = 0;
       this.lastReportText = "";
+      this.terminalResponse = undefined;
       this.opts.onModelChange?.(this.provider, this.thinkingLevel);
       return !this.runSignal().aborted;
     }
@@ -675,7 +725,12 @@ export class SubagentRun {
     error: ReturnType<typeof classifyAgentError>,
     phase: "request" | "stream",
   ): number | undefined {
-    if (this.finalizing || this.budgetExceeded || this.runSignal().aborted || !error.retriable) return undefined;
+    if (this.finalizing || this.budgetExceeded || this.runSignal().aborted || error.details?.origin === "local") return undefined;
+    if (isUnknownUpstreamBadRequest(error)) {
+      if (this.providerUnknownRetryAttempt >= this.unknownUpstreamRetryLimit) return undefined;
+      return ++this.providerUnknownRetryAttempt;
+    }
+    if (!error.retriable) return undefined;
     const infinite = this.opts.infiniteProviderRetry === true;
     if (error.code === "PROVIDER_RATE_LIMITED") {
       if (!infinite && this.providerRateLimitRetryAttempt >= PROVIDER_RATE_LIMIT_MAX_RETRIES) {
@@ -693,6 +748,21 @@ export class SubagentRun {
     return ++this.providerTransientRetryAttempt;
   }
 
+  private publishProviderRetry(error: ReturnType<typeof classifyAgentError>, attempt: number, delayMs: number): void {
+    this.providerRetries++;
+    const unknown = isUnknownUpstreamBadRequest(error);
+    this.emit({ type: "status", status: {
+      sessionId: this.opts.sessionId, isRunning: true, pendingToolConfirmations: 0,
+      ...(this.opts.turnId ? { currentTurnId: this.opts.turnId } : {}),
+      activity: { phase: "retrying", since: Date.now(), attempt, retryDelayMs: delayMs,
+        ...(unknown ? { maxAttempts: this.unknownUpstreamRetryLimit }
+          : this.opts.infiniteProviderRetry ? { infinite: true } : {}),
+        error: { code: error.code, message: error.message,
+          ...(typeof error.details?.providerStatus === "number" ? { providerStatus: error.details.providerStatus } : {}) },
+      },
+    } });
+  }
+
   private async retryPendingProviderFailure(): Promise<void> {
     const retryError = this.pendingProviderRetry;
     if (!retryError) return;
@@ -705,6 +775,8 @@ export class SubagentRun {
     this.agent.state.messages = messages;
     this.providerRetryInProgress = true;
     try {
+      const attempt = retryError.code === "PROVIDER_RATE_LIMITED" ? this.providerRateLimitRetryAttempt
+        : isUnknownUpstreamBadRequest(retryError) ? this.providerUnknownRetryAttempt : this.providerTransientRetryAttempt;
       const delayMs =
         retryError.code === "PROVIDER_RATE_LIMITED"
           ? providerRateLimitDelayMs(
@@ -712,10 +784,11 @@ export class SubagentRun {
               this.retryState.headers,
             )
           : providerSetupRetryDelayMs(
-              this.providerTransientRetryAttempt,
+              attempt,
               undefined,
               this.retryState.headers,
             );
+      this.publishProviderRetry(retryError, attempt, delayMs);
       await delayWithAbort(delayMs, this.runSignal());
       if (this.opts.signal?.aborted) return;
       await this.agent.continue();
@@ -774,7 +847,22 @@ export class SubagentRun {
       ...(this.progress.error ? [`Reporting issue: ${this.progress.error.message}`] : []),
     ];
     const completeReport = [...preamble, text].filter(Boolean).join("\n\n");
-    const persisted = this.progress.save(status, completeReport, error);
+    const response = this.terminalResponse;
+    const reportOutcome = status === "aborted" ? "cancelled"
+      : status === "completed" ? "delivered"
+        : error?.code === "SUBAGENT_NO_REPORT" || error?.code === "SUBAGENT_OUTPUT_TRUNCATED"
+          ? subagentReportOutcome(response) : "error";
+    const terminal: SubagentTerminalDiagnostics = {
+      stopReason: response?.stopReason ?? "unknown",
+      ...(response?.rawStopReason ? { rawStopReason: response.rawStopReason } : {}),
+      textBlocks: response?.textBlocks ?? 0,
+      thinkingBlocks: response?.thinkingBlocks ?? 0,
+      toolCalls: response?.toolCalls ?? 0,
+      reportOutcome,
+      reportRecoveryAttempt: this.reportRecoveryAttempt,
+      providerRetries: this.providerRetries,
+    };
+    const persisted = this.progress.save(status, completeReport, error, terminal);
     this.opts.onCheckpoint?.(persisted);
     const finalReport = persisted.reportPath && completeReport.length > MAX_SUBAGENT_REPORT_CHARS
       ? `${preamble.length > 0 ? `${preamble.join("\n\n")}\n\n` : ""}Complete subagent report (${completeReport.length} characters) was saved to: ${persisted.reportPath}`
@@ -792,11 +880,12 @@ export class SubagentRun {
       ...(this.modelFailures.length ? { modelFailures: [...this.modelFailures] } : {}),
       ...(this.contextCompactions > 0 ? { contextCompactions: this.contextCompactions } : {}),
       ...(this.contextDegraded ? { contextDegraded: true } : {}),
-      ...(this.lastReportTruncated ? { outputTruncated: true } : {}),
+      ...(response?.stopReason === "length" ? { outputTruncated: true } : {}),
       ...(persisted.reportPath ? { scratchReportPath: persisted.reportPath } : {}),
       ...(persisted.checkpointPath ? { checkpointPath: persisted.checkpointPath } : {}),
       ...(persisted.error ? { checkpointError: persisted.error } : {}),
       ...(status !== "completed" ? { partial: true } : {}),
+      terminal,
       ...(error ? { error } : {}),
     };
   }
@@ -890,12 +979,14 @@ export class SubagentRun {
     switch (event.type) {
       case "turn_start":
         this.turns += 1;
+        this.opts.onProgress?.({ turns: this.turns, toolCalls: this.toolCalls });
         break;
       case "turn_end":
         this.opts.onTurnEnd?.(event.message);
         break;
       case "message_start": {
         if (event.message.role !== "assistant") break;
+        this.terminalResponse = undefined;
         const content = assistantContent((event.message as AssistantMessage).content);
         const retryingAssistant = this.providerRetryInProgress
           ? this.currentAssistant
@@ -957,6 +1048,7 @@ export class SubagentRun {
       case "message_end": {
         if (event.message.role !== "assistant") break;
         const message = event.message as AssistantMessage;
+        this.terminalResponse = readSubagentTerminalResponse(message);
         const content = assistantContent(message.content);
         const stopReason = message.stopReason as string | undefined;
         // Read the cancel off the settled message, the same way the session
@@ -998,15 +1090,13 @@ export class SubagentRun {
         if (!failed && !aborted) {
           this.providerTransientRetryAttempt = 0;
           this.providerRateLimitRetryAttempt = 0;
+          this.providerUnknownRetryAttempt = 0;
         }
         const messageUsage = usageFromPi(message.usage);
         this.usage = addUsage(this.usage, messageUsage);
-        // The report is the last assistant text; a call-only turn has none and
-        // must not clear the text an earlier turn already produced.
+        // Empty terminal responses must not turn retained progress into delivery.
         if (content.hasText && content.text.trim() && !failed) {
           this.lastReportText = content.text;
-          this.lastReportTruncated =
-            stopReason === "length" || stopReason === "max_tokens";
         }
         if (retryAttempt !== undefined) {
           this.currentAssistant = {
@@ -1045,6 +1135,7 @@ export class SubagentRun {
       }
       case "tool_execution_start":
         this.toolCalls += 1;
+        this.opts.onProgress?.({ turns: this.turns, toolCalls: this.toolCalls });
         this.emit({
           type: "tool_start",
           toolCallId: event.toolCallId,

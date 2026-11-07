@@ -19,13 +19,16 @@ import {
   agentThinkingLevel as agentThinkingLevelFor,
   omitThinkingModel as withOmittedThinking,
 } from "./thinking-level.js";
-import { captureProviderResponse, carriesRetryDelayHeaders, createProviderRetryStream } from "./provider-retry.js";
+import { captureProviderResponse, carriesRetryDelayHeaders, createProviderRetryStream, type ProviderRetryController } from "./provider-retry.js";
 import type { AgentOptions } from "@earendil-works/pi-agent-core";
 import type { SubagentThinkingLevel } from "@pi-desktop/shared";
 import type { ClassifiedAgentError } from "./agent-errors.js";
 import type { ProviderFetchFailure } from "./provider-transport-recovery.js";
 
 export type SubagentProviderRetryState = {
+  allowOutputLimitRepair?: () => boolean;
+  onRetry?: ProviderRetryController["onRetry"];
+  onAttemptStart?: () => void;
   headers?: Record<string, string>;
   status?: number;
   failure?: ProviderFetchFailure;
@@ -126,6 +129,9 @@ export function subagentModelBinding(opts: {
               onUsage: opts.onUsage,
             }),
         {
+          allowOutputLimitRepair: retry.allowOutputLimitRepair,
+          onRetry: retry.onRetry,
+          onAttemptStart: retry.onAttemptStart,
           claim: (error, phase) => retry.claim(error, phase),
           headers: () => retry.headers,
           status: () => retry.status,

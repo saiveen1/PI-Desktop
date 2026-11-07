@@ -740,7 +740,8 @@ describe("bounded transient provider retry", () => {
     expect(carriesRetryDelayHeaders(409)).toBe(true);
     expect(carriesRetryDelayHeaders(502)).toBe(true);
     expect(carriesRetryDelayHeaders(503)).toBe(true);
-    expect(carriesRetryDelayHeaders(400)).toBe(false);
+    expect(carriesRetryDelayHeaders(400)).toBe(true);
+    expect(carriesRetryDelayHeaders(422)).toBe(true);
     expect(carriesRetryDelayHeaders(401)).toBe(false);
     expect(carriesRetryDelayHeaders(undefined)).toBe(false);
   });
@@ -941,6 +942,17 @@ describe("opaque bad-request repair", () => {
       model: "glm-5.3-flash",
       messages: [{ role: "user", content: "hi" }],
     });
+  });
+
+  it("allows report-only callers to forbid the output-limit repair request", async () => {
+    const createStream = vi.fn(() => failedStream({ errorMessage: "400 status code (no body)" }));
+    const stream = createProviderRetryStream(model, context, {}, createStream, {
+      claim: () => undefined, headers: () => undefined, status: () => 400,
+      allowOutputLimitRepair: () => false,
+    });
+    for await (const _event of stream) { /* Consume the one failed request. */ }
+    expect((await stream.result()).stopReason).toBe("error");
+    expect(createStream).toHaveBeenCalledTimes(1);
   });
 
   it("does not start the repair after the request is aborted", async () => {

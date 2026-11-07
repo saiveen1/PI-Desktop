@@ -18,18 +18,22 @@ export type DelegationRunPolicy = {
   /** Zero disables the exploration deadline. */
   maxDurationSeconds: number;
   finalReportTimeoutSeconds: number;
+  /** Absent in historical snapshots; zero disables automatic report recovery. */
+  reportRecoveryAttempts?: number;
 };
 
 export const DEFAULT_DELEGATION_RUN_POLICY: Readonly<DelegationRunPolicy> = Object.freeze({
   maxToolCalls: 0,
   maxDurationSeconds: 0,
   finalReportTimeoutSeconds: 60,
+  reportRecoveryAttempts: 0,
 });
 
 export const DELEGATION_RUN_POLICY_LIMITS = {
   maxToolCalls: { min: 0, max: 10_000 },
   maxDurationSeconds: { min: 0, max: 21_600 },
   finalReportTimeoutSeconds: { min: 1, max: 300 },
+  reportRecoveryAttempts: { min: 0, max: 1 },
 } as const;
 
 // Older trial settings and checkpoint metadata remain readable. These fields
@@ -52,7 +56,7 @@ export function isDelegationRunPolicy(value: unknown): value is Partial<Delegati
 
 /** Historical task metadata must contain all fields; never invent old effective values. */
 export function isDelegationRunPolicySnapshot(value: unknown): value is DelegationRunPolicy {
-  return isDelegationRunPolicy(value) && Object.keys(DEFAULT_DELEGATION_RUN_POLICY)
+  return isDelegationRunPolicy(value) && ["maxToolCalls", "maxDurationSeconds", "finalReportTimeoutSeconds"]
     .every(key => Object.hasOwn(value, key));
 }
 
@@ -62,6 +66,7 @@ export function resolveDelegationRunPolicy(value?: Partial<DelegationRunPolicy>)
     maxToolCalls: value?.maxToolCalls ?? DEFAULT_DELEGATION_RUN_POLICY.maxToolCalls,
     maxDurationSeconds: value?.maxDurationSeconds ?? DEFAULT_DELEGATION_RUN_POLICY.maxDurationSeconds,
     finalReportTimeoutSeconds: value?.finalReportTimeoutSeconds ?? DEFAULT_DELEGATION_RUN_POLICY.finalReportTimeoutSeconds,
+    reportRecoveryAttempts: value?.reportRecoveryAttempts ?? 0,
   });
 }
 
@@ -70,6 +75,7 @@ export function describeDelegationRunPolicy(policy: Readonly<DelegationRunPolicy
   return `Subagent work budget: ${policy.maxToolCalls || "unlimited"} tool calls; ${policy.maxDurationSeconds || "unlimited"} seconds. ` +
     "State is saved automatically. TaskReport is optional; work never requires periodic model-authored reports. " +
     `Budget exhaustion reserves one tool-free report request for at most ${policy.finalReportTimeoutSeconds} seconds. Explicit cancellation starts no report request. ` +
+    `Ordinary termination without a final report permits ${policy.reportRecoveryAttempts ?? 0} tool-free report recovery requests, each bounded by the same deadline. ` +
     "These are the effective Subagent Scheduling settings; an active run keeps its starting snapshot.";
 }
 

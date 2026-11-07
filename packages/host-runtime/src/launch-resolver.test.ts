@@ -75,6 +75,7 @@ describe("createHeadlessLaunchResolver", () => {
     expect(launch.sidecarParams.projectMemory).toBe("remember me");
     expect(launch.sidecarParams.commandShell).toMatchObject({ id: "bash" });
     expect(launch.sidecarParams.infiniteProviderRetry).toBe(false);
+    expect(launch.sidecarParams.unknownUpstreamRetryLimit).toBe(0);
     expect(calls.some((call) => call.method === "providers.getSecret")).toBe(true);
   });
 
@@ -115,6 +116,25 @@ describe("createHeadlessLaunchResolver", () => {
       { defaultMode: "agent", infiniteProviderRetry: true },
     );
     expect(launch.sidecarParams.infiniteProviderRetry).toBe(true);
+  });
+
+  it.each([0, 1, 2, 3])("forwards unknown upstream retry limit %s independently of infinite retries", async limit => {
+    const { host } = hostWith([provider], { p1: "sk-test" });
+    const resolver = createHeadlessLaunchResolver({ getHost: () => host, dataDir: "/data", log: () => undefined });
+    const launch = await resolver.resolve("s1", { providerId: "p1", modelId: "gpt-a" }, {
+      infiniteProviderRetry: true, unknownUpstreamRetryLimit: limit,
+    });
+    expect(launch.sidecarParams.unknownUpstreamRetryLimit).toBe(limit);
+    expect(launch.sidecarParams.infiniteProviderRetry).toBe(true);
+  });
+
+  it.each([null, "3", -1, 1.5, 4])("does not enable unknown upstream retry from malformed stored value %s", async limit => {
+    const { host } = hostWith([provider], { p1: "sk-test" });
+    const resolver = createHeadlessLaunchResolver({ getHost: () => host, dataDir: "/data", log: () => undefined });
+    const launch = await resolver.resolve("s1", { providerId: "p1", modelId: "gpt-a" }, {
+      unknownUpstreamRetryLimit: limit,
+    });
+    expect(launch.sidecarParams.unknownUpstreamRetryLimit).toBe(0);
   });
 
   it("falls back to the default provider and refuses a provider without a secret", async () => {

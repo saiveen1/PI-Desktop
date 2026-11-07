@@ -234,7 +234,7 @@ function outputCapReplayTarget(
   return { api: model.api, provider: model.provider, id: model.id };
 }
 
-function delegateContextBudgetFor(
+export function delegateContextBudgetFor(
   model: Model<Api>,
   messages: AgentMessage[],
   additionalMessages: AgentMessage[] = [],

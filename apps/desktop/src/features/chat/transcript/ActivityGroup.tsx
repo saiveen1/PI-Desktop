@@ -132,7 +132,7 @@ export function runActivityLabel(
       return t("chat.retryingModel", {
         delaySeconds: retryDelaySeconds(activity, now),
         attempt: activity.attempt,
-        maxAttempts: activity.infinite ? "∞" : PROVIDER_RETRY_MAX_RETRIES,
+        maxAttempts: activity.infinite ? "∞" : activity.maxAttempts ?? PROVIDER_RETRY_MAX_RETRIES,
       });
     case "waiting-subagents":
       return waitingSubagentsLabel(activity, t);

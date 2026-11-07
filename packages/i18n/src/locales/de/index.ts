@@ -1,4 +1,5 @@
 import { approvalCenter } from "./delegation-approval.js";
+import { delegationReliabilitySettings, delegationDiagnostics } from "./delegation-reliability.js";
 import { en, type EnglishCatalog } from "../en/index.js";
 
 export const de = {
@@ -353,6 +354,7 @@ export const de = {
     sessionMissing: "Diese Sitzung existiert nicht mehr",
   },
   "chat": {
+    delegationDiagnostics,
     promptRetractionFailed: "Der Entwurf konnte nicht sicher wiederhergestellt werden. Der Gesprächsverlauf bleibt erhalten.",
     "tableActions": "Tabellenaktionen",
     "markdownPlainTextFallback": "Große Antworten werden zur besseren Reaktionsfähigkeit als Klartext angezeigt.",
@@ -886,6 +888,7 @@ export const de = {
     "dismiss": "Verwerfen"
   },
   "settings": {
+    ...delegationReliabilitySettings,
     delegationRoles: "Rollen",
     delegationScheduling: "Modellzuweisung",
     delegationRunTitle: "Ausführung und Wiederherstellung",

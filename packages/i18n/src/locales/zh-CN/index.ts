@@ -1,4 +1,5 @@
 import { approvalCenter } from "./delegation-approval.js";
+import { delegationReliabilitySettings, delegationDiagnostics } from "./delegation-reliability.js";
 import { en, type EnglishCatalog } from "../en/index.js";
 
 export const zhCN = {
@@ -355,6 +356,7 @@ export const zhCN = {
     sessionMissing: "该会话已不存在",
   },
   chat: {
+    delegationDiagnostics,
     promptRetractionFailed: "无法安全恢复草稿。会话内容已保留。",
     tableActions: "表格操作",
     markdownPlainTextFallback: "内容较长，为保持界面响应速度，现以纯文本显示。",
@@ -891,6 +893,7 @@ export const zhCN = {
     dismiss: "关闭",
   },
   settings: {
+    ...delegationReliabilitySettings,
     delegationRoles: "角色",
     delegationScheduling: "调度",
     delegationRunTitle: "执行与恢复",

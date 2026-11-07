@@ -71,7 +71,7 @@
   Include peers, an ask-only specialist, auto candidates, long tasks/paths and
   requests from multiple projects/sessions. Use controlled deadlines and ACKs.
 - Steps: Save/reload Scheduling model priorities, descriptions, approval wait and
-  the three execution fields. Leave one child active, then save another policy
+  execution/recovery fields. Leave one child active, then save another policy
   during the same long parent turn. Admit later Tasks, manually resume a failed
   retained chain, and trigger natural fallback after a successful edit. Steer
   the parent while the retried child runs and during its settlement.
@@ -151,6 +151,89 @@
   pass the required cases above. Path existence or component fixture coverage does
   not establish installed-Desktop acceptance. No tests or real app validation are
   claimed by this documentation update.
+
+### E2E-DELEGATION-terminal-delivery-and-recovery
+
+- **Preconditions:** Real parent and child Agent loops with a deterministic
+  provider boundary, synthetic Read effects and isolated scratch. No live model
+  account, daily profile or installed application.
+- **Steps:** Enter through parent Task, emit child progress plus one Read call,
+  then end with empty stop, thinking-only stop, empty length, or an empty
+  tool-call ending. Repeat with a genuine final report. Observe TaskList while
+  the tool runs, then TaskWait, automatic parent delivery and the persisted Task
+  row after reload. Enable one report-recovery attempt and repeat missing and
+  truncated endings with success, empty output, error, deadline and cancellation
+  during the report request. Request a tool from that report-only response.
+- **Expected:** Old progress cannot complete a task; truncation remains visible
+  even without text. A current normally stopped final report completes. Read
+  executes once and its result enters the next request. Live counts are factual,
+  one accurate terminal result reaches the parent, and partial evidence/history
+  survives failure and explicit resume. Enabled recovery sends at most one
+  tool-free request using the existing deadline and authorized model, with no
+  repair, retry, fallback or tool replay; cancellation wins. Budget closure
+  remains a separate failed/partial outcome. Terminal diagnostics survive in the
+  Task/checkpoint record without creating empty bubbles or persisting thinking.
+  Old records without diagnostics or the new policy field remain readable.
+- **Traceability:** Runtime section 5f, Subagent task conversation component,
+  Scheduling settings, and [terminal reliability ADR](../../adr/delegation-terminal-reliability.md).
+- **Candidate entry points:** `packages/agent-runtime/src/subagent-recovery.test.ts`,
+  `subagent.test.ts`, `subagent-fallback.test.ts`, `subagent-checkpoint.test.ts`,
+  `delegation-recovery-user-path.test.ts`, and desktop subagent detail/persistence
+  fixtures. These paths identify coverage surfaces, not completed validation.
+- **Acceptance:** C / E / Data safety / Quality. **Milestone:** maintenance.
+- **Status:** Implementation candidate; final integrated verification pending.
+  The user requested implementation before further test execution.
+
+### E2E-DELEGATION-admission-contract-and-stop
+
+- **Preconditions:** A healthy Host authorizer, two enabled auto-permitted
+  synthetic models, real parent/child loops and isolated work.
+- **Steps:** Submit Task with omitted, zero, positive and boundary context
+  minimums. Submit fractions, negatives, unsafe integers, excessive values and
+  wrong types; separately return malformed-metadata and unavailable-authorizer
+  decisions. Exercise exact-model selection and explicit cancellation. Start a
+  child, send TaskStop with both job and one matching delegationId, and await
+  retirement; repeat conflicting, empty, multiple and Bash/delegation selectors.
+- **Expected:** Zero and omission admit the same no-minimum request. Positive
+  safe integers up to 10000000 preserve compatibility checks. Invalid request
+  metadata fails before cycling through the model pool and is not mislabeled
+  as authorization exhaustion; unavailable, disabled, incompatible and cancelled
+  outcomes remain distinct. Same-target Stop dispatches once. Rejection never
+  acknowledges a stop, unretired work remains pending, and historical no-job
+  delegate defaults preserve Bash jobs. Source checks do not establish that an
+  older installed runtime contains the selector fix.
+- **Traceability:** Runtime sections 5f and Session job controls; terminal
+  reliability ADR. Existing stop routing is reused rather than replaced.
+- **Candidate entry points:** `delegation-scheduler.test.ts`,
+  `delegation-user-path.test.ts`, `tool-schema.test.ts`,
+  `background-job-tools.test.ts`, `runtime.test.ts`, and Host runtime
+  `delegation-transport.test.ts` / `delegation-approval.test.ts`.
+- **Acceptance:** C / E / Security / Quality. **Milestone:** maintenance.
+- **Status:** Final integrated verification pending; no installed-app claim.
+
+### E2E-PROVIDER-unknown-upstream-recovery-policy
+
+- **Preconditions:** Isolated Behavior settings and real main/child Agent loops
+  using deterministic local 400/422, 429, 5xx and network responses.
+- **Steps:** Load missing settings, save/reload limits 0-3, and reject invalid
+  values. After one successful tool, return a generic upstream 400/422 wrapper,
+  then succeed or exhaust the configured limit. Change failure phase, deliver
+  partial output, enable infinite transient retry, and cancel during backoff.
+  Repeat explicit invalid-option, credential, quota/billing and context errors.
+- **Expected:** Missing settings disable this recovery. An enabled limit bounds
+  main and child retries independently of infinite transient retry, with truthful
+  attempt limits and abortable backoff. Only a complete successful response
+  resets the budget; completed tools never rerun. Explicit permanent errors keep
+  their own classification. Admitted recovery keeps the parent alive; exhaustion
+  retains the terminal error and safe child cleanup. Existing 429/5xx/network
+  pacing, Retry-After behavior and ordinary output-limit repair stay intact.
+- **Traceability:** Runtime section 5d, Behavior settings, terminal reliability ADR.
+- **Candidate entry points:** `unknown-upstream-errors.test.ts`,
+  `provider-recovery-flow.test.ts`, `provider-retry.test.ts`, shared
+  `provider-retry.test.ts`, Host settings RPC and settings/launch boundary tests.
+- **Acceptance:** C / Data safety / Quality. **Milestone:** maintenance.
+- **Status:** Final integrated verification pending. These scenarios do not
+  establish why the historical upstream request returned HTTP 400.
 
 
 ### E2E-TRANSCRIPT-lossless-tool-images
@@ -11216,6 +11299,9 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
 |---|---|
 | A / Data safety / Quality — Session multiselect and reversible deletion | E2E-SESSION-recycle-bin-and-multiselect |
 | C / E / Security / Quality — Live delegation policy, retry continuation and revision-bound grouped model consent | E2E-DELEGATION-scheduling-and-model-approval |
+| C / E / Data safety / Quality - Truthful terminal delivery and optional recovery | E2E-DELEGATION-terminal-delivery-and-recovery |
+| C / E / Security / Quality - Admission normalization and acknowledged stopping | E2E-DELEGATION-admission-contract-and-stop |
+| C / Data safety / Quality - Bounded unknown upstream response recovery | E2E-PROVIDER-unknown-upstream-recovery-policy |
 | A / F / Quality — Self-managed daily release and isolated Dev | E2E-RELEASE-self-managed-daily-build |
 | A / F / Security — Explicit Dev data-directory inheritance | E2E-DEV-explicit-data-directory-inheritance |
 | C / E / Security / Quality — Gemini work setup | E2E-LIVE-VOICE-gemini-work-schema |
@@ -20477,8 +20563,9 @@ Scenario: E2E-REVIEW-ROUNDS (local desktop, implemented)
 - **Preconditions**: Isolated Scheduling page fixture, version-1 settings without
   runPolicy, a retained Task snapshot, real parent/child loops with a deterministic
   provider, and an isolated Host database.
-- **Steps**: Inspect defaults without writing; edit all three controls including 0
-  for unlimited work; submit empty/fractional/out-of-range values; save and reload;
+- **Steps**: Inspect defaults without writing; edit all three numeric controls
+  including 0 for unlimited work and toggle one report-recovery attempt; submit
+  empty/fractional/out-of-range values; save and reload;
   edit/remove model rows; fail a save and restore only execution defaults. Render
   a child detail with a different global policy, then with missing/partial metadata.
   Resume a task under new settings and inspect model instructions, execution and
@@ -20486,10 +20573,12 @@ Scenario: E2E-REVIEW-ROUNDS (local desktop, implemented)
   a controlled clock beyond the old default deadline with the time limit disabled.
 - **Expected**: Invalid values cannot replace stored settings. Model and policy
   edits survive each other. UI shows actual immutable task values, never inferred
-  historical defaults. A new/resumed run uses the next parent turn's settings;
+  historical defaults. Older three-field snapshots stay valid without invented
+  report-recovery metadata. A new/resumed run uses current saved settings;
   active tasks retain their original policy. Zero disables only the corresponding
   work limit. Explicit budgets and finalization deadlines govern real execution;
-  retired report-gate fields do not. Loading an older trial policy is safe and a
+  retired report-gate fields do not. Ordinary report recovery defaults off and
+  respects its separate 0/1 setting. Loading an older trial policy is safe and a
   new save removes only the retired fields. Authorization gates remain enforced.
 - **Specs linked**: 03-runtime/02-agent-runtime.md §5f; 04-ux/06-settings-ia.md;
   ADR 0279 §14.
@@ -20499,6 +20588,9 @@ Scenario: E2E-REVIEW-ROUNDS (local desktop, implemented)
   `subagent-recovery.test.ts` and `delegation-recovery-user-path.test.ts`, shared
   policy validation in `delegation-policy.test.ts`, and Host settings RPC
   save/reopen/rejected-write tests in `delegation_settings_rpc_tests.rs`.
+  The report-recovery extension is an implementation candidate with final
+  integrated verification pending; the earlier automation status is not a claim
+  that the changed candidate has passed.
 
 
 ### E2E-TOOLS-session-background-jobs

@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
 import {
   delegationModelKey,
+  DelegationRequestError,
   isDelegationSettings,
+  normalizeDelegationContextWindow,
   orderDelegationModels,
   type DelegationApprovalDecision,
   type DelegationApprovalRequest,
@@ -37,7 +39,7 @@ type Options = {
   requestedModel?: string;
   thinkingLevel?: DelegationApprovalRequest["thinkingLevel"];
   requiresImages?: boolean;
-  minContextWindow?: number;
+  minContextWindow?: unknown;
   selection?: DelegationSelection;
   preferredKey?: string;
   /** Resolved definition pin or resumed chain: preserves the user's binding preference. */
@@ -56,6 +58,7 @@ type Options = {
 export class DelegationScheduler {
   readonly decisions: DelegationDecisionRecord[] = [];
   readonly requestedModel?: string;
+  readonly minContextWindow?: number;
   private readonly approved = new Set<string>();
   private readonly rejected = new Set<string>();
   private readonly attempted = new Set<string>();
@@ -63,6 +66,7 @@ export class DelegationScheduler {
   private current: CurrentDelegationPolicy;
 
   constructor(private readonly options: Options) {
+    this.minContextWindow = normalizeDelegationContextWindow(options.minContextWindow);
     this.current = { settings: options.settings };
     this.validate(this.current);
     this.requestedModel = options.requestedModel ?? options.preferredKey ?? (options.preferredProvider
@@ -180,7 +184,8 @@ export class DelegationScheduler {
         modelId: provider.modelId, task: this.options.task, reason: this.options.reason,
         agentName: this.options.agentName, description: this.options.description,
         requestedModel: this.requestedModel, thinkingLevel: this.options.thinkingLevel,
-        requiresImages: this.options.requiresImages, minContextWindow: this.options.minContextWindow,
+        requiresImages: this.options.requiresImages,
+        ...(this.minContextWindow === undefined ? {} : { minContextWindow: this.minContextWindow }),
         selection: this.options.selection,
         ...(this.automaticOnly ? { automaticOnly: true } : {}),
       }), aborted]);
@@ -195,6 +200,7 @@ export class DelegationScheduler {
       throw new Error("Delegation cancelled by the user; do not retry or switch models.");
     }
     if (result?.decision !== "allow") {
+      if (result?.code === "invalid") throw new DelegationRequestError(result.reason);
       if (result?.code === "timeout") this.automaticOnly = true;
       this.skip(key, result?.reason ?? "Model was not approved");
       return undefined;

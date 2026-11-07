@@ -47,6 +47,7 @@ pub(crate) const PORTABLE_APPLICATION_FIELDS: &[&str] = &[
     "defaultModelId",
     "defaultMode",
     "infiniteProviderRetry",
+    "unknownUpstreamRetryLimit",
     "keybindings",
     "linkOpenTarget",
     "contextUsageDisplay",
@@ -111,6 +112,8 @@ pub const DOMAIN_ADAPTERS: &[DomainAdapterSpec] = &[
             "keepCommandsExpanded",
             "autoCollapseSettledGroups",
             "autoCollapseThinking",
+            "infiniteProviderRetry",
+            "unknownUpstreamRetryLimit",
             "keybindings",
             "display bindings",
             "provider/model bindings",
@@ -644,6 +647,7 @@ mod tests {
         assert!(PORTABLE_APPLICATION_FIELDS.contains(&"transcriptDisplayMode"));
         assert!(PORTABLE_APPLICATION_FIELDS.contains(&"thinkingDisplayMode"));
         assert!(PORTABLE_APPLICATION_FIELDS.contains(&"keepCommandsExpanded"));
+        assert!(PORTABLE_APPLICATION_FIELDS.contains(&"unknownUpstreamRetryLimit"));
         let application = adapter_for(DOMAIN_APPLICATION).expect("application adapter");
         assert!(application.exportable_fields.contains(&"showThinking"));
         assert!(application
@@ -655,6 +659,9 @@ mod tests {
         assert!(application
             .exportable_fields
             .contains(&"keepCommandsExpanded"));
+        assert!(application
+            .exportable_fields
+            .contains(&"unknownUpstreamRetryLimit"));
         for domain in ALL_DOMAINS {
             let adapter = adapter_for(domain).expect("portable domain adapter");
             assert_eq!(adapter.schema_version, 1);

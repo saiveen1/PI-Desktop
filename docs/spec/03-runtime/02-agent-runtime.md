@@ -264,6 +264,20 @@ context, and other non-retryable errors do not enter either provider replay
 path, and a non-retryable `PROVIDER_ERROR` from a malformed 400/422 request
 stays terminal.
 
+Settings > Behavior also exposes `unknownUpstreamRetryLimit`, an integer from
+0 to 3, default 0. This independent, opt-in response budget applies only to a
+generic JSON `upstream_400` or `upstream_422` wrapper that contains no explicit
+permanent rejection. Such an error remains `PROVIDER_ERROR` with
+`recoveryCategory: "unknown-upstream"`; the wrapper is evidence that its cause
+is unknown, not that the request is valid or retry will succeed. Explicit
+invalid-option, credential, quota/billing and context failures keep their
+existing classifications and recovery paths. Main sessions and builtin
+subagents share the same configured limit, abortable backoff and failed-request
+replay rules. A complete successful model response resets this budget; partial
+output and request/stream phase changes do not. `infiniteProviderRetry` never
+removes this limit. Exhaustion produces the original terminal provider error
+and safe child cleanup once; an admitted retry keeps the owning turn open.
+
 Both budgets reset after a complete, non-error, non-aborted model response,
 including a response that requests tools. The next model request starts with
 fresh counters and backoff, even within the same user turn. Receiving HTTP
@@ -304,6 +318,8 @@ the generated output-limit fields removed: `max_tokens`,
 the transient retry budget or add backoff, and the caller's `onPayload` rewrite
 remains active. A second opaque failure is terminal, and an abort before the
 repair starts prevents the repair request.
+The reserved delegate report request disables this repair as well as ordinary
+provider retries, so its one-request limit cannot acquire a hidden second call.
 
 The non-429 delay honors the server first: `retry-after-ms`, `retry-after`
 seconds, then `retry-after` HTTP-date, capped at 8 seconds. Captured headers are
@@ -1012,6 +1028,14 @@ provider request. `modelReason` explains specialist selection ahead of a preferr
 tier. `modelSelection: prefer | require` defaults to prefer; require never
 substitutes another model. Optional `minContextWindow` and `requiresImages` filter
 candidates before approval. These model-authored fields do not grant permission.
+`minContextWindow` accepts an integer from 0 to 10000000: zero and omission
+both mean no minimum. The scheduler validates it before considering models
+and normalizes zero to omission at the authorization boundary. Host metadata
+accepts only an omitted value or a positive safe integer within the same upper
+bound. Invalid input returns `DELEGATION_INVALID_REQUEST`; it is not retried
+against every model or presented as an exhausted authorized pool. The Host
+returns `invalid` for malformed metadata and `unavailable` when its authorizer
+is absent, preserving distinct scheduling decisions.
 Natural-language model choices continue through `Task.model`; when the chosen
 model requires approval, only the host's human UI decision grants it.
 
@@ -1234,6 +1258,7 @@ values without changing the saved policy. No SQLite migration or IPC channel is 
 | `maxToolCalls` | 0 | integer 0–10000; 0 disables the work-tool admission limit |
 | `maxDurationSeconds` | 0 | integer 0–21600; 0 disables the exploration deadline |
 | `finalReportTimeoutSeconds` | 60 | integer 1–300 seconds for the one final report request |
+| `reportRecoveryAttempts` | 0 | integer 0 or 1; 1 permits one report-only recovery after ordinary termination without a deliverable |
 
 The retired trial fields `checkpointInterval` and `maxCheckpointRequests` remain
 accepted as legacy data so old settings and checkpoint files stay readable. They
@@ -1251,6 +1276,9 @@ settings; missing/incomplete historical snapshots remain absent. The parent and
 child model instructions also describe the effective policy. These execution
 limits apply to Task delegates; other delegation routes retain their execution
 behavior and continue to use the independent model authorization policy.
+Historical snapshots containing the original three execution fields remain
+valid; an absent `reportRecoveryAttempts` is not invented as a recorded old
+policy. Newly admitted runs resolve it to 0 unless explicitly enabled.
 
 ### Delegation admission failure reminders
 
@@ -1271,9 +1299,30 @@ filesystem capability. This summary tool is optional: ordinary work never waits
 for a periodic report, and there is no missing-report counter that terminates a
 working agent. State persistence at event boundaries is independent of model
 summarization. A failed optional scratch write is returned as a reporting warning;
-the report remains in the transcript and work may continue. Normal final text is
-still accepted as the terminal report. Tool activity counts do not establish
-semantic progress and never trigger a model-authored checkpoint by themselves.
+the report remains in the transcript and work may continue. A terminal report
+must come from the current assistant response, end normally with `stop`, contain
+non-empty text and request no tools. Earlier progress narration, optional
+TaskReport text and earlier model-failure explanations remain recovery evidence;
+they cannot satisfy final delivery on behalf of an empty or thinking-only
+response. A tool-call ending without calls is not successful delivery either.
+Finish/truncation classification is independent of the amount of visible text.
+This is a structural delivery check, not a semantic evaluation of task quality.
+
+If `reportRecoveryAttempts` is 1, ordinary termination without a deliverable
+may spend one report-only request using the already-authorized model and
+retained context. The same `finalReportTimeoutSeconds` deadline applies. This
+request exposes no tools, performs no provider retry, repair or model fallback,
+and never replays completed tools. A valid recovered final report can complete;
+otherwise settlement remains failed and partial. Explicit cancellation and
+terminal provider/local failures never start this recovery. Budget exhaustion
+keeps its existing one-report closure and `SUBAGENT_BUDGET_EXHAUSTED` result;
+it does not additionally spend ordinary report recovery.
+
+Live turn and tool counters reflect the child loop while it runs, without
+forwarding child turn-end events as parent lifecycle completion. Counts, paths,
+read-only exploration and elapsed time alone do not establish semantic progress.
+Only user-configured work budgets bound a running delegation; zero remains
+unlimited. No periodic TaskReport duty or automatic quality evaluator is added.
 
 Local runs save version-1 `checkpoint.json` and `report.md` beneath
 `<scratchDir>/delegations/<stable-chain-id>/` at startup, assistant/tool boundaries,
@@ -1285,6 +1334,15 @@ text, without another model request. The host-owned transcript retains the
 underlying tool history; the scratch report supplements it.
 Pending tools are labeled as requiring verification, never assumed undone.
 Task lifecycle snapshots expose the live checkpoint path and safe write errors.
+Terminal snapshots retain a small `terminal` diagnostic: normalized stop reason,
+an allowlisted raw stop reason when known, text/thinking/tool block counts,
+provider retry count,
+report outcome and report-recovery attempt count. These facts travel with the
+existing Task lifecycle/result record and checkpoint, not empty assistant
+bubbles or raw provider payloads. Child details can distinguish requested and
+actual model, selection/skipped attempts, fallback failures and final delivery.
+No thinking text or credentials are copied into this diagnostic. Historical
+records without these fields remain readable without inferred measurements.
 TaskStop returns retired workers' partial reports along with status. It still
 reports uncooperative workers as pending, not stopped.
 
@@ -1307,12 +1365,13 @@ they can end the parent turn even if a delegate ignores its abort. Ending the
 parent loop does not otherwise abort delegates.
 
 Fatal provider/stream errors (including exhausted HTTP 429) and parent aborts
-retain their existing `failed` and `aborted` outcomes. If an assistant response
-ends at the provider's output-token limit (`stopReason: "length"` or
-`"max_tokens"`) after emitting report text, the delegate instead settles as
-`failed` with `SUBAGENT_OUTPUT_TRUNCATED` and `outputTruncated: true`; its
-bounded partial report remains under the failure explanation for diagnosis. A
-later delegate turn that ends normally clears the marker and can complete. A
+retain their existing `failed` and `aborted` outcomes. A latest terminal response
+at the provider's output-token limit (`stopReason: "length"` or `"max_tokens"`),
+including with no text, settles as `failed` with `SUBAGENT_OUTPUT_TRUNCATED` and
+`outputTruncated: true`; its bounded partial report remains under the failure
+explanation for diagnosis. A subsequent recovery response is classified on its
+own finish state; a valid normal final report can complete, while a new error,
+missing report or cancellation keeps its corresponding outcome. A
 terminal parent error also aborts leftover delegates, skips the resume prompt,
 and returns the session to idle so Continue is not `AGENT_BUSY` (D352). The
 interrupted delegates settle as `failed` with `SUBAGENT_PARENT_FAILED` and keep
@@ -1328,6 +1387,8 @@ Aborted and stopped delegates remain explicitly resumable; cancellation never
 automatically restarts them. SubagentRun terminal results save the retained
 partial output when local scratch is available; initialization failures before a
 child exists retain the existing visible error path.
+See [the terminal reliability ADR](../../adr/delegation-terminal-reliability.md)
+for the delivery, admission and optional recovery trade-offs.
 
 **Resumable delegations (ADR 0279).** `Task` accepts an optional `resume`
 parameter carrying the `delegationId` of a settled delegation in the same

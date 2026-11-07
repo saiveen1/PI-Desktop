@@ -7,7 +7,7 @@ import {
 } from "@pi-desktop/shared";
 import { SettingsCard, SettingsRow } from "../../features/settings/primitives";
 import { delegationRunPolicyFields } from "../../lib/subagent-run-policy";
-import { Button, Input } from "../ui";
+import { Button, Input, SettingsToggle } from "../ui";
 
 export function SubagentRunPolicySettings({ policy, disabled, onChange }: {
   policy?: Partial<DelegationRunPolicy>;
@@ -41,6 +41,12 @@ export function SubagentRunPolicySettings({ policy, disabled, onChange }: {
           </SettingsRow>
         );
       })}
+      <SettingsRow title={t("settings.delegationRunReportRecovery")}
+        description={t("settings.delegationRunReportRecoveryDesc")}>
+        <SettingsToggle disabled={disabled} checked={value.reportRecoveryAttempts === 1}
+          label={t("settings.delegationRunReportRecovery")}
+          onChange={() => onChange({ ...value, reportRecoveryAttempts: value.reportRecoveryAttempts === 1 ? 0 : 1 })} />
+      </SettingsRow>
       {!isDelegationRunPolicy(value) ? (
         <p role="alert" className="p-4 text-sm text-text-secondary">{t("settings.delegationRunInvalid")}</p>
       ) : null}

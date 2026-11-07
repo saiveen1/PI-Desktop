@@ -1,4 +1,5 @@
 import { approvalCenter } from "./delegation-approval.js";
+import { delegationReliabilitySettings, delegationDiagnostics } from "./delegation-reliability.js";
 import { en, type EnglishCatalog } from "../en/index.js";
 
 export const ko = {
@@ -362,6 +363,7 @@ export const ko = {
     sessionMissing: "해당 세션이 더 이상 존재하지 않습니다",
   },
   chat: {
+    delegationDiagnostics,
     promptRetractionFailed: "초안을 안전하게 복원하지 못했습니다. 대화 내용은 보존되었습니다.",
     tableActions: "표 작업",
     markdownPlainTextFallback: "긴 응답은 화면의 반응성을 유지하기 위해 일반 텍스트로 표시됩니다.",
@@ -895,6 +897,7 @@ export const ko = {
     dismiss: "닫기",
   },
   settings: {
+    ...delegationReliabilitySettings,
     delegationRoles: "역할",
     delegationScheduling: "스케줄링",
     delegationRunTitle: "실행 및 복구",

@@ -16,6 +16,36 @@ const create = (options: Partial<ConstructorParameters<typeof DelegationSchedule
 });
 
 describe("delegation scheduling", () => {
+  it.each([undefined, 0])("omits a no-minimum context requirement (%s) before Host authorization", async minContextWindow => {
+    const requests: unknown[] = [];
+    const scheduler = create({
+      minContextWindow,
+      authorize: async request => {
+        requests.push(request);
+        return request.minContextWindow === undefined ? allow()
+          : { decision: "skip", reason: "Invalid minimum context window", code: "invalid" };
+      },
+    });
+    expect((await scheduler.select()).provider.modelId).toBe("expensive");
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).not.toHaveProperty("minContextWindow");
+  });
+  it.each([-1, 0.5, 10_000_001, Number.MAX_SAFE_INTEGER + 1, Number.NaN, Number.POSITIVE_INFINITY, "4096", null, {}, []])(
+    "rejects an invalid context minimum before resolving or authorizing any model (%s)", minContextWindow => {
+      const authorize = vi.fn(allow);
+      const resolver = vi.fn(resolve);
+      expect(() => create({ minContextWindow, authorize, resolve: resolver })).toThrow(/minContextWindow/);
+      expect(authorize).not.toHaveBeenCalled();
+      expect(resolver).not.toHaveBeenCalled();
+    },
+  );
+  it("does not retry a request-level Host rejection across the model pool", async () => {
+    const authorize = vi.fn(async (): Promise<DelegationApprovalDecision> => ({
+      decision: "skip", reason: "Invalid delegation metadata", code: "invalid",
+    }));
+    await expect(create({ authorize }).select()).rejects.toMatchObject({ code: "DELEGATION_INVALID_REQUEST" });
+    expect(authorize).toHaveBeenCalledTimes(1);
+  });
   it("starts the same delegation on an authorized alternate after approval expires", async () => {
     const authorize = vi.fn(async (request): Promise<DelegationApprovalDecision> => request.modelId === "expensive"
       ? { decision: "skip", reason: "Approval expired" } : allow());

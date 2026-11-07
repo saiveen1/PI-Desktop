@@ -1,5 +1,15 @@
 # Unreleased changes
 
+- Require a current final report before a delegation can complete; stale progress,
+  thinking-only replies and empty truncated endings no longer count as delivery.
+  Preserve partial findings and expose live counters, model selection/fallback
+  details and terminal report diagnostics. Scheduling offers one optional,
+  bounded report-only recovery; Behavior offers a separate 0-3 retry limit for
+  unexplained upstream 400/422 wrappers. Both new recovery options default off,
+  preserve completed tool effects and remain cancellable. Task context minimum
+  zero now means no minimum consistently, and malformed admission input fails
+  before cycling through the model pool. Final integration validation is pending.
+
 - Show recent session updates in seconds, minutes or hours instead of zero days,
   and align message clocks with full local date/time/timezone details without
   rewriting stored timestamps. Running statuses expose a shared details dialog

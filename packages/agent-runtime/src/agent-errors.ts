@@ -11,6 +11,7 @@
 import { isContextOverflow, type AssistantMessage } from "@earendil-works/pi-ai";
 import { ErrorCodes, isCertificateVerificationError } from "@pi-desktop/shared";
 import { readLocalRequestErrorDetails } from "./local-request-errors.js";
+import { isUnknownUpstreamWrapper } from "./unknown-upstream-errors.js";
 
 export type ClassifiedAgentError = {
   code: string;
@@ -514,7 +515,7 @@ function isStatuslessCredentialFailure(message: string): boolean {
   );
 }
 
-export function classifyAgentError(err: unknown): ClassifiedAgentError {
+export function classifyAgentError(err: unknown, responseStatus?: number): ClassifiedAgentError {
   const envelope = err !== null && typeof err === "object"
     ? err as Record<string, unknown> : undefined;
   const local = readLocalRequestErrorDetails(err);
@@ -558,7 +559,8 @@ export function classifyAgentError(err: unknown): ClassifiedAgentError {
     safeMessage.length > MAX_ERROR_MESSAGE_CHARS
       ? `${safeMessage.slice(0, MAX_ERROR_MESSAGE_CHARS)}…`
       : safeMessage;
-  const status = extractStatus(err, rawMessage);
+  const status = extractStatus(err, rawMessage) ??
+    (responseStatus === 400 || responseStatus === 422 ? responseStatus : undefined);
   const providerCode = extractErrorCode(err);
   const details: Record<string, unknown> = {
     ...(status !== undefined ? { providerStatus: status } : {}),
@@ -686,7 +688,10 @@ export function classifyAgentError(err: unknown): ClassifiedAgentError {
       if (API_KEY_REJECTION_PATTERN.test(rawMessage)) {
         return result("PROVIDER_UNAUTHORIZED", false);
       }
-      // Malformed request (wrong apiStyle, bad params) — retrying won't help.
+      if (isUnknownUpstreamWrapper(rawMessage, status)) {
+        return result("PROVIDER_ERROR", false, { recoveryCategory: "unknown-upstream" });
+      }
+      // Descriptive request failures keep their existing terminal treatment.
       return result("PROVIDER_ERROR", false);
     }
     return result("PROVIDER_ERROR", true);

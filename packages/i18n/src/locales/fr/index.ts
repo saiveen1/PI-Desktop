@@ -1,4 +1,5 @@
 import { approvalCenter } from "./delegation-approval.js";
+import { delegationReliabilitySettings, delegationDiagnostics } from "./delegation-reliability.js";
 import { en, type EnglishCatalog } from "../en/index.js";
 
 export const fr = {
@@ -353,6 +354,7 @@ export const fr = {
     sessionMissing: "Cette session n'existe plus",
   },
   "chat": {
+    delegationDiagnostics,
     promptRetractionFailed: "Impossible de restaurer le brouillon en toute sécurité. La conversation a été conservée.",
     "tableActions": "Actions du tableau",
     "markdownPlainTextFallback": "La réponse volumineuse est affichée en texte brut pour préserver la réactivité.",
@@ -886,6 +888,7 @@ export const fr = {
     "dismiss": "Ignorer"
   },
   "settings": {
+    ...delegationReliabilitySettings,
     delegationRoles: "Rôles",
     delegationScheduling: "Ordonnancement",
     delegationRunTitle: "Exécution et récupération",
