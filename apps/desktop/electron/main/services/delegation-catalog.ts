@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
   canonicalThinkingLevel, isDelegationSettings, delegationModelKey, nearestSupportedThinkingLevel,
-  orderDelegationModels, THINKING_LEVELS, type AppSettings, type DelegationApprovalModel,
+  orderDelegationModels, legacyDelegationSettings, THINKING_LEVELS, type AppSettings, type DelegationApprovalModel,
   type DelegationApprovalRequest, type ThinkingLevel,
 } from "@pi-desktop/shared";
 import { delegationPolicySnapshot } from "@pi-desktop/host-runtime";
@@ -22,23 +22,36 @@ export type DelegationCatalogDependencies = {
 export function createDelegationCatalog(deps: DelegationCatalogDependencies) {
   const authority = randomUUID();
   let generation = 0;
-  let lastFingerprint: string | undefined;
-  let revision = "";
+  const fingerprints = new Map<string, { fingerprint: string; revision: string }>();
   let epoch = 0;
-  async function read() {
+  async function read(sessionId?: string) {
     for (;;) {
     const started = epoch;
     const host = deps.getHost();
     if (!host) throw new Error("Delegation host unavailable");
-    const [settings, providers] = await Promise.all([
+    const [settings, providers, sessionPolicy] = await Promise.all([
       host.call<AppSettings>("settings.get"),
       deps.listProviders?.() ?? host.call<{ providers: DelegationProvider[] }>("providers.list", { includeDisabled: false })
         .then(result => result.providers),
+      sessionId ? host.call<{ modelKeys: string[] | null }>("session.delegationPolicy", { id: sessionId }) : undefined,
     ]);
     if (deps.getHost() !== host) throw new Error("Delegation host changed");
     if (epoch !== started) continue;
-    const policy = settings.delegation;
+    let policy = settings.delegation;
     if (policy !== undefined && !isDelegationSettings(policy)) throw new Error("Invalid delegation policy");
+    if (sessionId && (!sessionPolicy || (sessionPolicy.modelKeys !== null &&
+      (!Array.isArray(sessionPolicy.modelKeys) || sessionPolicy.modelKeys.length > 128 ||
+        new Set(sessionPolicy.modelKeys).size !== sessionPolicy.modelKeys.length ||
+        sessionPolicy.modelKeys.some(key => typeof key !== "string" || key !== key.trim() ||
+          key.length > 385 || key.indexOf("/") < 1 || key.endsWith("/")))))) {
+      throw new Error("Invalid session delegation policy");
+    }
+    const customKeys = sessionPolicy?.modelKeys ?? undefined;
+    if (customKeys !== undefined) {
+      const selected = new Set(customKeys);
+      const globalPolicy = policy ?? legacyDelegationSettings(providers);
+      policy = { ...globalPolicy, models: globalPolicy.models.filter(model => selected.has(delegationModelKey(model))) };
+    }
     const available = providers.filter(row => row.enabled !== false &&
       (row.hasSecret === true || row.hasOauth === true || row.authKind === "none")).flatMap(provider => {
       const bindings: Binding[] = provider.models?.length ? provider.models : provider.defaultModelId ? [{ id: provider.defaultModelId }] : [];
@@ -53,12 +66,14 @@ export function createDelegationCatalog(deps: DelegationCatalogDependencies) {
           legacyEnabled: binding.availableForSubagents === true, ...capabilities };
       });
     });
-    const fingerprint = createHash("sha256").update(JSON.stringify({ policy, available })).digest("hex");
-    if (fingerprint !== lastFingerprint) {
-      lastFingerprint = fingerprint;
-      revision = `${authority}:${++generation}`;
+    const fingerprint = createHash("sha256").update(JSON.stringify({ policy, available, customKeys })).digest("hex");
+    const key = sessionId ?? "";
+    if (fingerprint !== fingerprints.get(key)?.fingerprint) {
+      fingerprints.set(key, { fingerprint, revision: `${authority}:${++generation}` });
     }
+    const revision = fingerprints.get(key)!.revision;
     const snapshot = delegationPolicySnapshot({ ...(policy !== undefined ? { settings: policy } : {}), revision,
+      ...(customKeys !== undefined ? { selectionMode: "task-fit" } : {}),
       modelKeys: available.filter(model => policy === undefined ? model.legacyEnabled : policy.models.some(row =>
         row.enabled && row.providerId === model.providerId && row.modelId === model.modelId)).map(delegationModelKey) });
     return { host, policy: snapshot.settings, snapshot, available };
@@ -68,6 +83,7 @@ export function createDelegationCatalog(deps: DelegationCatalogDependencies) {
     if (!current.policy) return [];
     return orderDelegationModels(current.policy, {
       preferredKey: `${request.providerId}/${request.modelId}`, selection: request.selection, reason: request.reason,
+      selectionMode: current.snapshot.selectionMode,
     }).flatMap(row => {
       const model = current.available.find(model => model.providerId === row.providerId && model.modelId === row.modelId);
       if (!model || (request.requiresImages && !model.supportsVision)
@@ -104,5 +120,5 @@ export function createDelegationCatalog(deps: DelegationCatalogDependencies) {
         || session.projectTitle || projectPath.split(/[\\/]/).filter(Boolean).at(-1) } : {}),
     };
   }
-  return { read, candidates, source, invalidate() { epoch++; }, snapshot: async () => (await read()).snapshot };
+  return { read, candidates, source, invalidate() { epoch++; fingerprints.clear(); }, snapshot: async (sessionId?: string) => (await read(sessionId)).snapshot };
 }

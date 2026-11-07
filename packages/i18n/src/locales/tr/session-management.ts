@@ -1,0 +1,68 @@
+export const sessionLabels = {
+  "title": "Etiketler",
+  "add": "Etiket ekle",
+  "name": "Etiket adı",
+  "color": "Renk",
+  "delete": "Etiketi sil",
+  "deleteConfirm": "“{{name}}” silinsin ve {{count}} sohbetten kaldırılsın mı? Sohbetler korunacaktır.",
+  "moveUp": "Yukarı taşı",
+  "moveDown": "Aşağı taşı",
+  "save": "Kaydet",
+  "cancel": "İptal",
+  "none": "Etiket yok",
+  "manage": "Etiketleri yönet",
+  "filter": "Sohbetleri filtrele",
+  "clearFilters": "Filtreleri temizle",
+  "allColors": "Tüm renkler",
+  "colorMark": "Renk işareti",
+  "clearColor": "Renk işareti yok",
+  "overflow": "{{count}} etiket daha",
+  "reorderBefore": "{{title}} öncesine taşı",
+  "reorderAfter": "{{title}} sonrasına taşı",
+  "activityOrder": "Etkinlik sırası",
+  "investigation": "İnceleme",
+  "feature": "Özellik",
+  "fix": "Düzeltme",
+  "colors": {
+    "red": "Kırmızı",
+    "amber": "Kehribar",
+    "green": "Yeşil",
+    "blue": "Mavi",
+    "violet": "Mor",
+    "pink": "Pembe"
+  }
+};
+
+export const sessionDelegation = {
+  "title": "Alt ajan modelleri",
+  "customCount": "Alt ajan modelleri: {{count}} seçili",
+  "scope": "Model havuzu",
+  "inherit": "Geneli izle",
+  "custom": "Özel",
+  "inheritHint": "Genel görevlendirme ayarlarını kullanır.",
+  "taskFitHint": "Her alt görevi model açıklamalarına göre eşleştirir. Onay kuralları geçerli kalır.",
+  "search": "Model ara",
+  "models": "Kullanılabilir alt ajan modelleri",
+  "unavailable": "Kullanılamıyor",
+  "approvalRequired": "Onay gerekli",
+  "autoAllowed": "Otomatik izinli",
+  "noModels": "Eşleşen model yok.",
+  "selectedCount": "{{count}} model seçildi",
+  "disabled": "Bu sohbette görevlendirme devre dışı.",
+  "busy": "Model seçimi sohbet boşta olduğunda kaydedilebilir.",
+  "invalidSelection": "Kaydetmeden önce kullanılamayan modelleri kaldırın.",
+  "cancel": "İptal",
+  "save": "Kaydet",
+  "saving": "Kaydediliyor…"
+};
+
+export const delegationDetails = {
+  "title": "Model seçimi",
+  "requested": "İstenen model",
+  "reason": "Seçim gerekçesi",
+  "actual": "Kullanılan model",
+  "scheduling": "Zamanlama kararları",
+  "selected": "Seçildi",
+  "skipped": "Atlandı",
+  "cancelled": "İptal edildi"
+};

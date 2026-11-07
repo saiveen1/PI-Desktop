@@ -545,6 +545,8 @@ type SidebarPreferences = {
     pinned?: boolean;
     archived?: boolean;
     order?: number; // renderer-local manual order
+    labelIds?: string[];
+    color?: "red" | "amber" | "green" | "blue" | "violet" | "pink";
   }>;
   projectMeta: Record<string, {
     pinned?: boolean;
@@ -558,6 +560,8 @@ type SidebarPreferences = {
     archived: boolean;
   };
   openProjectPaths: string[];
+  sessionLabels: { id: string; name: string; color: string; defaultName?: string }[];
+  sessionFilter: { labelIds: string[]; color?: string };
 };
 ```
 
@@ -567,13 +571,24 @@ type SidebarPreferences = {
   project presentation order. Dragging a project title or using ArrowUp
   and ArrowDown on that title writes contiguous order values for the visible normalized paths.
   Missing or invalid values fall back to stable path order; pinned and archived
-  priority remains applied before manual order. Session `manual`/`order` remain
-  compatibility fields and are not exposed by the sidebar.
+  priority remains applied before manual order. Session `recent` and legacy
+  `manual` use the saved activity order; missing entries are seeded once from
+  existing activity and new sessions enter before known siblings. Accepted
+  sends and same-project drags change this presentation order only.
 - Missing, malformed, or unwritable preferences fall back to empty metadata,
   `recent`, archived hidden, and the host-selected project. Preference failure
   never blocks a host operation.
 - The record never contains transcript content, tool arguments, provider
   configuration, or secrets. Clearing it changes presentation only.
+- Label IDs are stable references to one local global catalog. Renaming and
+  recoloring keep associations; confirmed deletion prunes them. An explicitly
+  empty catalog stays empty on reload instead of restoring defaults. Independent
+  session color marks and label/color filters are also presentation-only.
+- Authoritative delegation model restrictions do not live in these preferences.
+  Host `kv(ns="sessionDelegation", key=sessionId)` stores an optional list of
+  exact model keys. Absence inherits; an empty list disables delegation. Fork
+  copies it in the session transaction; permanent deletion removes it. This
+  uses the existing extension boundary without a schema/table migration.
 - `openProjectPaths` retains sidebar tabs. The selected workspace remains
   host-owned `kv(app, currentProjectId)` and is restored through
   `workspace.get`; the renderer does not persist a competing active path.

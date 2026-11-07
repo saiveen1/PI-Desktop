@@ -286,10 +286,22 @@ destination, chat as the home surface, tools and permissions inline.
   preview even without an open project. Back returns to the no-project browsing
   state. Branches preserve referenced pasted/imported inputs as child-owned
   copies; deleting the source task does not break these previews.
-- **Sort**: user-facing modes are Recently updated, Created date, Oldest
-  first, and Name. Pinned rows precede unpinned rows. Project groups switch
+- **Sort**: session modes are Activity order (`recent`), Created date, Oldest
+  first, and Name. Activity order persists accepted-send and same-project drag
+  placement; opening and assistant output do not reorder it. Dragging a session
+  returns to Activity order without reordering hidden siblings. Global pins
+  remain above normal history and do not move on send. Project groups switch
   to `manual` by dragging a title or using ArrowUp/ArrowDown on that
-  title. Session `manual` remains a compatibility value.
+  title. Session `manual` remains a readable compatibility value.
+- **Labels and color marks**: Conversation settings owns one editable global
+  label catalog. A session row menu assigns multiple labels and one independent,
+  optional color mark. The sidebar can filter by any selected label and a color;
+  filters do not rewrite organization or include hidden rows in bulk actions.
+- **Subagent models**: A local conversation's composer opens its model-pool
+  dialog. Follow global is the default; Custom enables model checkboxes and
+  explains description-based task matching. Saving an empty custom pool disables
+  delegation for that conversation. The dialog is inspectable while busy but
+  saves only while idle, retains failures and closes on conversation switch.
 - **Conversation list**: each project group shows the ten most-recent sessions
   in the active sort order by default; the remainder folds behind a **Load N
   more…** row. The list has no time-group headings. Rows show the title and a

@@ -307,9 +307,18 @@ may be retained while exactly one workspace supplies the visible shell context.
   to a non-archived sibling. With no sibling, a conversation receives a fresh
   draft in the same scope and a project clears the visible workspace; the app
   never leaves a hidden archived row as the active context.
-- **Sort** offers Recently updated (`recent`), Created date (`created`),
+- **Sort** offers Activity order (`recent`), Created date (`created`),
   Oldest first (`oldest`), and Name (`name`). Missing/invalid values fall back
-  to `recent`. Pressing a project title and moving 8px, or ArrowUp/ArrowDown
+  to `recent`. Session Activity order is a persistent sequence: dragging within
+  the same project (or the standalone group) moves only the chosen conversation,
+  and returns an explicit alternate sort to Activity order. Accepting a user
+  message or durably queueing it raises that ordinary conversation once; later
+  execution, assistant output, reading and restoration do not move it. Failed
+  submissions do not raise it. Global pins stay stable under send activity.
+  Pin/archive boundaries remain intact; filtered drag placement uses the full
+  sequence so hidden rows retain their relative order. Host timestamps continue
+  to describe real activity and are not rewritten to achieve placement.
+  Pressing a project title and moving 8px, or ArrowUp/ArrowDown
   on that focused title, switches project ordering to `manual` and persists a
   contiguous order per normalized path. Archived and pinned priority remains
   ahead of the manual order; projects without an assigned order fall back to
@@ -323,6 +332,19 @@ may be retained while exactly one workspace supplies the visible shell context.
   session only, and not persisted.
 - Presentation changes are saved best-effort. Storage failure must not block
   project activation, session selection, or agent execution.
+
+- **Labels** are global editable metadata with a name, color and catalog order.
+  Conversation settings supports add, rename, recolor, reorder and confirmed
+  deletion. Deletion names the affected label and association count and removes
+  only those references. Session menus support multiple label assignments.
+- **Color mark** is one optional per-conversation color independent of labels.
+  Its swatch remains distinct from running, unread and failure indicators.
+  The row shows compact labels with an overflow affordance. Label colors are
+  not a replacement for the independent mark.
+- **Filters** match any selected label, then intersect with a selected color.
+  Clearing filters restores the same order. Visible/range selection respects
+  filtered rows, collapsed projects and folded history. A TODO label has no
+  effect on the task, reminder or notification systems.
 
 #### Session isolation across tabs
 

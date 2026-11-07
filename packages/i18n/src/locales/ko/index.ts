@@ -1,7 +1,11 @@
 import { approvalCenter } from "./delegation-approval.js";
+import { sessionLabels, sessionDelegation, delegationDetails } from "./session-management.js";
 import { en, type EnglishCatalog } from "../en/index.js";
 
 export const ko = {
+  sessionLabels,
+  sessionDelegation,
+  delegationDetails,
   sessionOrganization: {
     select: "세션 선택", selectVisible: "표시된 항목 선택", selectSession: "{{title}} 선택",
     done: "완료", selected: "{{count}}개 선택됨", unarchive: "보관 해제", moveToTrash: "휴지통으로 이동",

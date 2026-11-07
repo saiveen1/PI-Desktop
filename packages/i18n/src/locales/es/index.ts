@@ -1,7 +1,11 @@
 import { approvalCenter } from "./delegation-approval.js";
+import { sessionLabels, sessionDelegation, delegationDetails } from "./session-management.js";
 import { en, type EnglishCatalog } from "../en/index.js";
 
 export const es = {
+  sessionLabels,
+  sessionDelegation,
+  delegationDetails,
   sessionOrganization: {
     select: "Seleccionar sesiones", selectVisible: "Seleccionar visibles", selectSession: "Seleccionar {{title}}",
     done: "Listo", selected: "{{count}} seleccionadas", unarchive: "Desarchivar", moveToTrash: "Mover a la papelera",

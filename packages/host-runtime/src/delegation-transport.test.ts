@@ -53,11 +53,11 @@ it("snapshot callback stays host-local, preserves adopted empty policy and rejec
   } }));
   await expect(rpc("provider.delegationSnapshot", { sessionId: "s" })).resolves.toMatchObject({ revision: "r1", modelKeys: ["p/m"] });
   sidecar.setDelegationSnapshotResolver(async () => ({ revision: "r2", modelKeys: [], settings: { version: 1, approvalTimeoutSeconds: 30, models: [] } }));
-  await expect(rpc("provider.delegationSnapshot")).resolves.toMatchObject({ settings: { models: [] }, modelKeys: [] });
+  await expect(rpc("provider.delegationSnapshot", { sessionId: "s" })).resolves.toMatchObject({ settings: { models: [] }, modelKeys: [] });
   sidecar.setDelegationSnapshotResolver(async () => ({ revision: "r3", modelKeys: [] }));
-  await expect(rpc("provider.delegationSnapshot")).resolves.toEqual({ revision: "r3", modelKeys: [] });
+  await expect(rpc("provider.delegationSnapshot", { sessionId: "s" })).resolves.toEqual({ revision: "r3", modelKeys: [] });
   sidecar.setDelegationSnapshotResolver(async () => ({ revision: "", modelKeys: [] }));
-  await expect(rpc("provider.delegationSnapshot")).rejects.toThrow("Invalid delegation policy snapshot");
+  await expect(rpc("provider.delegationSnapshot", { sessionId: "s" })).rejects.toThrow("Invalid delegation policy snapshot");
   expect(forwarded).toEqual([]);
 });
 it("same-session pending reverse calls remain concurrent; abort cancels exact source requests", async () => {

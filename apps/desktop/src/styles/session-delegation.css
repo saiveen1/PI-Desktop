@@ -1,0 +1,38 @@
+.session-delegation-trigger.is-custom { color: var(--ds-accent); background: var(--ds-bg-hover); }
+.session-delegation-overlay { padding: 16px; }
+.session-delegation-dialog {
+  width: min(560px, 100%);
+  max-height: calc(100dvh - 32px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  overflow-y: auto;
+}
+.session-delegation-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.session-delegation-header > div { min-width: 0; }
+.session-delegation-header h2 { margin: 0; font-size: var(--text-base); font-weight: 600; }
+.session-delegation-header p { margin: 4px 0 0; font-size: var(--text-xs); color: var(--ds-text-secondary); overflow-wrap: anywhere; }
+.session-delegation-hint { margin: 0; font-size: var(--text-xs); color: var(--ds-text-secondary); overflow-wrap: anywhere; }
+.session-delegation-models { overflow-y: auto; min-height: 0; max-height: 320px; border-block: 1px solid var(--ds-border-default); }
+.session-delegation-model.ui-checkbox { display: flex; width: 100%; align-items: flex-start; padding: 10px 2px; }
+.session-delegation-model + .session-delegation-model { border-top: 1px solid var(--ds-border-default); }
+.session-delegation-model > span { min-width: 0; flex: 1; }
+.session-delegation-model-copy { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; overflow-wrap: anywhere; }
+.session-delegation-model-copy strong { font-size: var(--text-sm); }
+.session-delegation-model-copy > span { color: var(--ds-text-secondary); font-size: var(--text-xs); }
+.session-delegation-model-state { margin-left: auto; }
+.session-delegation-description { flex-basis: 100%; white-space: pre-wrap; }
+.session-delegation-empty { font-size: var(--text-sm); padding: 12px 0; color: var(--ds-text-secondary); }
+.session-delegation-error { margin: 0; font-size: var(--text-xs); color: var(--ds-error); overflow-wrap: anywhere; }
+.session-delegation-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; padding-top: 4px; }
+.delegation-selection-summary { padding: 12px 16px; font-size: var(--text-xs); color: var(--ds-text-secondary); }
+.delegation-selection-summary dl { display: grid; grid-template-columns: minmax(90px, auto) minmax(0, 1fr); gap: 6px 12px; margin: 0; }
+.delegation-selection-summary dt { font-weight: 500; }
+.delegation-selection-summary dd { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.delegation-selection-summary ul { padding-left: 16px; margin: 0; }
+@media (max-width: 480px) {
+  .delegation-selection-summary dl { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .delegation-selection-summary dd + dt { margin-top: 6px; }
+  .session-delegation-model-state { margin-left: 0; }
+}

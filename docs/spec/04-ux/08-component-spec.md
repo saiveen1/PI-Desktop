@@ -1520,6 +1520,15 @@ It does not render separate Details or Output tabs.
 
 ## 6. SessionList
 
+The sidebar's Activity order persists accepted-send and same-project drag
+placement, independently of the last-reply timestamp. The row menu supports
+multiple labels, one separate color mark, and keyboard-accessible move actions.
+Compact label chips expose overflow names; the color mark does not replace run,
+unread or error status. Filters match any chosen label and intersect with color,
+preserving hidden rows' order and excluding them from visible/range selection.
+Global pins remain separate and do not reorder on send. See
+[interaction patterns](09-interaction-patterns.md#organization-actions).
+
 ### 6.1 Purpose
 
 List user sessions inside the sidebar: global pinned shortcuts, followed by

@@ -895,7 +895,7 @@ is guidance, not the security boundary.
 
 ### 10.2 Delegation and subagent tool scope (D201, ADR 0062)
 
-`Task` is available in Agent mode only, and only when the session has at least
+`Task` and the read-only `TaskModels` directory are available in Agent mode only, and only when the session has at least
 one subagent definition. Plan and Goal are read-only contract negotiations, so a
 delegate with `Bash`, `Edit` or `Write` would drive straight through them.
 
@@ -909,7 +909,7 @@ ADR 0165) — is dropped with a parse warning.
 A document may opt into the parent session's live tool catalog with
 `tools: inherit` or `tools: [inherit, Bash]` (ADR 0246 / D415). At `Task` spawn
 the runtime unions `toolCatalog` keys (including deferred plugin/MCP tools)
-with any assignable extras, then drops `Task` / `TaskWait` / `TaskList` /
+with any assignable extras, then drops `Task` / `TaskModels` / `TaskWait` / `TaskList` /
 `TaskStop`, `EnterPlanMode` / `EnterGoalMode`, `asktool`, `new_context`, and
 `ToolSearch`. Builtins do not opt in. `inherit` is visible in the Markdown and
 in Settings; host-core keeps the token so an inherit-only document still

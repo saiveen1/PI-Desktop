@@ -2949,6 +2949,17 @@ async fn handle_request(
             todos::get_from(&st, session_id)
         }
 
+        "session.delegationPolicy" => {
+            let id = params
+                .get("id")
+                .and_then(Value::as_str)
+                .ok_or_else(|| rpc_err(1002, "id required", "INVALID_PARAMS"))?;
+            let st = state.lock().await;
+            let session = sessions::session_summary(&st.db, id)
+                .map_err(|e| rpc_err(1000, e.to_string(), "INTERNAL"))?
+                .ok_or_else(|| rpc_err(1007, "session not found", "NOT_FOUND"))?;
+            Ok(json!({ "modelKeys": session.delegation_model_keys }))
+        }
         "session.configure" => {
             let id = params
                 .get("id")
@@ -2960,7 +2971,23 @@ async fn handle_request(
                 .ok_or_else(|| rpc_err(1002, "mode required", "INVALID_PARAMS"))?;
             let thinking_level = thinking_level_param(&params)?;
             let fast_mode = fast_mode_param(&params)?;
+            let delegation_keys = params
+                .get("delegationModelKeys")
+                .map(crate::session_delegation::parse)
+                .transpose()
+                .map_err(|e| rpc_err(1002, e.to_string(), "INVALID_PARAMS"))?;
             let st = state.lock().await;
+            if delegation_keys.is_some() {
+                crate::session_delegation::ensure_idle(&st.db, id)
+                    .map_err(|e| plan_rpc_err(e.to_string()))?;
+            }
+            let previous = sessions::session_summary(&st.db, id)
+                .map_err(|e| rpc_err(1000, e.to_string(), "INTERNAL"))?;
+            let tx = st
+                .db
+                .conn()
+                .unchecked_transaction()
+                .map_err(|e| rpc_err(1000, e.to_string(), "INTERNAL"))?;
             let session = sessions::configure_session_with_fast_mode(
                 &st.db,
                 id,
@@ -2980,6 +3007,32 @@ async fn handle_request(
                 }
             })?
             .ok_or_else(|| rpc_err(1007, "session not found", "NOT_FOUND"))?;
+            if let Some(keys) = delegation_keys {
+                crate::session_delegation::write(&st.db, id, keys.as_deref())
+                    .map_err(|e| rpc_err(1000, e.to_string(), "INTERNAL"))?;
+                if let Some(previous) = previous.filter(|old| {
+                    old.mode == session.mode
+                        && old.provider_id == session.provider_id
+                        && old.model_id == session.model_id
+                        && old.thinking_level == session.thinking_level
+                        && old.permission_mode == session.permission_mode
+                        && old.fast_mode == session.fast_mode
+                }) {
+                    let timestamp = chrono::DateTime::parse_from_rfc3339(&previous.updated_at)
+                        .map_err(|e| rpc_err(1000, e.to_string(), "INTERNAL"))?
+                        .timestamp_millis();
+                    tx.execute(
+                        "UPDATE sessions SET updated_at = ?2 WHERE id = ?1",
+                        rusqlite::params![id, timestamp],
+                    )
+                    .map_err(|e| rpc_err(1000, e.to_string(), "INTERNAL"))?;
+                }
+            }
+            tx.commit()
+                .map_err(|e| rpc_err(1000, e.to_string(), "INTERNAL"))?;
+            let session = sessions::session_summary(&st.db, id)
+                .map_err(|e| rpc_err(1000, e.to_string(), "INTERNAL"))?
+                .ok_or_else(|| rpc_err(1007, "session not found", "NOT_FOUND"))?;
             let session = remote_tools::decorate_session(
                 &st.db,
                 serde_json::to_value(session)

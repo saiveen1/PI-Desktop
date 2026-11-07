@@ -1,7 +1,11 @@
 import { approvalCenter } from "./delegation-approval.js";
+import { sessionLabels, sessionDelegation, delegationDetails } from "./session-management.js";
 import { en, type EnglishCatalog } from "../en/index.js";
 
 export const zhTW = {
+  sessionLabels,
+  sessionDelegation,
+  delegationDetails,
   sessionOrganization: {
     select: "多選", selectVisible: "全選可見任務", selectSession: "選擇「{{title}}」",
     done: "完成", selected: "已選 {{count}} 項", unarchive: "取消封存", moveToTrash: "移至資源回收筒",

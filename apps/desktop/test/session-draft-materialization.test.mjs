@@ -8,6 +8,7 @@ const { createSessionRuntime } = await import("../src/stores/runtime/session-run
 const { createSessionCoordination } = await import("../src/stores/runtime/session-coordination.ts");
 const { createSessionSlice } = await import("../src/stores/slices/session-slice.ts");
 const { createQueueSlice } = await import("../src/stores/slices/queue-slice.ts");
+const { createSessionManagementSlice } = await import("../src/stores/slices/session-management-slice.ts");
 
 function fixture(t) {
   const gate = Promise.withResolvers();
@@ -55,6 +56,7 @@ function fixture(t) {
     messageErrorFromUnknown: error => ({ code: "FAILED", message: error.message }),
     assistantErrorMessage: error => ({ id: "error", role: "assistant", content: "", error }),
   }));
+  Object.assign(state, createSessionManagementSlice({ get, set, persist() {} }));
   return { get, set, runtime, coordination, gate, created: () => created };
 }
 

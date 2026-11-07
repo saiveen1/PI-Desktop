@@ -204,6 +204,8 @@ type SessionConfigureRequest = {
   thinkingLevel: SessionThinkingLevel;
   /** Session `/fast` switch (ADR 0334); omitted keeps the stored value. */
   fastMode?: boolean;
+  /** Omitted preserves; null inherits global; [] disables delegation. */
+  delegationModelKeys?: string[] | null;
 };
 ```
 
@@ -213,6 +215,13 @@ Plan/Goal `pending`/`queued`/`running` record exists. The renderer may keep thes
 controls editable during a turn, but it queues the latest full configuration
 locally and invokes this channel only after the terminal event; the running
 turn never observes that optimistic next-turn choice.
+
+The additive delegation model list contains at most 128 unique exact
+`providerId/modelId` keys. The local conversation dialog saves it only while
+idle and reports save failures. A pool-only change preserves the conversation's
+activity timestamp and transcript. A custom pool narrows global eligibility;
+it does not change model approval. Unsupported/native/remote session UI does
+not expose this local configuration.
 
 Only a changed effective global `defaultCommandShell` is idle-only across all
 affected sessions: any active turn or pending/queued/running Plan/Goal work blocks

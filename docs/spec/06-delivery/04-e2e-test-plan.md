@@ -1,5 +1,37 @@
 # 04. E2E Test Plan
 
+## E2E-SESSION-activity-labels-and-scoped-delegation
+
+- **Environment:** Current isolated worktree, synthetic sessions/provider
+  boundaries and isolated renderer/Host data. No daily profile or paid provider.
+- **Organization path:** Drag an old conversation within its project, open it,
+  stream assistant output, accept a new prompt, queue a prompt and execute it.
+  Switch Name/Created/Oldest views; drag back into Activity order. Repeat with
+  pins, archived rows, filtered/hidden siblings, standalone rows and restarts.
+  Failed sends leave order unchanged; queued execution never raises twice.
+- **Labels path:** Add, rename, recolor, reorder and delete labels from
+  Conversation settings. Assign multiple labels and an independent color from
+  the row menu. Filter by multiple labels (any match) and color (intersection),
+  clear filters, reload, then delete a default label. Only explicit deletion
+  removes associations; conversations and their transcripts survive.
+- **Delegation path:** Open the local conversation's model-pool dialog, save a
+  custom subset, switch sessions, reload and fork. Restore global inheritance
+  and separately save an empty custom pool. Query TaskModels only when preparing
+  a delegation; choose a lower numeric-priority specialist by description.
+  Observe automatic approval, explicit approval, denied/unavailable candidates,
+  exact requirements, cancellation, resume and natural fallback.
+- **Expected:** Every admission and approval alternative stays in the
+  invocation's effective session pool. Empty custom pools never inherit.
+  Global revocation remains authoritative. Model descriptions are absent from
+  constant system/Task payloads and appear in the requested directory result.
+  Original modelReason, requested model and actual scheduling decisions survive
+  reload and appear separately in ordinary detail views. Missing legacy reasons
+  remain absent. Configuring a pool does not alter activity timestamps.
+- **Status:** Implementation candidate. The initial organization baseline was
+  run before implementation; subsequent tests are NOT RUN at the user's
+  explicit request to prioritize implementation. Compilation is separate from
+  these behavioral acceptance scenarios.
+
 ## E2E-COMPOSER-DIRECTORY-PASTE: Native folder cards and lazy context
 
 - **Preconditions**: Synthetic folders/files with spaces, Unicode and XML-significant names.

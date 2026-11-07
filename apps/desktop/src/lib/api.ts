@@ -868,7 +868,7 @@ export const api = {
   configureSession: (
     id: string,
     config: Pick<SessionSummary, "mode" | "providerId" | "modelId"> &
-      Partial<Pick<SessionSummary, "thinkingLevel" | "permissionMode" | "fastMode">>,
+      Partial<Pick<SessionSummary, "thinkingLevel" | "permissionMode" | "fastMode">> & { delegationModelKeys?: string[] | null },
   ) =>
     invoke<{ session: SessionSummary }>(
       IPC.invoke.sessionConfigure,

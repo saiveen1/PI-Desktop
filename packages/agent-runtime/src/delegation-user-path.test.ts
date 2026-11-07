@@ -109,7 +109,7 @@ describe("delegation user path through real parent and child transports", () => 
     } finally { release(await allow()); await f.close(); }
   });
 
-  it.each([false, true])("holds the model request until approval and keeps descriptions in Task (pin=%s)", async (pin) => {
+  it.each([false, true])("holds the model request until approval and exposes only on-demand model guidance (pin=%s)", async (pin) => {
     let entered!: () => void;
     const pendingApproval = new Promise<void>((resolve) => { entered = resolve; });
     let release!: (decision: DelegationApprovalDecision) => void;
@@ -125,7 +125,8 @@ describe("delegation user path through real parent and child transports", () => 
       expect(f.requests.some((row) => row.model === "expensive")).toBe(true);
       for (const request of f.requests.filter((row) => row.model === "parent")) {
         const task = request.tools?.find((tool) => tool.function.name === "Task");
-        expect(task?.function.description).toContain("Independent concurrency review");
+        expect(task?.function.description).not.toContain("Independent concurrency review");
+        expect(task?.function.description).toContain("TaskModels");
         expect(task?.function.description).toContain("Review an independent change");
       }
     } finally { release(await allow()); await f.close(); }

@@ -10,6 +10,7 @@ import {
   normalizeMode,
   isDelegationSettings,
   orderDelegationModels,
+  legacyDelegationSettings,
   trustedExtensionAgentKeyFromProviderId,
   type CommandShellCatalog,
   type McpServerRecord,
@@ -605,7 +606,12 @@ export function createSessionLaunchRuntime({
             };
       },
     });
-    const delegation = settings.delegation;
+    const customModelKeys: string[] | undefined = session.delegationModelKeys;
+    const globalDelegation = settings.delegation;
+    const baseDelegation = globalDelegation ?? (customModelKeys !== undefined ? legacyDelegationSettings(providers.providers) : undefined);
+    const delegation = customModelKeys !== undefined && baseDelegation
+      ? { ...baseDelegation, models: baseDelegation.models.filter((model: { providerId: string; modelId: string }) => customModelKeys.includes(`${model.providerId}/${model.modelId}`)) }
+      : baseDelegation;
     if (delegation !== undefined && !isDelegationSettings(delegation)) throw new Error("Invalid delegation policy");
     const subagentModelKeys: string[] = [];
     const candidates = delegation !== undefined
@@ -740,7 +746,8 @@ export function createSessionLaunchRuntime({
       sidecarParams: {
         sessionId,
         mode,
-        delegationSettings: settings.delegation,
+        delegationSettings: delegation,
+        ...(customModelKeys !== undefined ? { delegationSelectionMode: "task-fit" as const } : {}),
         delegationAuthorization: true,
         ...(overrides.turnId ? { turnId: overrides.turnId } : {}),
         thinkingLevel,

@@ -1002,14 +1002,19 @@ Saved policy, catalog availability, descriptions and priorities apply to later
 Task admissions in the same long parent turn, later resumes, pending approvals
 and naturally triggered fallback. The additive `provider.delegationSnapshot`
 callback returns `DelegationPolicySnapshot` (`settings?`, opaque string `revision`,
-`modelKeys`); runtime resolves model keys independently. Refresh the parent-facing
-catalog at a provider-request boundary, never by rewriting an in-flight payload.
+`modelKeys`, optional derived `selectionMode: "task-fit"`); runtime resolves model
+keys independently. Refresh runtime authority at a provider-request boundary,
+never by rewriting an in-flight payload. The full directory is returned only by
+the read-only `TaskModels` tool when the parent is preparing delegation; it is
+absent from the system prompt and the Task declaration.
 Already-started children retain their provider and resolved execution policy;
 saving settings neither interrupts/recreates them nor forces a model switch.
 
-Task's tool declaration carries both role and model selection guidance on every
-provider request. `modelReason` explains specialist selection ahead of a preferred
-tier. `modelSelection: prefer | require` defaults to prefer; require never
+Task's declaration carries the role catalog and a short instruction to query
+TaskModels as needed. A batch may reuse the retrieved descriptions. A custom
+session pool requires an explicit model and concise `modelReason` for each new
+Task, and honors task fit ahead of numeric priority. Missing session overrides
+retain global/legacy ordering. `modelSelection: prefer | require` defaults to prefer; require never
 substitutes another model. Optional `minContextWindow` and `requiresImages` filter
 candidates before approval. These model-authored fields do not grant permission.
 Natural-language model choices continue through `Task.model`; when the chosen
@@ -1039,8 +1044,11 @@ or extending; expired, cancelled, replaced or stale requests cannot revive work.
 
 Acknowledged approval is distinct from waiting for capacity or execution start.
 Provider fallback keeps successful tool history and checks the next model before
-any request. `Task` results and settlement snapshots record requested model and
-selection/skip reasons in additive `scheduling` details. Main conversation model
+any request. `Task` results and settlement snapshots record requested model, original
+`modelReason`, and selection/skip reasons in additive `scheduling` details.
+Ordinary delegation views display the original explanation separately from
+actual model identity and scheduling decisions; old records never acquire an
+inferred explanation. Main conversation model
 selection and ordinary tool permissions are unchanged. Plugin collaboration
 uses the same model gate; an existing target session is not silently rebound.
 See [the scheduling ADR](../../adr/delegation-scheduling-and-approval.md),
@@ -1097,8 +1105,8 @@ the on-demand catalog of §7.1. Execution of all four is restricted to Agent mod
   The `Task` tool accepts an optional `model` parameter
   (`"provider/modelId"`) that overrides the delegate's model for that run.
   Resolution priority: Task.model parameter → definition frontmatter pin →
-  session model. The parent agent sees a model summary in the system prompt
-  listing all models marked `availableForSubagents` in provider settings. The
+  session model. The parent reads a model directory through TaskModels when needed,
+  listing models marked `availableForSubagents` in provider settings. The
   empty-catalog system summary, Task description and rejected-override error
   point to Settings → Models → edit service/account → model Advanced →
   "Available for AI delegation" → save, and require an exact catalog key

@@ -26,6 +26,7 @@ mod scheduled;
 mod scratch;
 mod secrets;
 mod session_collaboration;
+mod session_delegation;
 mod session_search;
 mod session_trash;
 mod session_worktrees;

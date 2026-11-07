@@ -72,7 +72,7 @@ export type SidecarRuntimeDependencies = {
   currentNetworkProxy: () => any;
   authorizeDelegation: (request: DelegationApprovalRequest) => Promise<DelegationApprovalDecision>;
   cancelDelegationApproval: (request: Pick<DelegationApprovalRequest, "sessionId" | "requestId">) => void;
-  delegationSnapshot: () => Promise<DelegationPolicySnapshot>;
+  delegationSnapshot: (sessionId: string) => Promise<DelegationPolicySnapshot>;
   /** The agent's drawn cursor. Visualization only (ADR 0342 §10). */
   computerCursorOverlay: Pick<ComputerCursorOverlay, "apply">;
   /** Push the live computer-use grant to the renderer's indicator. */

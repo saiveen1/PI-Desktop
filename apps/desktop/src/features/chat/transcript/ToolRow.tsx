@@ -1,6 +1,7 @@
 import { useChatSessionCapability } from "../../../hooks/use-chat-session-capability";
 import { SubagentStopButton } from "./SubagentStopButton";
 import { SubagentRetryButton } from "./SubagentRetryButton";
+import { DelegationSelectionSummary } from "./DelegationSelectionSummary";
 import { PlanHistoryCard } from "./PlanHistoryCard";
 import { planSubmission } from "../../../lib/plan-history";
 import { reviewChangeFromMessage } from "../../../lib/workspace-review";
@@ -597,6 +598,7 @@ function HostToolRow({
             label={t("chat.collapseToolOutput")}
             onCollapse={collapseRow}
           />
+          {action === "delegate" && !lifecycle ? <DelegationSelectionSummary payload={toolResultPayload(message)} /> : null}
           <ToolDetailBlocks blocks={blocks} plain={runHead} streaming={status === "running"} />
         </div>
       ) : null}

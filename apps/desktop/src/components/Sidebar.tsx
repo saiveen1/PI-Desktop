@@ -1,4 +1,6 @@
 import { IconClock } from "./icons";
+import { ColorSwatch, SessionRowLabels, SessionFilterControl, sessionMarkMenu } from "../features/sessions/SessionLabelControls";
+import { matchesSessionFilter } from "../lib/session-labels";
 import { RemoteProjectGroups } from "./remote/RemoteProjectGroups";
 import { groupRemoteProjectSessions } from "../lib/remote-project-catalog";
 import { isRemoteSession, sessionAllows } from "../lib/remote-session-safety";
@@ -340,6 +342,12 @@ export function Sidebar({
   } = useSessionHoverCard();
   const [expandedProjectSessions, setExpandedProjectSessions] = useState<Record<string, boolean>>({});
   const [draggingSessionId, setDraggingSessionId] = useState<string | null>(null);
+  const [sessionDrop, setSessionDrop] = useState<{ id: string; after: boolean } | null>(null);
+  const sessionLabels = useAppStore(state => state.sessionLabels);
+  const sessionFilter = useAppStore(state => state.sessionFilter);
+  const ensureSessionOrder = useAppStore(state => state.ensureSessionOrder);
+  const reorderSession = useAppStore(state => state.reorderSession);
+  useLayoutEffect(() => { ensureSessionOrder(); }, [sessions, ensureSessionOrder]);
   const [dropProjectKey, setDropProjectKey] = useState<string | null>(null);
   const [projectsDropActive, setProjectsDropActive] = useState(false);
   const [sidebarResizing, setSidebarResizing] = useState(false);
@@ -686,12 +694,13 @@ export function Sidebar({
     // can still resolve its title, source, and capabilities when it is opened
     // from there.
     const candidates = listableSessions(sessions)
-      .filter((session) => showArchived || !sessionArchived(session, sessionMeta[session.id]));
+      .filter((session) => (showArchived || !sessionArchived(session, sessionMeta[session.id])) &&
+        matchesSessionFilter(sessionMeta[session.id], sessionFilter));
     // Empty sessions are durable sidebar rows now. Their message count, not
     // their title, controls New Task reuse, so a manual rename never changes
     // the empty-slot behavior.
     return candidates;
-  }, [sessions, showArchived, sessionMeta]);
+  }, [sessions, showArchived, sessionMeta, sessionFilter]);
 
   const compareSessions = useCallback((a: SessionSummary, b: SessionSummary) => {
     const aMeta = sessionMeta[a.id] ?? {};
@@ -720,6 +729,8 @@ export function Sidebar({
       );
       if (byCreated !== 0) return byCreated;
     } else {
+      const byOrder = (aMeta.order ?? Number.MAX_SAFE_INTEGER) - (bMeta.order ?? Number.MAX_SAFE_INTEGER);
+      if (byOrder !== 0) return byOrder;
       const byRecent = compareOptionalDate(
         optionalTimestamp(a.updatedAt),
         optionalTimestamp(b.updatedAt),
@@ -1464,7 +1475,7 @@ export function Sidebar({
 
   const menuSortLabel = (value: Exclude<SessionSort, "manual"> | "created") =>
     value === "recent"
-      ? t("nav.sortRecent", { defaultValue: "Recently updated" })
+      ? t("sessionLabels.activityOrder")
       : value === "oldest"
         ? t("nav.sortOldest", { defaultValue: "Oldest first" })
         : value === "name"
@@ -1479,6 +1490,9 @@ export function Sidebar({
       const archived = sessionArchived(session, meta);
       const pinned = sessionPinned(session, meta);
       const native = session.source === "pi-native";
+      const siblings = filtered.filter(row => normalizeProjectPath(row.projectPath) === normalizeProjectPath(session.projectPath) &&
+        !sessionPinned(row, sessionMeta[row.id]) && sessionArchived(row, sessionMeta[row.id]) === archived).sort(compareSessions);
+      const position = siblings.findIndex(row => row.id === session.id);
       const gitItems = [
         ...(native || !sessionAllows(session, "canEditMessages")
           ? []
@@ -1497,6 +1511,19 @@ export function Sidebar({
       return {
         label: t("nav.sessionActions", { defaultValue: "Session actions" }),
         items: [
+          ...sessionMarkMenu(session.id, sessionLabels, meta, t, () => {
+            closeMenus(); setSettingsTab("chat");
+          }),
+          ...(!pinned ? [-1, 1].map(offset => sidebarMenuAction({
+            id: offset < 0 ? "session-move-up" : "session-move-down",
+            label: t(offset < 0 ? "sessionLabels.moveUp" : "sessionLabels.moveDown"),
+            disabled: !siblings[position + offset],
+            onSelect: () => {
+              const target = siblings[position + offset];
+              if (target) reorderSession(session.id, target.id, offset > 0);
+              closeMenus();
+            },
+          })) : []),
           sidebarMenuAction({
             id: "select-sessions",
             label: t("sessionOrganization.select"),
@@ -1605,6 +1632,11 @@ export function Sidebar({
       runningSessions,
       sessionMeta,
       sessionWorktreeItems,
+      sessionLabels,
+      filtered,
+      compareSessions,
+      reorderSession,
+      setSettingsTab,
       settings?.developerMode,
       t,
       toggleSessionPin,
@@ -1764,6 +1796,7 @@ export function Sidebar({
 
   const endSessionDrag = useCallback(() => {
     setDraggingSessionId(null);
+    setSessionDrop(null);
     setDropProjectKey(null);
   }, []);
 
@@ -1774,6 +1807,7 @@ export function Sidebar({
     if (!draggingSessionId) return;
     const clearDragState = () => {
       setDraggingSessionId(null);
+      setSessionDrop(null);
       setDropProjectKey(null);
     };
     window.addEventListener("dragend", clearDragState);
@@ -1917,7 +1951,7 @@ export function Sidebar({
     return (
       <div
         key={session.id}
-        className={`thread-item ${active ? "active" : ""} ${archived ? "archived" : ""} ${draggingSessionId === session.id ? "is-dragging" : ""} ${selectedIds.has(session.id) ? "selected" : ""}`}
+        className={`thread-item ${active ? "active" : ""} ${archived ? "archived" : ""} ${draggingSessionId === session.id ? "is-dragging" : ""} ${selectedIds.has(session.id) ? "selected" : ""} ${sessionDrop?.id === session.id ? sessionDrop.after ? "session-drop-after" : "session-drop-before" : ""}`}
         data-sidebar-session-row={session.id}
         draggable={!selection.active && !running && !isRemoteSession(session)}
         onDragStart={(event) => {
@@ -1928,6 +1962,32 @@ export function Sidebar({
           beginSessionDrag(event, session.id);
         }}
         onDragEnd={endSessionDrag}
+        onDragOver={(event) => {
+          const source = sessions.find(row => row.id === draggingSessionId);
+          if (!source || source.id === session.id || sessionPinned(source, sessionMeta[source.id]) ||
+            sessionPinned(session, meta) || normalizeProjectPath(source.projectPath) !== normalizedProjectPath ||
+            sessionArchived(source, sessionMeta[source.id]) !== archived) return;
+          event.preventDefault();
+          event.stopPropagation();
+          event.dataTransfer.dropEffect = "move";
+          const rect = event.currentTarget.getBoundingClientRect();
+          setSessionDrop({ id: session.id, after: event.clientY > rect.top + rect.height / 2 });
+        }}
+        onDragLeave={(event) => {
+          if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) setSessionDrop(null);
+        }}
+        onDrop={(event) => {
+          const id = sessionIdFromDrag(event.dataTransfer);
+          const source = sessions.find(row => row.id === id);
+          if (!id || !source || id === session.id || sessionPinned(source, sessionMeta[id]) || sessionPinned(session, meta) ||
+            normalizeProjectPath(source.projectPath) !== normalizedProjectPath ||
+            sessionArchived(source, sessionMeta[id]) !== archived) return;
+          event.preventDefault();
+          event.stopPropagation();
+          const rect = event.currentTarget.getBoundingClientRect();
+          reorderSession(id, session.id, event.clientY > rect.top + rect.height / 2);
+          endSessionDrag();
+        }}
         onClick={(event) => {
           const target = event.target as HTMLElement | null;
           if (target?.closest("button, input, label, [data-action]")) return;
@@ -1955,6 +2015,7 @@ export function Sidebar({
           );
         }}
       >
+        {meta.color ? <ColorSwatch color={meta.color} label={t(`sessionLabels.colors.${meta.color}`)} /> : null}
         {selection.active ? <Checkbox className="session-selection-checkbox" label={<span className="sr-only">{t("sessionOrganization.selectSession", { title: taskTitle(session.title) })}</span>}
           checked={selectedIds.has(session.id)} disabled={organizationBusy} onChange={() => selection.toggle(session.id)} />
           : status ? renderSessionStatus(status) : null}
@@ -1993,6 +2054,7 @@ export function Sidebar({
           {isRemoteSession(session) && <span className="thread-item-source" title={session.remoteHostLabel}>{t("remote:remote")}</span>}
           <WorktreeBadge worktree={session.worktree} sessionId={session.id} />
           <span className="thread-item-title">{taskTitle(session.title)}</span>
+          <SessionRowLabels meta={meta} labels={sessionLabels} />
           {options?.global ? (
             <span className="thread-item-project">
               {owningProject}
@@ -2420,6 +2482,7 @@ export function Sidebar({
               {t("nav.sessions", { defaultValue: "Sessions" })}
             </span>
             <div className="sidebar-toolbar-actions">
+              <SessionFilterControl />
               <TooltipButton className="sidebar-toolbar-button" data-action="select-sessions"
                 tooltip={t("sessionOrganization.select")} ariaLabel={t("sessionOrganization.select")}
                 aria-pressed={selection.active} disabled={organizationBusy}

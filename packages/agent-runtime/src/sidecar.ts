@@ -129,6 +129,7 @@ type RuntimeParams = {
   /** Opted-in override keys, separate from definition-only pinned bindings. */
   subagentModelKeys?: string[];
   delegationSettings?: import("@pi-desktop/shared").DelegationSettings;
+  delegationSelectionMode?: "task-fit";
   delegationAuthorization?: boolean;
   scratchDir?: string;
   /** Per-session visualization directory; omitted for remote sessions. */
@@ -247,6 +248,7 @@ async function runtimeFor(
     subagentProviders,
     subagentModelKeys,
     delegationSettings: params.delegationSettings,
+    delegationSelectionMode: params.delegationSelectionMode,
     delegationAuthorization: params.delegationAuthorization,
     jevApiKey: params.jevApiKey,
     projectInstructions: params.projectInstructions,
@@ -334,6 +336,7 @@ async function runtimeFor(
     subagentProviders,
     subagentModelKeys,
     delegationSettings: params.delegationSettings,
+    delegationSelectionMode: params.delegationSelectionMode,
     delegationAuthorization: params.delegationAuthorization,
     projectPath: params.projectPath,
     remoteWorkspace: params.remoteWorkspace,

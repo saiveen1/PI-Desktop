@@ -707,6 +707,7 @@ export function registerSessionIpc({
         thinkingLevel?: SessionThinkingLevel;
         permissionMode?: "inherit" | "ask" | "accept-edits" | "auto";
         fastMode?: boolean;
+        delegationModelKeys?: string[] | null;
       },
     ) => {
       rejectNativeMutation(id, "configuration");
