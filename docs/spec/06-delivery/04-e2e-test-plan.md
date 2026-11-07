@@ -20678,6 +20678,9 @@ Scenario: E2E-REVIEW-ROUNDS (local desktop, implemented)
   remain distinct. Retry totals and the latest stable error survive recovery.
   Model event and answer-text ages differ when only thinking/search arrives.
   Backoff records actual elapsed waits, including cancellation, not planned delay.
+- Verify the inline retry badge disappears 10 seconds after the latest retry,
+  even if the turn has already completed; another retry shows it again. Open
+  details afterward and verify cumulative retry counts remain available.
 - Hover/focus the real status trigger, pin with click, enter with ArrowDown,
   dismiss with Escape/outside click, and switch turns. The opaque portal stays
   within narrow viewport bounds and no old turn's clock or panel leaks across.

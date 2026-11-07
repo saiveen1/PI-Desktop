@@ -15,7 +15,8 @@ await i18n.use(initReactI18next).init({ lng: "en", fallbackLng: "en", resources:
 const host = document.getElementById("root")!;
 const root = createRoot(host);
 const now = Date.parse("2026-11-06T10:00:00Z");
-Date.now = () => now;
+let clock = now;
+Date.now = () => clock;
 const check = (value: unknown, message: string) => { if (!value) throw new Error(message); };
 const diagnostics = {
   turnId: "turn-a", startedAt: now - 492_000, requestCount: 2, attemptCount: 5, requestAttempt: 4,
@@ -87,10 +88,37 @@ Object.assign(window, {
     check(!trigger, "old hosts without diagnostics must keep the plain fallback");
     flushSync(() => root.render(<RunStatusIndicator diagnostics={{ ...diagnostics, endedAt: now - 1000 }} summary label="Run details" />));
     check(host.textContent?.includes("8m 11s"), "completed summary must use the frozen whole-turn end");
+    check(!host.querySelector(".run-status-retries"), "old retries must not leave a permanent badge on completed summaries");
+    const originalSetTimeout = window.setTimeout;
+    let expireBadge: (() => void) | undefined;
+    window.setTimeout = ((handler: TimerHandler, timeout?: number, ...args: unknown[]) => {
+      if (timeout === 10_000 && typeof handler === "function") {
+        expireBadge = () => handler(...args);
+        return 123456;
+      }
+      return originalSetTimeout(handler, timeout, ...args);
+    }) as typeof window.setTimeout;
+    const recent = { ...diagnostics, lastRetry: { ...diagnostics.lastRetry, at: now } };
+    flushSync(() => root.render(<RunStatusIndicator diagnostics={{ ...recent, endedAt: now }} summary label="Run details" />));
+    check(host.querySelector(".run-status-retries"), "a recent retry must show a transient badge");
+    window.setTimeout = originalSetTimeout;
+    check(expireBadge, "a completed summary must schedule badge expiration");
+    clock = now + 10_000;
+    flushSync(() => expireBadge!());
+    check(!host.querySelector(".run-status-retries"), "the badge must disappear when the timer expires without another update");
+    clock = now;
+    flushSync(() => root.render(<RunStatusIndicator diagnostics={{ ...recent, lastRetry: { ...recent.lastRetry, at: now - 11_000 }, endedAt: now }} summary label="Run details" />));
+    check(!host.querySelector(".run-status-retries"), "the badge must disappear after the retry window");
+    flushSync(() => root.render(<RunStatusIndicator diagnostics={{ ...recent, retryCount: 4, endedAt: now }} summary label="Run details" />));
+    check(host.querySelector(".run-status-retries")?.textContent?.includes("4"), "a later retry must restore the badge with the accumulated count");
+    flushSync(() => root.render(<RunStatusIndicator diagnostics={{ ...recent, retryCount: 4, lastRetry: { ...recent.lastRetry, at: now - 11_000 }, endedAt: now }} summary label="Run details" />));
+    check(!host.querySelector(".run-status-retries"), "the later badge must also expire");
     trigger = host.querySelector<HTMLButtonElement>(".run-status-trigger");
     flushSync(() => trigger!.click());
     await settle();
     panel = document.querySelector<HTMLElement>(".run-status-popover");
+    const retriesRow = Array.from(panel!.querySelectorAll("dl > div")).find(row => row.querySelector("dt")?.textContent === i18n.t("chat.runDetails.retries"));
+    check(retriesRow?.querySelector("dd")?.textContent?.includes("4"), "details must retain the cumulative retry count after the badge disappears");
     check(!Array.from(panel!.querySelectorAll("dt")).some(row => row.textContent === i18n.t("chat.runDetails.stage")),
       "completed details must not pretend an active stage still exists");
     flushSync(() => root.unmount());

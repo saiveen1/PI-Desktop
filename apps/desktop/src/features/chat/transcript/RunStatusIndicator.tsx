@@ -8,6 +8,8 @@ import { portalToBody } from "../../../lib/portal-visibility";
 import { runElapsedMs, runEventAgeMs } from "../../../lib/run-diagnostics";
 import { formatToolDuration } from "../../../lib/tool-display";
 
+const RETRY_BADGE_MS = 10_000;
+
 /** One factual diagnostic snapshot, shared by live status and completed replies. */
 export function RunStatusIndicator({
   diagnostics, activity, label, startedAt, summary = false,
@@ -61,6 +63,16 @@ export function RunStatusIndicator({
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, [summary, diagnostics?.endedAt]);
+  useEffect(() => {
+    const at = diagnostics?.lastRetry?.at;
+    if (at === undefined) return;
+    const current = Date.now();
+    setNow(current);
+    const remaining = at + RETRY_BADGE_MS - current;
+    if (remaining <= 0) return;
+    const timer = setTimeout(() => setNow(Date.now()), remaining);
+    return () => clearTimeout(timer);
+  }, [diagnostics?.lastRetry?.at]);
   useEffect(() => cancelClose, [cancelClose]);
   useEffect(() => { close(); }, [diagnostics?.turnId, close]);
 
@@ -138,7 +150,7 @@ export function RunStatusIndicator({
   const contents = <>
     <span className="working-indicator-label">{visibleLabel}</span>
     {elapsed ? <span className="working-elapsed" aria-hidden="true">{summary ? elapsed : t("chat.runDetails.elapsed", { time: elapsed })}</span> : null}
-    {diagnostics && diagnostics.retryCount > 0 ? <span className="run-status-retries">{t("chat.runDetails.retryBadge", { count: diagnostics.retryCount })}</span> : null}
+    {diagnostics?.lastRetry && diagnostics.retryCount > 0 && now - diagnostics.lastRetry.at < RETRY_BADGE_MS ? <span className="run-status-retries">{t("chat.runDetails.retryBadge", { count: diagnostics.retryCount })}</span> : null}
   </>;
   return <div className={summary ? "run-status-summary" : `working-indicator${activity ? " run-activity-indicator" : ""}`}
     data-phase={activity?.phase ?? diagnostics?.phase} data-testid={summary ? "run-status-summary" : activity ? "run-activity-indicator" : "working-indicator"}>
