@@ -2292,11 +2292,12 @@ selectors then identify the same single delegation. TaskWait's `mode` and
 multi-target or malformed identifier lists are rejected before dispatch,
 with a job-only retry example; the runtime never guesses which target wins.
 A Bash job cannot be combined with `delegationIds`, `mode` or `minCompleted`.
-The provider-facing descriptions state these rules without requiring
-provider-specific cross-field schema extensions. Omitting `job` preserves
-the existing delegation defaults, including stop-all-delegates. A Bash job
-never joins those implicit target sets. A legacy backgroundTaskId can be
-addressed as `{kind: "bash", id: backgroundTaskId}`.
+The provider-facing schema structurally excludes delegation selectors from Bash
+jobs; descriptions explain that a delegation job may retain its existing wait
+options. Matching a delegation job's ID to `delegationIds` remains a runtime
+check. Omitting `job` preserves the existing delegation defaults, including
+stop-all-delegates. A Bash job never joins those implicit target sets. A legacy
+backgroundTaskId can be addressed as `{kind: "bash", id: backgroundTaskId}`.
 
 For Bash, TaskWait returns a snapshot with state, nullable exitCode,
 stopRequested, separate stdout/stderr tails and truncated. Each stream is

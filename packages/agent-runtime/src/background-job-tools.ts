@@ -38,6 +38,20 @@ function target(params: unknown): JobReference | undefined {
   return { kind: job.kind, id: job.id };
 }
 
+function jobToolParameters(parameters: TObject): TObject {
+  return Type.Object({ ...parameters.properties, job: Type.Optional(jobSchema) }, {
+    oneOf: [
+      { not: { required: ["job"] } },
+      { required: ["job"], properties: { job: { properties: { kind: { const: "delegation" } } } } },
+      {
+        required: ["job"],
+        properties: { job: { properties: { kind: { const: "bash" } } } },
+        not: { anyOf: ["delegationIds", "mode", "minCompleted"].map(key => ({ required: [key] })) },
+      },
+    ],
+  });
+}
+
 /** Observe late rejections and release the listener on either completion path. */
 function abortable<T>(work: Promise<T>, signal?: AbortSignal): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -96,7 +110,7 @@ export function buildJobTools(
   const wait: AgentTool = {
     ...delegates.wait,
     description: `${delegates.wait.description}\nFor a background Bash command, pass its job reference ({kind: "bash", id: backgroundTaskId}) and omit delegationIds, mode and minCompleted. Returns state, exitCode and bounded stdout/stderr tails. Timeout or interrupted waiting leaves the process running. Bash completion is not automatically delivered; call TaskWait again when needed. For a delegation job, mode and minCompleted still apply; if delegationIds is also supplied, it must name the same single delegation (exactly [job.id]). Conflicting selectors are rejected before waiting. Omit job to keep the existing subagent defaults.`,
-    parameters: Type.Object({ ...(delegates.wait.parameters as TObject).properties, job: Type.Optional(jobSchema) }),
+    parameters: jobToolParameters(delegates.wait.parameters as TObject),
     execute: async (id, input, signal, update) => {
       const params = record(input) ? input : {};
       const job = target(params);
@@ -159,7 +173,7 @@ export function buildJobTools(
   const stop: AgentTool = {
     ...delegates.stop,
     description: `${delegates.stop.description}\nPass job to stop one explicit Bash or delegation job. If delegationIds is also supplied with a delegation job, it must name the same single delegation (exactly [job.id]). For Bash, omit delegationIds, mode and minCompleted. Conflicting selectors are rejected before stopping anything. Omitting job never stops Bash processes. A Bash stopRequested flag acknowledges a request; only the returned terminal state confirms the outcome.`,
-    parameters: Type.Object({ ...(delegates.stop.parameters as TObject).properties, job: Type.Optional(jobSchema) }),
+    parameters: jobToolParameters(delegates.stop.parameters as TObject),
     execute: async (id, input, signal, update) => {
       const params = record(input) ? input : {};
       const job = target(params);

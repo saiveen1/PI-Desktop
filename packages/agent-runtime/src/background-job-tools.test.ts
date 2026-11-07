@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { Type } from "@earendil-works/pi-ai";
+import * as Value from "typebox/value";
 import { buildJobTools } from "./background-job-tools.js";
 import type { RuntimeHost } from "./host-client.js";
 
@@ -33,6 +34,21 @@ function fixture(remote = false) {
   });
   return { delegates, dispatch, snapshot, wait, list, stop };
 }
+describe("session job schemas", () => {
+  it("constrains Bash job selectors in the model-facing schemas", () => {
+    const { wait, stop } = fixture();
+    for (const tool of [wait, stop]) {
+      expect(Value.Check(tool.parameters, { job: { kind: "bash", id: "process" } })).toBe(true);
+      expect(Value.Check(tool.parameters, { job: { kind: "bash", id: "process" }, timeoutSeconds: 30 })).toBe(true);
+      for (const key of ["delegationIds", "mode", "minCompleted"]) {
+        expect(Value.Check(tool.parameters, { job: { kind: "bash", id: "process" }, [key]: key === "delegationIds" ? [] : 1 })).toBe(false);
+      }
+      expect(Value.Check(tool.parameters, { job: { kind: "delegation", id: "delegate" }, delegationIds: ["delegate"] })).toBe(true);
+    }
+    expect(Value.Check(wait.parameters, { delegationIds: [], mode: "all" })).toBe(true);
+  });
+});
+
 
 describe("session job controls", () => {
   it("lists, reads and stops the same explicit Bash job with the bound session", async () => {
