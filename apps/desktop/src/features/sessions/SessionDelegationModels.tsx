@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { delegationModelKey, legacyDelegationSettings, type SessionSummary } from "@pi-desktop/shared";
+import { delegationModelKey, legacyDelegationSettings, type DelegationModelApprovals, type SessionSummary } from "@pi-desktop/shared";
 import { IconClose, IconWorkflow } from "../../components/icons";
-import { Button, Checkbox, Input, OverlayBackdrop, SegmentedControl, TooltipButton, portalOverlay } from "../../components/ui";
+import { Button, Checkbox, Input, OverlayBackdrop, SegmentedControl, Select, TooltipButton, portalOverlay } from "../../components/ui";
 import { api } from "../../lib/api";
 import { useBlockingOverlay } from "../../lib/blocking-overlay";
 import { useAppStore } from "../../stores/app-store";
@@ -47,6 +47,7 @@ function SessionDelegationDialog({ session, blocked, onClose }: {
       provider.models.some(model => model.id === row.modelId))).map(delegationModelKey)), [policy, providers]);
   const [mode, setMode] = useState<"inherit" | "custom">(session.delegationModelKeys === undefined ? "inherit" : "custom");
   const [selected, setSelected] = useState<string[]>(() => [...(session.delegationModelKeys ?? availableKeys)]);
+  const [approvals, setApprovals] = useState<DelegationModelApprovals>(() => ({ ...session.delegationModelApprovals }));
   const [query, setQuery] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,7 +65,7 @@ function SessionDelegationDialog({ session, blocked, onClose }: {
         if (!savingRef.current) onClose();
       }
       if (event.key !== "Tab") return;
-      const elements = dialogRef.current?.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), [tabindex="0"]');
+      const elements = dialogRef.current?.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex="0"]');
       if (!elements?.length) return;
       const first = elements[0];
       const last = elements[elements.length - 1];
@@ -104,10 +105,12 @@ function SessionDelegationDialog({ session, blocked, onClose }: {
       const result = await api.configureSession(session.id, {
         mode: current.mode,
         delegationModelKeys: mode === "inherit" ? null : selected,
+        delegationModelApprovals: mode === "inherit" ? null : Object.fromEntries(selected.map(key => [key,
+          approvals[key] ?? policy.models.find(row => delegationModelKey(row) === key)?.approval ?? "ask"])),
       });
       useAppStore.setState(latest => ({ sessions: latest.sessions.map(row => {
         if (row.id !== session.id) return row;
-        const { delegationModelKeys: _previousPool, ...existing } = row;
+        const { delegationModelKeys: _previousPool, delegationModelApprovals: _previousApprovals, ...existing } = row;
         return { ...existing, ...result.session };
       }) }));
       if (mounted.current) onClose();
@@ -134,14 +137,26 @@ function SessionDelegationDialog({ session, blocked, onClose }: {
         <Input type="search" value={query} onChange={event => setQuery(event.target.value)}
           placeholder={t("sessionDelegation.search")} aria-label={t("sessionDelegation.search")} />
         <div className="session-delegation-models" role="group" aria-label={t("sessionDelegation.models")}>
-          {visibleRows.map(row => <Checkbox key={row.key} className="session-delegation-model" checked={selected.includes(row.key)}
-            disabled={saving || blocked || (!row.available && !selected.includes(row.key))} aria-label={row.key}
-            onChange={event => { setSelected(current => event.target.checked ? [...current, row.key] : current.filter(key => key !== row.key)); setError(null); }}
-            label={<span className="session-delegation-model-copy"><strong>{row.modelId}</strong>
-              {row.provider ? <span>{row.provider}</span> : null}
-              <span className="session-delegation-model-state">{t(!row.available ? "sessionDelegation.unavailable" : row.approval === "ask" ? "sessionDelegation.approvalRequired" : "sessionDelegation.autoAllowed")}</span>
-              {row.description ? <span className="session-delegation-description">{row.description}</span> : null}
-            </span>} />)}
+          {visibleRows.map(row => <div key={row.key} className="session-delegation-model">
+            <Checkbox className="session-delegation-model-choice" checked={selected.includes(row.key)}
+              disabled={saving || blocked || (!row.available && !selected.includes(row.key))} aria-label={row.key}
+              onChange={event => { setSelected(current => event.target.checked ? [...current, row.key] : current.filter(key => key !== row.key)); setError(null); }}
+              label={<span className="session-delegation-model-copy"><strong>{row.modelId}</strong>
+                {row.provider ? <span>{row.provider}</span> : null}
+              </span>} />
+            {row.available ? <Select className="session-delegation-model-approval"
+              aria-label={t("sessionDelegation.approvalFor", { model: row.key })}
+              value={approvals[row.key] ?? row.approval} disabled={saving || blocked || !selected.includes(row.key)}
+              onChange={event => {
+                const approval = event.target.value;
+                if (approval === "auto" || approval === "ask") setApprovals(current => ({ ...current, [row.key]: approval }));
+                setError(null);
+              }}>
+              <option value="auto">{t("sessionDelegation.autoAllowed")}</option>
+              <option value="ask">{t("sessionDelegation.approvalRequired")}</option>
+            </Select> : <span className="session-delegation-model-state">{t("sessionDelegation.unavailable")}</span>}
+            {row.description ? <p className="session-delegation-description">{row.description}</p> : null}
+          </div>)}
           {visibleRows.length === 0 ? <p className="session-delegation-empty">{t("sessionDelegation.noModels")}</p> : null}
         </div>
         <p className="session-delegation-hint" role="status">{t(selected.length ? "sessionDelegation.selectedCount" : "sessionDelegation.disabled", { count: selected.length })}</p>

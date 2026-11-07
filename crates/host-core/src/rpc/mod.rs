@@ -2967,7 +2967,10 @@ async fn handle_request(
             let session = sessions::session_summary(&st.db, id)
                 .map_err(|e| rpc_err(1000, e.to_string(), "INTERNAL"))?
                 .ok_or_else(|| rpc_err(1007, "session not found", "NOT_FOUND"))?;
-            Ok(json!({ "modelKeys": session.delegation_model_keys }))
+            Ok(json!({
+                "modelKeys": session.delegation_model_keys,
+                "modelApprovals": session.delegation_model_approvals,
+            }))
         }
         "session.configure" => {
             let id = params
@@ -2985,6 +2988,11 @@ async fn handle_request(
                 .map(crate::session_delegation::parse)
                 .transpose()
                 .map_err(|e| rpc_err(1002, e.to_string(), "INVALID_PARAMS"))?;
+            let delegation_approvals = params
+                .get("delegationModelApprovals")
+                .map(crate::session_delegation::parse_approvals)
+                .transpose()
+                .map_err(|e| rpc_err(1002, e.to_string(), "INVALID_PARAMS"))?;
             let st = state.lock().await;
             let session = sessions::configure_session_with_delegation(
                 &st.db,
@@ -2996,6 +3004,9 @@ async fn handle_request(
                 params.get("permissionMode").and_then(|v| v.as_str()),
                 fast_mode,
                 delegation_keys.as_ref().map(|keys| keys.as_deref()),
+                delegation_approvals
+                    .as_ref()
+                    .map(|approvals| approvals.as_ref()),
             )
             .map_err(|e| {
                 let message = e.to_string();

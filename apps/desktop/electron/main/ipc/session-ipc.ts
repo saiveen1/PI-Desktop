@@ -708,6 +708,7 @@ export function registerSessionIpc({
         permissionMode?: "inherit" | "ask" | "accept-edits" | "auto";
         fastMode?: boolean;
         delegationModelKeys?: string[] | null;
+        delegationModelApprovals?: Record<string, "auto" | "ask"> | null;
       },
     ) => {
       rejectNativeMutation(id, "configuration");

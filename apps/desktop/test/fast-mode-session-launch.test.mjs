@@ -94,6 +94,21 @@ test("session launch sends Fast mode only for a model the user allowed it on (AD
     assert.equal(unified.sidecarParams.delegationAuthorization, true);
     assert.deepEqual(unified.sidecarParams.delegationSettings, delegation);
     assert.deepEqual(unified.sidecarParams.subagentModelKeys, [`${provider.id}/allowed-model`]);
+    const custom = await launchRuntime.resolveAgentRuntimeLaunch("session-fixture", {
+      providerId: provider.id, modelId: "allowed-model",
+      delegationModelKeys: [`${provider.id}/allowed-model`, `${provider.id}/legacy-only`],
+      delegationModelApprovals: { [`${provider.id}/allowed-model`]: "auto", [`${provider.id}/legacy-only`]: "auto" },
+    }, { delegation });
+    assert.equal(custom.sidecarParams.delegationSettings.models[0].approval, "auto");
+    assert.equal(custom.sidecarParams.delegationSettings.models[1].enabled, false);
+    assert.deepEqual(custom.sidecarParams.subagentModelKeys, [`${provider.id}/allowed-model`]);
+    assert.equal(custom.sidecarParams.delegationSelectionMode, "task-fit");
+    assert.equal(delegation.models[0].approval, "ask", "launch must not mutate global consent");
+    const customAsk = await launchRuntime.resolveAgentRuntimeLaunch("session-fixture", {
+      providerId: provider.id, modelId: "allowed-model", delegationModelKeys: [`${provider.id}/allowed-model`],
+      delegationModelApprovals: { [`${provider.id}/allowed-model`]: "ask" },
+    }, { delegation: { ...delegation, models: [{ ...delegation.models[0], approval: "auto" }] } });
+    assert.equal(customAsk.sidecarParams.delegationSettings.models[0].approval, "ask");
     const legacy = await launchRuntime.resolveAgentRuntimeLaunch("session-fixture", {
       providerId: provider.id, modelId: "allowed-model",
     }, {});

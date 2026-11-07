@@ -18,9 +18,28 @@
 .session-filter-menu > strong { display: block; font-size: var(--text-xs); margin-bottom: 8px; }
 .session-filter-labels { display: grid; gap: 8px; margin-bottom: 16px; }
 .session-filter-labels .ui-checkbox > span { display: inline-flex; gap: 8px; align-items: center; overflow-wrap: anywhere; min-width: 0; }
-.session-row-labels { display: inline-flex; align-items: center; gap: 3px; flex: 0 1 auto; min-width: 0; max-width: 40%; }
-.session-label-chip { font-size: var(--text-2xs); color: var(--session-mark); border: 1px solid color-mix(in oklab, var(--session-mark) 35%, transparent); border-radius: 3px; padding: 0 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; max-width: 65px; }
-.session-label-overflow { font-size: var(--text-2xs); color: var(--ds-text-muted); flex: 0 0 auto; }
+.sidebar-label-group { min-width: 0; }
+.sidebar-label-group-title.btn {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  min-height: 28px;
+  justify-content: flex-start;
+  gap: 5px;
+  padding: 4px 8px 4px 16px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ds-text-secondary);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  text-align: left;
+}
+.sidebar-label-group-title.btn:hover { background: var(--ds-bg-hover); }
+.sidebar-label-group-title > svg { flex: 0 0 auto; color: var(--ds-text-muted); }
+.sidebar-label-group-title > svg.is-expanded { transform: rotate(90deg); }
+.sidebar-label-group-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar-label-group-body > .thread-item { margin-left: 10px; width: calc(100% - 10px); }
 .thread-item > .session-color-swatch { width: 3px; flex-basis: 3px; height: 18px; border-radius: 2px; margin-right: 3px; }
 .thread-item.session-drop-before { box-shadow: inset 0 2px 0 var(--ds-accent); }
 .thread-item.session-drop-after { box-shadow: inset 0 -2px 0 var(--ds-accent); }

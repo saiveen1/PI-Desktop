@@ -506,7 +506,7 @@ visually distinct from list content.
 | Session completed | Green check mark from the latest unread task notification when the row is not selected |
 | Session failed | Red circled alert mark from the latest unread task notification when the row is not selected |
 | Hover row | Project headers and all conversation rows share one full-row `--ds-bg-hover` surface, radius and transition; selected conversation fill takes precedence |
-| Project session metadata | When Session time is enabled, the trailing slot shows the last-reply age at rest and replaces it with session actions on hover or keyboard focus, without a divider. Ages under 24 hours use seconds, minutes or hours even across midnight, never zero days; later ages through seven elapsed days use days. Older dates use localized month/day and include the year outside the current year. Future clock skew up to five minutes is clamped to now; more distant future timestamps use a calendar date. Invalid timestamps render nothing. Visible relative labels refresh while the sidebar is mounted. |
+| Project session metadata | When Session time is enabled, the trailing slot shows the last-reply age at rest and replaces it with session actions on hover or keyboard focus, without a divider. Ages below one minute read localized Now; ages under 24 hours use minutes or hours even across midnight, never zero days; later ages through seven elapsed days use days. Older dates use localized month/day and include the year outside the current year. Future clock skew up to five minutes is clamped to now; more distant future timestamps use a calendar date. Invalid timestamps render nothing. Mounted time components share one minute clock, paused while the document is hidden, with immediate resynchronization on visibility/focus. A clock tick updates time components, not the whole Sidebar. |
 | Current workspace | Project header shows the workspace dot, never a persistent selection fill; topbar follows that workspace; composer exposes no workspace identity |
 | Navigation selection | Only the selected conversation on the chat page uses `--ds-bg-active`, including pinned and standalone rows; folding its group never transfers selection to the header. No conversation or a non-chat page means no selected conversation row |
 | Keyboard focus | The focused control keeps its visible outline; the project title stays transparent and independent action buttons retain their own hover feedback |
@@ -1540,10 +1540,17 @@ It does not render separate Details or Output tabs.
 The sidebar's Activity order persists accepted-send and same-project drag
 placement, independently of the last-reply timestamp. The row menu supports
 multiple labels, one separate color mark, and keyboard-accessible move actions.
-Compact label chips expose overflow names; the color mark does not replace run,
-unread or error status. Filters match any chosen label and intersect with color,
-preserving hidden rows' order and excluding them from visible/range selection.
-Global pins remain separate and do not reorder on send. See
+Labels are full-width collapsible headings, not chips competing with the title
+and timestamp. Each nonempty group follows catalog order; its indented rows
+retain the current sort and source identity. Multiple labels produce multiple
+shortcuts to one conversation, not copies. Unassigned or deleted-label-only
+sessions appear in Unclassified. Folding is scoped to its project/temporary/
+remote bucket and lasts for the current Sidebar mount. Global pins stay flat.
+Project paging still limits original conversations before label grouping; load
+more reveals the rest. Selection and batch mutations deduplicate conversation
+IDs and exclude folded-only, filtered and unloaded rows. Independent color
+marks do not replace run, unread or error status. Filters match any chosen label
+and intersect with color, preserving hidden rows' order. See
 [interaction patterns](09-interaction-patterns.md#organization-actions).
 
 ### 6.1 Purpose
@@ -2618,6 +2625,15 @@ twice.
 | Success | Past-tense action + result chips; no green success badge, except a `run` row's dot and `Done` | Result blocks, then arguments if not already shown; small groups and Task topology groups stay open, large untouched ordinary groups close, and manual group and item choices are retained |
 | Error | Past-tense action + compact danger status; details remain collapsed by default and open only on user request. A `run` row is in this state whenever its command exited nonzero, whatever the call reported (D227) | Error note first, then arguments |
 | Denied | Muted `Denied` status; payload remains closed until requested | Permission result when available |
+| Skipped | Muted `Skipped` status instead of a failure when the runtime's exact new-input skip result is present; never claims execution | Original result and arguments remain available |
+| Interrupted | Muted `Interrupted` status for explicit abort evidence or a TaskWait interrupted by new input; a wait interruption does not imply the background work stopped | Original result remains available; real timeouts and nonzero command exits still show failure |
+
+Status labels expose a bounded reason through the shared Tooltip on hover or
+keyboard focus, with a visible focus ring and an accessible description. Known
+skip/interruption reasons are localized; errors show their existing message/code,
+not arguments or stdout. Skips and interruptions do not inflate activity issue
+counts. This is a renderer projection for both live and restored rows: persisted
+statuses, model-facing errors and plugin tool-card contracts do not change.
 
 ### 9.6 Interactions
 

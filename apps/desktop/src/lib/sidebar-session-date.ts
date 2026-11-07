@@ -1,9 +1,31 @@
-const SECOND_MS = 1_000;
-const MINUTE_MS = 60 * SECOND_MS;
+const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;
 const WEEK_MS = 7 * DAY_MS;
 const FUTURE_SKEW_MS = 5 * MINUTE_MS;
+const FORMATTER_CACHE_LIMIT = 8;
+const relativeFormatters = new Map<string, Intl.RelativeTimeFormat>();
+const calendarFormatters = new Map<string, Intl.DateTimeFormat>();
+
+/** Bound locale churn while reusing formatters across every sidebar row. */
+function cachedFormatter<T>(
+  cache: Map<string, T>,
+  key: string,
+  locale: string | undefined,
+  create: (locale: string | undefined) => T,
+): T {
+  const existing = cache.get(key);
+  if (existing) return existing;
+  let formatter: T;
+  try {
+    formatter = create(locale || undefined);
+  } catch {
+    formatter = create(undefined);
+  }
+  if (cache.size >= FORMATTER_CACHE_LIMIT) cache.clear();
+  cache.set(key, formatter);
+  return formatter;
+}
 
 function formatRelativeTime(
   value: number,
@@ -11,17 +33,11 @@ function formatRelativeTime(
   locale?: string,
 ): string {
   try {
-    return new Intl.RelativeTimeFormat(locale || undefined, {
-      numeric: "auto",
-    }).format(value, unit);
+    return cachedFormatter(relativeFormatters, locale || "", locale,
+      language => new Intl.RelativeTimeFormat(language, { numeric: "auto" }),
+    ).format(value, unit);
   } catch {
-    try {
-      return new Intl.RelativeTimeFormat(undefined, {
-        numeric: "auto",
-      }).format(value, unit);
-    } catch {
-      return "";
-    }
+    return "";
   }
 }
 
@@ -32,13 +48,11 @@ function formatCalendarDate(date: Date, now: Date, locale?: string): string {
     year: date.getFullYear() === now.getFullYear() ? undefined : "numeric",
   };
   try {
-    return new Intl.DateTimeFormat(locale || undefined, options).format(date);
+    return cachedFormatter(calendarFormatters, `${locale || ""}:${options.year || ""}`, locale,
+      language => new Intl.DateTimeFormat(language, options),
+    ).format(date);
   } catch {
-    try {
-      return new Intl.DateTimeFormat(undefined, options).format(date);
-    } catch {
-      return "";
-    }
+    return "";
   }
 }
 
@@ -57,7 +71,7 @@ export function formatSessionLastReplyDate(
   }
   const elapsed = Math.max(0, now.getTime() - timestamp);
   if (elapsed < MINUTE_MS) {
-    return formatRelativeTime(-Math.floor(elapsed / SECOND_MS), "second", locale);
+    return formatRelativeTime(0, "second", locale);
   }
   if (elapsed < HOUR_MS) {
     return formatRelativeTime(-Math.floor(elapsed / MINUTE_MS), "minute", locale);

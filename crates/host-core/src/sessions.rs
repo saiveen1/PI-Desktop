@@ -139,6 +139,8 @@ pub struct SessionSummary {
     pub updated_at: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub delegation_model_keys: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delegation_model_approvals: Option<crate::session_delegation::ModelApprovals>,
     pub created_at: String,
     /// True when this session is the transcript owned by a scheduled-task run.
     /// Automation transcripts are entered from the Scheduled page, so the
@@ -1371,6 +1373,7 @@ pub(crate) fn summary_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Sess
         fast_mode: row.get("fast_mode")?,
         worktree: None,
         delegation_model_keys: None,
+        delegation_model_approvals: None,
     })
 }
 
@@ -1535,6 +1538,7 @@ pub fn create_session_with_options(
         // A new or forked session starts without a worktree (ADR 0329).
         worktree: None,
         delegation_model_keys: None,
+        delegation_model_approvals: None,
     })
 }
 
@@ -1920,6 +1924,7 @@ pub fn fork_session_through(
         permission_mode: source.summary.permission_mode,
         fast_mode: source.summary.fast_mode,
         delegation_model_keys: source.summary.delegation_model_keys,
+        delegation_model_approvals: source.summary.delegation_model_approvals,
         updated_at: created_at.clone(),
         created_at,
         // A fork is the user's own conversation, not the automation's transcript.
@@ -2000,11 +2005,14 @@ pub fn configure_session_with_fast_mode(
         permission_mode,
         fast_mode,
         None,
+        None,
     )
 }
 
-/// Configure the session and optional pool in one transaction after approval expiry.
-/// An absent pool patch preserves it; an explicit None restores inheritance.
+/// Configure the session and optional delegation policy in one transaction after
+/// approval expiry. Omitted patches preserve saved policy; a null pool restores
+/// inheritance and clears all approvals, while a null approval map clears only
+/// approval overrides.
 #[allow(clippy::too_many_arguments)]
 pub fn configure_session_with_delegation(
     db: &Database,
@@ -2016,6 +2024,7 @@ pub fn configure_session_with_delegation(
     permission_mode: Option<&str>,
     fast_mode: Option<bool>,
     delegation_model_keys: Option<Option<&[String]>>,
+    delegation_model_approvals: Option<Option<&crate::session_delegation::ModelApprovals>>,
 ) -> Result<Option<SessionSummary>> {
     if !(is_valid_mode(mode) || mode == "chat") {
         return Err(anyhow!("mode must be plan or agent"));
@@ -2036,12 +2045,49 @@ pub fn configure_session_with_delegation(
         thinking_level,
         permission_mode,
     )?;
-    let previous = if delegation_model_keys.is_some() {
+    let has_delegation_patch =
+        delegation_model_keys.is_some() || delegation_model_approvals.is_some();
+    let previous = if has_delegation_patch {
         crate::session_delegation::ensure_idle(db, id)?;
-        session_summary(db, id)?
+        Some((
+            session_summary(db, id)?,
+            crate::session_delegation::read(db, id)?,
+        ))
     } else {
         None
     };
+    let delegation = previous
+        .as_ref()
+        .map(|(_, current)| {
+            let mut next = current.clone();
+            match delegation_model_keys {
+                Some(Some(keys)) => {
+                    next.model_keys = Some(keys.to_vec());
+                    if let Some(approvals) = next.model_approvals.as_mut() {
+                        approvals.retain(|key, _| keys.iter().any(|selected| selected == key));
+                        if approvals.is_empty() {
+                            next.model_approvals = None;
+                        }
+                    }
+                }
+                Some(None) => {
+                    next.model_keys = None;
+                    next.model_approvals = None;
+                }
+                None => {}
+            }
+            match delegation_model_approvals {
+                Some(Some(approvals)) => next.model_approvals = Some(approvals.clone()),
+                Some(None) => next.model_approvals = None,
+                None => {}
+            }
+            crate::session_delegation::validate_approvals(
+                next.model_keys.as_deref(),
+                next.model_approvals.as_ref(),
+            )?;
+            Ok::<_, anyhow::Error>(next)
+        })
+        .transpose()?;
     let tx = db.conn().unchecked_transaction()?;
     let changed = db
         .conn()
@@ -2067,16 +2113,20 @@ pub fn configure_session_with_delegation(
     if changed == 0 {
         return Ok(None);
     }
-    if let Some(keys) = delegation_model_keys {
-        crate::session_delegation::write(db, id, keys)?;
-        if let Some(previous) = previous.filter(|old| {
-            old.mode == mode
-                && provider_id.is_none_or(|value| old.provider_id.as_deref() == Some(value))
-                && model_id.is_none_or(|value| old.model_id.as_deref() == Some(value))
-                && thinking_level.is_none_or(|value| old.thinking_level == value)
-                && permission_mode.is_none_or(|value| old.permission_mode == value)
-                && fast_mode.is_none_or(|value| old.fast_mode == value)
-        }) {
+    if let Some(delegation) = delegation.as_ref() {
+        crate::session_delegation::write(db, id, delegation)?;
+        if let Some(previous) = previous
+            .as_ref()
+            .and_then(|(summary, _)| summary.as_ref())
+            .filter(|old| {
+                old.mode == mode
+                    && provider_id.is_none_or(|value| old.provider_id.as_deref() == Some(value))
+                    && model_id.is_none_or(|value| old.model_id.as_deref() == Some(value))
+                    && thinking_level.is_none_or(|value| old.thinking_level == value)
+                    && permission_mode.is_none_or(|value| old.permission_mode == value)
+                    && fast_mode.is_none_or(|value| old.fast_mode == value)
+            })
+        {
             let timestamp =
                 chrono::DateTime::parse_from_rfc3339(&previous.updated_at)?.timestamp_millis();
             tx.execute(
@@ -2096,7 +2146,11 @@ pub fn delete_session(db: &Database, id: &str) -> Result<bool> {
         .prepare_cached("DELETE FROM sessions WHERE id = ?1")?
         .execute(params![id])?;
     if n > 0 {
-        crate::session_delegation::write(db, id, None)?;
+        crate::session_delegation::write(
+            db,
+            id,
+            &crate::session_delegation::DelegationConfig::default(),
+        )?;
     }
     tx.commit()?;
     if n > 0 {
@@ -5407,6 +5461,7 @@ mod tests {
             fast_mode: false,
             worktree: None,
             delegation_model_keys: None,
+            delegation_model_approvals: None,
             created_at: "2025-01-01T00:00:00Z".into(),
             updated_at: "2025-01-02T00:00:00Z".into(),
         };
@@ -5462,6 +5517,7 @@ mod tests {
             fast_mode: false,
             worktree: None,
             delegation_model_keys: None,
+            delegation_model_approvals: None,
             created_at: "2025-01-01T00:00:00Z".into(),
             updated_at: "2025-01-01T00:00:00Z".into(),
         };
@@ -6649,6 +6705,7 @@ mod tests {
             fast_mode: false,
             worktree: None,
             delegation_model_keys: None,
+            delegation_model_approvals: None,
             created_at: "2025-01-01T00:00:00Z".into(),
             updated_at: "2025-01-01T00:00:00Z".into(),
         };

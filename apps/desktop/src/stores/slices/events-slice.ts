@@ -690,7 +690,7 @@ export function createEventsSlice({
                   ? {
                       ...message,
                       toolStatus: "error" as const,
-                      status: "error" as const,
+                      status: aborted ? ("aborted" as const) : ("error" as const),
                       isError: true,
                     }
                   : message.role === "assistant" &&

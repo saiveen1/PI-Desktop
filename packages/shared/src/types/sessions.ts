@@ -66,6 +66,8 @@ export type SessionSummary = {
   fastMode?: boolean;
   /** Absent inherits global delegation; an empty custom pool disables it. */
   delegationModelKeys?: string[];
+  /** Explicit human-selected approval rules for custom-pool members; absent follows global. */
+  delegationModelApprovals?: Record<string, "auto" | "ask">;
   /** Effective capability for this session's exact provider/model pair. */
   supportsReasoning?: boolean;
   /** Effective image-input capability for this session's exact model. */

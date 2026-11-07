@@ -42,7 +42,7 @@ function fixture(context, { timeout = 60, approval = "ask", legacy = false } = {
     models: [{ id: "m", alias: "Visible model", contextWindow: 8192, thinkingLevels: ["off", "high"] },
       { id: "alternate", contextWindow: 8192, thinkingLevels: ["off", "high"] }] }],
     session: { title: "Source chat", projectPath: "D:/workspace/source", projectTitle: "Source project" },
-    barrier: undefined, failed: false, sessionPools: new Map() };
+    barrier: undefined, failed: false, sessionPools: new Map(), sessionApprovals: new Map() };
   const events = [], errors = [];
   let time = Date.parse("2026-11-05T12:00:00.000Z");
   const host = { async call(method, params) {
@@ -52,7 +52,8 @@ function fixture(context, { timeout = 60, approval = "ask", legacy = false } = {
     if (method === "settings.set") { state.settings = { ...state.settings, ...structuredClone(params) }; return state.settings; }
     if (method === "providers.list") return { providers: structuredClone(state.providers) };
     if (method === "session.get") return { session: structuredClone(state.session) };
-    if (method === "session.delegationPolicy") return { modelKeys: state.sessionPools.get(params.id) ?? null };
+    if (method === "session.delegationPolicy") return { modelKeys: state.sessionPools.get(params.id) ?? null,
+      modelApprovals: state.sessionApprovals.get(params.id) };
     if (method === "projects.list") return { projects: [{ path: state.session.projectPath, name: state.session.projectTitle }] };
     throw new Error(method);
   } };
@@ -79,6 +80,38 @@ test("conversation pools constrain approval alternatives and preserve empty vers
   assert.deepEqual((await service.snapshot("disabled")).modelKeys, []);
   assert.equal((await service.snapshot("custom")).selectionMode, "task-fit");
   assert.deepEqual((await service.snapshot("inherited")).modelKeys, ["p/m", "p/alternate"]);
+});
+
+test("conversation approval overrides govern admission without changing global consent or eligibility", async t => {
+  const { state, service } = fixture(t);
+  state.sessionPools.set("custom", ["p/m"]);
+  state.sessionApprovals.set("custom", { "p/m": "auto" });
+  const snapshot = await service.snapshot("custom");
+  assert.equal(snapshot.settings.models[0].approval, "auto");
+  assert.equal((await service.authorize({ ...request, sessionId: "custom", automaticOnly: true })).decision, "allow");
+  assert.equal((await service.snapshot("inherited")).settings.models[0].approval, "ask");
+  assert.equal(state.settings.delegation.models[0].approval, "ask");
+  state.sessionApprovals.set("custom", { "p/m": "ask" });
+  const revised = await service.snapshot("custom");
+  assert.notEqual(revised.revision, snapshot.revision);
+  assert.equal((await service.authorize({ ...request, sessionId: "custom", automaticOnly: true })).decision, "skip");
+  state.sessionApprovals.set("custom", { "p/m": "auto" });
+  state.settings.delegation.models[0].enabled = false;
+  assert.deepEqual((await service.snapshot("custom")).modelKeys, []);
+  assert.equal((await service.authorize({ ...request, sessionId: "custom", automaticOnly: true })).decision, "skip");
+});
+
+test("a session may require consent for a globally automatic model", async t => {
+  const { state, service } = fixture(t, { approval: "auto" });
+  state.sessionPools.set("custom", ["p/m"]);
+  state.sessionApprovals.set("custom", { "p/m": "ask" });
+  const done = service.authorize({ ...request, sessionId: "custom" });
+  await drain();
+  const [row] = service.list().requests;
+  assert.ok(row, "the session override must prompt before admission");
+  assert.equal(row.candidate.approval, "ask");
+  await service.respond(action(row));
+  assert.equal((await done).decision, "allow");
 });
 
 test("concurrent same-session requests list immediately and user batch acts on the selected subset", async t => {

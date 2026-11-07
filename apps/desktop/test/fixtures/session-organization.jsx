@@ -39,6 +39,7 @@ const unhandled = [];
 let failTrash = "";
 let failDelete = "";
 let failList = false;
+let failConfigure = false;
 window.addEventListener("unhandledrejection", (event) => unhandled.push(String(event.reason)));
 window.piDesktop = {
   platform: "win32", on() { return () => {}; },
@@ -47,9 +48,15 @@ window.piDesktop = {
     const failure = (message) => ({ ok: false, error: { code: "INTERNAL", message } });
     if (channel === IPC.invoke.sessionList) return ok({ sessions: [...database.values()].filter((item) => !item.deletedAt) });
     if (channel === IPC.invoke.sessionConfigure) {
+      if (failConfigure) { failConfigure = false; return failure("fixture configure denied"); }
       const item = { ...database.get(input) };
-      if (config.delegationModelKeys === null) delete item.delegationModelKeys;
-      else item.delegationModelKeys = [...config.delegationModelKeys];
+      if (config.delegationModelKeys === null) {
+        delete item.delegationModelKeys;
+        delete item.delegationModelApprovals;
+      } else {
+        item.delegationModelKeys = [...config.delegationModelKeys];
+        item.delegationModelApprovals = { ...config.delegationModelApprovals };
+      }
       database.set(input, item);
       return ok({ session: item });
     }
@@ -111,8 +118,14 @@ const button = (text, scope = document) => [...scope.querySelectorAll("button")]
 const row = (id) => document.querySelector('[data-sidebar-session-row="' + id + '"]');
 const toolbar = () => document.querySelector(".session-selection-toolbar");
 const dialog = () => document.querySelector(".session-trash-dialog");
-const chosen = () => [...document.querySelectorAll('.thread-item.selected')].map((node) => node.dataset.sidebarSessionRow);
+const chosen = () => [...new Set([...document.querySelectorAll('.thread-item.selected')].map((node) => node.dataset.sidebarSessionRow))];
 const checkbox = (label, scope = document) => [...scope.querySelectorAll("label")].find((node) => node.textContent.includes(label))?.querySelector("input");
+function chooseApproval(model, value) {
+  const node = document.querySelector('select[aria-label="Approval for fixture/' + model + '"]');
+  check(node && !node.disabled, "missing or disabled approval control");
+  flushSync(() => { node.value = value; node.dispatchEvent(new Event("change", { bubbles: true })); });
+  check(document.querySelector('input[aria-label="fixture/' + model + '"]').checked, "approval change toggled model membership");
+}
 async function select(ids) {
   if (!toolbar()) click(document.querySelector('[data-action="select-sessions"]'));
   for (const id of ids) click(row(id)?.querySelector(".thread-item-main"));
@@ -135,6 +148,64 @@ async function openTrash() {
   click(document.querySelector('[data-nav="recycle-bin"]'));
   await waitFor(() => dialog()?.getAttribute("aria-busy") === "false", "recycle bin loaded");
 }
+window.sidebarLabelGroupingProbe = async () => {
+  await waitFor(() => row("project-00"), "label grouping sidebar rendered");
+  const original = useAppStore.getState();
+  const opened = [];
+  flushSync(() => useAppStore.setState({
+    sessionMeta: { ...original.sessionMeta,
+      "project-00": { ...original.sessionMeta["project-00"], labelIds: ["investigation", "fix"] },
+      "project-01": { ...original.sessionMeta["project-01"], labelIds: ["investigation"] },
+      beta: { ...original.sessionMeta.beta, labelIds: ["investigation"] },
+    },
+    sessionLabels: original.sessionLabels.map(label => label.id === "investigation"
+      ? { ...label, defaultName: undefined, name: "排查一个很长但不该挤成细条的分组标签" } : label),
+    selectSession: async id => { opened.push(id); useAppStore.setState({ activeSessionId: id }); },
+  }));
+  const project = row("project-00").closest("[data-sidebar-project-group]");
+  const group = id => project.querySelector('[data-sidebar-label-group="' + id + '"]');
+  const rows = () => [...project.querySelectorAll('[data-sidebar-session-row="project-00"]')];
+  check(rows().length === 2, "multi-label conversation needs two shortcuts");
+  click(rows()[0].querySelector(".thread-item-main"));
+  click(rows()[1].querySelector(".thread-item-main"));
+  check(opened.join() === "project-00,project-00", "shortcuts opened different conversations");
+  check(useAppStore.getState().sessions.length === original.sessions.length, "grouping duplicated stored conversations");
+  check(!document.querySelector(".session-label-chip"), "inline label chips survived grouping");
+  click(document.querySelector('[data-action="select-sessions"]'));
+  click(checkbox("Select visible", toolbar()));
+  check(document.querySelector(".session-selection-count").textContent.includes("14"), "visible selection counted shortcuts twice");
+  click(group("investigation").querySelector(".sidebar-label-group-title"));
+  await waitFor(() => !chosen().includes("project-01"), "folding removes exclusive hidden members from selection");
+  check(rows().length === 1 && chosen().includes("project-00"), "folding removed shared conversation's other shortcut");
+  check(document.querySelector('.sidebar-label-group[data-label-scope="temporary"][data-sidebar-label-group="investigation"] .thread-item'), "folding leaked into another scope");
+  await done();
+  click(group("investigation").querySelector(".sidebar-label-group-title"));
+  check(rows().length === 2 && row("project-01"), "expanding did not restore shortcuts");
+  for (const theme of ["light", "dark"]) {
+    document.documentElement.dataset.theme = theme;
+    for (const width of [220, 275, 360]) {
+      document.getElementById("root").style.width = width + "px";
+      flushSync(() => root.render(<Sidebar onToggleSidebar={() => {}} sidebarToggleShortcut="" sidebarWidth={width}
+        onWidthChange={() => {}} onWidthCommit={() => {}} onResizeCollapse={() => {}} />));
+      const name = group("investigation").querySelector(".sidebar-label-group-name");
+      const header = name.closest("button");
+      const bounds = header.getBoundingClientRect();
+      check(name.clientWidth >= 100, "label heading collapsed into a sliver");
+      check(bounds.width >= group("investigation").getBoundingClientRect().width - 1, "label heading does not occupy its own row");
+      check(!header.querySelector("time"), "timestamp still competes with label heading");
+      header.focus();
+      check(document.activeElement === header, "label heading is not keyboard focusable");
+    }
+  }
+  flushSync(() => useAppStore.setState({
+    sessionMeta: original.sessionMeta, sessionLabels: original.sessionLabels,
+    selectSession: original.selectSession, activeSessionId: original.activeSessionId,
+  }));
+  document.documentElement.dataset.theme = "light";
+  document.getElementById("root").style.width = "300px";
+  return { passed: true, duplicateShortcuts: 2, uniqueSelected: 14, layouts: 6 };
+};
+
 window.organizationProbe = async () => {
   await waitFor(() => row("alpha"), "sidebar rendered");
   click(row("beta").querySelector('[data-action="session-menu"]'));
@@ -252,8 +323,8 @@ window.organizationProbe = async () => {
   check(chosen().length === 2 && database.has("native") && database.has("running"), "unsafe targets disappeared");
   await done();
   for (const [locale, catalog] of Object.entries(catalogs)) {
-    for (const [key, english] of Object.entries(catalogs.en.sessionOrganization)) {
-      const text = catalog.sessionOrganization[key];
+    for (const [key, english] of Object.entries({ ...catalogs.en.sessionOrganization, ...catalogs.en.sessionDelegation })) {
+      const text = catalog.sessionOrganization[key] ?? catalog.sessionDelegation[key];
       check(typeof text === "string", locale + " missing " + key);
       const variables = (value) => [...value.matchAll(/\{\{([^}]+)\}\}/g)].map((match) => match[1]).sort().join();
       check(variables(text) === variables(english), locale + " variables differ for " + key);
@@ -266,13 +337,30 @@ window.organizationProbe = async () => {
       models: [{ id: "general" }, { id: "specialist" }] }],
       settings: { ...useAppStore.getState().settings, delegation: { version: 1, approvalTimeoutSeconds: 60,
         models: ["general", "specialist"].map((modelId, index) => ({ providerId: "fixture", modelId,
-          enabled: true, approval: "auto", priority: index + 1, description: modelId + " description" })) } } });
+          enabled: true, approval: index ? "ask" : "auto", priority: index + 1, description: modelId + " description" })) } } });
     root.render(<SessionDelegationModels sessionId="running" />);
   });
   click(button("Subagent models"));
   check(button("Save") === undefined, "running conversation unexpectedly permits saving");
   flushSync(() => useAppStore.setState({ runningSessions: {} }));
   click(button("Custom"));
+  chooseApproval("general", "ask");
+  chooseApproval("specialist", "auto");
+  failConfigure = true;
+  click(button("Save"));
+  await waitFor(() => document.querySelector('.session-delegation-dialog [role="alert"]')?.textContent.includes("fixture configure denied"), "save failure visible");
+  check(database.get("running").delegationModelKeys === undefined, "failed save changed durable session");
+  click(button("Save"));
+  await waitFor(() => !document.querySelector(".session-delegation-dialog"), "approval overrides saved");
+  check(JSON.stringify(database.get("running").delegationModelApprovals) === JSON.stringify({ "fixture/general": "ask", "fixture/specialist": "auto" }), "per-model approvals not saved");
+  check(useAppStore.getState().settings.delegation.models.map(model => model.approval).join() === "auto,ask", "session consent changed global policy");
+  click(button("Subagent models: 2 selected"));
+  check(document.querySelector('select[aria-label="Approval for fixture/general"]').value === "ask" &&
+    document.querySelector('select[aria-label="Approval for fixture/specialist"]').value === "auto", "saved approvals not restored on reopen");
+  chooseApproval("specialist", "ask");
+  click(button("Cancel", document.querySelector(".session-delegation-actions")));
+  check(database.get("running").delegationModelApprovals["fixture/specialist"] === "auto", "cancel saved approval edits");
+  click(button("Subagent models: 2 selected"));
   click(checkbox("general", document.querySelector(".session-delegation-dialog")));
   click(button("Save"));
   await waitFor(() => !document.querySelector(".session-delegation-dialog"), "custom pool saved");
@@ -287,6 +375,7 @@ window.organizationProbe = async () => {
   click(button("Save"));
   await waitFor(() => !document.querySelector(".session-delegation-dialog"), "inheritance restored");
   check(useAppStore.getState().sessions.find(item => item.id === "running").delegationModelKeys === undefined, "old pool survived inheritance");
+  check(useAppStore.getState().sessions.find(item => item.id === "running").delegationModelApprovals === undefined, "old approvals survived inheritance");
   flushSync(() => root.render(<DelegationSelectionSummary payload={{ modelId: "general", scheduling: {
     requestedModel: "fixture/specialist", modelReason: "Independent concurrency review",
     decisions: [{ model: "fixture/specialist", decision: "skipped", reason: "Approval expired" },

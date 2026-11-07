@@ -14,7 +14,7 @@ import { Button, TooltipButton } from "../ui";
 
 /** The same project/chat hierarchy, keyed by Host identity rather than local paths. */
 export function RemoteProjectGroups({ groups, renderSessions }: {
-  groups: RemoteProjectGroup[]; renderSessions: (sessions: SessionSummary[]) => ReactNode;
+  groups: RemoteProjectGroup[]; renderSessions: (sessions: SessionSummary[], projectKey: string) => ReactNode;
 }) {
   const { t } = useTranslation();
   const [busy, setBusy] = useState<string | null>(null);
@@ -54,7 +54,7 @@ export function RemoteProjectGroups({ groups, renderSessions }: {
         <TooltipButton tooltip={t("nav.newTask")} ariaLabel={`${t("nav.newTask")}: ${project.label} · ${project.hostLabel}`}
           disabled={busy !== null} onClick={() => void open(project)}><IconNewProject size={14} /></TooltipButton>
       </div>
-      {renderSessions(sessions)}
+      {renderSessions(sessions, project.key)}
     </section>;
   })}</>;
 }

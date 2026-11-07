@@ -34,10 +34,11 @@ import {
 import {
   buildToolPresentation,
   hasToolDetails,
-  runOutcome,
   toolResultChips,
   toolResultPayload,
 } from "../../../lib/tool-presentation";
+import { getToolStatus, TOOL_STATUS_LABEL_KEYS } from "../../../lib/tool-status";
+import { ToolStatusBadge } from "./ToolStatusBadge";
 import {
   subagentRunsEqual,
   type SubagentRun,
@@ -190,11 +191,9 @@ function HostToolRow({
   const activeWorkPanelTabId = useAppStore((s) => s.activeWorkPanelTabId);
   const status = message.toolStatus;
   const action = getToolAction(message.toolName);
-  // A run row states what the command did, not what the call around it did: an
-  // exit code the shell reported outranks a tool call that came back fine
-  // (D227). Property reads only, so a streaming row can afford it every tick.
-  const run = action === "run" ? runOutcome(message) : null;
-  const failed = status === "error" || run === "failed";
+  // Classify the result once; execution and persisted statuses stay untouched.
+  const toolStatus = getToolStatus(message);
+  const neutralStatus = toolStatus.kind === "skipped" || toolStatus.kind === "interrupted";
   // A tool call never opens itself: the payload waits for the user, and a
   // failure or denial stays in the row head either way.
   const revealRequest = useMessageRevealRequest(message.id);
@@ -272,7 +271,7 @@ function HostToolRow({
   }
   const blocks = variant !== "topology" && open && hasDetails ? presentation.current?.blocks : null;
   const outcome =
-    variant === "topology" ? subagentOutcome(message, delegationStatuses) : null;
+    variant === "topology" && !neutralStatus ? subagentOutcome(message, delegationStatuses) : null;
   // A bare `running` Task row (no delegation result yet) is still being
   // created: the delegate runtime is spawning and no structured snapshot
   // exists. Show it as starting rather than a generic running state.
@@ -280,16 +279,7 @@ function HostToolRow({
     variant === "topology" &&
     outcome === "running" &&
     delegationIsCreating(message);
-  const runLabel =
-    run === "running"
-      ? t("chat.running")
-      : run === "failed"
-        ? t("chat.toolFailed")
-        : run === "denied"
-          ? t("chat.toolDenied")
-          : run === "ok"
-            ? t("chat.toolCompleted")
-            : "";
+  const toolStatusLabel = toolStatus.kind === "unknown" ? "" : t(TOOL_STATUS_LABEL_KEYS[toolStatus.kind]);
   // A lifecycle row never falls back to its arguments: while it is still
   // running it has no roster yet, and `delegationIds` would otherwise reach the
   // head as a JSON blob of UUIDs (D268).
@@ -300,21 +290,15 @@ function HostToolRow({
         jobRow.state && t(`backgroundTasks.${jobRow.state}`),
       ].filter(Boolean).join(" · ")
     : lifecycle ? rosterSummary : argSummary;
-  const statusLabel = creating
-    ? t("chat.subagentCreating")
-    : outcome
-      ? t(`chat.subagentStatus.${outcome}`)
-      : rosterOutcome
-        ? t(`chat.subagentStatus.${rosterOutcome}`)
-        : run
-          ? runLabel
-          : status === "running"
-            ? t("chat.running")
-            : status === "error"
-              ? t("chat.toolFailed")
-              : status === "denied"
-                ? t("chat.toolDenied")
-                : t("chat.toolCompleted");
+  const statusLabel = neutralStatus
+    ? toolStatusLabel
+    : creating
+      ? t("chat.subagentCreating")
+      : outcome
+        ? t(`chat.subagentStatus.${outcome}`)
+        : rosterOutcome
+          ? t(`chat.subagentStatus.${rosterOutcome}`)
+          : toolStatusLabel;
   const delegationPayload =
     variant === "topology" ? toolResultPayload(message) : undefined;
   const delegationId =
@@ -386,21 +370,13 @@ function HostToolRow({
   }, [status, open, message, disclosure.bodyRef]);
 
 
-  const statusTone =
-    run === "running" || (!run && status === "running")
-      ? "is-running"
-      : failed
-        ? "is-error"
-        : run === "denied" || (!run && status === "denied")
-          ? "is-denied"
-          : "is-done";
   const caret = hasDetails ? <IconChevronRight size={12} /> : null;
 
   return (
     <div
       className={`tool-row ${variant === "topology" ? "subagent-topology-node" : ""} ${
         renderedOpen ? "open" : ""
-      } status-${run === "failed" ? "error" : status || "success"}${outcome ? ` outcome-${outcome.replaceAll("_", "-")}` : ""}${creating ? " outcome-creating" : ""}`}
+      } status-${toolStatus.kind === "failed" ? "error" : toolStatus.kind}${outcome ? ` outcome-${outcome.replaceAll("_", "-")}` : ""}${creating ? " outcome-creating" : ""}`}
       role={variant === "topology" ? "listitem" : "region"}
       data-message-id={message.id}
       aria-label={`${t("chat.toolCall")}: ${rawName}${agentName ? `, ${agentName}` : ""}${modelLabel ? `, ${modelLabel}` : ""}${statusLabel ? `, ${statusLabel}` : ""}`}
@@ -424,7 +400,7 @@ function HostToolRow({
             <span className="subagent-topology-status-icon">
               {outcome === "completed" ? (
                 <IconCheck size={8} />
-              ) : outcome === "aborted" ? (
+              ) : outcome === "aborted" || neutralStatus ? (
                 <IconStop size={7} />
               ) : outcome === "running" ? (
                 <span />
@@ -539,33 +515,7 @@ function HostToolRow({
               </span>
             ) : null}
             <ToolChips chips={chips} />
-            {runHead && statusLabel ? (
-              <span
-                className={`tool-row-state ${statusTone}`}
-                role="status"
-                aria-live="polite"
-              >
-                <span className="tool-row-state-dot" aria-hidden />
-                {statusLabel}
-              </span>
-            ) : status === "running" ? (
-              <span className="tool-spinner" aria-label={t("chat.running")} />
-            ) : status === "error" ? (
-              <span
-                className="tool-row-status error"
-                aria-label={t("chat.toolFailed")}
-              >
-                <IconCircleAlert size={13} />
-                {t("chat.toolFailed")}
-              </span>
-            ) : status === "denied" ? (
-              <span className="tool-row-status">{t("chat.toolDenied")}</span>
-            ) : null}
-            {runHead && statusLabel ? null : (
-              <span className="sr-only" role="status" aria-live="polite">
-                {statusLabel}
-              </span>
-            )}
+            <ToolStatusBadge status={toolStatus} label={statusLabel} runHead={runHead} />
             {runHead || !caret ? null : (
               <span className="tool-row-caret" aria-hidden>
                 {caret}

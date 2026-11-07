@@ -14,23 +14,39 @@
   the row menu. Filter by multiple labels (any match) and color (intersection),
   clear filters, reload, then delete a default label. Only explicit deletion
   removes associations; conversations and their transcripts survive.
+  Under each project/current page, temporary bucket and remote project, verify
+  full-row label headings, indented conversations, independent folding and an
+  Unclassified group. A conversation assigned to two labels appears twice but
+  opens the same session and counts once in selection/actions. Fold one group:
+  its exclusive members leave visible selection, shared members remain through
+  their other entry. Folded groups have no focusable conversation rows. Rename,
+  remove or delete labels and check reclassification without data duplication.
+  Global pins remain flat and project paging still counts original sessions.
+  Check long CJK labels at narrow/sidebar-resized widths, keyboard focus and
+  both themes; label headers never share space with session timestamps.
 - **Delegation path:** Open the local conversation's model-pool dialog, save a
-  custom subset, switch sessions, reload and fork. Restore global inheritance
+  custom subset and per-model approval in both directions, switch sessions,
+  reopen, reload and fork. Change approval without toggling model membership;
+  cancel edits, inject a failed save and retry. Restore global inheritance
   and separately save an empty custom pool. Query TaskModels only when preparing
   a delegation; choose a lower numeric-priority specialist by description.
   Observe automatic approval, explicit approval, denied/unavailable candidates,
   exact requirements, cancellation, resume and natural fallback.
 - **Expected:** Every admission and approval alternative stays in the
   invocation's effective session pool. Empty custom pools never inherit.
-  Global revocation remains authoritative. Model descriptions are absent from
-  constant system/Task payloads and appear in the requested directory result.
+  Global revocation remains authoritative. Explicit session consent overrides
+  global approval for selected models only; it cannot enable a revoked model
+  and never changes global/other-session rules. Missing approval entries preserve
+  legacy inheritance. Reset clears both fields; failed saves and cancelled edits
+  preserve saved consent. Model descriptions are absent from constant system/Task
+  payloads and appear in the requested directory result.
   Original modelReason, requested model and actual scheduling decisions survive
   reload and appear separately in ordinary detail views. Missing legacy reasons
   remain absent. Configuring a pool does not alter activity timestamps.
-- **Status:** Implementation candidate. The initial organization baseline was
-  run before implementation; subsequent tests are NOT RUN at the user's
-  explicit request to prioritize implementation. Compilation is separate from
-  these behavioral acceptance scenarios.
+- **Status:** Session approval coverage includes shared policy unit tests,
+  main-process authorization/launch tests, isolated renderer user-path tests and
+  Host RPC persistence tests. Earlier unrelated organization scenarios retain
+  their own validation status; no installed-app or paid-provider check is implied.
 
 ## E2E-COMPOSER-DIRECTORY-PASTE: Native folder cards and lazy context
 
@@ -12842,11 +12858,20 @@ This test plan spec is accepted when:
      tint, and that the running row shows the pulsing dot instead of the row
      spinner.
   2a) Run a command that exits non-zero (`pnpm test` on a failing suite, or
-     `false`) and confirm the row reads `Failed` with the error dot and opens
-     itself, even though the tool call completed. Confirm the exit-code chip and
-     the worded outcome agree.
-  2b) Interrupt a long command so the shell is killed with no exit code, and
-     confirm the row reads `Failed` rather than `Done`.
+     `false`) and confirm the row reads `Failed` with the error dot, even though
+     the tool call completed. Its details stay closed until requested. Confirm
+     the exit-code chip and the worded outcome agree.
+  2b) Stop a long command with explicit abort evidence and confirm a muted
+     `Interrupted` label, not `Failed` or `Done`. A null exit code without abort
+     evidence still reads `Failed`; a real timeout or nonzero exit stays red.
+  2c) Send new input while Read/Grep/Bash calls are awaiting execution. Confirm
+     those skipped calls show muted `Skipped`, do not count as activity issues,
+     and remain collapsed. Hover or focus the status to see the localized reason
+     that they never executed. Repeat after restoring the session's history.
+  2d) Interrupt TaskWait with new input. Confirm `Interrupted` explains that the
+     wait ended while background work continues; do not claim it completed or
+     stopped. Actual selector errors remain failures with their error reason.
+     Hover or focus a real failure/denial to read its bounded message/code.
   3) Hover the successful row and confirm a copy button and the chevron appear
      between the summary and the row's right edge; move the pointer away and
      confirm both fade while the status label stays visible.
@@ -12857,8 +12882,8 @@ This test plan spec is accepted when:
   5) Confirm the hover fill covers the whole head, including the copy button and
      chevron, and that a row with nothing to expand takes no fill at all.
   6) Tab through the row and confirm the header is the only stop that toggles
-     the body, the copy button is reachable and takes a visible focus ring
-     (revealing itself on focus), and the chevron is never a tab stop.
+     the body, the status can receive focus to reveal its reason, the copy button
+     has a visible focus ring, and the chevron is never a tab stop.
   7) With a screen reader, expand and collapse the row and confirm the outcome
      is announced once, not twice.
   8) Ask the agent to run a command that requires approval and confirm the
@@ -12868,9 +12893,10 @@ This test plan spec is accepted when:
   10) Repeat steps 1–3 in Chinese and in both light and dark themes.
 - **Expected**: A command appears exactly once per row, in the head, alongside a
   copy control that yields it verbatim and a worded outcome that does not rely
-  on the dot's color. The outcome reports what the command did — a non-zero or
-  missing exit code reads `Failed` regardless of the tool call's own status — and
-  a row with nothing to report states nothing instead of claiming `Done`. The
+  on the dot's color. A nonzero or null exit code without explicit abort evidence
+  reads `Failed`; a known skipped call or explicit interruption has a distinct
+  muted label and localized hover/focus reason without changing model-facing
+  tool results. A row with nothing to report does not claim `Done`. The
   running row is collapsed by default, and expanding it during execution shows
   the cumulative `details.output` stream in the stdout channel. The body keeps
   the live output in a capped internal scroll region and updates in place without
@@ -20692,8 +20718,11 @@ Scenario: E2E-REVIEW-ROUNDS (local desktop, implemented)
   Reload the completed transcript: its final diagnostics remain frozen. Legacy
   messages without metadata remain readable with no fabricated measurements.
 - Render sessions updated seconds, minutes and hours ago, including across local
-  midnight and DST transitions. Never show zero days within 24 hours. Exercise
-  old-year dates, invalid values and future clock skew; visible ages refresh.
+  midnight and DST transitions. Below one minute reads Now; no seconds counter
+  appears. Never show zero days within 24 hours. Exercise old-year dates, invalid
+  values and future clock skew. All time labels share one minute scheduler;
+  hidden documents stop it, visibility/focus resynchronizes immediately, and
+  unmounting the last time label releases it. Ticks do not rerender Sidebar.
   Message clock and full local date/time/timezone title describe the same instant
   with 00–23 hours. Stored ISO values are unchanged.
 - Deterministic renderer fixtures, runtime/provider-boundary tests and Rust

@@ -27,14 +27,14 @@ const calendarDate = (value, now, locale = "en") => new Intl.DateTimeFormat(loca
   year: new Date(value).getFullYear() === now.getFullYear() ? undefined : "numeric",
 }).format(new Date(value));
 
-test("formats recent session activity by elapsed seconds, minutes, hours, and days", () => {
+test("formats recent session activity as now, minutes, hours, and days", () => {
   // November 2, 2026 at 00:30 EST. Two actual elapsed hours earlier was 22:30
   // on the prior local calendar day, after the DST fallback weekend.
   const now = new Date("2026-11-02T05:30:00.000Z");
 
   assert.equal(
     formatSessionLastReplyDate("2026-11-02T05:29:43.000Z", now, "en"),
-    relative(-17, "second"),
+    relative(0, "second"),
   );
   assert.equal(
     formatSessionLastReplyDate("2026-11-02T05:10:00.000Z", now, "en"),
@@ -90,14 +90,65 @@ test("invalid timestamps are blank and invalid locales safely fall back", () => 
     new Intl.RelativeTimeFormat(undefined, { numeric: "auto" }).format(-2, "hour"),
   );
 });
+test("every sub-minute age uses localized now without a literal seconds count", () => {
+  const now = new Date("2026-11-02T05:30:00.000Z");
+  for (const locale of ["en", "zh-CN", "zh-TW", "de"]) {
+    for (let seconds = 0; seconds < 60; seconds += 1) {
+      const value = new Date(now.getTime() - seconds * 1_000).toISOString();
+      const label = formatSessionLastReplyDate(value, now, locale);
+      assert.equal(label, relative(0, "second", locale));
+      assert.doesNotMatch(label, /\d|seconds? ago|秒/);
+    }
+    assert.equal(
+      formatSessionLastReplyDate(new Date(now.getTime() - 60_000).toISOString(), now, locale),
+      relative(-1, "minute", locale),
+    );
+  }
+});
+
+test("repeated row timestamps reuse a bounded set of locale formatters", async (t) => {
+  const { formatSessionLastReplyDate: format } = await import("../src/lib/sidebar-session-date.ts?cache-test");
+  const RelativeTimeFormat = Intl.RelativeTimeFormat;
+  const DateTimeFormat = Intl.DateTimeFormat;
+  let relativeCreations = 0;
+  let calendarCreations = 0;
+  t.mock.method(Intl, "RelativeTimeFormat", function (...args) {
+    relativeCreations += 1;
+    return new RelativeTimeFormat(...args);
+  });
+  t.mock.method(Intl, "DateTimeFormat", function (...args) {
+    calendarCreations += 1;
+    return new DateTimeFormat(...args);
+  });
+  const now = new Date("2026-11-02T05:30:00.000Z");
+  const recent = "2026-11-02T05:29:43.000Z";
+  const old = "2026-10-01T05:30:00.000Z";
+  for (let row = 0; row < 200; row += 1) {
+    assert.equal(format(recent, now, "en"), "now");
+    assert.ok(format(old, now, "en"));
+    assert.ok(format("2025-10-01T05:30:00.000Z", now, "en"));
+  }
+  assert.equal(relativeCreations, 1);
+  assert.equal(calendarCreations, 2);
+  for (let index = 0; index < 16; index += 1) {
+    format(recent, now, `en-x-cache-${index}`);
+    format(old, now, `en-x-cache-${index}`);
+  }
+  const previousRelative = relativeCreations;
+  const previousCalendar = calendarCreations;
+  // The oldest locale must have been evicted, rather than retained forever.
+  format(recent, now, "en");
+  format(old, now, "en");
+  assert.equal(relativeCreations, previousRelative + 1);
+  assert.equal(calendarCreations, previousCalendar + 1);
+});
 
 test("project session rows show the date until hover or focus reveals actions", () => {
   assert.match(sidebarSource, /sidebarSessionTime === true/);
-  assert.match(sidebarSource, /window\.setInterval\(\(\) => setLastReplyNow\(Date\.now\(\)\), 1_000\)/);
-  assert.match(sidebarSource, /new Date\(lastReplyNow\)/);
-  assert.match(sidebarSource, /formatPreciseLocalTimestamp\(session\.updatedAt, lastReplyLocale\)/);
+  assert.match(sidebarSource, /<SessionLastReplyTime\s+updatedAt=\{session\.updatedAt\}\s+locale=\{[^}]+\}\s*\/>/);
+  assert.doesNotMatch(sidebarSource, /setLastReplyNow/);
   assert.match(sidebarSource, /className=\{cx\([\s\S]*?"thread-item-meta"[\s\S]*?sessionMenu === session\.id/);
-  assert.match(sidebarSource, /className="thread-item-last-reply"/);
+  assert.doesNotMatch(sidebarSource, /className="thread-item-last-reply"/);
   assert.match(
     sidebarStyles,
     /\.thread-item:hover \.thread-item-last-reply,[\s\S]*?\.thread-item:focus-within \.thread-item-last-reply\s*\{\s*opacity:\s*0;\s*visibility:\s*hidden;/,

@@ -3037,6 +3037,18 @@
   color: var(--ds-text-muted);
 }
 
+.tool-status-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tool-row-state:focus-visible,
+.tool-row-status:focus-visible {
+  outline: 2px solid var(--ds-text-secondary);
+  outline-offset: 2px;
+}
+
 .tool-row-status {
   display: inline-flex;
   flex: none;

@@ -1,8 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
-  canonicalThinkingLevel, isDelegationSettings, delegationModelKey, nearestSupportedThinkingLevel,
-  orderDelegationModels, legacyDelegationSettings, THINKING_LEVELS, type AppSettings, type DelegationApprovalModel,
-  type DelegationApprovalRequest, type ThinkingLevel,
+  canonicalThinkingLevel, delegationModelKey, nearestSupportedThinkingLevel,
+  orderDelegationModels, isSessionDelegationPolicy, resolveSessionDelegationSettings, THINKING_LEVELS, type AppSettings, type DelegationApprovalModel,
+  type DelegationApprovalRequest, type SessionDelegationPolicy, type ThinkingLevel,
 } from "@pi-desktop/shared";
 import { delegationPolicySnapshot } from "@pi-desktop/host-runtime";
 import type { RuntimeProvider } from "../runtime/provider-catalog";
@@ -33,25 +33,13 @@ export function createDelegationCatalog(deps: DelegationCatalogDependencies) {
       host.call<AppSettings>("settings.get"),
       deps.listProviders?.() ?? host.call<{ providers: DelegationProvider[] }>("providers.list", { includeDisabled: false })
         .then(result => result.providers),
-      sessionId ? host.call<{ modelKeys: string[] | null }>("session.delegationPolicy", { id: sessionId }) : undefined,
+      sessionId ? host.call<SessionDelegationPolicy>("session.delegationPolicy", { id: sessionId }) : undefined,
     ]);
     if (deps.getHost() !== host) throw new Error("Delegation host changed");
     if (epoch !== started) continue;
-    let policy = settings.delegation;
-    if (policy !== undefined && !isDelegationSettings(policy)) throw new Error("Invalid delegation policy");
-    if (sessionId && (!sessionPolicy || (sessionPolicy.modelKeys !== null &&
-      (!Array.isArray(sessionPolicy.modelKeys) || sessionPolicy.modelKeys.length > 128 ||
-        new Set(sessionPolicy.modelKeys).size !== sessionPolicy.modelKeys.length ||
-        sessionPolicy.modelKeys.some(key => typeof key !== "string" || key !== key.trim() ||
-          key.length > 385 || key.indexOf("/") < 1 || key.endsWith("/")))))) {
-      throw new Error("Invalid session delegation policy");
-    }
+    if (sessionId && !isSessionDelegationPolicy(sessionPolicy)) throw new Error("Invalid session delegation policy");
+    const policy = resolveSessionDelegationSettings(settings.delegation, providers, sessionPolicy ?? { modelKeys: null });
     const customKeys = sessionPolicy?.modelKeys ?? undefined;
-    if (customKeys !== undefined) {
-      const selected = new Set(customKeys);
-      const globalPolicy = policy ?? legacyDelegationSettings(providers);
-      policy = { ...globalPolicy, models: globalPolicy.models.filter(model => selected.has(delegationModelKey(model))) };
-    }
     const available = providers.filter(row => row.enabled !== false &&
       (row.hasSecret === true || row.hasOauth === true || row.authKind === "none")).flatMap(provider => {
       const bindings: Binding[] = provider.models?.length ? provider.models : provider.defaultModelId ? [{ id: provider.defaultModelId }] : [];

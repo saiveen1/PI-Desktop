@@ -585,10 +585,14 @@ type SidebarPreferences = {
   empty catalog stays empty on reload instead of restoring defaults. Independent
   session color marks and label/color filters are also presentation-only.
 - Authoritative delegation model restrictions do not live in these preferences.
-  Host `kv(ns="sessionDelegation", key=sessionId)` stores an optional list of
-  exact model keys. Absence inherits; an empty list disables delegation. Fork
-  copies it in the session transaction; permanent deletion removes it. This
-  uses the existing extension boundary without a schema/table migration.
+  Host `kv(ns="sessionDelegation", key=sessionId)` reads legacy exact-key arrays
+  and a version-1 object containing `modelKeys` and optional `modelApprovals`
+  (`auto` / `ask`, custom members only). Absence inherits; an empty pool disables
+  delegation. Missing approvals inherit the global rule. Fork copies both in the
+  session transaction; permanent deletion and restoring inheritance remove both.
+  Omitted configure fields preserve saved values, changed pools prune approvals,
+  and invalid writes roll back atomically. This uses the existing extension
+  boundary without a schema/table migration.
 - `openProjectPaths` retains sidebar tabs. The selected workspace remains
   host-owned `kv(app, currentProjectId)` and is restored through
   `workspace.get`; the renderer does not persist a competing active path.

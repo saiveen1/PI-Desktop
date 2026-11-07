@@ -1,5 +1,7 @@
 import { IconClock } from "./icons";
-import { ColorSwatch, SessionRowLabels, SessionFilterControl, sessionMarkMenu } from "../features/sessions/SessionLabelControls";
+import { ColorSwatch, SessionFilterControl, sessionMarkMenu } from "../features/sessions/SessionLabelControls";
+import { SidebarLabelGroups } from "../features/sessions/SidebarLabelGroups";
+import { groupSessionsByLabel, visibleLabelSessionIds, type SidebarLabelGroup } from "../lib/sidebar-label-groups";
 import { matchesSessionFilter } from "../lib/session-labels";
 import { RemoteProjectGroups } from "./remote/RemoteProjectGroups";
 import { groupRemoteProjectSessions } from "../lib/remote-project-catalog";
@@ -27,8 +29,7 @@ import {
 } from "../lib/sidebar-floating-menu";
 import { useTranslation } from "react-i18next";
 import { api } from "../lib/api";
-import { formatSessionLastReplyDate } from "../lib/sidebar-session-date";
-import { formatPreciseLocalTimestamp } from "../lib/local-date-time";
+import { SessionLastReplyTime } from "../features/sessions/SessionLastReplyTime";
 import { SessionHoverCard } from "../features/sessions/SessionHoverCard";
 import { useSessionHoverCard } from "../features/sessions/useSessionHoverCard";
 import { useSessionSelection } from "../features/sessions/useSessionSelection";
@@ -316,7 +317,6 @@ export function Sidebar({
   const setSettingsAnchor = useAppStore((s) => s.setSettingsAnchor);
   const update = useUpdateState();
 
-  const [lastReplyNow, setLastReplyNow] = useState(Date.now);
   const [sortOpen, setSortOpen] = useState(false);
   const [sessionMenu, setSessionMenu] = useState<string | null>(null);
   const [renameFor, setRenameFor] = useState<SessionSummary | null>(null);
@@ -341,6 +341,13 @@ export function Sidebar({
     registerDismissGuard: registerSessionHoverCardDismissGuard,
   } = useSessionHoverCard();
   const [expandedProjectSessions, setExpandedProjectSessions] = useState<Record<string, boolean>>({});
+  const [collapsedLabelGroups, setCollapsedLabelGroups] = useState<ReadonlySet<string>>(() => new Set());
+  const toggleLabelGroup = useCallback((key: string) => setCollapsedLabelGroups(previous => {
+    const next = new Set(previous);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    return next;
+  }), []);
   const [draggingSessionId, setDraggingSessionId] = useState<string | null>(null);
   const [sessionDrop, setSessionDrop] = useState<{ id: string; after: boolean } | null>(null);
   const sessionLabels = useAppStore(state => state.sessionLabels);
@@ -354,12 +361,6 @@ export function Sidebar({
   const [draggingProjectKey, setDraggingProjectKey] = useState<string | null>(null);
   const [dropIndicator, setDropIndicator] = useState<{ key: string; insertAfter: boolean } | null>(null);
   const [windowFocused, setWindowFocused] = useState(true);
-  useEffect(() => {
-    if (!showLastReplyDate) return;
-    setLastReplyNow(Date.now());
-    const timer = window.setInterval(() => setLastReplyNow(Date.now()), 1_000);
-    return () => window.clearInterval(timer);
-  }, [showLastReplyDate]);
 
   const menuTriggerRef = useRef<HTMLButtonElement | null>(null);
   const menuFirstItemRef = useRef<HTMLButtonElement | null>(null);
@@ -1051,19 +1052,29 @@ export function Sidebar({
   const remoteProjectGroups = useMemo(() => groupRemoteProjectSessions(
     filtered.filter((session) => isRemoteSession(session) && !pinnedSessionIds.has(session.id)), compareSessions,
   ), [filtered, pinnedSessionIds, compareSessions]);
-  // Follow the rendered order, excluding collapsed groups and unloaded history.
-  const flatSessionOrder = useMemo(() => {
-    const ids = pinnedSessions.map((session) => session.id);
-    ids.push(...temporarySessionHistory.map((session) => session.id));
+  const labelGroupsByScope = useMemo(() => {
+    const groups = new Map<string, SidebarLabelGroup<SessionSummary>[]>();
+    const add = (scope: string, rows: SessionSummary[]) => groups.set(scope, groupSessionsByLabel(rows, sessionLabels, sessionMeta));
+    add("temporary", temporarySessionHistory);
     for (const entry of projectEntries) {
-      if (entry.meta.collapsed ?? projectCollapsed[entry.key] ?? false) continue;
-      const history = entry.sessions.filter((session) => !pinnedSessionIds.has(session.id));
+      const history = entry.sessions.filter(session => !pinnedSessionIds.has(session.id));
       const { visibleSessions } = getVisibleProjectSessions(history, expandedProjectSessions[entry.key] ?? false);
-      ids.push(...visibleSessions.map((session) => session.id));
+      add(`project:${entry.key}`, visibleSessions);
     }
-    for (const group of remoteProjectGroups) ids.push(...group.sessions.map((session) => session.id));
-    return ids;
-  }, [pinnedSessions, temporarySessionHistory, projectEntries, projectCollapsed, pinnedSessionIds, expandedProjectSessions, remoteProjectGroups]);
+    for (const group of remoteProjectGroups) add(`remote:${group.project.key}`, group.sessions);
+    return groups;
+  }, [temporarySessionHistory, projectEntries, pinnedSessionIds, expandedProjectSessions, remoteProjectGroups, sessionLabels, sessionMeta]);
+  // Follow visible shortcuts, but select and mutate every conversation only once.
+  const flatSessionOrder = useMemo(() => {
+    const ids = pinnedSessions.map(session => session.id);
+    const add = (scope: string) => ids.push(...visibleLabelSessionIds(labelGroupsByScope.get(scope) ?? [], scope, collapsedLabelGroups));
+    add("temporary");
+    for (const entry of projectEntries) {
+      if (!(entry.meta.collapsed ?? projectCollapsed[entry.key] ?? false)) add(`project:${entry.key}`);
+    }
+    for (const group of remoteProjectGroups) add(`remote:${group.project.key}`);
+    return [...new Set(ids)];
+  }, [pinnedSessions, labelGroupsByScope, collapsedLabelGroups, projectEntries, projectCollapsed, remoteProjectGroups]);
   const selection = useSessionSelection(flatSessionOrder);
   const { selectedIds } = selection;
   const selectedSessions = sessions.filter((session) => selectedIds.has(session.id));
@@ -1938,16 +1949,6 @@ export function Sidebar({
       hasPendingPermission,
     });
     const lastReplyLocale = i18n.resolvedLanguage ?? i18n.language;
-    const lastReplyDate = options?.showLastReplyDate
-      ? formatSessionLastReplyDate(
-          session.updatedAt,
-          new Date(lastReplyNow),
-          lastReplyLocale,
-        )
-      : "";
-    const lastReplyTimestamp = lastReplyDate
-      ? formatPreciseLocalTimestamp(session.updatedAt, lastReplyLocale)
-      : "";
     return (
       <div
         key={session.id}
@@ -2054,7 +2055,6 @@ export function Sidebar({
           {isRemoteSession(session) && <span className="thread-item-source" title={session.remoteHostLabel}>{t("remote:remote")}</span>}
           <WorktreeBadge worktree={session.worktree} sessionId={session.id} />
           <span className="thread-item-title">{taskTitle(session.title)}</span>
-          <SessionRowLabels meta={meta} labels={sessionLabels} />
           {options?.global ? (
             <span className="thread-item-project">
               {owningProject}
@@ -2067,15 +2067,7 @@ export function Sidebar({
             sessionMenu === session.id && "is-menu-open",
           )}
         >
-          {lastReplyDate ? (
-            <time
-              className="thread-item-last-reply"
-              dateTime={session.updatedAt}
-              title={lastReplyTimestamp || undefined}
-            >
-              {lastReplyDate}
-            </time>
-          ) : null}
+          {options?.showLastReplyDate ? <SessionLastReplyTime updatedAt={session.updatedAt} locale={lastReplyLocale} /> : null}
           <TooltipButton
             type="button"
             disabled={organizationBusy}
@@ -2102,6 +2094,12 @@ export function Sidebar({
       </div>
     );
   });
+
+  const renderGroupedSessionRows = (scope: string, options?: Parameters<typeof renderSessionRows>[1]) => (
+    <SidebarLabelGroups key={scope} groups={labelGroupsByScope.get(scope) ?? []}
+      scope={scope} collapsed={collapsedLabelGroups} onToggle={toggleLabelGroup}
+      renderSessions={rows => renderSessionRows(rows, options)} />
+  );
 
   const renderProjectGroup = (entry: ProjectEntry) => {
     const collapsedProject = entry.meta.collapsed ?? projectCollapsed[entry.key] ?? false;
@@ -2133,9 +2131,9 @@ export function Sidebar({
 
     const renderProjectSessions = (sessions: SessionSummary[]) => {
       const result: React.ReactNode[] = [
-        ...renderSessionRows(sessions, {
+        renderGroupedSessionRows(`project:${entry.key}`, {
           projectPath: entry.path,
-      showLastReplyDate: settings?.sidebarSessionTime === true,
+          showLastReplyDate,
         }),
       ];
       // Add "load more" button if there are hidden sessions
@@ -2539,7 +2537,7 @@ export function Sidebar({
             }}
           >
             {temporarySessionHistory.length > 0 ? (
-              renderSessionRows(temporarySessionHistory, { temporary: true })
+              renderGroupedSessionRows("temporary", { temporary: true })
             ) : temporarySessions.length === 0 ? (
               <div className="sidebar-session-empty">{t("nav.noTemporarySessions")}</div>
             ) : null}
@@ -2606,9 +2604,9 @@ export function Sidebar({
             </section>
           )}
           <RemoteProjectGroups groups={remoteProjectGroups}
-            renderSessions={(sessions) => renderSessionRows(sessions, {
+            renderSessions={(_sessions, projectKey) => renderGroupedSessionRows(`remote:${projectKey}`, {
               temporary: false,
-              showLastReplyDate: settings?.sidebarSessionTime === true,
+              showLastReplyDate,
             })} />
         </div>
 

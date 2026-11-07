@@ -1,6 +1,6 @@
 # ADR: Session organization and scoped on-demand delegation
 
-- Status: Accepted, implementation candidate; validation deferred by request
+- Status: Accepted; session approval amendment validated with isolated fixtures
 - Date: 2026-11-07
 - Amends: ADR 0016 and `delegation-scheduling-and-approval`
 
@@ -36,12 +36,15 @@ with that result. Defaults are ordinary editable entries. No label, including
 TODO, creates tasks, notifications or other automation.
 
 The Rust Host owns an optional per-session list of exact delegation model
-keys. Missing means inherit global policy; an empty list disables delegation.
-An explicit list narrows global eligibility and never grants approval. Session
-configuration is idle-only and does not interrupt existing delegates. Session
-forks copy the list, and permanent deletion removes it. Existing sessions do
-not acquire a custom pool during upgrade. The existing Host `kv` extension
-stores this additive setting without a new SQLite table or schema version.
+keys and optional explicit approval overrides (`auto` / `ask`) for its members.
+Missing keys inherit global policy; an empty list disables delegation. A custom
+pool narrows global eligibility, while its user-saved approvals override global
+consent in either direction for that session only. Missing approval entries keep
+the global rule. Session configuration is idle-only and atomic, preserving
+activity timestamps on delegation-only writes. Forks copy both settings and
+permanent deletion removes them. Existing list-only records remain readable and
+inherit approval until explicitly saved. The existing Host `kv` extension accepts
+legacy lists and a version-1 object, without a new SQLite table or schema version.
 
 The candidate snapshot and approval service resolve the invocation's session,
 not the visible UI selection. Initial launch, later Task admissions, role pins,

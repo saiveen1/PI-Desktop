@@ -33,17 +33,6 @@ export function SessionColorPicker({ value, onChange, allowClear = false, clearL
   </div>;
 }
 
-export function SessionRowLabels({ meta, labels }: { meta: SessionMeta; labels: SessionLabel[] }) {
-  const { t } = useTranslation();
-  const assigned = labels.filter(label => meta.labelIds?.includes(label.id));
-  return <span className="session-row-labels">
-    {assigned.slice(0, 2).map(label => <span key={label.id} className={`session-label-chip session-color-${label.color}`}
-      title={sessionLabelName(label, t)}>{sessionLabelName(label, t)}</span>)}
-    {assigned.length > 2 ? <span className="session-label-overflow"
-      title={assigned.slice(2).map(label => sessionLabelName(label, t)).join(", ")}
-      aria-label={t("sessionLabels.overflow", { count: assigned.length - 2 })}>+{assigned.length - 2}</span> : null}
-  </span>;
-}
 
 export function sessionMarkMenu(id: string, labels: SessionLabel[], meta: SessionMeta,
   t: TFunction, manage: () => void) {

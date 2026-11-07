@@ -421,12 +421,19 @@ to later refresh and inference; the vendor picker does not collect them.
 - Its optional `delegationModelKeys` field preserves the saved session pool
   when omitted, removes the override when null, and disables delegation with
   an empty array. Up to 128 unique exact provider/model keys are accepted.
-  The field shares the idle gate and transaction; a pool-only change leaves
-  the activity timestamp intact. Session list/get return the optional list.
-- `session.delegationPolicy({ id })` returns `{ modelKeys: string[] | null }`
-  without reading the transcript; null means inherit. An unknown session fails.
+  Optional `delegationModelApprovals: Record<string, "auto" | "ask"> | null`
+  overrides consent for custom-pool members only. Omission preserves saved
+  entries; null clears them. A changed pool prunes removed entries, while null
+  keys clear the pool and approvals together. Invalid maps/values or approvals
+  without a custom pool reject the whole configuration. Both fields share the
+  idle gate and transaction; delegation-only changes leave activity intact.
+  Session list/get return both optional fields; forks copy both.
+- `session.delegationPolicy({ id })` returns
+  `{ modelKeys: string[] | null, modelApprovals: Record<string, "auto" | "ask"> | null }`
+  without reading the transcript; null keys mean inherit. An unknown session fails.
   Main uses the invocation's id to derive the candidate snapshot and approval
-  alternatives. Global policy still governs eligibility and consent.
+  alternatives. Global policy governs eligibility; explicit session approval
+  overrides govern consent, with global approval as the fallback.
 - `session.moveProject({ sessionId, projectPath })` moves an idle session to a
   project and returns `{ session }` carrying the canonical project path. It
   upserts the project row and updates only `sessions.project_id` and

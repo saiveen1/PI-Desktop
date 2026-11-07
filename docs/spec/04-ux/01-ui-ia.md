@@ -295,13 +295,23 @@ destination, chat as the home surface, tools and permissions inline.
   title. Session `manual` remains a readable compatibility value.
 - **Labels and color marks**: Conversation settings owns one editable global
   label catalog. A session row menu assigns multiple labels and one independent,
-  optional color mark. The sidebar can filter by any selected label and a color;
-  filters do not rewrite organization or include hidden rows in bulk actions.
+  optional color mark. Within each project's current history page, collapsible
+  full-row label headings replace inline label chips. A multi-label conversation
+  appears under every assigned label, as shortcuts to the same conversation;
+  unassigned conversations appear under Unclassified. Empty groups are omitted,
+  label order follows the catalog and row order follows the current sort.
+  Temporary and remote history use the same grouping; global pins remain flat.
+  The sidebar can filter by any selected label and a color. Filters and folding
+  do not rewrite organization; bulk actions deduplicate visible conversation IDs.
 - **Subagent models**: A local conversation's composer opens its model-pool
-  dialog. Follow global is the default; Custom enables model checkboxes and
-  explains description-based task matching. Saving an empty custom pool disables
-  delegation for that conversation. The dialog is inspectable while busy but
-  saves only while idle, retains failures and closes on conversation switch.
+  dialog. Follow global is the default; Custom enables model checkboxes and a
+  separate per-model Automatically allowed / Approval required selector. Saving
+  writes explicit consent for selected models in this conversation only; global
+  settings and other sessions stay unchanged. Unselected controls are disabled.
+  The hint explains session scope and description-based task matching. Saving
+  an empty pool disables delegation; restoring global inheritance clears both
+  model and approval overrides. The dialog is inspectable while busy but saves
+  only while idle, retains failures and closes on conversation switch.
 - **Conversation list**: each project group shows the ten most-recent sessions
   in the active sort order by default; the remainder folds behind a **Load N
   more…** row. The list has no time-group headings. Rows show the title and a

@@ -21,7 +21,8 @@ async fn session_delegation_pool_preserves_inheritance_and_activity_across_reope
     let saved = handle_request(
         state.clone(),
         "session.configure",
-        json!({"id": id, "mode": "agent", "delegationModelKeys": ["account/model"]}),
+        json!({"id": id, "mode": "agent", "delegationModelKeys": ["account/model"],
+            "delegationModelApprovals": {"account/model": "auto"}}),
         tx.clone(),
     )
     .await
@@ -31,6 +32,10 @@ async fn session_delegation_pool_preserves_inheritance_and_activity_across_reope
         json!(["account/model"])
     );
     assert_eq!(saved["session"]["updatedAt"], updated);
+    assert_eq!(
+        saved["session"]["delegationModelApprovals"],
+        json!({"account/model": "auto"})
+    );
     let rejected = handle_request(state.clone(), "session.configure",
         json!({"id": id, "mode": "agent", "delegationModelKeys": ["account/model", "account/model"]}), tx.clone()).await;
     assert!(rejected.is_err());
@@ -52,7 +57,8 @@ async fn session_delegation_pool_preserves_inheritance_and_activity_across_reope
         state.clone(),
         "session.configure",
         json!({"id": id, "mode": "plan", "permissionMode": "auto", "fastMode": true,
-            "delegationModelKeys": ["account/replacement"]}),
+            "delegationModelKeys": ["account/replacement"],
+            "delegationModelApprovals": {"account/replacement": "ask"}}),
         tx.clone(),
     )
     .await
@@ -87,6 +93,7 @@ async fn session_delegation_pool_preserves_inheritance_and_activity_across_reope
     .await
     .unwrap();
     assert_eq!(read["modelKeys"], json!(["account/model"]));
+    assert_eq!(read["modelApprovals"], json!({"account/model": "auto"}));
     let disabled = handle_request(
         state.clone(),
         "session.configure",
@@ -96,6 +103,9 @@ async fn session_delegation_pool_preserves_inheritance_and_activity_across_reope
     .await
     .unwrap();
     assert_eq!(disabled["session"]["delegationModelKeys"], json!([]));
+    assert!(disabled["session"]
+        .get("delegationModelApprovals")
+        .is_none());
     let inherited = handle_request(
         state.clone(),
         "session.configure",
@@ -114,6 +124,7 @@ async fn session_delegation_pool_preserves_inheritance_and_activity_across_reope
     .await
     .unwrap();
     assert!(read["modelKeys"].is_null());
+    assert!(read["modelApprovals"].is_null());
 }
 
 #[tokio::test]
@@ -250,4 +261,177 @@ async fn delegation_settings_invalid_writes_leave_saved_settings_unchanged() {
             .unwrap(),
         saved
     );
+}
+
+#[tokio::test]
+async fn session_delegation_approvals_validate_prune_and_follow_session_lifecycle() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut app = AppState::open(directory.path()).unwrap();
+    app.handshook = true;
+    let state = Arc::new(Mutex::new(app));
+    let tx = mpsc::unbounded_channel().0;
+    let created = handle_request(
+        state.clone(),
+        "session.create",
+        json!({"mode": "agent"}),
+        tx.clone(),
+    )
+    .await
+    .unwrap();
+    let id = created["session"]["id"].as_str().unwrap().to_owned();
+    macro_rules! configure {
+        ($patch:expr) => {{
+            let mut params = $patch;
+            params["id"] = json!(id);
+            params["mode"] = json!("agent");
+            handle_request(state.clone(), "session.configure", params, tx.clone())
+                .await
+                .unwrap()
+        }};
+    }
+    for approvals in [json!({"account/model": "auto"}), json!({})] {
+        assert!(handle_request(
+            state.clone(),
+            "session.configure",
+            json!({"id": id, "mode": "agent", "delegationModelApprovals": approvals}),
+            tx.clone()
+        )
+        .await
+        .is_err());
+    }
+    // Historical arrays remain readable and do not invent approval consent.
+    state
+        .lock()
+        .await
+        .db
+        .kv_set(
+            crate::session_delegation::NAMESPACE,
+            &id,
+            &json!(["account/model", "account/other"]),
+        )
+        .unwrap();
+    let legacy = handle_request(
+        state.clone(),
+        "session.delegationPolicy",
+        json!({"id": id}),
+        tx.clone(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        legacy["modelKeys"],
+        json!(["account/model", "account/other"])
+    );
+    assert!(legacy["modelApprovals"].is_null());
+    let approvals = json!({"account/model": "auto", "account/other": "ask"});
+    let saved = configure!(json!({"delegationModelApprovals": approvals}));
+    assert_eq!(
+        saved["session"]["updatedAt"],
+        created["session"]["updatedAt"]
+    );
+    assert_eq!(saved["session"]["delegationModelApprovals"], approvals);
+    let omitted = configure!(json!({"fastMode": false}));
+    assert_eq!(omitted["session"]["delegationModelApprovals"], approvals);
+    for invalid in [
+        json!([]),
+        json!(false),
+        json!({"account/model": "always"}),
+        json!({"account/model": true}),
+        json!({"account/missing": "auto"}),
+        json!({"bad key": "ask"}),
+        json!({"account/model ": "auto"}),
+    ] {
+        let failed = handle_request(state.clone(), "session.configure", json!({"id": id, "mode": "plan", "permissionMode": "auto", "fastMode": true, "delegationModelApprovals": invalid}), tx.clone()).await.unwrap_err();
+        assert_eq!(failed.code, 1002);
+        let current = handle_request(state.clone(), "session.get", json!({"id": id}), tx.clone())
+            .await
+            .unwrap();
+        assert_eq!(current["session"]["delegationModelApprovals"], approvals);
+        assert_eq!(current["session"]["mode"], "agent");
+        assert_eq!(
+            current["session"]["permissionMode"],
+            omitted["session"]["permissionMode"]
+        );
+        assert_eq!(
+            current["session"]["fastMode"],
+            omitted["session"]["fastMode"]
+        );
+        assert_eq!(
+            current["session"]["updatedAt"],
+            omitted["session"]["updatedAt"]
+        );
+    }
+    let forked = handle_request(
+        state.clone(),
+        "session.fork",
+        json!({"sessionId": id}),
+        tx.clone(),
+    )
+    .await
+    .unwrap();
+    let fork_id = forked["session"]["id"].as_str().unwrap();
+    assert_eq!(forked["session"]["delegationModelApprovals"], approvals);
+    let listed = handle_request(state.clone(), "session.list", json!({}), tx.clone())
+        .await
+        .unwrap();
+    assert_eq!(
+        listed["sessions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|row| row["id"] == id)
+            .unwrap()["delegationModelApprovals"],
+        approvals
+    );
+    {
+        let app = state.lock().await;
+        assert!(sessions::delete_session(&app.db, fork_id).unwrap());
+        assert!(app
+            .db
+            .kv_get(crate::session_delegation::NAMESPACE, fork_id)
+            .unwrap()
+            .is_none());
+    }
+    let pruned = configure!(json!({"delegationModelKeys": ["account/model"]}));
+    assert_eq!(
+        pruned["session"]["delegationModelApprovals"],
+        json!({"account/model": "auto"})
+    );
+    let cleared = configure!(json!({"delegationModelApprovals": null}));
+    assert!(cleared["session"].get("delegationModelApprovals").is_none());
+    assert_eq!(
+        cleared["session"]["delegationModelKeys"],
+        json!(["account/model"])
+    );
+    configure!(json!({"delegationModelApprovals": {"account/model": "ask"}}));
+    let turn = handle_request(
+        state.clone(),
+        "session.beginTurn",
+        json!({"sessionId": id}),
+        tx.clone(),
+    )
+    .await
+    .unwrap();
+    let busy = handle_request(
+        state.clone(),
+        "session.configure",
+        json!({"id": id, "mode": "agent", "delegationModelApprovals": {"account/model": "auto"}}),
+        tx.clone(),
+    )
+    .await
+    .unwrap_err();
+    assert!(busy.message.contains("PLAN_CONFIGURATION_BLOCKED"));
+    handle_request(
+        state.clone(),
+        "session.endTurn",
+        json!({"turnId": turn["turnId"], "status": "completed", "createNotification": false}),
+        tx.clone(),
+    )
+    .await
+    .unwrap();
+    let inherited = configure!(json!({"delegationModelKeys": null}));
+    assert!(inherited["session"].get("delegationModelKeys").is_none());
+    assert!(inherited["session"]
+        .get("delegationModelApprovals")
+        .is_none());
 }

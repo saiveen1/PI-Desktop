@@ -1,5 +1,22 @@
 # Unreleased changes
 
+- Present conversation labels as collapsible full-row groups within project,
+  temporary and remote history. Multi-label conversations have multiple shortcuts
+  to the same data; visible selection deduplicates IDs and global pins stay flat.
+  Replace sidebar seconds counters with localized Now/minute ages and one shared,
+  visibility-aware minute clock that updates time components instead of Sidebar.
+
+- Distinguish tool calls skipped for new input and explicit interruptions from
+  real failures. Muted status labels expose localized hover/focus reasons;
+  actual failures retain bounded error details, and timeouts/nonzero command
+  exits stay red. Preserve original tool results and plugin status contracts.
+
+- Fix conversation-specific subagent customization: selected models now have
+  editable Automatically allowed / Approval required rules saved for that
+  conversation, rather than read-only global approval labels. Launch and live
+  admission share the same effective policy. Global eligibility remains enforced;
+  legacy pools inherit approval until saved, and Follow global clears both overrides.
+
 - Require a current final report before a delegation can complete; stale progress,
   thinking-only replies and empty truncated endings no longer count as delivery.
   Preserve partial findings and expose live counters, model selection/fallback

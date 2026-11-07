@@ -9,9 +9,8 @@ import {
   imageGenerationBindings,
   isImageGenerationModel,
   normalizeMode,
-  isDelegationSettings,
+  resolveSessionDelegationSettings,
   orderDelegationModels,
-  legacyDelegationSettings,
   trustedExtensionAgentKeyFromProviderId,
   UNKNOWN_UPSTREAM_RETRY_LIMIT_DEFAULT,
   type CommandShellCatalog,
@@ -609,12 +608,10 @@ export function createSessionLaunchRuntime({
       },
     });
     const customModelKeys: string[] | undefined = session.delegationModelKeys;
-    const globalDelegation = settings.delegation;
-    const baseDelegation = globalDelegation ?? (customModelKeys !== undefined ? legacyDelegationSettings(providers.providers) : undefined);
-    const delegation = customModelKeys !== undefined && baseDelegation
-      ? { ...baseDelegation, models: baseDelegation.models.filter((model: { providerId: string; modelId: string }) => customModelKeys.includes(`${model.providerId}/${model.modelId}`)) }
-      : baseDelegation;
-    if (delegation !== undefined && !isDelegationSettings(delegation)) throw new Error("Invalid delegation policy");
+    const delegation = resolveSessionDelegationSettings(settings.delegation, providers.providers, {
+      modelKeys: customModelKeys ?? null,
+      modelApprovals: session.delegationModelApprovals,
+    });
     const subagentModelKeys: string[] = [];
     const candidates = delegation !== undefined
       ? orderDelegationModels(delegation).flatMap((model) => {

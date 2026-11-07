@@ -1,15 +1,13 @@
 import type { AssistantActivityItem } from "./assistant-turns";
 import { getToolAction } from "./tool-display";
-import { runOutcome } from "./tool-presentation";
+import { getToolStatus } from "./tool-status";
 import { isDelegationActivityItem, subagentOutcome, type SubagentOutcome } from "./subagent-topology";
 
 export function activityItemHasIssue(item: AssistantActivityItem): boolean {
   if (item.kind === "hostedSearch") return item.round.status === "failed";
   if (item.kind !== "tool") return false;
-  const message = item.message;
-  return message.toolStatus === "error" || message.toolStatus === "denied" ||
-    Boolean(message.isError) ||
-    (getToolAction(message.toolName) === "run" && runOutcome(message) === "failed");
+  const status = getToolStatus(item.message).kind;
+  return status === "failed" || status === "denied";
 }
 
 export function visibleActivityItems(
@@ -37,6 +35,8 @@ export function activitySummary(items: readonly AssistantActivityItem[], statuse
     thinking,
     issues: items.filter((item) => {
       if (!isDelegationActivityItem(item)) return activityItemHasIssue(item);
+      const status = getToolStatus(item.message).kind;
+      if (status === "skipped" || status === "interrupted") return false;
       const outcome = subagentOutcome(item.message, statuses);
       return outcome === "failed" || outcome === "denied";
     }).length,

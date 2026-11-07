@@ -50,18 +50,18 @@ test("the caret becomes a pointer target beside the copy control", () => {
 });
 
 test("a run row states what the command did, not what the call did", () => {
-  assert.match(transcript, /className=\{`tool-row-state \$\{statusTone\}`\}/);
-  // The outcome comes from the shell's exit code first (D227), so a command
-  // that exits 1 inside a call that came back fine still reads as failed.
-  assert.match(transcript, /const run = action === "run" \? runOutcome\(message\) : null/);
-  assert.match(transcript, /run === "running" \|\| \(!run && status === "running"\)\s*\?\s*"is-running"/);
-  assert.match(transcript, /: "is-done"/);
+  assert.match(transcript, /<ToolStatusBadge status=\{toolStatus\} label=\{statusLabel\} runHead=\{runHead\} \/>/);
+  // The shared classifier preserves command exit evidence; rendered cases live
+  // in tool-status.test.mjs, including skips and explicit interruption.
+  assert.match(transcript, /const toolStatus = getToolStatus\(message\)/);
+  assert.match(transcript, /status.kind === "running" \? "is-running"/);
+  assert.match(transcript, /status.kind === "success" \? "is-done"/);
   assert.match(styles, /\.tool-row-state\.is-done \.tool-row-state-dot \{\s*background: var\(--ds-success\)/);
   assert.match(styles, /\.tool-row-state\.is-error \.tool-row-state-dot \{\s*background: var\(--ds-error\)/);
-  // A row with nothing to claim says nothing rather than claiming success, and
-  // hands the announcement back to the hidden live region.
-  assert.match(transcript, /\{runHead && statusLabel \? \(/);
-  assert.match(transcript, /\{runHead && statusLabel \? null : \(\s*<span className="sr-only" role="status"/);
+  // Unknown outcomes never claim success. Visible badges own one announcement;
+  // ordinary success/running rows retain the hidden live region.
+  assert.match(transcript, /if \(!label\) return null/);
+  assert.match(transcript, /<span className="sr-only" role="status" aria-live="polite">\{label\}<\/span>/);
   assert.match(
     styles,
     /\.tool-row-state\.is-running \.tool-row-state-dot \{[^}]*animation: tool-row-state-pulse/,

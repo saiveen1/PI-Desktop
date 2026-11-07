@@ -229,3 +229,27 @@ test("background tool partials stay cache-only and update the first running matc
   assert.equal(h.get().retainedTranscripts, retained);
   assert.equal(h.writes(), 0);
 }));
+
+test("aborted turns mark unfinished tools interrupted without hiding real failures", async () => {
+  const { getToolStatus } = await import("../src/lib/tool-status.ts");
+  for (const [code, expected] of [["TURN_ABORTED", "interrupted"], ["INTERNAL", "failed"]]) {
+    const done = message("done", { role: "tool", toolName: "Read", toolStatus: "success" });
+    const actualFailure = message("failed", { role: "tool", toolName: "Bash", toolStatus: "error", toolResult: { details: { code: "TOOL_TIMEOUT", error: "timed out" } } });
+    const running = message("running", { role: "tool", toolName: "Read", toolStatus: "running" });
+    const h = harness([done, actualFailure, running]);
+    h.set({ agentStatuses: {}, pendingPermissions: [], pendingAsks: [], askDrafts: {}, latestTurnResults: {} });
+    const slice = createEventsSlice({
+      get: h.get, set: h.set, runtime: h.runtime,
+      withoutRecordKey: (record = {}, key) => Object.fromEntries(Object.entries(record).filter(([id]) => id !== key)),
+      flushPendingSessionConfiguration: async () => {},
+      assistantErrorMessage: (error) => message("turn-error", { error }),
+    });
+    slice.handleAgentEvent({ sessionId: "active", ts: 2, event: { type: "error", error: { code, message: "Turn ended", retriable: false } } });
+    const rows = h.get().messages;
+    assert.equal(getToolStatus(rows[2]).kind, expected, code);
+    assert.equal(rows[2].status, code === "TURN_ABORTED" ? "aborted" : "error");
+    assert.equal(rows[0], done, "completed calls are never relabeled");
+    assert.equal(rows[1], actualFailure, "a real tool failure is never relabeled");
+    assert.equal(getToolStatus(rows[1]).kind, "failed");
+  }
+});
