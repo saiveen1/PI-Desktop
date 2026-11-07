@@ -5,6 +5,8 @@ use std::future::{poll_fn, Future};
 use std::sync::{Mutex as StdMutex, OnceLock};
 use std::task::Poll;
 
+mod search_tests;
+
 struct Gate {
     entered: StdMutex<Option<tokio::sync::oneshot::Sender<()>>>,
     leave: StdMutex<std::sync::mpsc::Receiver<()>>,

@@ -29,6 +29,8 @@ mod grep_rg;
 pub mod hashline;
 pub mod ignore_rules;
 mod image_dimensions;
+mod search;
+mod search_control;
 pub mod shell;
 #[cfg(windows)]
 mod windows_process_tree;
@@ -979,7 +981,11 @@ impl<R: BufRead> LineReader<R> {
 
     /// Next line with its trailing newline (and CR) stripped, clipped to
     /// `max_chars`. `Ok(None)` marks end of input.
-    fn next_line(&mut self, max_chars: usize) -> std::io::Result<Option<ScannedLine>> {
+    fn next_line_checked(
+        &mut self,
+        max_chars: usize,
+        mut check: impl FnMut() -> std::io::Result<()>,
+    ) -> std::io::Result<Option<ScannedLine>> {
         // Cap the raw read at the widest UTF-8 encoding of the char budget so
         // the char clip below never has to split a multi-byte sequence.
         let max_bytes = max_chars.saturating_mul(4);
@@ -987,6 +993,7 @@ impl<R: BufRead> LineReader<R> {
         let mut clipped = false;
         let mut saw_input = false;
         loop {
+            check()?;
             let chunk = match self.reader.fill_buf() {
                 Ok(chunk) => chunk,
                 Err(error) if error.kind() == ErrorKind::Interrupted => continue,
@@ -1171,7 +1178,9 @@ async fn run_file_tool(
     let hashline = hashline.map(|ctx| (ctx.session_id.to_string(), ctx.store.clone()));
     #[cfg(test)]
     let test_rg = grep_rg::current_test_rg();
-    tokio::task::spawn_blocking(move || {
+    let (search_owner, search_control) =
+        search_control::SearchControl::new(lease.as_ref().map(|(permit, _)| permit.clone()));
+    let result = tokio::task::spawn_blocking(move || {
         // Dropping the transport future does not stop this closure. It must
         // retain the lease until the actual filesystem body has returned.
         let _file_lease = lease;
@@ -1204,9 +1213,23 @@ async fn run_file_tool(
         match tool_name.as_str() {
             "Read" => tool_read(workspace, roots, args, allow_external_paths, hashline)
                 .map_err(Into::into),
-            "Glob" => tool_glob(workspace, roots, args, allow_external_paths).map_err(Into::into),
-            "Grep" => tool_grep(workspace, roots, args, allow_external_paths, hashline)
-                .map_err(Into::into),
+            "Glob" => search::tool_glob(
+                workspace,
+                roots,
+                args,
+                allow_external_paths,
+                &search_control,
+            )
+            .map_err(Into::into),
+            "Grep" => search::tool_grep(
+                workspace,
+                roots,
+                args,
+                allow_external_paths,
+                hashline,
+                &search_control,
+            )
+            .map_err(Into::into),
             "Write" => tool_write(workspace, roots, args, allow_external_paths, hashline)
                 .map_err(Into::into),
             // "Edit": the caller routes only these five file tools here.
@@ -1214,7 +1237,9 @@ async fn run_file_tool(
         }
     })
     .await
-    .map_err(|error| hashline::ToolError::new("INTERNAL", format!("tool task failed: {error}")))?
+    .map_err(|error| hashline::ToolError::new("INTERNAL", format!("tool task failed: {error}")))?;
+    drop(search_owner);
+    result
 }
 
 /// Execute a builtin tool after the host permission gate has decided whether
@@ -2027,314 +2052,6 @@ fn search_root(
         }
         None => Ok((root.to_path_buf(), ToolRoot::Workspace, false)),
     }
-}
-
-fn candidate_files(
-    search_root: &Path,
-    ignore_root: &Path,
-    scoped: bool,
-    include: Option<&globset::GlobSet>,
-    max_files: usize,
-) -> (Vec<PathBuf>, bool) {
-    if search_root.is_file() {
-        if ignore_rules::is_sensitive_path(search_root) {
-            return (Vec::new(), false);
-        }
-        let relative = search_root
-            .file_name()
-            .map(Path::new)
-            .unwrap_or(search_root);
-        if include.is_some_and(|set| !glob_matches(set, relative)) {
-            return (Vec::new(), false);
-        }
-        return (vec![search_root.to_path_buf()], false);
-    }
-
-    let mut walker = WalkBuilder::new(search_root);
-    walker.hidden(false).git_ignore(true);
-    if scoped {
-        walker.parents(false);
-    }
-    ignore_rules::configure_walker(&mut walker, ignore_root, scoped);
-    let mut candidates: Vec<(PathBuf, SystemTime)> = Vec::new();
-    let mut capped = false;
-    for entry in walker.build().flatten() {
-        let path = entry.path();
-        if !path.is_file() {
-            continue;
-        }
-        let relative = path.strip_prefix(search_root).unwrap_or(path);
-        if let Some(set) = include {
-            if !glob_matches(set, relative) {
-                continue;
-            }
-        }
-        if candidates.len() >= max_files {
-            capped = true;
-            break;
-        }
-        let mtime = entry
-            .metadata()
-            .ok()
-            .and_then(|meta| meta.modified().ok())
-            .unwrap_or(UNIX_EPOCH);
-        candidates.push((path.to_path_buf(), mtime));
-    }
-    // Most recently touched first: the file someone just edited is far more
-    // likely to be the one the question is about than an alphabetically early
-    // one, so a capped result keeps the useful half.
-    candidates.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
-    (
-        candidates.into_iter().map(|(path, _)| path).collect(),
-        capped,
-    )
-}
-
-fn tool_glob(
-    workspace: Option<&Path>,
-    roots: &ContainedRoots,
-    args: &Value,
-    allow_external_paths: bool,
-) -> Result<Value, (String, String)> {
-    let root = require_workspace(workspace)?;
-    let pattern = args
-        .get("pattern")
-        .and_then(|v| v.as_str())
-        .unwrap_or("**/*");
-    let set = build_glob_set(pattern)?;
-    let (search_dir, root_kind, scoped) = search_root(
-        root,
-        roots,
-        args,
-        allow_external_paths,
-        SearchPathKind::DirectoryOnly,
-    )?;
-    let limit = args
-        .get("limit")
-        .and_then(|v| v.as_u64())
-        .map(|v| v.min(GLOB_MAX_LIMIT as u64) as usize)
-        .filter(|v| *v > 0)
-        .unwrap_or(GLOB_DEFAULT_LIMIT);
-
-    let ignore_root = if root_kind == ToolRoot::Workspace {
-        root
-    } else {
-        search_dir.as_path()
-    };
-    let (files, mut truncated) = candidate_files(
-        &search_dir,
-        ignore_root,
-        scoped,
-        Some(&set),
-        GLOB_MAX_LIMIT * 8,
-    );
-    let mut matches: Vec<String> = Vec::new();
-    let mut bytes = 0_usize;
-    for path in &files {
-        if matches.len() >= limit {
-            truncated = true;
-            break;
-        }
-        let shown = display_tool_path(root_kind, root, path);
-        bytes += shown.len() + 8;
-        if bytes > BUDGET_SEARCH.max_bytes {
-            truncated = true;
-            break;
-        }
-        matches.push(shown);
-    }
-
-    let mut out = json!({
-        "matches": matches,
-        "count": matches.len(),
-        "truncated": truncated,
-    });
-    if truncated {
-        out["notice"] = json!(format!(
-            "more files match; raise limit (max {GLOB_MAX_LIMIT}) or narrow pattern/path. Results are ordered by modification time, newest first"
-        ));
-    }
-    Ok(out)
-}
-
-fn tool_grep(
-    workspace: Option<&Path>,
-    roots: &ContainedRoots,
-    args: &Value,
-    allow_external_paths: bool,
-    hashline: Option<&HashlineContext<'_>>,
-) -> Result<Value, (String, String)> {
-    let root = require_workspace(workspace)?;
-    let pattern = args
-        .get("pattern")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| ("INVALID_ARGUMENT".into(), "pattern required".into()))?;
-    let re = RegexBuilder::new(pattern)
-        .case_insensitive(
-            args.get("caseInsensitive")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false),
-        )
-        .build()
-        .map_err(|e| ("INVALID_ARGUMENT".into(), e.to_string()))?;
-    let (search_dir, root_kind, scoped) = search_root(
-        root,
-        roots,
-        args,
-        allow_external_paths,
-        SearchPathKind::FileOrDirectory,
-    )?;
-    let include = args
-        .get("include")
-        .and_then(|v| v.as_str())
-        .map(str::trim)
-        .filter(|p| !p.is_empty())
-        .map(build_glob_set)
-        .transpose()?;
-    let mode = match args.get("outputMode").and_then(|v| v.as_str()) {
-        Some("files_with_matches") | Some("files-with-matches") => "filesWithMatches",
-        Some(value) => value,
-        None => "content",
-    };
-    if !matches!(mode, "content" | "filesWithMatches" | "count") {
-        return Err((
-            "INVALID_ARGUMENT".into(),
-            format!("unknown outputMode: {mode} (content | filesWithMatches | count)"),
-        ));
-    }
-    let head_limit = args
-        .get("headLimit")
-        .and_then(|v| v.as_u64())
-        .map(|v| v.min(BUDGET_SEARCH.max_lines as u64) as usize)
-        .filter(|v| *v > 0)
-        .unwrap_or(GREP_DEFAULT_HEAD_LIMIT);
-    let include_pattern = args
-        .get("include")
-        .and_then(|v| v.as_str())
-        .map(str::trim)
-        .filter(|p| !p.is_empty());
-    let case_insensitive = args
-        .get("caseInsensitive")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
-
-    let ignore_root = if root_kind == ToolRoot::Workspace {
-        root
-    } else {
-        search_dir.as_path()
-    };
-
-    // Prefer a system `rg` when one is installed (Codex's search default).
-    // The result shape, budgets, newest-first order, and scoped-ignore rule
-    // stay host-defined; a missing or failing binary falls through.
-    if let Some(value) = grep_rg::try_system_rg(grep_rg::SystemGrep {
-        pattern,
-        search_dir: &search_dir,
-        workspace_root: root,
-        ignore_root,
-        root_kind,
-        scoped,
-        include: include_pattern,
-        mode,
-        case_insensitive,
-        head_limit,
-    }) {
-        return Ok(mint_grep_tags(
-            root,
-            roots,
-            allow_external_paths,
-            mode,
-            value,
-            hashline,
-        ));
-    }
-
-    let (files, mut truncated) = candidate_files(
-        &search_dir,
-        ignore_root,
-        scoped,
-        include.as_ref(),
-        GREP_MAX_CANDIDATE_FILES,
-    );
-
-    let mut hits: Vec<Value> = Vec::new();
-    let mut counts: Vec<Value> = Vec::new();
-    let mut matched_files: Vec<String> = Vec::new();
-    let mut total_matches = 0_usize;
-    let mut clipped_lines = 0_usize;
-    let mut bytes = 0_usize;
-    'files: for path in &files {
-        let Ok(mut reader) = LineReader::open(path) else {
-            continue;
-        };
-        // Skipped rather than lossily decoded: a regex over mangled bytes
-        // produces hits nobody can act on.
-        if reader.looks_binary() {
-            continue;
-        }
-        let shown = display_tool_path(root_kind, root, path);
-        let mut line_no = 0_usize;
-        let mut file_matches = 0_usize;
-        // A read error mid-file is treated as end of file: partial matches from
-        // what was readable beat dropping the file entirely.
-        while let Ok(Some(line)) = reader.next_line(MAX_LINE_CHARS) {
-            line_no += 1;
-            if !re.is_match(&line.text) {
-                continue;
-            }
-            file_matches += 1;
-            total_matches += 1;
-            if line.clipped {
-                clipped_lines += 1;
-            }
-            match mode {
-                "content" => {
-                    // 48 bytes covers the JSON envelope of one hit.
-                    bytes += shown.len() + line.text.len() + 48;
-                    if hits.len() >= head_limit || bytes > BUDGET_SEARCH.max_bytes {
-                        truncated = true;
-                        break 'files;
-                    }
-                    hits.push(json!({
-                        "path": shown,
-                        "line": line_no,
-                        "text": line.text,
-                    }));
-                }
-                // One hit settles it; no reason to read the rest of the file.
-                "filesWithMatches" => break,
-                _ => {}
-            }
-        }
-        if file_matches == 0 {
-            continue;
-        }
-        matched_files.push(shown.clone());
-        if mode == "count" {
-            counts.push(json!({ "path": shown, "count": file_matches }));
-        }
-        if mode != "content" && matched_files.len() >= head_limit {
-            truncated = true;
-            break;
-        }
-    }
-
-    Ok(mint_grep_tags(
-        root,
-        roots,
-        allow_external_paths,
-        mode,
-        grep_output(
-            mode,
-            hits,
-            counts,
-            matched_files,
-            total_matches,
-            clipped_lines,
-            truncated,
-        ),
-        hashline,
-    ))
 }
 
 pub(super) fn grep_output(

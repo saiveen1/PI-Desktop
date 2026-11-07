@@ -1899,9 +1899,10 @@ directory tree. Calls use `Read.offset/limit`, `Glob.path/limit`, and
 `Grep.path/include/outputMode/headLimit`; `filesWithMatches` or `count` avoids
 unneeded content. Workspace-relative paths remain the portable default, with a
 bounded command in the active shell only when native tools are insufficient.
-Grep uses a system `rg` when one is installed and an in-process searcher
-otherwise; the agent calls Grep rather than shelling out to `rg`. Bash must
-still not assume `rg` is present. The agent must not repeat a search whose
+Coordinated local Grep uses the in-process scanner with per-file Host leases;
+uncoordinated callers may use an installed system `rg`. The agent calls Grep
+rather than shelling out to `rg`, and Bash must not assume `rg` is present.
+The agent must not repeat a search whose
 answer is already in context.
 
 The edit-discipline block carries the line-anchored `Edit` contract of
@@ -2124,6 +2125,10 @@ conflicting same-batch calls by source ordinal and atomically grants resources
 with capacity. Native file identities cover aliases across parent/delegate and
 session calls. Unknown identities and namespace changes fence conservatively.
 The actual blocking task retains its permit after transport cancellation.
+Searches retain capacity/source-order ownership without a whole-tree execution
+fence. Grep borrows that slot for per-file leases through tag generation; Glob
+enumerates metadata. Blocking searches cooperatively stop after waiter
+cancellation. See ADR `search-file-lease-isolation`.
 Supported calls bypass sidecar PathMutex; legacy calls retain it. Existing
 mutation-recovery rules remain in force. See `03-tools-and-permissions.md` §0
 and ADR `host-file-batch-admission` for identity, lifecycle and scope limits.

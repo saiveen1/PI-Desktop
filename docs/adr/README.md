@@ -40,6 +40,7 @@ Each ADR includes:
 | remote-project-home-workflow | [Remote projects in the shared Chat home workflow](remote-project-home-workflow.md) | Accepted |
 | parallel-read-batches | [Ordered preparation and parallel file batches](parallel-read-batches.md) | Proposed |
 | host-file-batch-admission | [Host file identities and ordered batch admission](host-file-batch-admission.md) | Proposed |
+| search-file-lease-isolation | [Per-file search leases instead of Host-wide search fences](search-file-lease-isolation.md) | Accepted |
 | composer-mcp-invocations | [Composer MCP Invocations](composer-mcp-invocations.md) | Accepted |
 | chronological-system-transcript | [Preserve chronological model system state](chronological-system-transcript.md) | Accepted |
 | mcp-tool-approval-risk | [User MCP tools keep the normal approval path](mcp-tool-approval-risk.md) | Accepted |

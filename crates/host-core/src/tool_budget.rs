@@ -71,6 +71,38 @@ pub struct ToolPermit {
     pub initial_wait_reason: &'static str,
 }
 
+/// A per-file search read borrows its parent's execution slot, never another one.
+pub struct SearchReadPermit {
+    _permit: ToolPermit,
+    _parent: Arc<ToolPermit>,
+}
+
+impl ToolPermit {
+    pub async fn acquire_search_read(
+        self: &Arc<Self>,
+        resources: Arc<FileResources>,
+    ) -> Result<SearchReadPermit, AdmissionError> {
+        let permit = self
+            .budget
+            .acquire_request(
+                Request {
+                    session_id: self.request.session_id.clone(),
+                    class: ToolClass::Read,
+                    own_worktree: self.request.own_worktree,
+                    resources: Some(resources),
+                    ticket: None,
+                    borrowed_capacity: true,
+                },
+                QUEUE_WAIT,
+            )
+            .await?;
+        Ok(SearchReadPermit {
+            _permit: permit,
+            _parent: self.clone(),
+        })
+    }
+}
+
 #[cfg(test)]
 mod file_tests;
 
@@ -171,6 +203,7 @@ struct Request {
     own_worktree: bool,
     resources: Option<Arc<FileResources>>,
     ticket: Option<String>,
+    borrowed_capacity: bool,
 }
 
 impl Request {
@@ -242,7 +275,10 @@ impl BudgetState {
             {
                 return "source_order";
             }
-            if self.file_holders.iter().any(|r| r.conflicts(resources))
+            if self
+                .file_holders
+                .iter()
+                .any(|r| r.execution_conflicts(resources))
                 || !self.can_pass_waiters(request, self.waiting.len())
             {
                 return "resource";
@@ -255,7 +291,7 @@ impl BudgetState {
             if self
                 .file_holders
                 .iter()
-                .any(|held| held.conflicts(resources))
+                .any(|held| held.execution_conflicts(resources))
                 || request
                     .ticket
                     .as_deref()
@@ -263,6 +299,15 @@ impl BudgetState {
             {
                 return false;
             }
+        }
+        self.has_capacity(request)
+    }
+
+    fn has_capacity(&self, request: &Request) -> bool {
+        // Existing searches must finish even while session-exclusive work waits
+        // for them to drain. Their parent retains all capacity/lifecycle ownership.
+        if request.borrowed_capacity {
+            return true;
         }
         if self.active >= MAX_IN_FLIGHT_TOOLS
             || self.classes[request.class as usize] >= request.class.limit()
@@ -294,6 +339,9 @@ impl BudgetState {
         if let Some(ticket) = &request.ticket {
             self.batches.start(ticket);
         }
+        if request.borrowed_capacity {
+            return;
+        }
         self.active += 1;
         self.classes[request.class as usize] += 1;
         let usage = self.sessions.entry(request.session_id.clone()).or_default();
@@ -321,6 +369,9 @@ impl BudgetState {
         }
         if let Some(ticket) = &request.ticket {
             self.batches.finish(ticket, true);
+        }
+        if request.borrowed_capacity {
+            return;
         }
         self.active -= 1;
         self.classes[request.class as usize] -= 1;
@@ -373,6 +424,15 @@ impl BudgetState {
                 return true;
             }
             let prior = &entry.request;
+            // Diagnostic inspection of a queued request must not count itself.
+            if std::ptr::eq(prior, request) {
+                return true;
+            }
+            // A running search cannot wait for a writer that needs its slot.
+            // Runnable writers still win fairness; active writers always conflict.
+            if request.borrowed_capacity && !self.has_capacity(prior) {
+                return true;
+            }
             // An unready successor must not fence another batch that could be
             // needed by its own predecessor. Preserve this before capacity fairness.
             if let (Some(ticket), Some(claims)) = (&prior.ticket, &prior.resources) {
@@ -397,7 +457,7 @@ impl BudgetState {
             prior
                 .resources
                 .as_ref()
-                .is_none_or(|claims| !resources.conflicts(claims))
+                .is_none_or(|claims| !resources.execution_conflicts(claims))
         })
     }
 }
@@ -531,6 +591,7 @@ impl ToolBudget {
                 own_worktree,
                 resources: Some(resources),
                 ticket,
+                borrowed_capacity: false,
             },
             QUEUE_WAIT,
         )
@@ -578,6 +639,7 @@ impl ToolBudget {
             own_worktree,
             resources: None,
             ticket: None,
+            borrowed_capacity: false,
         };
         self.acquire_request(request, wait).await
     }
@@ -622,7 +684,24 @@ impl ToolBudget {
         };
         match tokio::time::timeout(wait, ready.notified()).await {
             Ok(()) => Ok(guard.into_permit()),
-            Err(_) => Err(AdmissionError::QueueWaitTimeout),
+            Err(_) => {
+                let state = self.lock();
+                if let Some(entry) = state
+                    .waiting
+                    .iter()
+                    .find(|entry| Some(entry.id) == guard.id)
+                {
+                    tracing::warn!(session_id = %entry.request.session_id,
+                        tool_class = ?entry.request.class,
+                        initial_wait_reason = entry.initial_wait_reason,
+                        wait_reason = state.wait_reason(&entry.request),
+                        active = state.active, queued = state.queued,
+                        file_holders = state.file_holders.len(),
+                        "tool admission wait timed out");
+                }
+                drop(state);
+                Err(AdmissionError::QueueWaitTimeout)
+            }
         }
     }
 

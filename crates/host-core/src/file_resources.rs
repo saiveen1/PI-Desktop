@@ -16,8 +16,11 @@ pub struct FileResources {
     pub exclusive: bool,
     identity: Option<FileId>,
     address: Option<PathBuf>,
-    // Keep the object alive while its ID is used, including queued admission.
+    entry: Option<(FileId, std::ffi::OsString)>,
+    search: bool,
+    // Pin both identities across queued admission and actual filesystem work.
     _file: Option<File>,
+    _parent: Option<File>,
 }
 
 pub fn is_file_tool(name: &str) -> bool {
@@ -38,16 +41,26 @@ impl FileResources {
             exclusive,
             identity: None,
             address: None,
+            entry: None,
+            search: false,
             _file: None,
+            _parent: None,
         })
     }
 
+    /// Source-order conflicts include a search's entire observation interval.
     pub fn conflicts(&self, other: &Self) -> bool {
         (self.exclusive || other.exclusive)
-            && (self.identity.is_none()
-                || other.identity.is_none()
-                || self.identity == other.identity
-                || self.address == other.address)
+            && ((self.identity.is_none() && self.entry.is_none())
+                || (other.identity.is_none() && other.entry.is_none())
+                || (self.identity.is_some() && self.identity == other.identity)
+                || (self.entry.is_some() && self.entry == other.entry)
+                || (self.address.is_some() && self.address == other.address))
+    }
+
+    /// Searches reserve capacity, not a whole-tree lock. Grep leases each file.
+    pub fn execution_conflicts(&self, other: &Self) -> bool {
+        !self.search && !other.search && self.conflicts(other)
     }
 
     /// Called only after the existing permission decision. No contents are read.
@@ -59,12 +72,18 @@ impl FileResources {
         external: bool,
     ) -> Arc<Self> {
         let exclusive = is_write(name);
+        if matches!(name, "Glob" | "Grep") {
+            let mut resources = Self::fence(false);
+            Arc::get_mut(&mut resources)
+                .expect("new search resource is unshared")
+                .search = true;
+            return resources;
+        }
         let Some(root) = root else {
             return Self::fence(exclusive);
         };
-        // Namespace changes and session registers conservatively fence all file
-        // tools, including paths approved outside the workspace.
-        if matches!(name, "Glob" | "Grep") || (name == "Edit" && structural_edit(args)) {
+        // Structural edits and registers retain conservative exclusion.
+        if name == "Edit" && structural_edit(args) {
             return Self::fence(exclusive);
         }
         let Some(path) = args.get("path").and_then(Value::as_str) else {
@@ -74,10 +93,26 @@ impl FileResources {
             // Execution still reports the original permission/path/I/O failure.
             return Self::fence(exclusive);
         };
-        // Classification must never wait for a FIFO reader/writer or open a
-        // device. Recheck the opened object as the binding can change here.
-        if !std::fs::metadata(&address).is_ok_and(|metadata| metadata.is_file()) {
-            return Self::fence(exclusive);
+        let parent = entry_identity(&address);
+        // A missing leaf has a namespace identity even before it has a file ID.
+        // Missing ancestors and unsupported filesystems still fence conservatively.
+        match std::fs::metadata(&address) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                if let Some((entry, file)) = parent {
+                    return Arc::new(Self {
+                        exclusive,
+                        identity: None,
+                        address: Some(address),
+                        entry: Some(entry),
+                        search: false,
+                        _file: None,
+                        _parent: Some(file),
+                    });
+                }
+                return Self::fence(exclusive);
+            }
+            Ok(metadata) if metadata.is_file() => {}
+            _ => return Self::fence(exclusive),
         }
         #[cfg(unix)]
         let opened = {
@@ -101,11 +136,18 @@ impl FileResources {
         let Some(identity) = file_id(&file, &address) else {
             return Self::fence(exclusive);
         };
+        let (entry, parent) = match parent {
+            Some((entry, file)) => (Some(entry), Some(file)),
+            None => (None, None),
+        };
         Arc::new(Self {
             exclusive,
             identity: Some(identity),
             address: Some(address),
+            entry,
+            search: false,
             _file: Some(file),
+            _parent: parent,
         })
     }
 
@@ -119,16 +161,50 @@ impl FileResources {
         args: &Value,
         external: bool,
     ) -> Result<(), String> {
-        if self.identity.is_none() {
+        if self.identity.is_none() && self.entry.is_none() {
             return Ok(());
         }
         let current = Self::resolve(root, roots, name, args, external);
-        if self.identity == current.identity && self.address == current.address {
+        if self.identity == current.identity
+            && self.address == current.address
+            && self.entry == current.entry
+        {
             Ok(())
         } else {
             Err("file identity changed while awaiting admission; read the path again before retrying".into())
         }
     }
+}
+
+fn entry_identity(address: &Path) -> Option<((FileId, std::ffi::OsString), File)> {
+    let parent = address.parent()?;
+    let name = address.file_name()?.to_os_string();
+    #[cfg(windows)]
+    let name = {
+        // ASCII case aliases share an entry. Uncertain Unicode names keep the
+        // conservative missing-target fence rather than guessing NTFS folding.
+        let text = name.to_str()?;
+        if !text.is_ascii() || text.ends_with('.') || text.ends_with(' ') || text.contains(':') {
+            return None;
+        }
+        std::ffi::OsString::from(text.to_ascii_uppercase())
+    };
+    #[cfg(windows)]
+    let file = {
+        use std::os::windows::fs::OpenOptionsExt;
+        use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_BACKUP_SEMANTICS;
+        std::fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+            .open(parent)
+            .ok()?
+    };
+    #[cfg(not(windows))]
+    let file = File::open(parent).ok()?;
+    if !file.metadata().ok()?.is_dir() {
+        return None;
+    }
+    Some(((file_id(&file, parent)?, name), file))
 }
 
 fn structural_edit(args: &Value) -> bool {
@@ -207,6 +283,63 @@ fn file_id(file: &File, address: &Path) -> Option<FileId> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn missing_leaf_identity_is_scoped_and_revalidated_after_creation() {
+        let dir = tempfile::tempdir().unwrap();
+        let pending = claims(dir.path(), "Write", "new");
+        assert!(!pending.conflicts(&claims(dir.path(), "Write", "other")));
+        assert!(pending
+            .validate(
+                Some(dir.path()),
+                &ContainedRoots::new(),
+                "Write",
+                &json!({"path":"new"}),
+                false
+            )
+            .is_ok());
+        std::fs::write(dir.path().join("new"), "created").unwrap();
+        assert!(pending.conflicts(&claims(dir.path(), "Read", "new")));
+        assert!(pending
+            .validate(
+                Some(dir.path()),
+                &ContainedRoots::new(),
+                "Write",
+                &json!({"path":"new"}),
+                false
+            )
+            .is_err());
+    }
+
+    #[test]
+    fn missing_leaf_rejects_replaced_parent_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir(dir.path().join("parent")).unwrap();
+        let pending = claims(dir.path(), "Write", "parent/new");
+        std::fs::rename(dir.path().join("parent"), dir.path().join("old")).unwrap();
+        std::fs::create_dir(dir.path().join("parent")).unwrap();
+        assert!(pending
+            .validate(
+                Some(dir.path()),
+                &ContainedRoots::new(),
+                "Write",
+                &json!({"path":"parent/new"}),
+                false
+            )
+            .is_err());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn missing_windows_names_preserve_alias_exclusion() {
+        let dir = tempfile::tempdir().unwrap();
+        let pending = claims(dir.path(), "Write", "new");
+        assert!(pending.conflicts(&claims(dir.path(), "Write", "NEW")));
+        for name in ["new.", "new ", "new:stream", "é"] {
+            assert!(entry_identity(&dir.path().join(name)).is_none());
+            assert!(pending.conflicts(&claims(dir.path(), "Write", name)));
+        }
+    }
+
     use super::*;
     use serde_json::json;
 
@@ -234,11 +367,16 @@ mod tests {
     }
 
     #[test]
-    fn missing_targets_and_structural_edits_fence() {
+    fn missing_targets_are_scoped_but_structural_edits_fence() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("a"), "a").unwrap();
         let read = claims(dir.path(), "Read", "a");
-        assert!(read.conflicts(&claims(dir.path(), "Write", "missing")));
+        assert!(!read.conflicts(&claims(dir.path(), "Write", "missing")));
+        assert!(claims(dir.path(), "Read", "missing").conflicts(&claims(
+            dir.path(),
+            "Write",
+            "missing"
+        )));
         for ops in ["MV other", "REM", "CUT 1.=2 @r", "PUT <1 @r"] {
             let edit = FileResources::resolve(
                 Some(dir.path()),

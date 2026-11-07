@@ -4,6 +4,10 @@
 - Date: 2026-10-30
 - Related: #1982, #1908, ADR 0062, ADR 0329, parallel-read-batches
 
+> Search and missing-leaf execution fencing is amended by
+> [per-file search leases](search-file-lease-isolation.md). The original
+> whole-Host search fence below is historical; source-order claims remain.
+
 ## Context
 
 The first #1982 candidate classified file conflicts using lexical path keys and

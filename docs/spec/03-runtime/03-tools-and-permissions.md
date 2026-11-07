@@ -46,8 +46,10 @@ independent batches/sessions, only active resource exclusion and queue fairness.
 |---|---|
 | Existing regular-file Read | shared object identity and resolved address |
 | Existing regular-file Write / ordinary Edit | exclusive object identity and resolved address |
-| Glob / Grep | shared across the Host file coordination domain |
-| Missing target, unknown identity, unsupported filesystem | shared domain for a read; exclusive domain for a write |
+| Glob | metadata enumeration; source-order dependency but no active content fence |
+| Grep | source-order dependency; shared identity/address lease per actual file |
+| Missing leaf with trusted existing parent | parent object ID plus leaf name and resolved address |
+| Unknown identity, missing ancestor, unsupported filesystem | shared domain for a read; exclusive domain for a write |
 | Edit MV / REM or a named CUT/PUT register | exclusive domain |
 | Review rollback | exclusive domain, with the existing post-tool hash guard |
 
@@ -59,15 +61,17 @@ and address resolution, not separate namespaces for physical file IDs. File
 names, file size, lexical keys and realpath alone cannot prove independence.
 The global domain includes approved external paths. Two shared declarations do
 not conflict. A domain declaration conflicts with every exclusive declaration;
-otherwise equal object identities or resolved addresses conflict when either
+otherwise equal object IDs, parent/name entries or resolved addresses conflict when either
 side is exclusive. Unknown identity never falls back to presumed independence.
 
-ToolBudget grants all resources and execution capacity together. Waiting for a
-predecessor/resource does not occupy a capacity slot. Later conflicting calls
-cannot bypass an exclusive resource waiter; an earlier source-order call can
-bypass a later waiter from its own batch to avoid a queue/DAG deadlock. Existing
-limits remain: 16 total, 8 reads, 2 writes and 4 per session. Within a session,
-up to two writes may overlap only when both have validated batch tickets and
+ToolBudget grants initial resources and execution capacity together. Initial
+predecessor/resource waits do not occupy a capacity slot. Grep's per-file reads
+borrow the search's existing slot and keep its parent permit alive. They may
+pass a capacity-blocked writer or unready source-order successor to let the
+search drain, but never an active conflicting writer. Runnable conflicting
+writers retain priority. Existing limits remain: 16 total, 8 reads, 2 writes
+and 4 per session. Source predecessors may bypass a later same-batch waiter.
+Within a session, up to two writes may overlap only when both have validated batch tickets and
 trusted local file identities, subject to the existing conflict checks. All
 other mutations retain single-write admission and exclude coordinated writes
 in both arrival orders. An older source-ready conservative mutation waiter
@@ -76,11 +80,14 @@ unready successors and source-predecessor bypass retain the DAG exceptions.
 The bounded admission wait still returns HOST_OVERLOADED after 30 seconds.
 Audit/debug diagnostics record total admission wait and its initial reason
 (source_order, resource or capacity); these are not disjoint duration segments.
+Timeout warnings also record current reason and active/queued/resource counts.
 
 Identity/address is revalidated under the granted lease before review snapshots
 and in the actual blocking file task. A changed binding fails without writing
-or automatic replay. Namespace changes and missing-target writes use an
-exclusive domain fence. Snapshot, execution, Hashline state and final review
+or automatic replay. Structural edits and uncertain identities retain an
+exclusive domain fence. Trusted missing leaves are scoped by parent identity
+and name; uncertain Windows entry spellings remain conservative. Snapshot,
+execution, Hashline state and final review
 snapshot share the lease; later rollback also acquires it without holding the
 AppState mutex while waiting. Cancelling an RPC future does not stop
 spawn_blocking: the blocking task retains the permit until its body ends.
@@ -88,6 +95,14 @@ Unstarted calls are abandoned; a batch close cannot release active disk work.
 Registry limits are 512 calls globally, 128 per batch and 32 MiB of retained
 arguments. Unused metadata expires after 15 minutes; submitted/running calls
 are not expired through a pending permission decision or disk operation.
+
+Search enumeration is not a whole-tree snapshot. Grep's shared per-file lease
+covers the content scan and tag generation; unrelated files may change between
+observations. Glob does not hold a content lease. Same-batch search/write source
+order remains conservative. Cancelling the async waiter signals the blocking
+search, checked between directory entries/buffered chunks and during lease
+waits; a single kernel I/O call is not forcibly interrupted. See
+[search isolation](../../adr/search-file-lease-isolation.md).
 
 Host resources replace sidecar PathMutex around calls on the supported path;
 the legacy path retains its original locking. Existing permission, Hashline,
@@ -125,7 +140,7 @@ Let the agent get things done, but stay under control by default.
 | `Read` | low | Read files within the workspace; returns line-numbered content and a `[path#TAG]` header |
 | `new_context` | low | Start a new context window at the next turn boundary; takes no parameters and changes no environment state |
 | `Glob` | low | List files by pattern |
-| `Grep` | low | Content search; uses system `rg` when installed, else in-process; mints a per-file `tag` |
+| `Grep` | low | Content search; coordinated calls use per-file native leases, uncoordinated calls may use system `rg`; mints a per-file `tag` |
 | `BrowserPreview` | low | Open a workspace-relative preview in the bundled Browser plugin (fails if `pi.browser` is disabled) |
 | `EnterPlanMode` | low | Move the same Agent from Agent to Plan after host validation |
 | `SubmitPlan` | low | Preserve exact Markdown bytes in a new `.pi/plan/*.md` artifact and request approval |
@@ -245,10 +260,10 @@ Native file and search tools enforce distinct path shapes (D208, ADR 0069):
 - `Glob.path` is a directory search root.
 - `Grep.path` may be one file or a directory tree. A directly named file is
   searched without walking siblings, while `include` still filters its base
-  name and every output budget remains unchanged. Grep prefers a user-installed
-  `rg` on PATH (and the Unix login PATH) and falls back to the in-process
-  searcher when `rg` is missing or fails (D315). The model-facing contract does
-  not change.
+  name and every output budget remains unchanged. Coordinated local Grep uses
+  the in-process scanner to acquire per-file leases. Uncoordinated callers
+  retain the optional user-installed `rg` backend and native fallback (D315,
+  amended by the search-isolation ADR). Result modes and tag contracts remain.
 
 Workspace-relative paths in tool results use `/` for platform separators.
 On POSIX, a literal backslash in a filename remains a backslash so the result

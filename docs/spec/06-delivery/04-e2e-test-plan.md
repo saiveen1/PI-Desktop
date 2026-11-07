@@ -597,14 +597,26 @@
   reversed source order, global limits and cancellation after reservation.
   Runtime E2E must preserve distinct snapshots and rollback for both writes;
   this is correctness evidence, not a wall-clock throughput claim.
+- Search isolation regressions hold a real Grep file read while an unrelated
+  new-file Write completes; a hard-link Write must wait. Returned Grep tags
+  must successfully drive Edit. Cancelled Glob/Grep must stop before the next
+  file and release capacity only after the blocking body exits. Per-file lease
+  waits must respond to cancellation without releasing an active writer.
+  Budget cases cover full session slots, pending session-exclusive work,
+  writer fairness and same-batch search/write source order. These deterministic
+  tests use isolated temporary files, not the live desktop or elapsed sleeps.
+  Head-limit and byte-budget truncation must report the number of files actually
+  represented by returned matches, including a partially returned final file;
+  a file whose first hit is omitted must not be counted or receive a tag.
 - Runtime/pi integration tests cover parent/delegate registration, preparation
   order, validation/mode failures, Stop and model result order. Protocol adapter
   tests cover sealing, cleanup, remote/legacy fallback and equal provider IDs in
   independent asynchronous executors. host-runtime/file-batch-bridge.test.ts
   verifies the explicit allowlist through a real stdio child.
 - Unknown capability/remote workspaces must retain whole-batch sequential writes;
-  no local filesystem identity is used for a remote path. Resource and batch
-  waits consume no capacity, and uncertain writes are not replayed.
+  no local filesystem identity is used for a remote path. Initial resource and
+  batch waits consume no capacity; per-file reads borrow the running search's
+  slot without acquiring another. Uncertain writes are not replayed.
 - Specs: tools-and-permissions §0, agent-runtime concurrency, Host RPC file batch
   protocol; ADRs parallel-read-batches and host-file-batch-admission.
 

@@ -6,6 +6,8 @@ use std::future::{poll_fn, Future};
 use std::pin::Pin;
 use std::task::Poll;
 
+mod search_tests;
+
 fn coordinated_write(
     budget: &ToolBudget,
     root: &std::path::Path,
@@ -43,6 +45,62 @@ async fn independent_coordinated_writes_share_session_capacity() {
     .await;
     assert_eq!(budget.snapshot().mutations, 2);
     drop((first, second));
+    assert_eq!(budget.snapshot().active, 0);
+}
+
+#[tokio::test]
+async fn search_admission_does_not_fence_independent_writes() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("a"), "before").unwrap();
+    let budget = ToolBudget::new();
+    for name in ["Glob", "Grep"] {
+        let search = FileResources::resolve(
+            Some(dir.path()),
+            &ContainedRoots::new(),
+            name,
+            &json!({"path":"."}),
+            false,
+        );
+        let search = budget
+            .acquire_files("search", name, false, search, None)
+            .await
+            .unwrap();
+        let write = FileResources::resolve(
+            Some(dir.path()),
+            &ContainedRoots::new(),
+            "Write",
+            &json!({"path":"a"}),
+            false,
+        );
+        let mut writer = Box::pin(budget.acquire_files("writer", "Write", false, write, None));
+        drop(ready(writer.as_mut()).await.unwrap());
+        drop(search);
+    }
+    assert_eq!(budget.snapshot().active, 0);
+}
+
+#[tokio::test]
+async fn new_file_write_does_not_fence_unrelated_reads() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("existing"), "before").unwrap();
+    let budget = ToolBudget::new();
+    let resolve = |name, path| {
+        FileResources::resolve(
+            Some(dir.path()),
+            &ContainedRoots::new(),
+            name,
+            &json!({"path":path}),
+            false,
+        )
+    };
+    let reader = budget
+        .acquire_files("reader", "Read", false, resolve("Read", "existing"), None)
+        .await
+        .unwrap();
+    let mut writer =
+        Box::pin(budget.acquire_files("writer", "Write", false, resolve("Write", "new"), None));
+    drop(ready(writer.as_mut()).await.unwrap());
+    drop(reader);
     assert_eq!(budget.snapshot().active, 0);
 }
 
