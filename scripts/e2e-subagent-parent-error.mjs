@@ -9,12 +9,24 @@ import { DesktopAgentRuntime } from "../packages/agent-runtime/dist/runtime.js";
 // Host tool boundary are fixtures; no account or running Desktop is used.
 let scenario;
 let sequence = 0;
-const until = async (check) => {
-  const deadline = Date.now() + 15_000;
-  while (!check()) {
-    assert.ok(Date.now() < deadline, `scenario timed out: ${scenario?.mode}`);
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
+const checkpoints = new Set();
+const changed = () => { for (const check of [...checkpoints]) check(); };
+const until = (condition) => {
+  if (condition()) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const check = () => {
+      if (!condition()) return;
+      clearTimeout(timer);
+      checkpoints.delete(check);
+      resolve();
+    };
+    const timer = setTimeout(() => {
+      checkpoints.delete(check);
+      reject(new Error(`scenario timed out: ${scenario?.mode}`));
+    }, 15_000);
+    checkpoints.add(check);
+    check();
+  });
 };
 const bounded = async (promise) => {
   let timer;
@@ -56,15 +68,16 @@ const server = createServer(async (req, res) => {
         reply(res, body.model, [{ id: `read_${label}`, name: "Read", args: { path: `fixture-${label}.txt` } }]);
       } else {
         s.waiting.add(res);
-        res.on("close", () => s.waiting.delete(res));
+        res.on("close", () => { s.waiting.delete(res); changed(); });
         // A live provider stream stops cooperatively on the real abort signal.
         res.writeHead(200, { "content-type": "text/event-stream" });
         res.write(": waiting\n\n");
+        changed();
       }
       return;
     }
-    if (latest.includes("Resume")) {
-      if (!s.resumeSent) {
+    if (s.continuing) {
+      if (s.mode !== "error" && !s.resumeSent) {
         s.resumeSent = true;
         reply(res, body.model, [...s.ids.values()].map((id, index) => ({ id: `resume_${index}`,
           name: "Task", args: { agent: "explorer", task: "Continue", resume: id } })));
@@ -80,6 +93,7 @@ const server = createServer(async (req, res) => {
     } else {
       await until(() => s.waiting.size === 2);
       s.parentWaiting = true;
+      changed();
       if (s.mode === "error") {
         res.writeHead(401, { "content-type": "application/json" });
         res.end(JSON.stringify({ error: { message: "fixture parent authentication failure" } }));
@@ -114,6 +128,9 @@ try {
       subagentProviders: { "fixture/worker": provider("worker") },
       host: { onNotification: () => () => {}, call: async (method, params) => {
         if (method === "project.instructions.resolve") return { entries: [] };
+        if (method === "tools.fileBatchCapabilities") return { version: 1, supported: false };
+        if (method === "provider.delegationSnapshot" || method === "session.appendMessage") return undefined;
+        if (method === "todos.get") return { sessionId: `fixture-${mode}`, todos: [] };
         if (method === "tools.execute") {
           assert.equal(params.toolName, "Read");
           s.reads.push(params.args.path);
@@ -132,6 +149,7 @@ try {
         if (message?.toolName === "Task" && message.toolResult?.details?.status !== "running") {
           s.settled.set(message.toolCallId, message.toolResult.details);
         }
+        changed();
       },
     });
     try {
@@ -161,7 +179,9 @@ try {
         if (mode === "error") assert.equal(s.settled.get(id).error.code, "SUBAGENT_PARENT_FAILED");
       }
       if (mode === "error") assert.equal(s.parentErrors.length, 1);
-      await bounded(runtime.prompt("Resume both delegates"));
+      s.continuing = true;
+      await bounded(runtime.prompt(mode === "error" ? "Continue the main task" : "Resume both delegates"));
+      if (mode === "error") assert.equal(s.resumeSent, undefined, "parent must not need to issue Task/resume");
       assert.equal(s.replayed.length, 2);
       assert.equal(s.rejected.length, 0);
       assert.equal(s.reads.length, 2, "resume must not replay either completed Read");

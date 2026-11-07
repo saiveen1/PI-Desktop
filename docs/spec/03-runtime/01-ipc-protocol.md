@@ -359,20 +359,27 @@ type AgentRetrySubagentResponse =
 ```
 
 `pi-desktop/agent/retry-subagent` is a local Desktop-only control for a
-settled `failed` delegation. Main creates a new durable turn, and the sidecar
-starts the equivalent of `Task(resume: delegationId)` directly; the parent
-model is not asked to initiate or authorize the retry and cannot veto it. Existing delegation
+settled `failed` delegation. Main reuses the current durable turn when active;
+only an idle session begins a new turn. Active retries carry identity only to
+the existing sidecar runtime, without launch reconfiguration or usage resets.
+The sidecar starts the equivalent of `Task(resume: delegationId)` directly; the
+parent model is not asked to initiate or authorize the retry and cannot veto it. Existing delegation
 authorization, recorded model binding, history, read-budget, worktree, and
 permission checks still apply. The runtime emits a synthetic `Task` row so the
 retry and its child transcript remain auditable. Remote and native sessions,
-running delegations, cancellations, and chains without retained history are
-rejected or returned as `accepted: false`.
+cancellations, and chains without retained history are rejected or returned as
+`accepted: false`. Automatic recovery and concurrent retry requests for the same
+chain share admission. A previously failed card returns its already recovered
+running/completed successor rather than starting another worker. Stale active
+turns fail visibly; rejecting that retry never finalizes the running parent.
 
 While the resumed child runs, this same durable turn accepts parent steering
 without cancelling the child or opening a second parent loop. Its settlement
 report is consumed once by the parent continuation; the turn emits/finalizes
 its terminal outcome exactly once. Accepted steering at settlement is retained.
 Explicit Stop still cancels the child and joins cleanup.
+Pending authorization also belongs to that turn: it cannot finalize early,
+and Stop cancels and joins recovery admission before releasing ownership.
 
 ### 5.2c Delegation model approval
 

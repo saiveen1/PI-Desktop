@@ -594,8 +594,11 @@ async function handle(method: string, params: any): Promise<unknown> {
           errorCode: "INVALID_ARGUMENT",
         });
       }
-      const runtime = await runtimeFor(params);
-      return runtime.retryFailedSubagent(delegationId, turnId);
+      // An active retry carries only identity, never replacement launch configuration.
+      const requireActiveTurn = params.provider === undefined;
+      const runtime = requireActiveTurn ? runtimes.get(sessionId) : await runtimeFor(params);
+      if (!runtime) throw Object.assign(new Error("The target turn is no longer accepting recovery"), { errorCode: "TURN_NOT_FOUND" });
+      return runtime.retryFailedSubagent(delegationId, turnId, requireActiveTurn);
     }
     case "agent.stopSubagents": {
       const runtime = runtimes.get(String(params.sessionId));

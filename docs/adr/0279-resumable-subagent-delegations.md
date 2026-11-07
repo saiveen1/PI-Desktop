@@ -4,6 +4,7 @@
 - Date: 2026-09-17
 - Amended: 2026-11-04 — durable progress reports and explicit recovery after cancellation
 - Amended: 2026-11-05 — visible scheduling run policy and immutable task snapshots
+- Amended: 2026-11-07 — user continuation rejoins parent-interrupted chains; retry can join an active turn
 - Deciders: PI-Desktop core
 - Related: [ADR 0062](0062-bounded-subagents-behind-a-task-tool.md) ·
   [ADR 0089](0089-proactive-background-subagent-delegation.md) ·
@@ -257,6 +258,28 @@ checkpoint writes and optional summary tokens. Disk errors remain visible and
 local artifacts require scratch availability. A process killed between tool
 boundaries can retain incomplete results, so resumed work must verify uncertain
 side effects. It never automatically replays an interrupted write.
+
+### 15. Recovery belongs to the continuing parent turn
+
+Parent failure still cancels its workers and releases the failed turn. The next
+ordinary user prompt recovers that preceding failure's retained chains through
+the same admission path as the Desktop retry control. This repairs the gap where
+Continue resumed only the parent and left its children stranded. Restored history
+selects SUBAGENT_PARENT_FAILED only within the latest failed parent turn; explicit
+cancellation, unrelated failures and completed work remain excluded.
+
+Manual retry joins an active parent turn rather than opening a competing turn;
+an idle retry retains its existing dedicated recovery lifecycle. One chain-owned
+admission coalesces automatic and manual requests, holds ownership during consent,
+and is cancelled on Stop/dispose/failure. A stale active-turn request fails without
+ending or replacing the parent. Existing model authorization, bounded history,
+checkpoints and worktree ownership remain authoritative. Completed tools are not
+replayed. Ordinary Task/resume still rejects resuming a running delegation.
+
+This avoids both rejected recovery during a busy parent and duplicate workers
+from automatic/manual races. It deliberately does not keep workers detached from
+a failed parent, infer a user's intent from prompt text, or automatically retry
+on failure/boot. Wire shapes and storage versions are unchanged.
 
 ## Consequences
 

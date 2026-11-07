@@ -11581,14 +11581,11 @@ describe("DesktopAgentRuntime subagents", () => {
         }
         internals.agent.prompt = vi.fn(async () => undefined);
         internals.agent.waitForIdle = vi.fn(async () => undefined);
-        await runtime.prompt("Continue the failed delegates");
         subagentRuns.deferred = false;
+        await runtime.prompt("Continue the failed delegates");
+        expect(subagentRuns.calls).toHaveLength(4);
         for (let index = 0; index < 2; index++) {
-          const result = await startTask(runtime, `resumed-${index}`, {
-            agent: "explorer", task: "Continue", resume: ids[index],
-          });
-          expect((result.details as any).resumedFrom).toBe(ids[index]);
-          const context = JSON.stringify(subagentRuns.calls.at(-1).initialMessages);
+          const context = JSON.stringify(subagentRuns.calls[index + 2].initialMessages);
           expect(context).toContain(`Finding ${index}`);
           expect(context).not.toContain(`Finding ${1 - index}`);
         }

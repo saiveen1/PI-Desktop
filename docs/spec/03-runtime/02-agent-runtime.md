@@ -1316,8 +1316,15 @@ later delegate turn that ends normally clears the marker and can complete. A
 terminal parent error also aborts leftover delegates, skips the resume prompt,
 and returns the session to idle so Continue is not `AGENT_BUSY` (D352). The
 interrupted delegates settle as `failed` with `SUBAGENT_PARENT_FAILED` and keep
-their transcript-backed resume eligibility. Aborted and stopped delegates also
-remain resumable when their transcript history is retained; cancellation never
+their transcript-backed resume eligibility. On the user's next ordinary Agent
+prompt, the runtime rejoins only that preceding failure's interrupted chains,
+using the same resume admission as the retry control. It waits for old workers
+to retire, preserves completed tools and validated checkpoints, and gives the
+new parent turn the recovery identities and eventual reports. Restored sessions
+select only SUBAGENT_PARENT_FAILED tasks in the latest failed parent turn;
+unrelated failures, older turns, completed tasks and cancellations are excluded.
+No provider request is made automatically at failure time or on application boot.
+Aborted and stopped delegates remain explicitly resumable; cancellation never
 automatically restarts them. SubagentRun terminal results save the retained
 partial output when local scratch is available; initialization failures before a
 child exists retain the existing visible error path.
@@ -1389,11 +1396,16 @@ snapshots. The immediate `Task` result and the lifecycle details add
 multi-turn conversation under its latest `Task` card, with no separate
 "resumed" marker.
 The Desktop-only `agent/retry-subagent` control can force a retry of a settled
-`failed` chain without asking the parent model to emit another `Task` call. It
-creates a new durable turn and synthetic `Task` row, then uses the same resume
-path and all existing authorization, worktree, history, and read-budget gates.
+`failed` chain without asking the parent model to emit another `Task` call. An
+active parent turn admits the retry in place without resetting its configuration,
+input or usage. An idle session creates a new durable recovery turn. Both paths
+emit a synthetic `Task` row and use the same authorization, worktree, history,
+and context-budget gates. Automatic recovery and repeated clicks share one
+chain admission; an already recovered run is returned instead of duplicated.
 The retry is available only for local failed delegations with retained history;
-running, missing-history, remote, and native sessions remain unavailable. A
+missing-history, remote, and native sessions remain unavailable. A stale active
+turn identity is rejected, never silently replaced with a new turn. Pending
+authorization keeps the owner alive until admission or rejection settles. A
 budget-exhausted run is a failed delegation and can use the same retry/resume
 path when its history remains available. While that child runs, the same durable
 turn accepts parent steering without cancelling it or starting a second parent

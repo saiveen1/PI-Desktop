@@ -22,7 +22,7 @@ function deferred<T>() {
   const promise = new Promise<T>((done) => { resolve = done; });
   return { promise, resolve };
 }
-function response(content: AssistantMessage["content"], failed = false) {
+function response(content: AssistantMessage["content"], failed = false, ready: Promise<void> = Promise.resolve()) {
   const stream = createAssistantMessageEventStream();
   const reason = failed ? "error" : content.some(block => block.type === "toolCall") ? "toolUse" : "stop";
   const message: AssistantMessage = {
@@ -32,7 +32,7 @@ function response(content: AssistantMessage["content"], failed = false) {
     usage: { input: 10, output: 5, cacheRead: 0, cacheWrite: 0, totalTokens: 15,
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
   };
-  queueMicrotask(() => {
+  void ready.then(() => {
     stream.push({ type: "start", partial: message });
     if (failed) stream.push({ type: "error", reason: "error", error: message });
     else stream.push({ type: "done", reason: reason === "toolUse" ? "toolUse" : "stop", message });
@@ -53,6 +53,9 @@ function fixture(options: {
   childFailure?: boolean;
   parentFailure?: boolean;
   parentSilent?: boolean;
+  holdParent?: boolean;
+  restoredParentFailure?: boolean;
+  newerIndependentFailure?: boolean;
   steerOnSettlement?: boolean;
   approval?: "deny" | "pending";
 } = {}) {
@@ -66,6 +69,18 @@ function fixture(options: {
     toolArgs: { path: "a.ts" }, toolStatus: "success",
     toolResult: { content: [{ type: "text", text: "Exact retained evidence from a.ts." }] },
   }];
+  if (options.restoredParentFailure) {
+    history[0].toolResult = { details: { delegationId: "original", agent: "worker", status: "failed",
+      modelId: "fixture", error: { code: "SUBAGENT_PARENT_FAILED" } } };
+    history.push({ id: "failed-parent", role: "assistant", content: "", status: "error", createdAt: "2026-11-04T00:00:02.000Z" });
+  }
+  if (options.newerIndependentFailure) history.push({
+    ...history[0], id: "task-newer", toolCallId: "task-newer",
+    toolArgs: { agent: "worker", task: "Continue.", resume: "original" },
+    toolResult: { details: { delegationId: "newer", agent: "worker", status: "failed", modelId: "fixture", error: { code: "PROVIDER_ERROR" } } },
+  });
+  const parentStarted = deferred<void>();
+  const parentGate = deferred<void>();
   const read = deferred<unknown>();
   const readStarted = deferred<void>();
   const handled = deferred<void>();
@@ -83,7 +98,10 @@ function fixture(options: {
       parentRequests.push(JSON.stringify(context.messages));
       if (parentRequests.length === 2) recovered.resolve();
       if (options.parentSilent && parentRequests.length === 1) return response([]);
-      return response([{ type: "text", text: parentRequests.length === 1 ? "Correction handled." : "Child result incorporated." }], options.parentFailure);
+      parentStarted.resolve();
+      return response([{ type: "text", text: parentRequests.length === 1 ? "Correction handled." : "Child result incorporated." }],
+        options.parentFailure && parentRequests.length === 1,
+        options.holdParent && parentRequests.length === 1 ? parentGate.promise : undefined);
     }
     childRequests.push(JSON.stringify(context.messages));
     return response(childRequests.length === 1 && !options.early
@@ -111,6 +129,8 @@ function fixture(options: {
       }
       if (method === "provider.cancelDelegationApproval") return undefined as T;
       if (method === "tools.fileBatchCapabilities") return { version: 1, supported: false } as T;
+      if (method === "provider.delegationSnapshot") return undefined as T;
+      if (method === "todos.get") return { sessionId: "session", todos: [] } as T;
       if (method === "project.instructions.resolve") return { entries: [] } as T;
       if (method === "tools.execute") { executions.push(params); readStarted.resolve(); return await read.promise as T; }
       if (method === "session.appendMessage") return undefined as T;
@@ -132,7 +152,7 @@ function fixture(options: {
   });
   const terminalEvents = (type: "agent_start" | "turn_end" | "agent_end") =>
     events.filter(envelope => !envelope.parentToolCallId && envelope.turnId === "manual-turn" && envelope.event.type === type);
-  return { runtime, steer, read, readStarted, handled, recovered, finished, approvalStarted, approval, events, parentRequests, childRequests, executions, terminalEvents };
+  return { runtime, steer, read, readStarted, handled, recovered, finished, approvalStarted, approval, events, parentRequests, childRequests, executions, terminalEvents, parentStarted, parentGate };
 }
 
 describe("manual child recovery user path", () => {
@@ -307,5 +327,157 @@ describe("manual child recovery user path", () => {
       expect(f.terminalEvents("agent_end")).toHaveLength(1);
       expect(f.runtime.getStatus().isRunning).toBe(false);
     } finally { f.read.resolve({ ok: true }); await f.runtime.abort(); await f.runtime.dispose(); }
+  });
+
+  it("automatically rejoins a parent-interrupted child when the user continues", async () => {
+    const f = fixture({ parentFailure: true });
+    try {
+      await f.runtime.retryFailedSubagent("original", "manual-turn");
+      await f.readStarted.promise;
+      f.steer();
+      await f.finished.promise;
+      expect(f.runtime.getStatus().isRunning).toBe(false);
+      await f.runtime.prompt("Continue.", "continue-user", "continue-turn");
+      expect(f.childRequests).toHaveLength(2);
+      expect(f.childRequests[1]).toContain("Exact retained evidence from a.ts");
+      expect(f.parentRequests.at(-1)).toContain("B verified; unique child result.");
+      expect(f.executions).toHaveLength(1);
+      const ends = f.events.filter(e => !e.parentToolCallId && e.turnId === "continue-turn" && e.event.type === "agent_end");
+      expect(ends).toHaveLength(1);
+    } finally { f.read.resolve({ ok: true }); await f.runtime.abort(); await f.runtime.dispose(); }
+  });
+
+  it("automatically recovers a restored parent failure and coalesces a simultaneous retry", async () => {
+    const f = fixture({ restoredParentFailure: true, holdParent: true });
+    const running = f.runtime.prompt("Continue.", "continue-user", "manual-turn");
+    try {
+      await f.parentStarted.promise;
+      expect(f.childRequests).toHaveLength(1);
+      expect(await f.runtime.retryFailedSubagent("original", "manual-turn")).toMatchObject({ accepted: true });
+      expect(f.childRequests).toHaveLength(1);
+      f.parentGate.resolve();
+      f.read.resolve({ ok: true, content: "B evidence" });
+      await running;
+      expect(f.childRequests).toHaveLength(2);
+      expect(f.parentRequests.at(-1)).toContain("B verified; unique child result.");
+      expect(f.terminalEvents("agent_end")).toHaveLength(1);
+    } finally { f.parentGate.resolve(); f.read.resolve({ ok: true }); await running; await f.runtime.abort(); await f.runtime.dispose(); }
+  });
+
+  it("retries inside an active parent turn once without replacing its input or turn", async () => {
+    const f = fixture({ holdParent: true });
+    const running = f.runtime.prompt("Keep the parent working.", "parent-user", "manual-turn");
+    try {
+      await f.parentStarted.promise;
+      const retries = await Promise.all([
+        f.runtime.retryFailedSubagent("original", "manual-turn"),
+        f.runtime.retryFailedSubagent("original", "manual-turn"),
+      ]);
+      expect(retries[0]).toEqual(retries[1]);
+      expect(retries[0]).toMatchObject({ accepted: true, turnId: "manual-turn" });
+      await f.readStarted.promise;
+      expect(f.childRequests).toHaveLength(1);
+      f.parentGate.resolve();
+      await f.handled.promise;
+      f.read.resolve({ ok: true, content: "B evidence" });
+      await running;
+      expect(f.parentRequests.at(-1)).toContain("Keep the parent working.");
+      expect(f.parentRequests.at(-1)).toContain("B verified; unique child result.");
+      expect(f.terminalEvents("turn_end")).toHaveLength(1);
+      expect(f.terminalEvents("agent_end")).toHaveLength(1);
+    } finally { f.parentGate.resolve(); f.read.resolve({ ok: true }); await running; await f.runtime.abort(); await f.runtime.dispose(); }
+  });
+
+  it.each(["allow", "deny", "stop"] as const)("keeps active retry admission owned until authorization %s", async decision => {
+    const f = fixture({ holdParent: true, approval: "pending" });
+    const running = f.runtime.prompt("Keep working.", "parent-user", "manual-turn");
+    try {
+      await f.parentStarted.promise;
+      const starting = f.runtime.retryFailedSubagent("original", "manual-turn");
+      // Observe rejection immediately on the old implementation, not via a fixture timeout.
+      await Promise.race([f.approvalStarted.promise, starting]);
+      f.parentGate.resolve();
+      await f.handled.promise;
+      expect(f.terminalEvents("agent_end")).toHaveLength(0);
+      if (decision === "stop") await f.runtime.abort();
+      else f.approval.resolve({ decision, reason: "Fixture decision" });
+      const result = await starting;
+      expect(result.accepted).toBe(decision === "allow");
+      if (decision === "allow") { await f.readStarted.promise; f.read.resolve({ ok: true, content: "B evidence" }); }
+      await running;
+      expect(f.terminalEvents("turn_end")).toHaveLength(1);
+      expect(f.terminalEvents("agent_end")).toHaveLength(1);
+      expect(f.runtime.getStatus().isRunning).toBe(false);
+      if (decision !== "allow") expect(f.childRequests).toEqual([]);
+      else expect(f.parentRequests.at(-1)).toContain("B verified; unique child result.");
+    } finally {
+      f.parentGate.resolve(); f.approval.resolve({ decision: "deny" }); f.read.resolve({ ok: true });
+      await running; await f.runtime.abort(); await f.runtime.dispose();
+    }
+  });
+
+  it("rejects stale active-turn retries without opening a replacement turn", async () => {
+    const f = fixture();
+    try {
+      await f.runtime.prompt("Finish this turn.", "parent-user", "manual-turn");
+      await expect(f.runtime.retryFailedSubagent("original", "manual-turn", true)).rejects.toMatchObject({ errorCode: "TURN_NOT_FOUND" });
+      expect(f.childRequests).toEqual([]);
+      expect(f.terminalEvents("agent_end")).toHaveLength(1);
+      expect(f.runtime.getStatus().isRunning).toBe(false);
+    } finally { await f.runtime.abort(); await f.runtime.dispose(); }
+  });
+
+  it("coalesces duplicate idle retries and never restarts a completed successor from its old failed card", async () => {
+    const f = fixture();
+    try {
+      const [first, second] = await Promise.all([
+        f.runtime.retryFailedSubagent("original", "manual-turn"),
+        f.runtime.retryFailedSubagent("original", "manual-turn"),
+      ]);
+      expect(first).toEqual(second);
+      await f.readStarted.promise;
+      f.read.resolve({ ok: true, content: "B evidence" });
+      await f.finished.promise;
+      const settled = f.events.flatMap(({ event }) => {
+        const result = event.type === "message_end" && event.message.toolName === "Task" ? event.message.toolResult : undefined;
+        return isRecord(result) && isRecord(result.details) ? [{ status: result.details.status, error: result.details.error }] : [];
+      });
+      expect(settled.at(-1)?.error).toBeUndefined();
+      expect(settled.at(-1)).toMatchObject({ status: "completed" });
+      await expect(f.runtime.retryFailedSubagent("original", "later-turn")).rejects.toThrow("not failed");
+      expect(f.childRequests).toHaveLength(2);
+      expect(f.terminalEvents("agent_start")).toHaveLength(1);
+      expect(f.terminalEvents("agent_end")).toHaveLength(1);
+    } finally { f.read.resolve({ ok: true }); await f.runtime.abort(); await f.runtime.dispose(); }
+  });
+
+  it("does not automatically retry a newer independent failure from an old parent-failed card", async () => {
+    const f = fixture({ restoredParentFailure: true, newerIndependentFailure: true });
+    try {
+      f.read.resolve({ ok: true });
+      await f.runtime.prompt("Continue the parent.", "parent-user", "manual-turn");
+      expect(f.childRequests).toEqual([]);
+      expect(f.terminalEvents("agent_end")).toHaveLength(1);
+    } finally { await f.runtime.abort(); await f.runtime.dispose(); }
+  });
+
+  it("preserves the new user input when Stop cancels automatic recovery before the parent request", async () => {
+    const f = fixture({ restoredParentFailure: true, approval: "pending" });
+    const running = f.runtime.prompt("Retain this continuation.", "continue-user", "manual-turn")
+      .then(() => undefined, error => error);
+    try {
+      await f.approvalStarted.promise;
+      await f.runtime.abort();
+      expect(String(await running)).toContain("aborted");
+      expect(f.parentRequests).toHaveLength(0);
+      expect(f.childRequests).toHaveLength(0);
+      await f.runtime.prompt("Now finish without a child.", "later-user", "later-turn");
+      expect(f.parentRequests[0]).toContain("Retain this continuation.");
+      expect(f.parentRequests[0]).toContain("Now finish without a child.");
+      expect(f.childRequests).toHaveLength(0);
+    } finally {
+      f.approval.resolve({ decision: "deny" });
+      await running; await f.runtime.abort(); await f.runtime.dispose();
+    }
   });
 });

@@ -2,6 +2,7 @@
 
 - Status: Accepted for implementation
 - Date: 2026-09-08
+- Amended: 2026-11-07 — resume retained interrupted chains on the next user continuation (ADR 0279 §15)
 - Deciders: PI-Desktop core
 - Related: D352, D328, ADR 0166, ADR 0089, E2E-155
 
@@ -30,10 +31,13 @@ looked finished while the sidecar was still busy.
    not count leftover delegates after `turnHadError`. The failed
    TurnOutcomeCard stays visible; a later `agent_end` must not overwrite it
    with `completed`.
-4. **A later parent prompt does not inherit previous-turn delegates.** Each
-   `prompt()` / `executeApprovedPlan()` bumps a turn epoch, aborts leftover
-   runs from earlier epochs, and only auto-resumes delegates started in the
-   current turn.
+4. **A later parent prompt never inherits still-running previous-turn workers.**
+   Each `prompt()` / `executeApprovedPlan()` bumps a turn epoch and aborts leftover
+   runs. An ordinary user continuation rejoins the preceding failure's retained
+   SUBAGENT_PARENT_FAILED chains only after old workers retire, through normal
+   authorized resume admission. The resumed workers belong to the new epoch;
+   only that epoch's reports are auto-delivered. Cancelled and completed workers
+   are not automatically restarted. ADR 0279 §15 records the recovery decision.
 
 No IPC, storage, or host-protocol change.
 

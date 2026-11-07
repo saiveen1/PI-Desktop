@@ -722,9 +722,13 @@ export function registerAgentIpc({
     if (!host || !sidecar) throw new Error("backend unavailable");
     const releaseSessionOperation = await acquireSessionOperation(req.sessionId);
     try {
-      if (activeTurns.has(req.sessionId)) {
-        throw Object.assign(new Error("session already has an active turn"), {
-          errorCode: ErrorCodes.AGENT_BUSY,
+      const activeTurnId = activeTurns.get(req.sessionId);
+      if (activeTurnId) {
+        // The runtime fences stale turns; rejection must not finalize the parent.
+        return await sidecar.call<AgentRetrySubagentResponse>("agent.retrySubagent", {
+          sessionId: req.sessionId,
+          turnId: activeTurnId,
+          delegationId: req.delegationId.trim(),
         });
       }
       const settings = await host.call<any>("settings.get");
