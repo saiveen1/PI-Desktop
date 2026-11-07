@@ -2,6 +2,7 @@ import { isDelegationRunPolicySnapshot, type DelegationRunPolicy } from "@pi-des
 import { createHash, randomUUID } from "node:crypto";
 import { closeSync, fstatSync, lstatSync, mkdirSync, openSync, readSync, realpathSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, relative } from "node:path";
+import { parseSubagentTerminalDiagnostics, type SubagentTerminalDiagnostics } from "./subagent-terminal.js";
 
 export type SubagentCheckpointStatus = "running" | "completed" | "failed" | "aborted" | "timed_out";
 export type SubagentCheckpointError = {
@@ -30,6 +31,7 @@ export type SubagentCheckpoint = {
   contextCompactions?: number;
   contextDegraded?: boolean;
   outputTruncated?: boolean;
+  terminal?: SubagentTerminalDiagnostics;
 };
 type CheckpointLocation = { scratchDir?: string; delegateSessionId?: string; parentToolCallId: string };
 export type PersistSubagentCheckpointOptions = CheckpointLocation & { checkpoint: SubagentCheckpoint };
@@ -133,6 +135,8 @@ function validate(value: unknown, options: ReadSubagentCheckpointOptions): Subag
         typeof value.updatedAt === "string" && value.updatedAt.length > 0 && value.updatedAt.length <= 64) ||
       value.task !== undefined && typeof value.task !== "string") fail("checkpoint-invalid");
   if (value.runPolicy !== undefined && !isDelegationRunPolicySnapshot(value.runPolicy)) fail("checkpoint-invalid");
+  const terminal = parseSubagentTerminalDiagnostics(value.terminal);
+  if (value.terminal !== undefined && !terminal) fail("checkpoint-invalid");
   // Only known fields survive: no arbitrary persisted context, tools, or credentials.
   return {
     version: 1, sessionId: options.sessionId, agentName: options.agentName, delegateSessionId: chainId(options),
@@ -146,6 +150,7 @@ function validate(value: unknown, options: ReadSubagentCheckpointOptions): Subag
     ...(count(value.contextCompactions) ? { contextCompactions: value.contextCompactions } : {}),
     ...(typeof value.contextDegraded === "boolean" ? { contextDegraded: value.contextDegraded } : {}),
     ...(typeof value.outputTruncated === "boolean" ? { outputTruncated: value.outputTruncated } : {}),
+    ...(terminal ? { terminal } : {}),
     ...(value.error !== undefined ? { error: restoredError(value.error) } : {}),
   };
 }

@@ -1192,6 +1192,15 @@ fn validate_settings_value(value: &Value) -> Result<(), JsonRpcError> {
             ));
         }
     }
+    if let Some(limit) = object.get("unknownUpstreamRetryLimit") {
+        if !crate::provider_retry::is_unknown_upstream_retry_limit(limit) {
+            return Err(rpc_err(
+                1002,
+                "unknownUpstreamRetryLimit must be an integer from 0 to 3",
+                "INVALID_PARAMS",
+            ));
+        }
+    }
     if let Some(keep_awake) = object.get("keepAwakeWhileRunning") {
         if !keep_awake.is_boolean() {
             return Err(rpc_err(
@@ -8152,6 +8161,60 @@ mod tests {
         assert!(content.contains("temporary"), "{content}");
         assert_eq!(read.content["tag"].as_str().unwrap().len(), 4);
         assert!(!active_project.join("notes.txt").exists());
+    }
+
+    #[tokio::test]
+    async fn unknown_upstream_retry_settings_validate_and_survive_reopen() {
+        let data_dir = tempfile::tempdir().unwrap();
+        let mut app_state = AppState::open(data_dir.path()).unwrap();
+        app_state.handshook = true;
+        let state = Arc::new(Mutex::new(app_state));
+        let (tx, _rx) = mpsc::unbounded_channel();
+        let initial = handle_request(state.clone(), "settings.get", json!({}), tx.clone())
+            .await
+            .unwrap();
+        assert!(initial.get("unknownUpstreamRetryLimit").is_none());
+
+        for limit in [0, 1, 3] {
+            handle_request(
+                state.clone(),
+                "settings.set",
+                json!({"unknownUpstreamRetryLimit": limit}),
+                tx.clone(),
+            )
+            .await
+            .unwrap();
+        }
+        for invalid in [
+            json!(-1), json!(4), json!(0.5), json!("1"), json!(true),
+            json!(9_007_199_254_740_991_i64), serde_json::Value::Null, json!({}),
+        ] {
+            let error = handle_request(
+                state.clone(),
+                "settings.set",
+                json!({"unknownUpstreamRetryLimit": invalid}),
+                tx.clone(),
+            )
+            .await
+            .unwrap_err();
+            assert_eq!(error.data.unwrap()["errorCode"], "INVALID_PARAMS");
+            let retained = handle_request(state.clone(), "settings.get", json!({}), tx.clone())
+                .await
+                .unwrap();
+            assert_eq!(retained["unknownUpstreamRetryLimit"], 3);
+        }
+        drop(state);
+        let mut reopened = AppState::open(data_dir.path()).unwrap();
+        reopened.handshook = true;
+        let restored = handle_request(
+            Arc::new(Mutex::new(reopened)),
+            "settings.get",
+            json!({}),
+            tx,
+        )
+        .await
+        .unwrap();
+        assert_eq!(restored["unknownUpstreamRetryLimit"], 3);
     }
 
     #[tokio::test]

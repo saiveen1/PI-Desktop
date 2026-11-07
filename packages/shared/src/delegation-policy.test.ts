@@ -42,6 +42,16 @@ describe("delegation policy", () => {
 
 
 describe("subagent run policy", () => {
+  it("defaults optional report recovery to off without inventing it in historical snapshots", () => {
+    const historical = { maxToolCalls: 0, maxDurationSeconds: 0, finalReportTimeoutSeconds: 60 };
+    expect(isDelegationRunPolicySnapshot(historical)).toBe(true);
+    expect(historical).not.toHaveProperty("reportRecoveryAttempts");
+    expect(resolveDelegationRunPolicy(historical)).toHaveProperty("reportRecoveryAttempts", 0);
+    expect(resolveDelegationRunPolicy({ reportRecoveryAttempts: 1 })).toHaveProperty("reportRecoveryAttempts", 1);
+    for (const value of [-1, 2, 0.5, "1", null, true]) {
+      expect(isDelegationRunPolicy({ reportRecoveryAttempts: value })).toBe(false);
+    }
+  });
   it("keeps visible defaults without changing legacy saved settings", () => {
     const previous = settings([]);
     expect(isDelegationSettings(previous)).toBe(true);
@@ -60,8 +70,8 @@ describe("subagent run policy", () => {
       checkpointInterval: 12, maxCheckpointRequests: 2 };
     expect(isDelegationSettings({ ...settings([]), runPolicy: legacy })).toBe(true);
     expect(isDelegationRunPolicySnapshot(legacy)).toBe(true);
-    expect(resolveDelegationRunPolicy(legacy)).toEqual({ maxToolCalls: 128, maxDurationSeconds: 900, finalReportTimeoutSeconds: 30 });
-    expect(resolveDelegationRunPolicy()).toEqual({ maxToolCalls: 0, maxDurationSeconds: 0, finalReportTimeoutSeconds: 60 });
+    expect(resolveDelegationRunPolicy(legacy)).toEqual({ maxToolCalls: 128, maxDurationSeconds: 900, finalReportTimeoutSeconds: 30, reportRecoveryAttempts: 0 });
+    expect(resolveDelegationRunPolicy()).toEqual({ maxToolCalls: 0, maxDurationSeconds: 0, finalReportTimeoutSeconds: 60, reportRecoveryAttempts: 0 });
   });
   it("validates every configured bound and rejects typos and non-integers", () => {
     for (const [key, { min, max }] of Object.entries(DELEGATION_RUN_POLICY_LIMITS)) {

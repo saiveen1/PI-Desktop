@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Type } from "typebox";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { withExplicitRequired } from "./tool-schema.js";
+import { subagentTaskDeclaration } from "./delegation-tool.js";
 
 // Guards the provider-facing shape of a tool schema (#864). Tool types go
 // through a JSON round trip before the provider sees them, so a key that is
@@ -49,4 +50,16 @@ describe("withExplicitRequired", () => {
     const union = toolWith({ anyOf: [{ type: "object" }] });
     expect(withExplicitRequired(union)).toBe(union);
   });
+});
+
+it("declares an integer bounded context minimum and documents zero as no minimum", () => {
+  const declaration = subagentTaskDeclaration({
+    definitions: [{ name: "worker", description: "Fixture", prompt: "Inspect.", tools: ["Read"], source: "builtin" }],
+    hasOverrides: false, defaultGuidance: "", optInGuidance: "",
+    settings: { version: 1, approvalTimeoutSeconds: 60, models: [] },
+  });
+  expect(declaration.parameters.properties.minContextWindow).toMatchObject({
+    type: "integer", minimum: 0, maximum: 10_000_000,
+  });
+  expect(declaration.parameters.properties.minContextWindow.description).toContain("0");
 });

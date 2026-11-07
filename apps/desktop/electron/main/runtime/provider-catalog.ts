@@ -3,10 +3,12 @@ import {
   SESSION_THINKING_LEVELS,
   defaultCommandShellForPlatform,
   isCommandShellId,
+  isUnknownUpstreamRetryLimit,
   normalizeRadialMenuPreferences,
   radialMenuWriteError,
   validateNetworkProxy,
   validateSpeechSettings,
+  UNKNOWN_UPSTREAM_RETRY_LIMIT_DEFAULT,
   type CommandShellId,
   type ModelBinding,
   type SessionThinkingLevel,
@@ -168,11 +170,13 @@ export function createProviderCatalogRuntime({
   ): T & { defaultCommandShell: CommandShellId } => {
     const value = (
       settings && typeof settings === "object" ? settings : {}
-    ) as T & { defaultCommandShell?: unknown; radialMenu?: unknown };
+    ) as T & { defaultCommandShell?: unknown; radialMenu?: unknown; unknownUpstreamRetryLimit?: unknown };
     return {
       ...(value as T),
       infiniteProviderRetry: (value as T & { infiniteProviderRetry?: unknown })
         .infiniteProviderRetry === true,
+      unknownUpstreamRetryLimit: isUnknownUpstreamRetryLimit(value.unknownUpstreamRetryLimit)
+        ? value.unknownUpstreamRetryLimit : UNKNOWN_UPSTREAM_RETRY_LIMIT_DEFAULT,
       keepAwakeWhileRunning: (value as T & { keepAwakeWhileRunning?: unknown })
         .keepAwakeWhileRunning === true,
       autoContinueUnfinishedTodos:
@@ -205,6 +209,7 @@ export function createProviderCatalogRuntime({
     const value = settings as T & {
       defaultCommandShell?: unknown;
       infiniteProviderRetry?: unknown;
+      unknownUpstreamRetryLimit?: unknown;
       keepAwakeWhileRunning?: unknown;
       scheduledTasksEnabled?: unknown;
       jevEnabled?: unknown;
@@ -232,6 +237,14 @@ export function createProviderCatalogRuntime({
       typeof value.infiniteProviderRetry !== "boolean"
     ) {
       throw Object.assign(new Error("infiniteProviderRetry is invalid"), {
+        errorCode: ErrorCodes.INVALID_PARAMS,
+      });
+    }
+    if (
+      Object.prototype.hasOwnProperty.call(value, "unknownUpstreamRetryLimit") &&
+      !isUnknownUpstreamRetryLimit(value.unknownUpstreamRetryLimit)
+    ) {
+      throw Object.assign(new Error("unknownUpstreamRetryLimit is invalid"), {
         errorCode: ErrorCodes.INVALID_PARAMS,
       });
     }

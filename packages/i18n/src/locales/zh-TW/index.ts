@@ -1,4 +1,5 @@
 import { approvalCenter } from "./delegation-approval.js";
+import { delegationReliabilitySettings, delegationDiagnostics } from "./delegation-reliability.js";
 import { en, type EnglishCatalog } from "../en/index.js";
 
 export const zhTW = {
@@ -355,6 +356,7 @@ export const zhTW = {
     sessionMissing: "該對話已不存在",
   },
   chat: {
+    delegationDiagnostics,
     promptRetractionFailed: "無法安全恢復草稿。對話內容已保留。",
     tableActions: "表格操作",
     markdownPlainTextFallback: "內容較長，為維持介面回應速度，現以純文字顯示。",
@@ -891,6 +893,7 @@ export const zhTW = {
     dismiss: "關閉",
   },
   settings: {
+    ...delegationReliabilitySettings,
     delegationRoles: "角色",
     delegationScheduling: "排程",
     delegationRunTitle: "執行與復原",

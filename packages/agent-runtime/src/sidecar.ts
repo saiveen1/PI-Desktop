@@ -36,6 +36,7 @@ import {
   normalizeNetworkProxy,
   OAUTH_AUTH_KIND,
   readNdjsonLines,
+  resolveUnknownUpstreamRetryLimit,
 } from "@pi-desktop/shared";
 import type {
   AgentEventEnvelope,
@@ -111,6 +112,7 @@ type RuntimeParams = {
   turnId?: string;
   thinkingLevel?: SessionThinkingLevel;
   infiniteProviderRetry?: boolean;
+  unknownUpstreamRetryLimit?: number;
   autoContinueUnfinishedTodos?: boolean;
   /** Session `/fast` switch AND the model's opt-in, resolved by main (ADR 0334). */
   fastMode?: boolean;
@@ -190,6 +192,7 @@ async function runtimeFor(
 ): Promise<DesktopAgentRuntime> {
   const sessionId = String(params.sessionId);
   const mode = normalizeMode(params.mode);
+  const unknownUpstreamRetryLimit = resolveUnknownUpstreamRetryLimit(params.unknownUpstreamRetryLimit);
   if (!isCommandShellOption(params.commandShell) || !params.commandShell.available) {
     throw Object.assign(new Error("active command shell is invalid or unavailable"), {
       rpcCode: -32000,
@@ -272,6 +275,7 @@ async function runtimeFor(
     reusable.setPluginSkills(pluginSkills);
     reusable.setCompactionSettings(params.compactionSettings);
     reusable.setInfiniteProviderRetry(params.infiniteProviderRetry === true);
+    reusable.setUnknownUpstreamRetryLimit(unknownUpstreamRetryLimit);
     reusable.setAutoContinueUnfinishedTodos(params.autoContinueUnfinishedTodos !== false);
     reusable.setFastMode(params.fastMode === true);
     reusable.setMode(mode);
@@ -321,6 +325,7 @@ async function runtimeFor(
     commandShell: params.commandShell,
     thinkingLevel,
     infiniteProviderRetry: params.infiniteProviderRetry === true,
+    unknownUpstreamRetryLimit,
     autoContinueUnfinishedTodos: params.autoContinueUnfinishedTodos !== false,
     fastMode: params.fastMode === true,
     jevApiKey: params.jevApiKey,

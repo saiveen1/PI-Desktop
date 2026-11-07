@@ -1,7 +1,8 @@
 import { DelegationAdmissionError, DelegationScheduler, type DelegationDecisionRecord } from "./delegation-scheduler.js";
 import { DelegationPolicyState } from "./delegation-policy-state.js";
 import { subagentTaskDeclaration } from "./delegation-tool.js";
-import { resolveDelegationRunPolicy, describeDelegationRunPolicy, isDelegationRunPolicySnapshot, type DelegationRunPolicy, describeDelegationModels, type DelegationSettings, type DelegationApprovalDecision } from "@pi-desktop/shared";
+import { parseSubagentTerminalDiagnostics } from "./subagent-terminal.js";
+import { resolveDelegationRunPolicy, describeDelegationRunPolicy, isDelegationRunPolicySnapshot, type DelegationRunPolicy, describeDelegationModels, type DelegationSettings, type DelegationApprovalDecision, DelegationRequestError, resolveUnknownUpstreamRetryLimit } from "@pi-desktop/shared";
 import { buildJobTools } from "./background-job-tools.js";
 import {
   mutationFailureKey, mutationTerminationAdvice, mutationTerminationMessage,
@@ -309,6 +310,7 @@ import {
   PROVIDER_TRANSIENT_MAX_RETRIES,
   carriesRetryDelayHeaders,
   isTransientProviderRetryCode,
+  isUnknownUpstreamBadRequest,
   providerRateLimitDelayMs,
   providerSetupRetryDelayMs,
   streamIdleTimeoutMs,
@@ -585,6 +587,7 @@ export type DelegationRecord = {
   lastToolName?: string;
   lastPhase?: AgentActivityAgentPhase;
   lastActivityAt: number;
+  activity?: AgentActivity;
   /** `prompt()` / `executeApprovedPlan()` generation that started this run.
    * Resume-after-idle only waits for the current turn's delegates (D352). */
   startedEpoch: number;
@@ -625,8 +628,10 @@ function delegationSummary(record: DelegationRecord): Record<string, unknown> {
     turns: record.result?.turns ?? record.turns,
     toolCalls: record.result?.toolCalls ?? record.toolCalls,
     ...(record.lastToolName ? { lastToolName: record.lastToolName } : {}),
+    ...(record.status === "running" && record.activity ? { activity: record.activity } : {}),
     ...(record.completedAt ? { completedAt: record.completedAt } : {}),
     ...(record.result?.modelFailures ? { modelFailures: record.result.modelFailures } : {}),
+    ...(record.result?.terminal ? { terminal: record.result.terminal } : {}),
     ...(record.scheduling ? { scheduling: record.scheduling } : {}),
     ...(record.result?.error ? { error: record.result.error } : {}),
     // A delegate that compacted or lost history says so in its lifecycle
@@ -1040,6 +1045,8 @@ export type AgentRuntimeOptions = {
   thinkingLevel: SessionThinkingLevel;
   /** Persisted opt-in for retrying transient provider failures until success. */
   infiniteProviderRetry?: boolean;
+  /** Separate bounded recovery for generic upstream 400/422 wrappers. */
+  unknownUpstreamRetryLimit?: number;
   /** Continue once when this task's committed checklist remains unfinished. On unless false. */
   autoContinueUnfinishedTodos?: boolean;
   /**
@@ -2000,6 +2007,8 @@ export class DesktopAgentRuntime {
   private pendingProviderRetry?: ReturnType<typeof classifyAgentError>;
   /** Non-429 setup + stream failures since the last successful response. */
   private providerTransientRetryAttempt = 0;
+  private providerUnknownRetryAttempt = 0;
+  private unknownUpstreamRetryLimit = 0;
   /** Shared OpenCode-style 429 retry count across setup and stream phases. */
   private providerRateLimitRetryAttempt = 0;
   /** Opt-in mode removes only the retry-count ceiling; abort and backoff stay intact. */
@@ -2113,6 +2122,7 @@ export class DesktopAgentRuntime {
     this.provider = opts.provider;
     this.thinkingLevel = clampThinkingLevel(opts.provider, opts.thinkingLevel);
     this.infiniteProviderRetry = opts.infiniteProviderRetry === true;
+    this.unknownUpstreamRetryLimit = resolveUnknownUpstreamRetryLimit(opts.unknownUpstreamRetryLimit);
     this.fastMode = opts.fastMode === true;
     this.jevApiKey = opts.jevApiKey;
     this.computerUseEnabled = opts.computerUseEnabled === true;
@@ -2386,7 +2396,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
                 phase: "retrying",
                 since: now,
                 attempt,
-                ...(this.infiniteProviderRetry ? { infinite: true } : {}),
+                ...this.retryActivityPolicy(error),
                 retryDelayMs: delayMs,
                 error: this.retryActivityError(error),
               });
@@ -2480,6 +2490,11 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
   setInfiniteProviderRetry(enabled: boolean): void {
     if (this.disposed) throw new Error("runtime disposed");
     this.infiniteProviderRetry = enabled;
+  }
+
+  setUnknownUpstreamRetryLimit(limit?: number): void {
+    if (this.disposed) throw new Error("runtime disposed");
+    this.unknownUpstreamRetryLimit = resolveUnknownUpstreamRetryLimit(limit);
   }
 
   setAutoContinueUnfinishedTodos(enabled: boolean): void {
@@ -4893,8 +4908,10 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       if (!report) return [];
       const savedStatus = typeof details?.status === "string" ? details.status : checkpoint?.status ?? "interrupted";
       const runPolicy = details?.runPolicy ?? checkpoint?.runPolicy;
+      const terminal = parseSubagentTerminalDiagnostics(details?.terminal) ?? checkpoint?.terminal;
       return [{ delegationId, agent: chain.agentName,
         ...(isDelegationRunPolicySnapshot(runPolicy) ? { runPolicy } : {}),
+        ...(terminal ? { terminal } : {}),
         status: savedStatus === "running" ? "interrupted" : savedStatus,
         report: truncateTextWithMarker(report, MAX_SUBAGENT_REPORT_CHARS, "\n[report truncated]\n"),
         partial: savedStatus !== "completed",
@@ -5078,41 +5095,46 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
         const modelReason = isRecord(params) && typeof params.modelReason === "string" ? params.modelReason : undefined;
         const selection = isRecord(params) && params.modelSelection === "require" ? "require" : "prefer";
         const requestedBinding = modelOverride ? this.subagentProviders[modelOverride] : undefined;
-        const scheduler = new DelegationScheduler({
-          settings: this.delegationSettings,
-          sessionId: this.sessionId, task, reason: modelReason, selection,
-          currentPolicy: () => this.delegationPolicy.refresh(),
-          agentName: definition.name,
-          description: isRecord(params) && typeof params.description === "string" ? params.description : definition.description,
-          requestedModel: modelOverride || undefined,
-          thinkingLevel: definition.thinkingLevel === "omit" ? undefined : definition.thinkingLevel ?? this.thinkingLevel,
-          requiresImages: isRecord(params) && params.requiresImages === true,
-          minContextWindow: isRecord(params) && typeof params.minContextWindow === "number" ? params.minContextWindow : undefined,
-          preferredKey: requestedBinding ? `${requestedBinding.id}/${requestedBinding.modelId}` : modelOverride || undefined,
-          preferredProvider: resumedProvider ?? (this.delegationSettings
-            ? definition.model && (!modelOverride || modelOverride === subagentModelKey(definition.model)) ? this.subagentProvider(definition) : undefined
-            : provider),
-          legacyFallbacks: (definition.fallbackModels ?? []).map((pin) => ({ key: subagentModelKey(pin), provider: this.subagentProviders[subagentModelKey(pin)] })),
-          resolve: async (key) => this.delegationPolicy.authoritative
-            ? this.resolveSubagentModel(key, true) : this.subagentProviders[key] ?? await this.resolveSubagentModel(key),
-          resolveSelected: (key) => this.resolveSubagentModel(key, true),
-          ...(this.delegationAuthorization ? {
-            authorize: (request) => this.host.call<DelegationApprovalDecision>("provider.authorizeDelegation", request),
-            cancelApproval: (requestId: string) => this.host.call("provider.cancelDelegationApproval", { sessionId: this.sessionId, requestId }),
-          } : {}),
-          compatible: (candidate) => {
-            if (isRecord(params) && params.requiresImages === true && !visionFromModelConfig(candidate.modelConfig)) return "Task requires image input support";
-            const minimum = isRecord(params) && typeof params.minContextWindow === "number" ? params.minContextWindow : 0;
-            return minimum > (candidate.modelConfig?.contextWindow ?? 128_000) ? "Task requires a larger context window" : undefined;
-          },
-        });
+        let scheduler: DelegationScheduler;
+        try {
+          scheduler = new DelegationScheduler({
+            settings: this.delegationSettings,
+            sessionId: this.sessionId, task, reason: modelReason, selection,
+            currentPolicy: () => this.delegationPolicy.refresh(),
+            agentName: definition.name,
+            description: isRecord(params) && typeof params.description === "string" ? params.description : definition.description,
+            requestedModel: modelOverride || undefined,
+            thinkingLevel: definition.thinkingLevel === "omit" ? undefined : definition.thinkingLevel ?? this.thinkingLevel,
+            requiresImages: isRecord(params) && params.requiresImages === true,
+            minContextWindow: isRecord(params) ? params.minContextWindow : undefined,
+            preferredKey: requestedBinding ? `${requestedBinding.id}/${requestedBinding.modelId}` : modelOverride || undefined,
+            preferredProvider: resumedProvider ?? (this.delegationSettings
+              ? definition.model && (!modelOverride || modelOverride === subagentModelKey(definition.model)) ? this.subagentProvider(definition) : undefined
+              : provider),
+            legacyFallbacks: (definition.fallbackModels ?? []).map((pin) => ({ key: subagentModelKey(pin), provider: this.subagentProviders[subagentModelKey(pin)] })),
+            resolve: async (key) => this.delegationPolicy.authoritative
+              ? this.resolveSubagentModel(key, true) : this.subagentProviders[key] ?? await this.resolveSubagentModel(key),
+            resolveSelected: (key) => this.resolveSubagentModel(key, true),
+            ...(this.delegationAuthorization ? {
+              authorize: (request) => this.host.call<DelegationApprovalDecision>("provider.authorizeDelegation", request),
+              cancelApproval: (requestId: string) => this.host.call("provider.cancelDelegationApproval", { sessionId: this.sessionId, requestId }),
+            } : {}),
+            compatible: (candidate) => {
+              if (isRecord(params) && params.requiresImages === true && !visionFromModelConfig(candidate.modelConfig)) return "Task requires image input support";
+              return (scheduler.minContextWindow ?? 0) > (candidate.modelConfig?.contextWindow ?? 128_000) ? "Task requires a larger context window" : undefined;
+            },
+          });
+        } catch (error) {
+          return this.subagentToolError(toolCallId, error instanceof Error ? error.message : "Invalid delegation request; no task started.",
+            error instanceof DelegationRequestError ? { code: error.code } : undefined);
+        }
         let scheduled: Awaited<ReturnType<DelegationScheduler["select"]>>;
         try {
           scheduled = await scheduler.select(signal);
           provider = scheduled.provider;
         } catch (error) {
           return this.subagentToolError(toolCallId, error instanceof Error ? error.message : "Delegation scheduling failed; no task started.",
-            error instanceof DelegationAdmissionError ? { code: error.code,
+            error instanceof DelegationRequestError ? { code: error.code } : error instanceof DelegationAdmissionError ? { code: error.code,
               scheduling: { requestedModel: scheduler.requestedModel, decisions: error.decisions } } : undefined);
         }
         if (this.disposed || this.runCancelled || this.turnHadError || resumeEpoch !== this.turnEpoch) {
@@ -5261,6 +5283,13 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
             task,
             provider,
             infiniteProviderRetry: this.infiniteProviderRetry,
+            unknownUpstreamRetryLimit: this.unknownUpstreamRetryLimit,
+            onProgress: ({ turns }) => {
+              if (record.status !== "running") return;
+              record.turns = turns;
+              this.publishDelegationSettlement(record);
+              this.refreshDelegationWait();
+            },
             thinkingLevel,
             fallbackModels: scheduled.fallbacks,
             refreshFallbackModels: () => scheduler.candidates(),
@@ -5289,7 +5318,8 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
             onTurnEnd: (message) => this.batchPlanner.settleBatch(message),
             onEvent: (envelope) => {
               this.noteDelegationActivity(record, envelope);
-              this.onEvent(envelope);
+              // Child retry activity belongs to its Task, never the parent session status.
+              if (envelope.event.type !== "status") this.onEvent(envelope);
             },
             // A host failure inside a delegate reaches its tool-error channel
             // through the same bookkeeping the parent uses.
@@ -5366,6 +5396,8 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
             status: "running",
             runPolicy,
             startedAt,
+            turns: record.turns,
+            toolCalls: record.toolCalls,
             modelId: provider.modelId,
             thinkingLevel,
             ...(record.scheduling ? { scheduling: record.scheduling } : {}),
@@ -5521,6 +5553,8 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     const original = record.taskMessage.toolResult;
     const details = isRecord(original) && isRecord(original.details) ? original.details : undefined;
     if (record.status === "running" && details?.modelId === record.modelId &&
+        details?.turns === record.turns && details?.toolCalls === record.toolCalls &&
+        agentActivityEqual(details?.activity as AgentActivity | undefined, record.activity) &&
         details?.thinkingLevel === record.thinkingLevel &&
         details?.checkpointPath === record.checkpoint?.checkpointPath &&
         details?.checkpointError === record.checkpoint?.error) return;
@@ -5620,6 +5654,15 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
   ): void {
     record.lastActivityAt = Date.now();
     const event = envelope.event;
+    if (event.type === "status") {
+      record.activity = event.status.activity;
+      this.publishDelegationSettlement(record);
+      return;
+    }
+    if (event.type === "message_start" || event.type === "tool_start") {
+      record.activity = undefined;
+      this.publishDelegationSettlement(record);
+    }
     if (event.type === "turn_start") {
       record.turns += 1;
       this.touchDelegationPhase(record, "waiting-model");
@@ -5628,6 +5671,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     if (event.type === "tool_start") {
       record.toolCalls += 1;
       this.touchDelegationPhase(record, "tool", event.toolName);
+      this.publishDelegationSettlement(record);
       // The row a later `resume` replays needs the call's arguments, and
       // `tool_end` carries only the result (ADR 0279 §3).
       this.delegateToolCalls.set(event.toolCallId, {
@@ -5957,6 +6001,11 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           startedAt: record.startedAt,
           ...(record.completedAt ? { completedAt: record.completedAt } : {}),
           ...(record.result?.error ? { error: record.result.error } : {}),
+          ...(record.result?.terminal ? { terminal: record.result.terminal } : {}),
+          ...(record.result?.modelFailures ? { modelFailures: record.result.modelFailures } : {}),
+          ...(record.scheduling ? { scheduling: record.scheduling } : {}),
+          turns: record.result?.turns ?? record.turns,
+          toolCalls: record.result?.toolCalls ?? record.toolCalls,
           ...(record.result?.scratchReportPath
             ? { scratchReportPath: record.result.scratchReportPath }
             : {}),
@@ -6963,7 +7012,14 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     error: ReturnType<typeof classifyAgentError>,
     phase: "request" | "stream",
   ): number | undefined {
-    if (!error.retriable || error.details?.origin === "local") return undefined;
+    if (error.details?.origin === "local" || this.disposed || this.runCancelled) return undefined;
+    if (isUnknownUpstreamBadRequest(error)) {
+      if (this.providerUnknownRetryAttempt >= this.unknownUpstreamRetryLimit) return undefined;
+      const attempt = ++this.providerUnknownRetryAttempt;
+      this.activeProviderRetryAttempt = attempt;
+      return attempt;
+    }
+    if (!error.retriable) return undefined;
     const infinite = this.infiniteProviderRetry;
     if (error.code === "PROVIDER_RATE_LIMITED") {
       if (
@@ -6994,6 +7050,12 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     return attempt;
   }
 
+  private retryActivityPolicy(error: ReturnType<typeof classifyAgentError>): { infinite?: boolean; maxAttempts?: number } {
+    return isUnknownUpstreamBadRequest(error)
+      ? { maxAttempts: this.unknownUpstreamRetryLimit }
+      : this.infiniteProviderRetry ? { infinite: true } : {};
+  }
+
   private providerErrorWithDiagnostics(
     error: ReturnType<typeof classifyAgentError>,
     phase: "request" | "stream",
@@ -7007,6 +7069,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     const existingDetails = explained.details ?? {};
     const retryAttempt = error.code === "PROVIDER_RATE_LIMITED"
       ? this.providerRateLimitRetryAttempt
+      : isUnknownUpstreamBadRequest(error) ? this.providerUnknownRetryAttempt
       : isTransientProviderRetryCode(error.code) ? this.providerTransientRetryAttempt : 0;
     // A capture exists only for an attempt that rejected before any response, so
     // it is also the honest phase: whatever the message lifecycle that surfaced
@@ -7095,6 +7158,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     this.suppressOverflowRunEnd = false;
     this.pendingProviderRetry = undefined;
     this.providerTransientRetryAttempt = 0;
+    this.providerUnknownRetryAttempt = 0;
     this.providerRateLimitRetryAttempt = 0;
     this.providerRetryHeaders = undefined;
     this.providerFetchFailure = undefined;
@@ -7128,6 +7192,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       this.activeProviderRetryAttempt ||
       (retryError.code === "PROVIDER_RATE_LIMITED"
         ? this.providerRateLimitRetryAttempt
+        : isUnknownUpstreamBadRequest(retryError) ? this.providerUnknownRetryAttempt
         : this.providerTransientRetryAttempt || 1);
     this.activeProviderRetryAttempt = retryAttempt;
     this.pendingProviderRetry = undefined;
@@ -7165,7 +7230,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
         phase: "retrying",
         since: retryAt,
         attempt: retryAttempt,
-        ...(this.infiniteProviderRetry ? { infinite: true } : {}),
+        ...this.retryActivityPolicy(retryError),
         retryDelayMs: delayMs,
         error: this.retryActivityError(retryError),
       });
@@ -8947,6 +9012,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           if (!failed && !aborted) {
             this.providerTransientRetryAttempt = 0;
             this.providerRateLimitRetryAttempt = 0;
+            this.providerUnknownRetryAttempt = 0;
           }
           // Re-run an invisible answer once before surfacing a finished turn.
           const silence =

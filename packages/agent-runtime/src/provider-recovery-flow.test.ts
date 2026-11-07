@@ -16,11 +16,14 @@ const provider: RuntimeProviderConfig = {
   supportedThinkingLevels: ["off"],
 };
 
-type Failure = "network" | "rate-limit" | "stream";
+type Failure = "network" | "rate-limit" | "stream" | "unknown-upstream" | "bad-request";
 type Step = Failure | "tool" | "success" | "stall";
 
 /** Real provider adapter and agent loop; replace only fetch and the host edge. */
-function fixture(steps: Step[], retryAfterMs = 1) {
+function fixture(steps: Step[], retryAfterMs = 1, recovery: {
+  unknownUpstreamRetryLimit?: number;
+  infiniteProviderRetry?: boolean;
+} = {}, childSignal?: AbortSignal) {
   let requests = 0;
   let reads = 0;
   let abortedRequests = 0;
@@ -43,6 +46,13 @@ function fixture(steps: Step[], retryAfterMs = 1) {
       });
     }
     if (step === "network") throw new TypeError("fetch failed");
+    if (step === "unknown-upstream" || step === "bad-request") {
+      return new Response(JSON.stringify({ error: step === "unknown-upstream"
+        ? { code: "upstream_400", message: "Upstream returned status 400" }
+        : { code: "invalid_request_error", message: "Invalid parameter: temperature" } }), {
+        status: 400, headers: { "content-type": "application/json" },
+      });
+    }
     if (step === "rate-limit")
       return new Response("Rate limited", {
         status: 429,
@@ -90,6 +100,7 @@ function fixture(steps: Step[], retryAfterMs = 1) {
     sessionId: "fixture-session",
     mode: "agent",
     provider,
+    ...recovery,
     thinkingLevel: "off",
     commandShell: {
       id: "bash",
@@ -124,6 +135,8 @@ function fixture(steps: Step[], retryAfterMs = 1) {
     parentToolCallId: "task",
     task: "Read fixture",
     provider,
+    ...recovery,
+    signal: childSignal,
     thinkingLevel: "off",
     systemPrompt: "Read and report",
     tools: [
@@ -170,6 +183,71 @@ afterEach(() => {
 });
 
 describe("provider recovery through real agent loops (#699)", () => {
+  for (const owner of ["session", "subagent"] as const) {
+    it(`${owner} recovers an enabled unknown upstream failure without replaying a successful tool`, async () => {
+      vi.useFakeTimers();
+      const f = fixture(["tool", "unknown-upstream", "success"], 1, { unknownUpstreamRetryLimit: 1 });
+      try {
+        if (owner === "session") await settle(f.runtime.prompt("Read and report."));
+        else expect((await settle(f.subagent.run())).status).toBe("completed");
+        expect(f.requests()).toBe(3);
+        expect(f.reads()).toBe(1);
+        expect(f.events.filter(({ event }) => event.type === "error")).toHaveLength(0);
+      } finally { await f.runtime.dispose(); }
+    });
+
+    it.each(["unknown-upstream", "bad-request"] as const)(
+      `${owner} keeps %s terminal by default, even with infinite transient retries`, async failure => {
+        vi.useFakeTimers();
+        const f = fixture([failure], 1, { infiniteProviderRetry: true });
+        try {
+          if (owner === "session") await settle(f.runtime.prompt("Report."));
+          else expect((await settle(f.subagent.run())).status).toBe("failed");
+          expect(f.requests()).toBe(1);
+        } finally { await f.runtime.dispose(); }
+      },
+    );
+
+    it(`${owner} exhausts the independent unknown-error ceiling despite infinite transient retry`, async () => {
+      vi.useFakeTimers();
+      const f = fixture(["unknown-upstream", "unknown-upstream", "unknown-upstream"], 1, {
+        unknownUpstreamRetryLimit: 2, infiniteProviderRetry: true,
+      });
+      try {
+        if (owner === "session") await settle(f.runtime.prompt("Report."));
+        else expect((await settle(f.subagent.run())).status).toBe("failed");
+        expect(f.requests()).toBe(3);
+        expect(f.reads()).toBe(0);
+        if (owner === "session") {
+          expect(f.events.filter(({ event }) => event.type === "error")).toHaveLength(1);
+          expect(f.events.find(({ event }) => event.type === "error")?.event).toMatchObject({
+            error: { code: "PROVIDER_ERROR", details: { retryAttempt: 2, recoveryCategory: "unknown-upstream" } },
+          });
+          const activities = f.events.flatMap(({ event }) => event.type === "status" && event.status.activity?.phase === "retrying"
+            ? [event.status.activity] : []);
+          expect(activities.map(activity => activity.attempt)).toEqual([1, 2]);
+          expect(activities.every(activity => !activity.infinite)).toBe(true);
+        }
+      } finally { await f.runtime.dispose(); }
+    });
+
+    it(`${owner} cancels unknown-upstream backoff without another request`, async () => {
+      vi.useFakeTimers();
+      const controller = new AbortController();
+      const f = fixture(["unknown-upstream"], 1, { unknownUpstreamRetryLimit: 1 }, controller.signal);
+      try {
+        const running: Promise<unknown> = owner === "session" ? f.runtime.prompt("Report.") : f.subagent.run();
+        await vi.waitFor(() => expect(f.events.some(({ event }) => event.type === "status"
+          && event.status.activity?.phase === "retrying")).toBe(true));
+        if (owner === "session") await f.runtime.abort();
+        else controller.abort();
+        await settle(running);
+        await vi.advanceTimersByTimeAsync(10_000);
+        expect(f.requests()).toBe(1);
+      } finally { controller.abort(); await f.runtime.dispose(); }
+    });
+  }
+
   for (const [idleTimeout, failures] of [[180_000, 10], [30_000, 1]] as const) {
     it(`keeps ${failures} rate-limit waits outside the ${idleTimeout}ms stream idle budget`, async () => {
       vi.useFakeTimers();

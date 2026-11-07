@@ -1,4 +1,5 @@
 import { approvalCenter } from "./delegation-approval.js";
+import { delegationReliabilitySettings, delegationDiagnostics } from "./delegation-reliability.js";
 import { en, type EnglishCatalog } from "../en/index.js";
 
 export const ptBR = {
@@ -352,6 +353,7 @@ export const ptBR = {
     sessionMissing: "Essa sessão não existe mais"
   },
   chat: {
+    delegationDiagnostics,
     promptRetractionFailed: "Não foi possível restaurar o rascunho com segurança. A conversa foi preservada.",
     tableActions: "Ações da tabela",
     markdownPlainTextFallback: "Respostas extensas são exibidas como texto simples para manter a interface responsiva.",
@@ -885,6 +887,7 @@ export const ptBR = {
     dismiss: "Dispensar"
   },
   settings: {
+    ...delegationReliabilitySettings,
     delegationRoles: "Funções",
     delegationScheduling: "Escalonamento",
     delegationRunTitle: "Execução e recuperação",

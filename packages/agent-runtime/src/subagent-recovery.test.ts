@@ -16,7 +16,7 @@ vi.mock("./provider-binding.js", async (original) => {
   } };
 });
 
-function response(content: AssistantMessage["content"], stopReason: "stop" | "toolUse" = "stop") {
+function response(content: AssistantMessage["content"], stopReason: "stop" | "toolUse" | "length" = "stop") {
   const stream = createAssistantMessageEventStream();
   const message: AssistantMessage = {
     role: "assistant", api: "openai-completions", provider: "fixture", model: "fixture", timestamp: Date.now(),
@@ -53,6 +53,49 @@ function fixture(execute: AgentTool["execute"], extra: Partial<SubagentRunOption
 // a loaded machine (for example the full suite), where they timed out while
 // passing in isolation. Declare a budget consistent with the loop they run.
 describe("subagent recovery through the real loop", { timeout: 60_000 }, () => {
+  it.each([
+    { name: "empty stop", content: [], stopReason: "stop", code: "SUBAGENT_NO_REPORT" },
+    { name: "thinking-only stop", content: [{ type: "thinking", thinking: "Unpublished reasoning." }], stopReason: "stop", code: "SUBAGENT_NO_REPORT" },
+    { name: "empty length", content: [], stopReason: "length", code: "SUBAGENT_OUTPUT_TRUNCATED" },
+    { name: "empty tool ending", content: [], stopReason: "toolUse", code: "SUBAGENT_NO_REPORT" },
+  ] satisfies Array<{ name: string; content: AssistantMessage["content"]; stopReason: "stop" | "toolUse" | "length"; code: string }>)(
+    "does not deliver retained progress after $name", async ({ content, stopReason, code }) => {
+      let requests = 0;
+      const execute = vi.fn(async () => ({ content: [text("A evidence")], details: {} }));
+      transport.mockImplementation((_model, context) => {
+        if (++requests === 1) return response([text("Confirmed A at src/a.ts:12; still checking."), call("read-a")], "toolUse");
+        expect(context.messages.some(message => message.role === "toolResult" && message.toolCallId === "read-a")).toBe(true);
+        return response(content, stopReason);
+      });
+
+      const result = await fixture(execute).run();
+
+      expect(result).toMatchObject({ status: "failed", partial: true, error: { code } });
+      expect(result.report).toContain("Confirmed A");
+      expect(result.outputTruncated).toBe(stopReason === "length" ? true : undefined);
+      expect(execute).toHaveBeenCalledTimes(1);
+      expect(requests).toBe(2);
+      expect(JSON.parse(readFileSync(result.checkpointPath!, "utf8"))).toMatchObject({
+        status: "failed", partial: true, report: expect.stringContaining("Confirmed A"),
+      });
+    },
+  );
+
+  it("delivers a new terminal report instead of tool preamble", async () => {
+    let requests = 0;
+    const execute = vi.fn(async () => ({ content: [text("A evidence")], details: {} }));
+    transport.mockImplementation(() => ++requests === 1
+      ? response([text("I will start inspecting."), call("read-a")], "toolUse")
+      : response([text("Confirmed src/a.ts:12 is missing its null check.")]));
+
+    const result = await fixture(execute).run();
+
+    expect(result).toMatchObject({ status: "completed", report: "Confirmed src/a.ts:12 is missing its null check." });
+    expect(result.partial).toBeUndefined();
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(requests).toBe(2);
+  });
+
   it("saves findings while a tool is running and retains them after cancellation", async () => {
     const controller = new AbortController();
     const entered = deferred();
@@ -224,7 +267,7 @@ describe("subagent recovery through the real loop", { timeout: 60_000 }, () => {
     expect(requests).toBe(3);
     expect(executed).toHaveLength(2);
     expect(result.status).toBe("completed");
-    expect(result.runPolicy).toEqual({ maxToolCalls: 0, maxDurationSeconds: 0, finalReportTimeoutSeconds: 3 });
+    expect(result.runPolicy).toEqual({ maxToolCalls: 0, maxDurationSeconds: 0, finalReportTimeoutSeconds: 3, reportRecoveryAttempts: 0 });
   });
 
   it.each([false, true])("keeps the deadline off by default or explicit zero (explicit=%s)", async explicit => {
@@ -272,7 +315,7 @@ describe("subagent recovery through the real loop", { timeout: 60_000 }, () => {
     expect(executed).toHaveLength(130);
     expect(requests).toBe(2);
     expect(declarations.every(names => names.includes("Read"))).toBe(true);
-    expect(result.runPolicy).toEqual({ maxToolCalls: 0, maxDurationSeconds: 0, finalReportTimeoutSeconds: 60 });
+    expect(result.runPolicy).toEqual({ maxToolCalls: 0, maxDurationSeconds: 0, finalReportTimeoutSeconds: 60, reportRecoveryAttempts: 0 });
     expect(readFileSync(result.checkpointPath!, "utf8")).toContain("Work completed");
   });
 

@@ -60,6 +60,10 @@ export function isTransientProviderRetryCode(code: string): boolean {
   return TRANSIENT_RETRY_CODES.has(code);
 }
 
+export function isUnknownUpstreamBadRequest(error: ClassifiedAgentError): boolean {
+  return error.code === "PROVIDER_ERROR" && error.details?.recoveryCategory === "unknown-upstream";
+}
+
 /**
  * Statuses whose response headers can carry a usable retry delay. Gateway 5xx
  * and 408/409 responses often ship `Retry-After`, so keeping their headers lets
@@ -67,7 +71,7 @@ export function isTransientProviderRetryCode(code: string): boolean {
  */
 export function carriesRetryDelayHeaders(status: number | undefined): boolean {
   if (status === undefined) return false;
-  return status === 429 || status === 408 || status === 409 || status >= 500;
+  return status === 400 || status === 422 || status === 429 || status === 408 || status === 409 || status >= 500;
 }
 
 /** OpenAI-style SDK clients summarize an unreadable failure as "<status> status code (no body)". */
@@ -129,6 +133,8 @@ export type ProviderResponseSnapshot = {
 };
 
 export type ProviderRetryController = {
+  /** Report-only finalization permits one request, including no hidden repair. */
+  allowOutputLimitRepair?: () => boolean;
   /** Claim one retry across setup/stream failures of the current response. */
   claim: (
     error: ClassifiedAgentError,
@@ -162,7 +168,7 @@ export function classifyProviderError(
   error: unknown,
   providerStatus?: number,
 ): ClassifiedAgentError {
-  const classified = classifyAgentError(error);
+  const classified = classifyAgentError(error, providerStatus);
   if (
     providerStatus === 429 &&
     classified.code !== "PROVIDER_RATE_LIMITED" &&
@@ -467,7 +473,7 @@ export function createProviderRetryStream(
             classifyProviderError(event.error, controller.status?.()),
             controller.failure?.(),
           );
-          if (!limitRepairTried && isOpaqueBadRequest(error)) {
+          if (!limitRepairTried && controller.allowOutputLimitRepair?.() !== false && isOpaqueBadRequest(error)) {
             opaqueLimitRejection = error;
             break;
           }

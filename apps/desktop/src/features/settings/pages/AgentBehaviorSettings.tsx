@@ -7,7 +7,7 @@
  * presentation and composer input, which are now the Conversation
  * destination.
  */
-import type { AppSettings, GlobalPermissionMode } from "@pi-desktop/shared";
+import { UNKNOWN_UPSTREAM_RETRY_LIMIT_MAX, type AppSettings, type GlobalPermissionMode } from "@pi-desktop/shared";
 import { useTranslation } from "react-i18next";
 import { SegmentedControl, SettingsToggle } from "../../../components/ui";
 import { SettingsMenuSelect } from "../../../components/settings/SettingsMenuSelect";
@@ -78,6 +78,15 @@ export function AgentBehaviorSettings({
             label={t("settings.infiniteProviderRetry")}
             onChange={() => void saveSettings({ infiniteProviderRetry: settings.infiniteProviderRetry !== true })}
           />
+        </SettingsRow>
+        <SettingsRow title={t("settings.unknownUpstreamRetryLimit")}
+          description={t("settings.unknownUpstreamRetryLimitDesc")}>
+          <SettingsMenuSelect label={t("settings.unknownUpstreamRetryLimit")}
+            value={String(settings.unknownUpstreamRetryLimit ?? 0)}
+            onChange={value => void saveSettings({ unknownUpstreamRetryLimit: Number(value) })}
+            options={Array.from({ length: UNKNOWN_UPSTREAM_RETRY_LIMIT_MAX + 1 }, (_, value) => ({
+              id: String(value), label: value === 0 ? t("settings.delegationRunReportRecoveryOff") : String(value),
+            }))} />
         </SettingsRow>
         <AutoContinueUnfinishedTodosRow settings={settings} saveSettings={saveSettings} />
         <SettingsRow

@@ -173,6 +173,7 @@ import {
   defaultCommandShellForPlatform,
   IPC,
   isCommandShellId,
+  isUnknownUpstreamRetryLimit,
   normalizeLargePasteThreshold,
   normalizeMode,
   normalizeNetworkProxy,
@@ -185,6 +186,7 @@ import {
   validateNetworkProxy,
   validateSpeechSettings,
   JEV_API_KEY_SECRET_REF,
+  UNKNOWN_UPSTREAM_RETRY_LIMIT_DEFAULT,
 } from "@pi-desktop/shared";
 
 export type ImportSource = "claude-code" | "opencode" | "codex" | "pi";
@@ -462,6 +464,8 @@ export function normalizeSettings(settings: AppSettings): AppSettings {
     defaultMode: normalizeMode((settings as { defaultMode?: unknown }).defaultMode),
     infiniteProviderRetry:
       (settings as { infiniteProviderRetry?: unknown }).infiniteProviderRetry === true,
+    unknownUpstreamRetryLimit: isUnknownUpstreamRetryLimit(settings.unknownUpstreamRetryLimit)
+      ? settings.unknownUpstreamRetryLimit : UNKNOWN_UPSTREAM_RETRY_LIMIT_DEFAULT,
     autoContinueUnfinishedTodos:
       (settings as { autoContinueUnfinishedTodos?: unknown })
         .autoContinueUnfinishedTodos !== false,
@@ -540,6 +544,7 @@ export function validateSettingsWrite(settings: AppSettings): AppSettings {
     fontScale?: unknown;
     chatContentMaxWidth?: unknown;
     infiniteProviderRetry?: unknown;
+    unknownUpstreamRetryLimit?: unknown;
     jevEnabled?: unknown;
     smoothStreaming?: unknown;
     autoContinueUnfinishedTodos?: unknown;
@@ -590,6 +595,14 @@ export function validateSettingsWrite(settings: AppSettings): AppSettings {
     typeof value.infiniteProviderRetry !== "boolean"
   ) {
     throw Object.assign(new Error("infiniteProviderRetry is invalid"), {
+      errorCode: "INVALID_PARAMS",
+    });
+  }
+  if (
+    Object.prototype.hasOwnProperty.call(value, "unknownUpstreamRetryLimit") &&
+    !isUnknownUpstreamRetryLimit(value.unknownUpstreamRetryLimit)
+  ) {
+    throw Object.assign(new Error("unknownUpstreamRetryLimit is invalid"), {
       errorCode: "INVALID_PARAMS",
     });
   }

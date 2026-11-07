@@ -78,6 +78,7 @@ fn validate_run_policy(value: &Value) -> Result<(), &'static str> {
             "checkpointInterval" => (1.0, 1_000.0),
             "maxCheckpointRequests" => (1.0, 10.0),
             "finalReportTimeoutSeconds" => (1.0, 300.0),
+            "reportRecoveryAttempts" => (0.0, 1.0),
             _ => return Err("delegation.runPolicy contains an unknown field"),
         };
         if !integer_in_range(Some(value), min, max) {
@@ -227,6 +228,7 @@ pub(super) mod tests {
             ("checkpointInterval", 1, 1_000),
             ("maxCheckpointRequests", 1, 10),
             ("finalReportTimeoutSeconds", 1, 300),
+            ("reportRecoveryAttempts", 0, 1),
         ] {
             for invalid in [
                 json!(min - 1),
@@ -246,6 +248,20 @@ pub(super) mod tests {
         duplicate["models"][1]["modelId"] = json!("economy");
         cases.push(duplicate);
         cases
+    }
+
+    #[test]
+    fn delegation_settings_report_recovery_accepts_only_zero_or_one() {
+        for attempts in [0, 1] {
+            let mut value = policy();
+            value["runPolicy"]["reportRecoveryAttempts"] = json!(attempts);
+            assert!(validate(&json!({"delegation": value})).is_ok());
+        }
+        for attempts in [json!(-1), json!(2), json!(0.5), json!("1"), Value::Null, json!(true)] {
+            let mut value = policy();
+            value["runPolicy"]["reportRecoveryAttempts"] = attempts;
+            assert!(validate(&json!({"delegation": value})).is_err());
+        }
     }
 
     #[test]

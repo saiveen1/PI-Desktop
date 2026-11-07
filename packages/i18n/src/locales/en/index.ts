@@ -1,4 +1,5 @@
 import { approvalCenter } from "./delegation-approval.js";
+import { delegationReliabilitySettings, delegationDiagnostics } from "./delegation-reliability.js";
 export const en = {
   sessionOrganization: {
     select: "Select sessions", selectVisible: "Select visible", selectSession: "Select {{title}}",
@@ -360,6 +361,7 @@ export const en = {
     sessionMissing: "That session no longer exists",
   },
   chat: {
+    delegationDiagnostics,
     promptRetractionFailed: "Could not safely restore the draft. Your conversation has been preserved.",
     tableActions: "Table actions",
     markdownPlainTextFallback: "Large response shown as plain text to keep the conversation responsive.",
@@ -898,6 +900,7 @@ export const en = {
     dismiss: "Dismiss",
   },
   settings: {
+    ...delegationReliabilitySettings,
     delegationRoles: "Roles",
     delegationScheduling: "Scheduling",
     delegationRunTitle: "Execution and recovery",

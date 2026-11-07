@@ -456,7 +456,10 @@ export class AgentSidecar {
   }
 
   private async authorizeDelegation(params: Record<string, unknown>): Promise<DelegationApprovalDecision> {
-    if (!isDelegationAuthorizationRequest(params) || !this.delegationAuthorizer) {
+    if (!isDelegationAuthorizationRequest(params)) {
+      return { decision: "skip", reason: "Invalid delegation authorization request", code: "invalid" };
+    }
+    if (!this.delegationAuthorizer) {
       return { decision: "skip", reason: "Delegation authorization unavailable", code: "unavailable" };
     }
     const request = structuredClone(params);

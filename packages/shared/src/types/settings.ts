@@ -84,6 +84,8 @@ export type AppSettings = {
    * Absent and false use the bounded ten-retry policy.
    */
   infiniteProviderRetry?: boolean;
+  /** Independent 0-3 retries for unknown upstream 400/422 wrappers; absent is off. */
+  unknownUpstreamRetryLimit?: number;
   /**
    * Keep the current task going once per user turn when the model finishes its
    * reply while the TodoWrite checklist for that turn still has unfinished

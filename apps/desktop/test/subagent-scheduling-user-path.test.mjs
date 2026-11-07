@@ -208,7 +208,12 @@ window.resetSchedulingFixture = () => {
 
 window.runPolicyProbe = async () => {
   const label = (key) => i18n.t(delegationRunPolicyFields.find((item) => item.key === key).label);
-  const policyValues = () => Object.fromEntries(delegationRunPolicyFields.map(({ key }) => [key, Number(field(label(key)).value)]));
+  const recoveryLabel = i18n.t("settings.delegationRunReportRecovery");
+  const recoveryToggle = () => [...document.querySelectorAll('[role="switch"]')].find(node => node.getAttribute("aria-label") === recoveryLabel);
+  const policyValues = () => ({
+    ...Object.fromEntries(delegationRunPolicyFields.map(({ key }) => [key, Number(field(label(key)).value)])),
+    reportRecoveryAttempts: recoveryToggle()?.getAttribute("aria-checked") === "true" ? 1 : 0,
+  });
   const equals = (actual, expected, message) => check(JSON.stringify(actual) === JSON.stringify(expected), message + ": " + JSON.stringify(actual));
   const saved = () => waitFor(() => [...document.querySelectorAll('[role="status"]')]
     .some((node) => node.textContent === i18n.t("settings.delegationSaved")), "run policy save did not finish");
@@ -216,6 +221,7 @@ window.runPolicyProbe = async () => {
   await settle();
   click("Scheduling");
   equals(policyValues(), DEFAULT_DELEGATION_RUN_POLICY, "omitted policy did not show defaults");
+  check(recoveryToggle()?.getAttribute("aria-checked") === "false", "optional report recovery is not visibly disabled by default");
   check(writes.length === 0 && persisted.delegation === undefined, "reading defaults wrote settings");
   check(delegationRunPolicyFields.length === 3, "retired report controls remain visible");
   // Old trial values are readable, ignored during work, and removed on a new save.
@@ -236,8 +242,9 @@ window.runPolicyProbe = async () => {
     }
     input(label(key), DEFAULT_DELEGATION_RUN_POLICY[key]);
   }
-  const edited = { maxToolCalls: 0, maxDurationSeconds: 0, finalReportTimeoutSeconds: 45 };
-  for (const [key, value] of Object.entries(edited)) input(label(key), value);
+  const edited = { maxToolCalls: 0, maxDurationSeconds: 0, finalReportTimeoutSeconds: 45, reportRecoveryAttempts: 1 };
+  for (const { key } of delegationRunPolicyFields) input(label(key), edited[key]);
+  flushSync(() => recoveryToggle().click());
   click("Save");
   await saved();
   equals(persisted.delegation.runPolicy, edited, "policy edits were not saved");

@@ -1,5 +1,5 @@
 import {
-  SESSION_THINKING_LEVELS, isDelegationSettings, resolveDelegationRunPolicy,
+  SESSION_THINKING_LEVELS, isDelegationContextMinimum, isDelegationSettings, resolveDelegationRunPolicy,
   type DelegationApprovalRequest, type DelegationPolicySnapshot,
 } from "@pi-desktop/shared";
 
@@ -24,8 +24,7 @@ export function isDelegationAuthorizationRequest(value: unknown): value is Deleg
     && (value.thinkingLevel === undefined || (typeof value.thinkingLevel === "string"
       && (SESSION_THINKING_LEVELS as readonly string[]).includes(value.thinkingLevel)))
     && ["requiresImages", "automaticOnly"].every(key => value[key] === undefined || typeof value[key] === "boolean")
-    && (value.minContextWindow === undefined || (typeof value.minContextWindow === "number"
-      && Number.isSafeInteger(value.minContextWindow) && value.minContextWindow > 0))
+    && (value.minContextWindow === undefined || isDelegationContextMinimum(value.minContextWindow))
     && (value.selection === undefined || value.selection === "prefer" || value.selection === "require");
 }
 

@@ -1468,8 +1468,9 @@ It does not render separate Details or Output tabs.
   conversation. Task/node titles, descriptions, and step summaries use the
   available width and wrap or clamp to multiple lines; long paths, commands,
   and tool summaries in the live process wrap inside the dock instead of
-  becoming one-line ellipses. Reports and counters remain omitted from this
-  compact surface.
+  becoming one-line ellipses. Compact diagnostics use recorded live turn/tool
+  counts and the task's immutable execution policy. Historical snapshots never
+  borrow current settings or acquire inferred measurements.
 - The dock has one scroll owner, the panel body. The scroll owner is
   keyboard-focusable and exposed as a polite `role="log"` so streamed rows
   remain discoverable without forcing focus changes. The live process is
@@ -1497,6 +1498,18 @@ It does not render separate Details or Output tabs.
   process uses an **Activity** section label (it does not repeat the agent
   name), a trailing step count, and one subtle vertical timeline with no nested
   card, so unused panel space reads as one continuous work surface.
+- A compact **Delegation details** section after the execution-policy summary
+  exposes factual lifecycle diagnostics:
+  requested and actual model, selected/skipped candidates and their recorded
+  reasons, fallback model failures, and terminal report outcome. Stop/finish
+  reason, text/thinking/tool block counts and report-recovery attempt count come
+  from the compact persisted terminal record. They do not expose thinking text
+  or raw provider payloads. Missing historical fields are omitted. Approval
+  acceptance is not shown as execution or delivery, and a failed parent remains
+  distinguishable from an independent child provider failure. **Model selection**
+  uses a collapsed disclosure for ordered decisions; **Model failures** starts
+  expanded when failures exist. Details stay in the same scroll surface without
+  adding a card stack or separate Details or Output tabs.
 - A delegate that settles without completing explains why, because the process
   alone does not: a `Failed`, `Timed out`, or `Aborted` capsule with no reason
   is all a reader gets, and a delegate that dies before emitting a message row

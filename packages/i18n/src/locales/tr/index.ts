@@ -1,4 +1,5 @@
 import { approvalCenter } from "./delegation-approval.js";
+import { delegationReliabilitySettings, delegationDiagnostics } from "./delegation-reliability.js";
 import { en, type EnglishCatalog } from "../en/index.js";
 
 export const tr = {
@@ -362,6 +363,7 @@ export const tr = {
     sessionMissing: "Bu oturum artık mevcut değil",
   },
   chat: {
+    delegationDiagnostics,
     promptRetractionFailed: "Taslak güvenli biçimde geri yüklenemedi. Konuşmanız korundu.",
     tableActions: "Tablo işlemleri",
     markdownPlainTextFallback: "Büyük yanıtlar arayüzün duyarlı kalması için düz metin olarak gösterilir.",
@@ -895,6 +897,7 @@ export const tr = {
     dismiss: "Kapat",
   },
   settings: {
+    ...delegationReliabilitySettings,
     delegationRoles: "Roller",
     delegationScheduling: "Zamanlama",
     delegationRunTitle: "Yürütme ve kurtarma",

@@ -226,6 +226,8 @@ export type AgentActivity =
       attempt: number;
       /** The retry budget is unbounded for this active turn. */
       infinite?: boolean;
+      /** Omitted for the ordinary shared retry budget. */
+      maxAttempts?: number;
       retryDelayMs?: number;
       error?: AgentActivityError;
     }

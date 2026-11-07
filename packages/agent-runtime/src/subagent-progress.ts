@@ -2,6 +2,7 @@ import type { AgentContext, AgentTool } from "@earendil-works/pi-agent-core";
 import { getCurrentTools, getToolStateChanges, Type } from "@earendil-works/pi-ai";
 import { isRecord } from "./agent-messages.js";
 import { persistSubagentCheckpoint, type SubagentCheckpoint, type PersistSubagentCheckpointResult } from "./subagent-checkpoint.js";
+import type { SubagentTerminalDiagnostics } from "./subagent-terminal.js";
 
 export const SUBAGENT_REPORT_TOOL = "TaskReport";
 export const SUBAGENT_FINAL_REPORT_PROMPT = "Stop exploration and write a self-contained partial report from the evidence already collected: confirmed findings with file references, completed work, unresolved questions, and the exact next step. No tools are available. Do not claim unfinished work is complete.";
@@ -72,18 +73,23 @@ ${summary.trim()}`;
   partialText(output: string): string {
     if (output.trim()) this.latestOutput = output;
     const lastOutput = output || this.latestOutput;
-    return [this.report, lastOutput !== this.report ? lastOutput : "", this.pending.size
+    if (!this.report && !lastOutput && this.pending.size === 0) return "No findings have been reported yet. Inspect the retained tool history before continuing; the task is incomplete.";
+    return [this.report || (lastOutput
+      ? "No separate findings summary was saved. The retained assistant output below is partial progress, not a final deliverable."
+      : "No findings have been reported yet."),
+      lastOutput !== this.report ? lastOutput : "", this.pending.size
       ? `Interrupted or pending tools (their effects may need verification): ${[...this.pending.values()].join(", ")}.`
       : ""].filter(Boolean).join("\n\n") || "No findings have been reported yet. Inspect the retained tool history before continuing; the task is incomplete.";
   }
 
-  save(status: SubagentCheckpoint["status"], report: string, error?: { code: string; message: string }): PersistSubagentCheckpointResult {
+  save(status: SubagentCheckpoint["status"], report: string, error?: { code: string; message: string }, terminal?: SubagentTerminalDiagnostics): PersistSubagentCheckpointResult {
     this.persistence = persistSubagentCheckpoint({
       ...this.options,
       checkpoint: {
         ...this.options.metadata(), status, report, partial: status !== "completed",
         terminationReason: error?.code === "SUBAGENT_BUDGET_EXHAUSTED" ? "budget_exhausted" : status,
         ...(error ? { error } : {}),
+        ...(terminal ? { terminal } : {}),
       },
     });
     return this.persistence;

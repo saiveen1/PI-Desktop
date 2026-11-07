@@ -15,6 +15,7 @@ test("settings read-modify-write preserves disabled retry and unrelated preferen
       {},
       { infiniteProviderRetry: false },
       { infiniteProviderRetry: true },
+      { unknownUpstreamRetryLimit: 2 },
       { keepCommandsExpanded: false },
     ]) {
       const original = { defaultMode: "agent", theme: "light", ...stored };
@@ -24,6 +25,7 @@ test("settings read-modify-write preserves disabled retry and unrelated preferen
       const outgoing = renderer.validateSettingsWrite(edited);
       const persisted = main.validateSettingsWrite(structuredClone(outgoing));
       assert.equal(persisted.infiniteProviderRetry, stored.infiniteProviderRetry === true);
+      assert.equal(persisted.unknownUpstreamRetryLimit, stored.unknownUpstreamRetryLimit ?? 0);
       // Absent means on; an explicit false survives both boundaries.
       assert.equal(
         persisted.keepCommandsExpanded,
@@ -43,6 +45,35 @@ test("invalid retry writes stay rejected at both boundaries", () => {
     const settings = { infiniteProviderRetry: value };
     assert.throws(() => renderer.validateSettingsWrite(settings), /infiniteProviderRetry is invalid/);
     assert.throws(() => main.validateSettingsWrite(settings), /infiniteProviderRetry is invalid/);
+  }
+});
+
+test("unknown upstream recovery stays disabled on old reads and rejects invalid writes before IPC", () => {
+  const previousWindow = globalThis.window;
+  let invoked = 0;
+  globalThis.window = { piDesktop: { platform: "win32", invoke: async () => { invoked++; } } };
+  try {
+    const base = { defaultMode: "agent", theme: "light", enterToSend: true };
+    for (const normalize of [renderer.normalizeSettings, main.normalizeSettings]) {
+      assert.equal(normalize(base).unknownUpstreamRetryLimit, 0);
+      assert.equal(Object.hasOwn(base, "unknownUpstreamRetryLimit"), false);
+      for (const limit of [0, 1, 2, 3]) {
+        assert.equal(normalize({ ...base, unknownUpstreamRetryLimit: limit }).unknownUpstreamRetryLimit, limit);
+      }
+      for (const value of [null, "2", -1, 1.5, 4, {}, Number.NaN, Number.POSITIVE_INFINITY]) {
+        assert.equal(normalize({ ...base, unknownUpstreamRetryLimit: value }).unknownUpstreamRetryLimit, 0);
+      }
+    }
+    for (const value of [undefined, null, "2", -1, 1.5, 4, {}, Number.NaN, Number.POSITIVE_INFINITY]) {
+      const settings = { ...base, unknownUpstreamRetryLimit: value };
+      assert.throws(() => renderer.validateSettingsWrite(settings), /unknownUpstreamRetryLimit is invalid/);
+      assert.throws(() => main.validateSettingsWrite(settings), /unknownUpstreamRetryLimit is invalid/);
+      assert.throws(() => renderer.api.setSettings(settings), /unknownUpstreamRetryLimit is invalid/);
+    }
+    assert.equal(invoked, 0);
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
   }
 });
 
@@ -200,16 +231,20 @@ test("settings write round-trips command folding through the preload boundary", 
   try {
     const initial = await renderer.api.getSettings();
     assert.equal(initial.keepCommandsExpanded, true);
+    assert.equal(initial.unknownUpstreamRetryLimit, 0);
+    assert.equal(Object.hasOwn(stored, "unknownUpstreamRetryLimit"), false);
 
-    await renderer.api.setSettings({ ...initial, keepCommandsExpanded: false });
+    await renderer.api.setSettings({ ...initial, keepCommandsExpanded: false, unknownUpstreamRetryLimit: 2 });
 
     const write = calls.find(({ channel }) => channel === IPC.invoke.settingsSet);
     assert.ok(write, "settings write must cross the preload boundary");
     assert.equal(write.payload.keepCommandsExpanded, false);
     assert.equal(stored.keepCommandsExpanded, false);
+    assert.equal(stored.unknownUpstreamRetryLimit, 2);
 
     const reread = await renderer.api.getSettings();
     assert.equal(reread.keepCommandsExpanded, false);
+    assert.equal(reread.unknownUpstreamRetryLimit, 2);
   } finally {
     if (previousWindow === undefined) delete globalThis.window;
     else globalThis.window = previousWindow;

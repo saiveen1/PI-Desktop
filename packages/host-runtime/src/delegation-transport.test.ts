@@ -34,17 +34,26 @@ it("uses the real NDJSON transport for additive metadata and exact selected iden
 });
 it("fails closed for malformed metadata, unknown methods, and absent callbacks", async () => {
   const { sidecar, rpc, forwarded } = fixture();
-  await expect(rpc("provider.authorizeDelegation", request)).resolves.toMatchObject({ decision: "skip" });
+  await expect(rpc("provider.authorizeDelegation", request)).resolves.toMatchObject({ decision: "skip", code: "unavailable" });
   const authorize = vi.fn(async (): Promise<DelegationApprovalDecision> => ({ decision: "allow", reason: "policy" }));
   sidecar.setDelegationAuthorizer(authorize, () => {});
   for (const bad of [{ task: 1 }, { selection: "force" }, { automaticOnly: "false" }, { minContextWindow: -1 },
+    ...[0, 0.5, 10_000_001, Number.MAX_SAFE_INTEGER + 1, "4096", null].map(minContextWindow => ({ minContextWindow })),
     { thinkingLevel: "unknown" }, { description: {} }, { userApproved: true }, { sessionId: " " }]) {
-    await expect(rpc("provider.authorizeDelegation", { ...request, ...bad })).resolves.toMatchObject({ decision: "skip" });
+    await expect(rpc("provider.authorizeDelegation", { ...request, ...bad })).resolves.toMatchObject({ decision: "skip", code: "invalid" });
   }
   expect(authorize).not.toHaveBeenCalled();
   await expect(rpc("provider.delegationSnapshot")).rejects.toMatchObject({ code: -32601 });
   await expect(rpc("provider.unknownPolicy")).rejects.toMatchObject({ code: -32601 });
   expect(forwarded).toEqual([]);
+});
+it.each([undefined, 1, 10_000_000])("admits an omitted or bounded positive context requirement (%s)", async minContextWindow => {
+  const { sidecar, rpc } = fixture();
+  const authorize = vi.fn(async (): Promise<DelegationApprovalDecision> => ({ decision: "allow", reason: "policy" }));
+  sidecar.setDelegationAuthorizer(authorize, () => {});
+  const metadata = { ...request, ...(minContextWindow === undefined ? {} : { minContextWindow }) };
+  await expect(rpc("provider.authorizeDelegation", metadata)).resolves.toMatchObject({ decision: "allow" });
+  expect(authorize).toHaveBeenCalledWith(metadata);
 });
 it("snapshot callback stays host-local, preserves adopted empty policy and rejects malformed snapshots", async () => {
   const { sidecar, rpc, forwarded } = fixture();

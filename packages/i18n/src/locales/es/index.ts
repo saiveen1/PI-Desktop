@@ -1,4 +1,5 @@
 import { approvalCenter } from "./delegation-approval.js";
+import { delegationReliabilitySettings, delegationDiagnostics } from "./delegation-reliability.js";
 import { en, type EnglishCatalog } from "../en/index.js";
 
 export const es = {
@@ -353,6 +354,7 @@ export const es = {
     sessionMissing: "Esa sesión ya no existe",
   },
   "chat": {
+    delegationDiagnostics,
     promptRetractionFailed: "No se pudo restaurar el borrador de forma segura. Se ha conservado la conversación.",
     "tableActions": "Acciones de tabla",
     "markdownPlainTextFallback": "La respuesta extensa se muestra como texto sin formato para mantener la fluidez.",
@@ -886,6 +888,7 @@ export const es = {
     "dismiss": "Descartar"
   },
   "settings": {
+    ...delegationReliabilitySettings,
     delegationRoles: "Roles",
     delegationScheduling: "Planificación",
     delegationRunTitle: "Ejecución y recuperación",

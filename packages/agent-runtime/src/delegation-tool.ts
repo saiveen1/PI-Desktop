@@ -1,5 +1,5 @@
 import { Type } from "@earendil-works/pi-ai";
-import { describeDelegationRunPolicy, resolveDelegationRunPolicy, describeDelegationModels, subagentModelKey, subagentToolsLabel, type DelegationSettings, type SubagentDefinition } from "@pi-desktop/shared";
+import { DELEGATION_CONTEXT_WINDOW_MAX, describeDelegationRunPolicy, resolveDelegationRunPolicy, describeDelegationModels, subagentModelKey, subagentToolsLabel, type DelegationSettings, type SubagentDefinition } from "@pi-desktop/shared";
 
 /** Stable tool metadata is supplied on every request, including after compaction. */
 export function subagentTaskDeclaration(options: {
@@ -42,7 +42,7 @@ export function subagentTaskDeclaration(options: {
       ...(settings ? {
         modelReason: Type.Optional(Type.String({ maxLength: 1000, description: "Why this model fits the task. Required to prioritize a specialist over a higher-priority model. This never grants approval." })),
         modelSelection: Type.Optional(Type.Union([Type.Literal("prefer"), Type.Literal("require")], { description: "prefer (default) permits authorized alternatives; require preserves an exact model explicitly required by the user and never substitutes it. Approval still applies." })),
-        minContextWindow: Type.Optional(Type.Number({ minimum: 0, maximum: 10_000_000, description: "Minimum model context window required by this task, when known." })),
+        minContextWindow: Type.Optional(Type.Integer({ minimum: 0, maximum: DELEGATION_CONTEXT_WINDOW_MAX, description: "Minimum model context window required by this task, when known. Omit or use 0 for no minimum." })),
         requiresImages: Type.Optional(Type.Boolean({ description: "Require image input support for this task." })),
       } : {}),
     }),

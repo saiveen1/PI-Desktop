@@ -99,6 +99,14 @@ test("session launch sends Fast mode only for a model the user allowed it on (AD
     }, {});
     assert.equal(legacy.sidecarParams.delegationSettings, undefined);
     assert.deepEqual(legacy.sidecarParams.subagentModelKeys, ["OpenAI/legacy-only"]);
+    assert.equal(legacy.sidecarParams.unknownUpstreamRetryLimit, 0);
+    for (const limit of [0, 1, 2, 3]) {
+      const recovery = await launchRuntime.resolveAgentRuntimeLaunch("session-fixture", {
+        providerId: provider.id, modelId: "allowed-model",
+      }, { infiniteProviderRetry: true, unknownUpstreamRetryLimit: limit });
+      assert.equal(recovery.sidecarParams.unknownUpstreamRetryLimit, limit);
+      assert.equal(recovery.sidecarParams.infiniteProviderRetry, true);
+    }
   } finally {
     process.env.HOME = priorHome;
     await rm(temp, { recursive: true, force: true });

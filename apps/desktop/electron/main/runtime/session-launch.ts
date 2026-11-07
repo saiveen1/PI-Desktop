@@ -4,6 +4,7 @@ import {
   ErrorCodes as SharedErrorCodes,
   isActiveInProject,
   isCommandShellCatalog,
+  isUnknownUpstreamRetryLimit,
   JEV_API_KEY_SECRET_REF,
   imageGenerationBindings,
   isImageGenerationModel,
@@ -11,6 +12,7 @@ import {
   isDelegationSettings,
   orderDelegationModels,
   trustedExtensionAgentKeyFromProviderId,
+  UNKNOWN_UPSTREAM_RETRY_LIMIT_DEFAULT,
   type CommandShellCatalog,
   type McpServerRecord,
   type ModelBinding,
@@ -745,6 +747,8 @@ export function createSessionLaunchRuntime({
         ...(overrides.turnId ? { turnId: overrides.turnId } : {}),
         thinkingLevel,
         infiniteProviderRetry: settings.infiniteProviderRetry === true,
+        unknownUpstreamRetryLimit: isUnknownUpstreamRetryLimit(settings.unknownUpstreamRetryLimit)
+          ? settings.unknownUpstreamRetryLimit : UNKNOWN_UPSTREAM_RETRY_LIMIT_DEFAULT,
         autoContinueUnfinishedTodos: settings.autoContinueUnfinishedTodos !== false,
         // The session `/fast` switch only reaches a model the user allowed it
         // for in model settings (ADR 0334).

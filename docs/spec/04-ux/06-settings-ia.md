@@ -459,7 +459,14 @@ Card order is **Session defaults → Execution → Computer use**.
   continuation switch, and app-wide **Scheduled tasks** switch. The retry switch
   is off by default and explains that network/transient provider failures keep
   retrying until success; Stop still cancels the turn and the setting may
-  continue API usage while enabled. The scheduled-tasks switch persists as optional
+  continue API usage while enabled. A separate Unknown upstream retries selector
+  stores `unknownUpstreamRetryLimit`, integer 0-3, default 0 (disabled).
+  It permits bounded retries for an otherwise unexplained upstream 400/422
+  wrapper on main and child requests. Explicit parameter, authentication,
+  quota and context failures retain their existing handling. The infinite
+  transient-retry switch never removes this independent limit. Invalid numeric
+  input cannot replace the saved setting; enabling retries may add API usage.
+  The scheduled-tasks switch persists as optional
   `AppSettings.scheduledTasksEnabled`, on when absent or true. Off hides the
   footer clock and global-search page entry, leaves the route if already open,
   withholds scheduled Agent tools, and blocks new manual/automatic runs and task
@@ -781,8 +788,12 @@ profiles.
 
 Subagents has separate Roles and Scheduling tabs. Scheduling adds an Execution
 and recovery card with three numeric controls: optional tool budget, optional
-run duration in seconds, and final report timeout. The two work limits default
-to 0 (disabled), and final reporting defaults to 60 seconds. Labels display units, inclusive ranges, and zero-as-unlimited
+run duration in seconds, and final report timeout, plus a report-recovery toggle.
+The toggle maps to `reportRecoveryAttempts` 0 or 1 and defaults to off. Enabling
+it permits one tool-free request when a child otherwise ends without a valid
+final report; the displayed final-report deadline also bounds that request.
+The two work limits default to 0 (disabled), and final reporting defaults to
+60 seconds. Labels display units, inclusive ranges, and zero-as-unlimited
 for the two work budgets. Defaults and ranges come from the shared run-policy
 contract. Empty, fractional or out-of-range values remain editable and block
 Save with localized feedback; values are never silently clamped. Restore defaults
@@ -790,13 +801,18 @@ changes only execution fields, preserving model/approval edits. Saving uses the
 same delegation policy transaction; failures retain the whole draft. Explain
 that later Task admissions in the same parent turn and later manual resumes use
 current saved settings; active children retain their starting provider and
-three-field execution snapshot (`maxToolCalls`, `maxDurationSeconds`,
-`finalReportTimeoutSeconds`). Saving does not interrupt/recreate active work or
-force a fallback. State is saved automatically, summaries are optional, and
+execution snapshot (`maxToolCalls`, `maxDurationSeconds`,
+`finalReportTimeoutSeconds`, `reportRecoveryAttempts`). Saving does not
+interrupt/recreate active work or force a fallback. State is saved
+automatically, summaries are optional, and
 cancellation sends no extra report request. There are no report-cadence or
 missing-report termination controls. Legacy trial fields remain readable but a
 new save drops them without changing model/approval choices. Child details show
 actual task metadata, not current Settings values.
+Older three-field task snapshots remain valid and do not acquire a fabricated
+historical report-recovery setting. Report recovery does not replay tools,
+switch models, retry provider errors or start after Stop. Budget closure remains
+failed/partial even when it produces a useful report.
 
 Scheduling keeps its policy help, approval wait, model-add control and explicit
 Save action. New/default policy drafts seed a 300-second wait; preserve existing
