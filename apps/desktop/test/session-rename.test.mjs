@@ -71,3 +71,14 @@ test("host title validation is bounded and does not change activity ordering", (
   assert.doesNotMatch(hostSource, /UPDATE sessions SET title = \?1, updated_at = \?2 WHERE id = \?3/);
   assert.match(hostSource, /rename_session_normalizes_title_without_touching_activity/);
 });
+
+test("rename dialog selects the initial title once without resetting later user selection", () => {
+  assert.match(dialogSource, /const onCloseRef = useRef\(onClose\);/);
+  assert.match(dialogSource, /onCloseRef\.current = onClose;/);
+
+  const modalLifecycleEffect = dialogSource.match(
+    /useEffect\(\(\) => \{[\s\S]*?requestAnimationFrame\(\(\) => \{[\s\S]*?inputRef\.current\?\.select\(\);[\s\S]*?\}\);[\s\S]*?\}, \[\]\);/,
+  )?.[0] ?? "";
+  assert.match(modalLifecycleEffect, /onCloseRef\.current\(\)/);
+  assert.doesNotMatch(modalLifecycleEffect, /\bonClose\b/);
+});

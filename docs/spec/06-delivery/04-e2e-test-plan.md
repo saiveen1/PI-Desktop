@@ -3843,18 +3843,23 @@ identify the platform validation still needed.
   `session.autoTitle`, `agent.complete`, and `models.list`, a deterministic test
   model, a custom prompt template, and thinking set to off.
 - **Steps**: 1) Open a Sidebar session overflow menu or right-click a session
-  row and choose Rename. 2) Enter a title with surrounding whitespace and
-  save. 3) Verify the title in the Sidebar, topbar, Project archive, and
-  Search. 4) Restart the app and verify the title again. 5) Try an empty and
-  an over-80-Unicode-code-point title. 6) Open **Session Titles: Configure**,
-  set the prompt to return a fixed test title, choose the deterministic test
-  model, and save. 7) Send the first prompt in the default-title session. 8)
-  Confirm the Sidebar and topbar immediately show the normalized
-  48-character prompt fallback, then wait for `session:turnEnded` and the
-  plugin completion, which replaces that fallback with the deterministic test
-  title. 9) Manually rename that session and complete another turn. 10) Send
-  the first prompt in another default-title session with the plugin disabled.
-- **Expected**: The saved title is trimmed, displayed across every current
+  row and choose Rename. The initial title is focused and selected once. Move
+  the caret or select only part of the title, then cause an unrelated parent
+  refresh while the dialog remains open. 2) Enter a title with surrounding
+  whitespace and save. 3) Verify the title in the Sidebar, topbar, Project
+  archive, and Search. 4) Restart the app and verify the title again. 5) Try
+  an empty and an over-80-Unicode-code-point title. 6) Open **Session Titles:
+  Configure**, set the prompt to return a fixed test title, choose the
+  deterministic test model, and save. 7) Send the first prompt in the
+  default-title session. 8) Confirm the Sidebar and topbar immediately show
+  the normalized 48-character prompt fallback, then wait for
+  `session:turnEnded` and the plugin completion, which replaces that fallback
+  with the deterministic test title. 9) Manually rename that session and
+  complete another turn. 10) Send the first prompt in another default-title
+  session with the plugin disabled.
+- **Expected**: The initial automatic selection is not repeated by unrelated
+  parent renders, so a user's caret position or partial selection remains
+  editable. The saved title is trimmed, displayed across every current
   session-summary surface, and persists after restart. The session stays in
   the same project or Temporary group, its transcript/message count and
   recent-activity ordering do not change, and historical notification title
