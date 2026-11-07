@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { Type } from "@earendil-works/pi-ai";
-import * as Value from "typebox/value";
 import { buildJobTools } from "./background-job-tools.js";
 import type { RuntimeHost } from "./host-client.js";
 
@@ -34,21 +33,6 @@ function fixture(remote = false) {
   });
   return { delegates, dispatch, snapshot, wait, list, stop };
 }
-describe("session job schemas", () => {
-  it("constrains Bash job selectors in the model-facing schemas", () => {
-    const { wait, stop } = fixture();
-    for (const tool of [wait, stop]) {
-      expect(Value.Check(tool.parameters, { job: { kind: "bash", id: "process" } })).toBe(true);
-      expect(Value.Check(tool.parameters, { job: { kind: "bash", id: "process" }, timeoutSeconds: 30 })).toBe(true);
-      for (const key of ["delegationIds", "mode", "minCompleted"]) {
-        expect(Value.Check(tool.parameters, { job: { kind: "bash", id: "process" }, [key]: key === "delegationIds" ? [] : 1 })).toBe(false);
-      }
-      expect(Value.Check(tool.parameters, { job: { kind: "delegation", id: "delegate" }, delegationIds: ["delegate"] })).toBe(true);
-    }
-    expect(Value.Check(wait.parameters, { delegationIds: [], mode: "all" })).toBe(true);
-  });
-});
-
 
 describe("session job controls", () => {
   it("lists, reads and stops the same explicit Bash job with the bound session", async () => {
@@ -111,12 +95,15 @@ describe("session job controls", () => {
     expect(dispatch).not.toHaveBeenCalled();
   });
 
-  it.each(["delegationIds", "mode", "minCompleted"])("rejects mixed selectors before dispatch (%s)", async key => {
-    const { wait, stop, dispatch } = fixture();
-    const args = { job: { kind: "bash", id: "process" }, [key]: [] };
-    await expect(wait.execute("wait", args)).rejects.toThrow("cannot be combined");
-    await expect(stop.execute("stop", args)).rejects.toThrow("cannot be combined");
-    expect(dispatch).not.toHaveBeenCalled();
+  it("routes explicit Bash jobs despite irrelevant delegation selectors", async () => {
+    const { wait, stop, dispatch, delegates } = fixture();
+    const job = { kind: "bash" as const, id: "process" };
+    await wait.execute("wait", { job, delegationIds: [], mode: "all", minCompleted: 1, timeoutSeconds: 1 });
+    expect(dispatch).toHaveBeenCalledWith("backgroundJobs.wait", { sessionId: "owner", id: "process", timeoutMs: 0 });
+    await stop.execute("stop", { job, delegationIds: [] });
+    expect(dispatch).toHaveBeenCalledWith("backgroundJobs.stop", { sessionId: "owner", id: "process", timeoutMs: 1000 });
+    expect(delegates.wait.execute).not.toHaveBeenCalled();
+    expect(delegates.stop.execute).not.toHaveBeenCalled();
   });
 
   it("returns running at the deadline and never requests a stop", async () => {

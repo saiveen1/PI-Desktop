@@ -158,16 +158,15 @@ finite Host output/history retention. A process does not gain durability across
 Host restart. Protocol, runtime and real-process tests cover the changed
 boundary; process-tree termination remains the existing supervisor's job.
 
-### Coherent delegation selectors (2026-11-06)
+### Coherent delegation selectors and explicit Bash targets (2026-11-07)
 
-Rejecting every combination of `job` and the historical fields also rejected
-two selectors naming the same delegation. Repeated model calls then failed
-before entering the wait, even after that child had completed. The shared
-selection boundary now accepts exactly one matching `delegationIds` entry for
-a delegation job and preserves delegation wait options. Ambiguous target sets
-and Bash/delegation mixtures remain errors, with a concrete job-only retry.
-Descriptions document the cross-field rule; provider-specific schema equality
-extensions and global retry limits are not introduced. Existing cancellation,
-ownership, report delivery and implicit-target behavior remain unchanged.
-Failed lifecycle rows expose their arguments for diagnosis without changing
-the successful roster presentation.
+The shared selection boundary accepts exactly one matching `delegationIds`
+entry for a delegation job and preserves delegation wait options. Ambiguous
+delegation target sets remain errors. For Bash, an explicit job reference is
+the sole target, so delegation-only selectors supplied alongside it are
+ignored rather than causing a repeated failed wait. Delegation ID equality
+remains a runtime check; provider-specific cross-field schema logic and global
+retry limits are not introduced. Existing cancellation, ownership, report
+delivery and implicit-target behavior remain unchanged. Failed lifecycle rows
+expose their arguments for diagnosis without changing successful roster
+presentation.

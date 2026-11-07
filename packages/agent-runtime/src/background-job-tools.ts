@@ -13,7 +13,7 @@ import type { RuntimeHost } from "./host-client.js";
 const jobSchema = Type.Object({
   kind: Type.Union([Type.Literal("bash"), Type.Literal("delegation")]),
   id: Type.String({ minLength: 1 }),
-}, { additionalProperties: false, description: "One explicit job returned by Bash, Task or TaskList. For a delegation, omit delegationIds or use exactly [id]. For Bash, omit delegationIds, mode and minCompleted." });
+}, { additionalProperties: false, description: "One explicit job returned by Bash, Task or TaskList. A Bash job selects its target; delegationIds, mode and minCompleted are ignored. For a delegation, omit delegationIds or use exactly [id]." });
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -26,30 +26,12 @@ function target(params: unknown): JobReference | undefined {
       typeof job.id !== "string" || !job.id.trim() || Object.keys(job).some(key => key !== "id" && key !== "kind")) {
     throw new Error("job must contain a kind (bash or delegation) and a nonempty id");
   }
-  const retry = `Retry with ${JSON.stringify({ job })} and omit the conflicting selectors. Keep timeoutSeconds if needed; do not repeat the conflicting arguments.`;
-  if (job.kind === "delegation") {
-    if (params.delegationIds !== undefined && (!Array.isArray(params.delegationIds) ||
-        params.delegationIds.length !== 1 || params.delegationIds[0] !== job.id)) {
-      throw new Error(`job and delegationIds must identify the same single delegation. ${retry}`);
-    }
-  } else if (["delegationIds", "mode", "minCompleted"].some(key => params[key] !== undefined)) {
-    throw new Error(`A Bash job cannot be combined with delegationIds, mode or minCompleted. ${retry}`);
+  const retry = `Retry with ${JSON.stringify({ job })} and omit the conflicting delegation selectors.`;
+  if (job.kind === "delegation" && params.delegationIds !== undefined && (!Array.isArray(params.delegationIds) ||
+      params.delegationIds.length !== 1 || params.delegationIds[0] !== job.id)) {
+    throw new Error(`job and delegationIds must identify the same single delegation. ${retry}`);
   }
   return { kind: job.kind, id: job.id };
-}
-
-function jobToolParameters(parameters: TObject): TObject {
-  return Type.Object({ ...parameters.properties, job: Type.Optional(jobSchema) }, {
-    oneOf: [
-      { not: { required: ["job"] } },
-      { required: ["job"], properties: { job: { properties: { kind: { const: "delegation" } } } } },
-      {
-        required: ["job"],
-        properties: { job: { properties: { kind: { const: "bash" } } } },
-        not: { anyOf: ["delegationIds", "mode", "minCompleted"].map(key => ({ required: [key] })) },
-      },
-    ],
-  });
 }
 
 /** Observe late rejections and release the listener on either completion path. */
@@ -109,8 +91,8 @@ export function buildJobTools(
 
   const wait: AgentTool = {
     ...delegates.wait,
-    description: `${delegates.wait.description}\nFor a background Bash command, pass its job reference ({kind: "bash", id: backgroundTaskId}) and omit delegationIds, mode and minCompleted. Returns state, exitCode and bounded stdout/stderr tails. Timeout or interrupted waiting leaves the process running. Bash completion is not automatically delivered; call TaskWait again when needed. For a delegation job, mode and minCompleted still apply; if delegationIds is also supplied, it must name the same single delegation (exactly [job.id]). Conflicting selectors are rejected before waiting. Omit job to keep the existing subagent defaults.`,
-    parameters: jobToolParameters(delegates.wait.parameters as TObject),
+    description: `${delegates.wait.description}\nFor a background Bash command, pass its job reference ({kind: "bash", id: backgroundTaskId}); it selects the target, and delegationIds, mode and minCompleted are ignored. timeoutSeconds still applies. Returns state, exitCode and bounded stdout/stderr tails. Timeout or interrupted waiting leaves the process running. Bash completion is not automatically delivered; call TaskWait again when needed. For a delegation job, mode and minCompleted still apply; if delegationIds is also supplied, it must name the same single delegation (exactly [job.id]). Conflicting delegation selectors are rejected before waiting. Omit job to keep the existing subagent defaults.`,
+    parameters: Type.Object({ ...(delegates.wait.parameters as TObject).properties, job: Type.Optional(jobSchema) }),
     execute: async (id, input, signal, update) => {
       const params = record(input) ? input : {};
       const job = target(params);
@@ -172,8 +154,8 @@ export function buildJobTools(
   };
   const stop: AgentTool = {
     ...delegates.stop,
-    description: `${delegates.stop.description}\nPass job to stop one explicit Bash or delegation job. If delegationIds is also supplied with a delegation job, it must name the same single delegation (exactly [job.id]). For Bash, omit delegationIds, mode and minCompleted. Conflicting selectors are rejected before stopping anything. Omitting job never stops Bash processes. A Bash stopRequested flag acknowledges a request; only the returned terminal state confirms the outcome.`,
-    parameters: jobToolParameters(delegates.stop.parameters as TObject),
+    description: `${delegates.stop.description}\nPass job to stop one explicit Bash or delegation job. If delegationIds is also supplied with a delegation job, it must name the same single delegation (exactly [job.id]). A Bash job selects the target and ignores delegationIds. Conflicting delegation selectors are rejected before stopping anything. Omitting job never stops Bash processes. A Bash stopRequested flag acknowledges a stop request only; the returned snapshot determines whether the process has actually terminated.`,
+    parameters: Type.Object({ ...(delegates.stop.parameters as TObject).properties, job: Type.Optional(jobSchema) }),
     execute: async (id, input, signal, update) => {
       const params = record(input) ? input : {};
       const job = target(params);

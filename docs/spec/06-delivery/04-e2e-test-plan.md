@@ -259,22 +259,22 @@
 - **Acceptance:** C / E / Security / Quality. **Milestone:** maintenance.
 - **Status:** Final integrated verification pending; no installed-app claim.
 
-### E2E-DELEGATION-job-selector-schema
+### E2E-DELEGATION-bash-job-selector-tolerance
 
 - **Preconditions:** Isolated Agent runtime with deterministic synthetic
   providers; no paid provider, daily profile or installed application.
-- **Steps:** Inspect TaskWait and TaskStop parameter schemas. Validate legacy
-  delegation waits, explicit delegation jobs with matching IDs, and explicit
-  Bash jobs with and without `timeoutSeconds`. Try Bash jobs combined with
-  `delegationIds: []`, `mode`, or `minCompleted`.
-- **Expected:** Valid legacy and job calls remain accepted. Bash-job selector
-  mixtures fail schema validation before dispatch, including an empty
-  `delegationIds` array. Delegation ID equality remains enforced by runtime
-  validation; invalid direct calls still fail before Host dispatch.
+- **Steps:** Call TaskWait with an explicit Bash job plus an empty
+  `delegationIds`, `mode: "all"` and `minCompleted: 1`; call TaskStop with an
+  explicit Bash job plus an empty `delegationIds`. Also submit delegation jobs
+  with matching, empty, different and multi-target IDs.
+- **Expected:** The explicit Bash job ID alone selects the Host target; irrelevant
+  delegation selectors do not fail or leak into the Host request. Delegation
+  jobs still require a matching single ID when both selectors are present.
+  Legacy calls without a job retain their current defaults.
 - **Traceability:** Runtime §Session job controls;
   `packages/agent-runtime/src/background-job-tools.test.ts`.
-- **Status:** Covered by isolated runtime schema and execution tests; no
-  installed-app or live-provider validation is implied.
+- **Status:** Covered by isolated runtime execution tests; no installed-app or
+  live-provider validation is implied.
 
 ### E2E-PROVIDER-unknown-upstream-recovery-policy
 
