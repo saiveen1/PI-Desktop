@@ -2,6 +2,121 @@ use super::delegation_settings::tests::{invalid_policies, policy};
 use super::*;
 
 #[tokio::test]
+async fn session_delegation_pool_preserves_inheritance_and_activity_across_reopen() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut app = AppState::open(directory.path()).unwrap();
+    app.handshook = true;
+    let state = Arc::new(Mutex::new(app));
+    let tx = mpsc::unbounded_channel().0;
+    let created = handle_request(
+        state.clone(),
+        "session.create",
+        json!({"title": "Scoped delegation", "mode": "agent"}),
+        tx.clone(),
+    )
+    .await
+    .unwrap();
+    let id = created["session"]["id"].as_str().unwrap().to_owned();
+    let updated = created["session"]["updatedAt"].clone();
+    let saved = handle_request(
+        state.clone(),
+        "session.configure",
+        json!({"id": id, "mode": "agent", "delegationModelKeys": ["account/model"]}),
+        tx.clone(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        saved["session"]["delegationModelKeys"],
+        json!(["account/model"])
+    );
+    assert_eq!(saved["session"]["updatedAt"], updated);
+    let rejected = handle_request(state.clone(), "session.configure",
+        json!({"id": id, "mode": "agent", "delegationModelKeys": ["account/model", "account/model"]}), tx.clone()).await;
+    assert!(rejected.is_err());
+    let before_failure = {
+        let app = state.lock().await;
+        let summary =
+            serde_json::to_value(sessions::session_summary(&app.db, &id).unwrap()).unwrap();
+        app.db
+            .conn()
+            .execute_batch(
+                "CREATE TRIGGER reject_delegation_pool BEFORE INSERT ON kv
+             WHEN NEW.ns = 'sessionDelegation'
+             BEGIN SELECT RAISE(ABORT, 'injected delegation storage failure'); END;",
+            )
+            .unwrap();
+        summary
+    };
+    let failed_write = handle_request(
+        state.clone(),
+        "session.configure",
+        json!({"id": id, "mode": "plan", "permissionMode": "auto", "fastMode": true,
+            "delegationModelKeys": ["account/replacement"]}),
+        tx.clone(),
+    )
+    .await
+    .unwrap_err();
+    assert!(failed_write
+        .message
+        .contains("injected delegation storage failure"));
+    assert_eq!(failed_write.code, 1000);
+    assert_eq!(failed_write.data.unwrap()["errorCode"], "INTERNAL");
+    {
+        let app = state.lock().await;
+        assert_eq!(
+            serde_json::to_value(sessions::session_summary(&app.db, &id).unwrap()).unwrap(),
+            before_failure,
+            "a failed pool write must roll back configuration and activity together",
+        );
+        app.db
+            .conn()
+            .execute_batch("DROP TRIGGER reject_delegation_pool")
+            .unwrap();
+    }
+    drop(state);
+    let mut app = AppState::open(directory.path()).unwrap();
+    app.handshook = true;
+    let state = Arc::new(Mutex::new(app));
+    let read = handle_request(
+        state.clone(),
+        "session.delegationPolicy",
+        json!({"id": id}),
+        tx.clone(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(read["modelKeys"], json!(["account/model"]));
+    let disabled = handle_request(
+        state.clone(),
+        "session.configure",
+        json!({"id": id, "mode": "agent", "delegationModelKeys": []}),
+        tx.clone(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(disabled["session"]["delegationModelKeys"], json!([]));
+    let inherited = handle_request(
+        state.clone(),
+        "session.configure",
+        json!({"id": id, "mode": "agent", "delegationModelKeys": null}),
+        tx.clone(),
+    )
+    .await
+    .unwrap();
+    assert!(inherited["session"].get("delegationModelKeys").is_none());
+    let read = handle_request(
+        state.clone(),
+        "session.delegationPolicy",
+        json!({"id": id}),
+        tx,
+    )
+    .await
+    .unwrap();
+    assert!(read["modelKeys"].is_null());
+}
+
+#[tokio::test]
 async fn delegation_settings_roundtrips_and_omitted_patch_preserves_policy() {
     let directory = tempfile::tempdir().unwrap();
     let mut app = AppState::open(directory.path()).unwrap();

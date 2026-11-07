@@ -60,6 +60,6 @@ it("declares an integer bounded context minimum and documents zero as no minimum
   });
   expect(declaration.parameters.properties.minContextWindow).toMatchObject({
     type: "integer", minimum: 0, maximum: 10_000_000,
+    description: expect.stringContaining("0"),
   });
-  expect(declaration.parameters.properties.minContextWindow.description).toContain("0");
 });

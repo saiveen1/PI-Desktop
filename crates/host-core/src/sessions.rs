@@ -137,6 +137,8 @@ pub struct SessionSummary {
     #[serde(default)]
     pub fast_mode: bool,
     pub updated_at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delegation_model_keys: Option<Vec<String>>,
     pub created_at: String,
     /// True when this session is the transcript owned by a scheduled-task run.
     /// Automation transcripts are entered from the Scheduled page, so the
@@ -1368,11 +1370,13 @@ pub(crate) fn summary_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Sess
         scheduled_run: row.get("scheduled_run")?,
         fast_mode: row.get("fast_mode")?,
         worktree: None,
+        delegation_model_keys: None,
     })
 }
 
-/// Attach isolated-worktree badges. Sessions without a worktree are untouched.
-fn attach_worktrees(db: &Database, summaries: &mut [SessionSummary]) -> Result<()> {
+/// Attach host-owned presentation and delegation metadata without loading transcripts.
+fn attach_session_metadata(db: &Database, summaries: &mut [SessionSummary]) -> Result<()> {
+    crate::session_delegation::attach(db, summaries)?;
     let mut worktrees = crate::session_worktrees::lifecycle::summaries(db)?;
     if worktrees.is_empty() {
         return Ok(());
@@ -1393,7 +1397,7 @@ pub fn list_sessions(db: &Database) -> Result<Vec<SessionSummary>> {
     for row in rows {
         out.push(row?);
     }
-    attach_worktrees(db, &mut out)?;
+    attach_session_metadata(db, &mut out)?;
     Ok(out)
 }
 
@@ -1530,6 +1534,7 @@ pub fn create_session_with_options(
         scheduled_run: false,
         // A new or forked session starts without a worktree (ADR 0329).
         worktree: None,
+        delegation_model_keys: None,
     })
 }
 
@@ -1582,7 +1587,7 @@ pub fn session_summary(db: &Database, id: &str) -> Result<Option<SessionSummary>
         .query_row(params![id], summary_from_row)
         .optional()?;
     if let Some(summary) = summary.as_mut() {
-        attach_worktrees(db, std::slice::from_mut(summary))?;
+        attach_session_metadata(db, std::slice::from_mut(summary))?;
     }
     Ok(summary)
 }
@@ -1888,6 +1893,11 @@ pub fn fork_session_through(
         for (seq, record) in records.iter().enumerate() {
             insert_index_row(&tx, &id, seq as i64, None, record, texts[seq].as_deref())?;
         }
+        tx.execute(
+            "INSERT INTO kv (ns, key, value_json, updated_at)
+             SELECT ns, ?1, value_json, updated_at FROM kv WHERE ns = ?2 AND key = ?3",
+            params![id, crate::session_delegation::NAMESPACE, source_id],
+        )?;
         tx.commit()?;
         Ok(())
     })();
@@ -1909,6 +1919,7 @@ pub fn fork_session_through(
         thinking_level: source.summary.thinking_level,
         permission_mode: source.summary.permission_mode,
         fast_mode: source.summary.fast_mode,
+        delegation_model_keys: source.summary.delegation_model_keys,
         updated_at: created_at.clone(),
         created_at,
         // A fork is the user's own conversation, not the automation's transcript.
@@ -1979,6 +1990,33 @@ pub fn configure_session_with_fast_mode(
     permission_mode: Option<&str>,
     fast_mode: Option<bool>,
 ) -> Result<Option<SessionSummary>> {
+    configure_session_with_delegation(
+        db,
+        id,
+        mode,
+        provider_id,
+        model_id,
+        thinking_level,
+        permission_mode,
+        fast_mode,
+        None,
+    )
+}
+
+/// Configure the session and optional pool in one transaction after approval expiry.
+/// An absent pool patch preserves it; an explicit None restores inheritance.
+#[allow(clippy::too_many_arguments)]
+pub fn configure_session_with_delegation(
+    db: &Database,
+    id: &str,
+    mode: &str,
+    provider_id: Option<&str>,
+    model_id: Option<&str>,
+    thinking_level: Option<&str>,
+    permission_mode: Option<&str>,
+    fast_mode: Option<bool>,
+    delegation_model_keys: Option<Option<&[String]>>,
+) -> Result<Option<SessionSummary>> {
     if !(is_valid_mode(mode) || mode == "chat") {
         return Err(anyhow!("mode must be plan or agent"));
     }
@@ -1998,6 +2036,13 @@ pub fn configure_session_with_fast_mode(
         thinking_level,
         permission_mode,
     )?;
+    let previous = if delegation_model_keys.is_some() {
+        crate::session_delegation::ensure_idle(db, id)?;
+        session_summary(db, id)?
+    } else {
+        None
+    };
+    let tx = db.conn().unchecked_transaction()?;
     let changed = db
         .conn()
         .prepare_cached(
@@ -2022,14 +2067,38 @@ pub fn configure_session_with_fast_mode(
     if changed == 0 {
         return Ok(None);
     }
+    if let Some(keys) = delegation_model_keys {
+        crate::session_delegation::write(db, id, keys)?;
+        if let Some(previous) = previous.filter(|old| {
+            old.mode == mode
+                && provider_id.is_none_or(|value| old.provider_id.as_deref() == Some(value))
+                && model_id.is_none_or(|value| old.model_id.as_deref() == Some(value))
+                && thinking_level.is_none_or(|value| old.thinking_level == value)
+                && permission_mode.is_none_or(|value| old.permission_mode == value)
+                && fast_mode.is_none_or(|value| old.fast_mode == value)
+        }) {
+            let timestamp =
+                chrono::DateTime::parse_from_rfc3339(&previous.updated_at)?.timestamp_millis();
+            tx.execute(
+                "UPDATE sessions SET updated_at = ?2 WHERE id = ?1",
+                params![id, timestamp],
+            )?;
+        }
+    }
+    tx.commit()?;
     Ok(get_session(db, id)?.map(|detail| detail.summary))
 }
 
 pub fn delete_session(db: &Database, id: &str) -> Result<bool> {
+    let tx = db.conn().unchecked_transaction()?;
     let n = db
         .conn()
         .prepare_cached("DELETE FROM sessions WHERE id = ?1")?
         .execute(params![id])?;
+    if n > 0 {
+        crate::session_delegation::write(db, id, None)?;
+    }
+    tx.commit()?;
     if n > 0 {
         // Here rather than in the RPC handler so every deletion path (UI,
         // failed scheduled-run cleanup) also drops the transcript files.
@@ -5337,6 +5406,7 @@ mod tests {
             scheduled_run: false,
             fast_mode: false,
             worktree: None,
+            delegation_model_keys: None,
             created_at: "2025-01-01T00:00:00Z".into(),
             updated_at: "2025-01-02T00:00:00Z".into(),
         };
@@ -5391,6 +5461,7 @@ mod tests {
             scheduled_run: false,
             fast_mode: false,
             worktree: None,
+            delegation_model_keys: None,
             created_at: "2025-01-01T00:00:00Z".into(),
             updated_at: "2025-01-01T00:00:00Z".into(),
         };
@@ -6577,6 +6648,7 @@ mod tests {
             scheduled_run: false,
             fast_mode: false,
             worktree: None,
+            delegation_model_keys: None,
             created_at: "2025-01-01T00:00:00Z".into(),
             updated_at: "2025-01-01T00:00:00Z".into(),
         };

@@ -80,6 +80,7 @@ function fixture(ending: Ending, reportRecoveryAttempts = 0, recoveryDelivers = 
   const tools = new Map<string, string>();
   const results = new Map<string, unknown>();
   const parentRequests: string[] = [];
+  const parentToolResultText: string[] = [];
   const childRequests: Array<{ messages: string; tools: string[] }> = [];
   const executions: unknown[] = [];
   let delegationId: string | undefined;
@@ -90,6 +91,8 @@ function fixture(ending: Ending, reportRecoveryAttempts = 0, recoveryDelivers = 
   transport.mockImplementation((model, context, options) => {
     if (model.id === "parent") {
       parentRequests.push(JSON.stringify(context.messages));
+      parentToolResultText.push(context.messages.flatMap(message => message.role === "toolResult"
+        ? message.content.flatMap(block => block.type === "text" ? [block.text] : []) : []).join("\n"));
       switch (parentRequests.length) {
         case 1: return response(model.id, [call("parent-task", "Task", {
           agent: "worker", task: "Inspect src/a.ts and provide a final evidence report.",
@@ -161,7 +164,7 @@ function fixture(ending: Ending, reportRecoveryAttempts = 0, recoveryDelivers = 
     },
   });
   return {
-    runtime, events, results, parentRequests, childRequests, executions,
+    runtime, events, results, parentRequests, parentToolResultText, childRequests, executions,
     run: () => runtime.prompt("Delegate the fixture review and report its outcome.", "user-message", "parent-turn"),
     close: async () => { readStarted.resolve(); releaseRead.resolve(); await runtime.abort(); await runtime.dispose(); },
   };
@@ -217,7 +220,14 @@ describe("terminal delegation delivery through Task, TaskList and TaskWait", () 
       expect(firstDelegation(f.results.get("TaskWait"))).toMatchObject({
         status: "completed", report: finalReport, terminal: { reportOutcome: "delivered", reportRecoveryAttempt: 0 },
       });
-      expect(f.parentRequests[3]?.split(finalReport)).toHaveLength(2);
+      // Structured report metadata repeats the text without delivering another message.
+      expect(f.parentToolResultText[3]?.split(finalReport)).toHaveLength(2);
+      const settlements = f.events.flatMap(({ event, parentToolCallId }) => !parentToolCallId
+        && event.type === "message_end" && event.message.toolName === "Task"
+        && isRecord(event.message.toolResult) && isRecord(event.message.toolResult.details)
+        && event.message.toolResult.details.status === "completed" ? [event.message] : []);
+      expect(settlements).toHaveLength(1);
+      expect(settlements[0]?.toolResult).toMatchObject({ details: { report: finalReport } });
     } finally { await f.close(); }
   });
 

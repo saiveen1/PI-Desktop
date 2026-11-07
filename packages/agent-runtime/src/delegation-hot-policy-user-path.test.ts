@@ -50,7 +50,7 @@ const policy = (modelIds = ["old", "new"], limit = 0): DelegationSettings => ({ 
 beforeEach(() => { transport.mockReset(); });
 
 function fixture(options: { parent: (index: number) => ReturnType<typeof reply>; oldRead?: boolean;
-  authorize?: (request: DelegationApprovalRequest) => Promise<DelegationApprovalDecision> } ) {
+  authorize?: (request: DelegationApprovalRequest) => Promise<DelegationApprovalDecision>; selectionMode?: "task-fit" } ) {
   const events: AgentEventEnvelope[] = [];
   const parentRequests: string[] = [];
   const childRequests: string[] = [];
@@ -60,7 +60,7 @@ function fixture(options: { parent: (index: number) => ReturnType<typeof reply>;
   const read = deferred<unknown>();
   const newStarted = deferred<void>();
   const afterSecondTask = deferred<void>();
-  let snapshot: DelegationPolicySnapshot = { settings: policy(), modelKeys: ["fixture/old", "fixture/new"], revision: "initial" };
+  let snapshot: DelegationPolicySnapshot = { settings: policy(), modelKeys: ["fixture/old", "fixture/new"], revision: "initial", selectionMode: options.selectionMode };
   let oldRequests = 0;
   transport.mockImplementation((model, context) => {
     if (model.id === "parent") {
@@ -96,6 +96,7 @@ function fixture(options: { parent: (index: number) => ReturnType<typeof reply>;
         return (options.authorize ? await options.authorize(request) : { decision: "allow", reason: "Auto policy" }) as T;
       }
       if (method === "provider.cancelDelegationApproval" || method === "session.appendMessage") return undefined as T;
+      if (method === "todos.get") return { sessionId: "hot-policy", todos: [] } as T;
       if (method === "tools.fileBatchCapabilities") return { version: 1, supported: false } as T;
       if (method === "project.instructions.resolve") return { entries: [] } as T;
       if (method === "tools.execute") { readStarted.resolve(); return await read.promise as T; }
@@ -104,7 +105,7 @@ function fixture(options: { parent: (index: number) => ReturnType<typeof reply>;
   });
   return { runtime, config, events, parentRequests, childRequests, approvals, resolved, read, readStarted, newStarted, afterSecondTask,
     save: async (settings: DelegationSettings, modelKeys = settings.models.map(row => `${row.providerId}/${row.modelId}`)) => {
-      snapshot = { settings, modelKeys, revision: crypto.randomUUID() };
+      snapshot = { settings, modelKeys, revision: crypto.randomUUID(), selectionMode: options.selectionMode };
       await runtime.refreshDelegationPolicy();
     },
     prompt: () => runtime.prompt("Delegate independent checks.", crypto.randomUUID(), "same-turn"),
@@ -123,6 +124,23 @@ function details(events: AgentEventEnvelope[]) {
 }
 
 describe("hot delegation policy through the real parent and child agent loops", () => {
+  it("queries descriptions on demand, chooses a specialist and retains its rationale", async () => {
+    const reason = "The new model fits the independent review.";
+    const f = fixture({ selectionMode: "task-fit", parent: index => immediate(
+      index === 1 ? call("TaskModels", {}) :
+      index === 2 ? task({ model: "fixture/new", modelReason: reason }) :
+      index === 3 ? call("TaskWait", {}) : text("Review incorporated."),
+    ) });
+    try {
+      await f.prompt();
+      expect(f.parentRequests[0]).not.toContain("new scheduling guidance");
+      expect(f.parentRequests[1]).toContain("new scheduling guidance");
+      expect(f.childRequests).toEqual(["new"]);
+      expect(details(f.events)[0]).toMatchObject({
+        modelId: "new", scheduling: { requestedModel: "fixture/new", modelReason: reason },
+      });
+    } finally { await f.close(); }
+  });
   it("applies a save to a later Task and catalog in one parent turn while an active child keeps its model and policy", async () => {
     const waitingParent = deferred<void>();
     const held = reply(task());
@@ -143,7 +161,7 @@ describe("hot delegation policy through the real parent and child agent loops", 
       expect(f.childRequests).toEqual(["old"]);
       held.finish();
       await Promise.all([f.newStarted.promise, f.afterSecondTask.promise]);
-      expect(f.parentRequests[2]).toContain("new scheduling guidance");
+      expect(f.parentRequests[2]).not.toContain("new scheduling guidance");
       expect(f.parentRequests[2]).not.toContain("old scheduling guidance");
       expect(details(f.events)).toEqual([
         expect.objectContaining({ modelId: "old", thinkingLevel: "off", runPolicy: expect.objectContaining({ maxToolCalls: 0 }) }),

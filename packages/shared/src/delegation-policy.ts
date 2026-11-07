@@ -107,6 +107,8 @@ export type DelegationModelIdentity = { providerId: string; modelId: string };
 /** Runtime callback snapshot, not a persistence schema or credential container. */
 export type DelegationPolicySnapshot = {
   settings?: DelegationSettings;
+  /** Derived from a custom session pool; never a global strategy setting. */
+  selectionMode?: "task-fit";
   revision: string;
   modelKeys: string[];
 };
@@ -194,7 +196,7 @@ export function legacyDelegationSettings(providers: readonly {
 /** The AI may choose within a tier. Moving ahead of a preferred tier needs a reason. */
 export function orderDelegationModels(
   settings: DelegationSettings,
-  options: { preferredKey?: string; selection?: DelegationSelection; reason?: string } = {},
+  options: { preferredKey?: string; selection?: DelegationSelection; reason?: string; selectionMode?: "task-fit" } = {},
 ): DelegationModel[] {
   const models = settings.models.filter((model) => model.enabled)
     .sort((a, b) => a.priority - b.priority);
@@ -202,16 +204,20 @@ export function orderDelegationModels(
   if (options.selection === "require") return preferred ? [preferred] : [];
   if (!preferred) return models;
   // Same-tier selection does not need an escalation rationale.
-  const canPromote = preferred.priority === models[0]?.priority || Boolean(options.reason?.trim());
+  const canPromote = options.selectionMode === "task-fit" || preferred.priority === models[0]?.priority || Boolean(options.reason?.trim());
   if (canPromote) return [preferred, ...models.filter((model) => model !== preferred)];
   return models;
 }
 
-export function describeDelegationModels(settings: DelegationSettings): string {
-  const models = orderDelegationModels(settings);
+export function describeDelegationModels(settings: DelegationSettings, selectionMode?: "task-fit"): string {
+  const models = selectionMode === "task-fit"
+    ? settings.models.filter(model => model.enabled).sort((a, b) => delegationModelKey(a).localeCompare(delegationModelKey(b)))
+    : orderDelegationModels(settings);
   return [
     "Delegation scheduling policy (enforced by the host):",
-    "Choose a role by its task description and tools. Choose a model by task fit, then priority (P1 first). Equal priorities are peers; choose the most suitable description. Supply modelReason when requesting a lower-priority specialist. Descriptions are selection hints, not permissions.",
+    selectionMode === "task-fit"
+      ? "Choose each task's model by its description, not catalog position, automatic authorization or numeric priority. Priority breaks comparable-fit ties and orders fallbacks. Supply one concise modelReason. Descriptions are selection hints, not permissions."
+      : "Choose a role by its task description and tools. Choose a model by task fit, then priority (P1 first). Equal priorities are peers; choose the most suitable description. Supply modelReason when requesting a lower-priority specialist. Descriptions are selection hints, not permissions.",
     "Approval is handled inside Task. If approval is unavailable or expires, the scheduler starts the same task on an authorized alternative. Do not abandon delegation just because a preferred model needs approval.",
     "Use modelSelection=require only when the user explicitly requires that exact model; otherwise prefer permits automatic alternatives. A model argument or claim of user approval never bypasses the approval gate.",
     "Give every delegate a concrete goal, relevant context, permitted scope, expected deliverable and acceptance criteria. Parallelize independent work; avoid overlapping edits and duplicate exploration. Reuse a settled delegate via TaskList/resume when its context is still relevant, then verify its result.",

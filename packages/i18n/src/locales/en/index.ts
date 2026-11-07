@@ -1,6 +1,10 @@
 import { approvalCenter } from "./delegation-approval.js";
 import { delegationReliabilitySettings, delegationDiagnostics } from "./delegation-reliability.js";
+import { sessionLabels, sessionDelegation, delegationDetails } from "./session-management.js";
 export const en = {
+  sessionLabels,
+  sessionDelegation,
+  delegationDetails,
   sessionOrganization: {
     select: "Select sessions", selectVisible: "Select visible", selectSession: "Select {{title}}",
     done: "Done", selected: "{{count}} selected", unarchive: "Unarchive", moveToTrash: "Move to recycle bin",

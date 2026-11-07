@@ -6,6 +6,8 @@ import { initReactI18next } from "react-i18next";
 import { catalogs } from "@pi-desktop/i18n";
 import { IPC } from "@pi-desktop/shared";
 import { Sidebar } from "../../src/components/Sidebar";
+import { SessionDelegationModels } from "../../src/features/sessions/SessionDelegationModels";
+import { DelegationSelectionSummary } from "../../src/features/chat/transcript/DelegationSelectionSummary";
 import { useAppStore } from "../../src/stores/app-store";
 import "../../src/styles/tokens.css";
 import "../../src/styles/base.css";
@@ -40,10 +42,17 @@ let failList = false;
 window.addEventListener("unhandledrejection", (event) => unhandled.push(String(event.reason)));
 window.piDesktop = {
   platform: "win32", on() { return () => {}; },
-  async invoke(channel, input) {
+  async invoke(channel, input, config) {
     const ok = (data) => ({ ok: true, data });
     const failure = (message) => ({ ok: false, error: { code: "INTERNAL", message } });
     if (channel === IPC.invoke.sessionList) return ok({ sessions: [...database.values()].filter((item) => !item.deletedAt) });
+    if (channel === IPC.invoke.sessionConfigure) {
+      const item = { ...database.get(input) };
+      if (config.delegationModelKeys === null) delete item.delegationModelKeys;
+      else item.delegationModelKeys = [...config.delegationModelKeys];
+      database.set(input, item);
+      return ok({ session: item });
+    }
     if (channel === IPC.invoke.sessionTrashList) {
       if (failList) { failList = false; return failure("fixture list unavailable"); }
       return ok({ sessions: [...database.values()].filter((item) => item.deletedAt) });
@@ -128,6 +137,31 @@ async function openTrash() {
 }
 window.organizationProbe = async () => {
   await waitFor(() => row("alpha"), "sidebar rendered");
+  click(row("beta").querySelector('[data-action="session-menu"]'));
+  click(await waitFor(() => document.querySelector('[data-submenu-trigger="session-labels"]'), "labels menu"));
+  click(await waitFor(() => document.querySelector('[data-action="session-label-fix"]'), "assign label"));
+  click(document.querySelector('[data-action="session-label-feature"]'));
+  check(useAppStore.getState().sessionMeta.beta.labelIds.length === 2, "multiple labels were not retained");
+  click(document.querySelector('[data-submenu-trigger="session-color"]'));
+  click(await waitFor(() => document.querySelector('[data-action="session-color-blue"]'), "independent color mark"));
+  flushSync(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+  flushSync(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+  click(button("Filter conversations"));
+  await waitFor(() => document.querySelector(".session-filter-menu.is-open"), "filter opened");
+  click(checkbox("Fix", document.querySelector(".session-filter-menu")));
+  check(row("beta") && !row("alpha"), "label filter did not restrict rows");
+  click(button("Blue", document.querySelector(".session-filter-menu")));
+  check(row("beta"), "label and independent color did not intersect");
+  click(button("Clear filters", document.querySelector(".session-filter-menu")));
+  flushSync(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+  click(row("project-01").querySelector('[data-action="session-menu"]'));
+  click(await waitFor(() => document.querySelector('[data-action="session-move-up"]'), "move action"));
+  const orderBefore = useAppStore.getState().sessionMeta["project-01"].order;
+  check(orderBefore < useAppStore.getState().sessionMeta["project-00"].order, "same-project reorder failed");
+  flushSync(() => useAppStore.setState(state => ({ sessions: state.sessions.map(item =>
+    item.id === "project-00" ? { ...item, updatedAt: "2099-01-01T00:00:00Z" } : item) })));
+  check(useAppStore.getState().sessionMeta["project-01"].order === orderBefore, "assistant update changed activity order");
+  flushSync(() => useAppStore.getState().setSessionSort("name"));
   click(document.querySelector('[data-action="select-sessions"]'));
   click(checkbox("Select visible", toolbar()));
   check(!chosen().includes("folded"), "collapsed sessions included by select all");
@@ -227,6 +261,40 @@ window.organizationProbe = async () => {
   }
   await frame();
   check(unhandled.length === 0, "unhandled errors: " + unhandled.join());
+  flushSync(() => {
+    useAppStore.setState({ providers: [{ id: "fixture", name: "Fixture", enabled: true, authKind: "none",
+      models: [{ id: "general" }, { id: "specialist" }] }],
+      settings: { ...useAppStore.getState().settings, delegation: { version: 1, approvalTimeoutSeconds: 60,
+        models: ["general", "specialist"].map((modelId, index) => ({ providerId: "fixture", modelId,
+          enabled: true, approval: "auto", priority: index + 1, description: modelId + " description" })) } } });
+    root.render(<SessionDelegationModels sessionId="running" />);
+  });
+  click(button("Subagent models"));
+  check(button("Save") === undefined, "running conversation unexpectedly permits saving");
+  flushSync(() => useAppStore.setState({ runningSessions: {} }));
+  click(button("Custom"));
+  click(checkbox("general", document.querySelector(".session-delegation-dialog")));
+  click(button("Save"));
+  await waitFor(() => !document.querySelector(".session-delegation-dialog"), "custom pool saved");
+  check(database.get("running").delegationModelKeys.join() === "fixture/specialist", "wrong session model pool");
+  click(button("Subagent models: 1 selected"));
+  click(checkbox("specialist", document.querySelector(".session-delegation-dialog")));
+  click(button("Save"));
+  await waitFor(() => !document.querySelector(".session-delegation-dialog"), "empty pool saved");
+  check(database.get("running").delegationModelKeys.length === 0, "empty pool became inherited");
+  click(button("Subagent models: 0 selected"));
+  click(button("Follow global"));
+  click(button("Save"));
+  await waitFor(() => !document.querySelector(".session-delegation-dialog"), "inheritance restored");
+  check(useAppStore.getState().sessions.find(item => item.id === "running").delegationModelKeys === undefined, "old pool survived inheritance");
+  flushSync(() => root.render(<DelegationSelectionSummary payload={{ modelId: "general", scheduling: {
+    requestedModel: "fixture/specialist", modelReason: "Independent concurrency review",
+    decisions: [{ model: "fixture/specialist", decision: "skipped", reason: "Approval expired" },
+      { model: "fixture/general", decision: "selected", reason: "Automatic fallback" }],
+  } }} />));
+  check(document.body.textContent.includes("Independent concurrency review") &&
+    document.body.textContent.includes("fixture/general") &&
+    document.body.textContent.includes("Approval expired"), "selection rationale or actual fallback missing");
   flushSync(() => root.unmount());
   return { passed: true, locales: Object.keys(catalogs).length, permanentDeletes: calls.filter(([channel]) => channel === IPC.invoke.sessionTrashDelete).length };
 };

@@ -74,7 +74,7 @@ export function createDelegationApprovalService(deps: Dependencies) {
     }, Math.max(0, deadline - now()));
   }
   async function load(entry: Entry) {
-    const [current, source] = await Promise.all([catalog.read(), catalog.source(entry.input.sessionId)]);
+    const [current, source] = await Promise.all([catalog.read(entry.input.sessionId), catalog.source(entry.input.sessionId)]);
     if (deps.getHost() !== current.host) throw new Error("Delegation host changed");
     return { current, source };
   }

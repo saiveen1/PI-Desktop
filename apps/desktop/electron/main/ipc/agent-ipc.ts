@@ -720,12 +720,15 @@ export function registerAgentIpc({
       });
     }
     if (!host || !sidecar) throw new Error("backend unavailable");
+    const retrySidecar = sidecar;
     const releaseSessionOperation = await acquireSessionOperation(req.sessionId);
+    let removeStartListener: (() => void) | undefined;
     try {
       const activeTurnId = activeTurns.get(req.sessionId);
       if (activeTurnId) {
         // The runtime fences stale turns; rejection must not finalize the parent.
-        return await sidecar.call<AgentRetrySubagentResponse>("agent.retrySubagent", {
+        // Returning the promise releases the lock before authorization settles.
+        return retrySidecar.call<AgentRetrySubagentResponse>("agent.retrySubagent", {
           sessionId: req.sessionId,
           turnId: activeTurnId,
           delegationId: req.delegationId.trim(),
@@ -735,7 +738,7 @@ export function registerAgentIpc({
       const detail = await host.call<{ session?: any }>("session.get", { id: req.sessionId });
       if (!detail.session) throw Object.assign(new Error("Session not found"), { errorCode: ErrorCodes.NOT_FOUND });
       const launch = await resolveAgentRuntimeLaunch(req.sessionId, detail.session, settings);
-      sidecar.setProjectInstructionRoot(req.sessionId, launch.workspaceRoot ?? launch.projectPath);
+      retrySidecar.setProjectInstructionRoot(req.sessionId, launch.workspaceRoot ?? launch.projectPath);
       const turn = await host.call<{ turnId?: string }>("session.beginTurn", {
         sessionId: req.sessionId,
         providerId: launch.providerId,
@@ -746,8 +749,18 @@ export function registerAgentIpc({
       activeTurns.set(req.sessionId, turnId);
       recordTurnStart(req.sessionId, turnId);
       activeTurnUsages.delete(req.sessionId);
+      // Stop needs the runtime to exist, but must not wait for model approval.
+      removeStartListener = retrySidecar.onNotification((method, params) => {
+        if (method !== "agent.event" || !params || typeof params !== "object") return;
+        const envelope = params as Partial<AgentEventEnvelope>;
+        if (envelope.sessionId !== req.sessionId || envelope.turnId !== turnId ||
+          envelope.event?.type !== "agent_start") return;
+        removeStartListener?.();
+        removeStartListener = undefined;
+        releaseSessionOperation();
+      });
       try {
-        return await sidecar.call<AgentRetrySubagentResponse>("agent.retrySubagent", {
+        return await retrySidecar.call<AgentRetrySubagentResponse>("agent.retrySubagent", {
           ...launch.sidecarParams,
           turnId,
           delegationId: req.delegationId.trim(),
@@ -757,6 +770,7 @@ export function registerAgentIpc({
         throw error;
       }
     } finally {
+      removeStartListener?.();
       releaseSessionOperation();
     }
   });

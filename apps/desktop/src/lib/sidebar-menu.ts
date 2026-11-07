@@ -13,6 +13,7 @@
 /** A command row. `danger` paints destructive ink; `separatorBefore` adds a rule. */
 export type SidebarMenuActionItem = {
   kind: "action";
+  checked?: boolean;
   /** Stable identity for tests and React keys. */
   id: string;
   label: string;

@@ -1,8 +1,12 @@
 import { approvalCenter } from "./delegation-approval.js";
 import { delegationReliabilitySettings, delegationDiagnostics } from "./delegation-reliability.js";
+import { sessionLabels, sessionDelegation, delegationDetails } from "./session-management.js";
 import { en, type EnglishCatalog } from "../en/index.js";
 
 export const ptBR = {
+  sessionLabels,
+  sessionDelegation,
+  delegationDetails,
   sessionOrganization: {
     select: "Selecionar sessões", selectVisible: "Selecionar visíveis", selectSession: "Selecionar {{title}}",
     done: "Concluído", selected: "{{count}} selecionadas", unarchive: "Desarquivar", moveToTrash: "Mover para a lixeira",

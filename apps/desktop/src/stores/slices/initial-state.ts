@@ -24,6 +24,8 @@ export function createInitialState(): AppStateData {
     healthOk: false,
     sessions: [],
     sessionMeta: initialSidebarPreferences.sessionMeta,
+    sessionLabels: initialSidebarPreferences.sessionLabels,
+    sessionFilter: initialSidebarPreferences.sessionFilter,
     sessionView: {
       ...initialSidebarPreferences.sessionView,
       sortBy: initialSidebarPreferences.sessionView.sort,

@@ -42,7 +42,7 @@ function fixture(context, { timeout = 60, approval = "ask", legacy = false } = {
     models: [{ id: "m", alias: "Visible model", contextWindow: 8192, thinkingLevels: ["off", "high"] },
       { id: "alternate", contextWindow: 8192, thinkingLevels: ["off", "high"] }] }],
     session: { title: "Source chat", projectPath: "D:/workspace/source", projectTitle: "Source project" },
-    barrier: undefined, failed: false };
+    barrier: undefined, failed: false, sessionPools: new Map() };
   const events = [], errors = [];
   let time = Date.parse("2026-11-05T12:00:00.000Z");
   const host = { async call(method, params) {
@@ -52,6 +52,7 @@ function fixture(context, { timeout = 60, approval = "ask", legacy = false } = {
     if (method === "settings.set") { state.settings = { ...state.settings, ...structuredClone(params) }; return state.settings; }
     if (method === "providers.list") return { providers: structuredClone(state.providers) };
     if (method === "session.get") return { session: structuredClone(state.session) };
+    if (method === "session.delegationPolicy") return { modelKeys: state.sessionPools.get(params.id) ?? null };
     if (method === "projects.list") return { projects: [{ path: state.session.projectPath, name: state.session.projectTitle }] };
     throw new Error(method);
   } };
@@ -62,6 +63,23 @@ function fixture(context, { timeout = 60, approval = "ask", legacy = false } = {
   return { state, events, errors, service, host, loseHost: () => { owner = null; },
     tick: milliseconds => { time += milliseconds; context.mock.timers.tick(milliseconds); } };
 }
+
+test("conversation pools constrain approval alternatives and preserve empty versus inherited pools", async t => {
+  const { state, service } = fixture(t);
+  state.sessionPools.set("custom", ["p/m"]);
+  state.sessionPools.set("disabled", []);
+  const first = service.authorize({ ...request, sessionId: "custom" });
+  await drain();
+  const row = service.list().requests[0];
+  assert.deepEqual(row.candidates.map(model => model.modelId), ["m"]);
+  assert.equal((await service.respond(action(row, "select", { providerId: "p", modelId: "alternate" }))).accepted, false);
+  await service.respond(action(row));
+  assert.equal((await first).decision, "allow");
+  assert.equal((await service.authorize({ ...request, sessionId: "disabled" })).decision, "skip");
+  assert.deepEqual((await service.snapshot("disabled")).modelKeys, []);
+  assert.equal((await service.snapshot("custom")).selectionMode, "task-fit");
+  assert.deepEqual((await service.snapshot("inherited")).modelKeys, ["p/m", "p/alternate"]);
+});
 
 test("concurrent same-session requests list immediately and user batch acts on the selected subset", async t => {
   const { service, events } = fixture(t);

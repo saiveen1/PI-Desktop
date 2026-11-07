@@ -55,7 +55,7 @@ export function sortSessions(
         false,
       );
       if (byCreated) return byCreated;
-    } else if (sort === "manual") {
+    } else if (sort === "manual" || sort === "recent") {
       const byOrder = (manualOrder(meta[a.id]?.order) ?? Number.MAX_SAFE_INTEGER) -
         (manualOrder(meta[b.id]?.order) ?? Number.MAX_SAFE_INTEGER);
       if (byOrder) return byOrder;

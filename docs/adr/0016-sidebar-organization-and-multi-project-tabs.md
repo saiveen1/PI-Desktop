@@ -3,6 +3,10 @@
 - Status: Accepted
 - Date: 2026-07-26
 
+The session activity-order and label behavior is amended by
+[session organization and scoped delegation](session-organization-and-scoped-delegation.md).
+Project organization and process ownership below remain applicable.
+
 ## Context
 
 D088 replaced the mixed Recents list with one current-project group plus

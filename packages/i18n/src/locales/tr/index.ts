@@ -1,8 +1,12 @@
 import { approvalCenter } from "./delegation-approval.js";
 import { delegationReliabilitySettings, delegationDiagnostics } from "./delegation-reliability.js";
+import { sessionLabels, sessionDelegation, delegationDetails } from "./session-management.js";
 import { en, type EnglishCatalog } from "../en/index.js";
 
 export const tr = {
+  sessionLabels,
+  sessionDelegation,
+  delegationDetails,
   sessionOrganization: {
     select: "Oturumları seç", selectVisible: "Görünenleri seç", selectSession: "{{title}} oturumunu seç",
     done: "Bitti", selected: "{{count}} seçildi", unarchive: "Arşivden çıkar", moveToTrash: "Geri dönüşüm kutusuna taşı",

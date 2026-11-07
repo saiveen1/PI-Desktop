@@ -418,6 +418,15 @@ to later refresh and inference; the vendor picker does not collect them.
   `INVALID_PARAMS`; mode is `plan | goal | agent` and changing any session
   configuration is allowed only while idle and without a pending/queued/running
   Plan or Goal record
+- Its optional `delegationModelKeys` field preserves the saved session pool
+  when omitted, removes the override when null, and disables delegation with
+  an empty array. Up to 128 unique exact provider/model keys are accepted.
+  The field shares the idle gate and transaction; a pool-only change leaves
+  the activity timestamp intact. Session list/get return the optional list.
+- `session.delegationPolicy({ id })` returns `{ modelKeys: string[] | null }`
+  without reading the transcript; null means inherit. An unknown session fails.
+  Main uses the invocation's id to derive the candidate snapshot and approval
+  alternatives. Global policy still governs eligibility and consent.
 - `session.moveProject({ sessionId, projectPath })` moves an idle session to a
   project and returns `{ session }` carrying the canonical project path. It
   upserts the project row and updates only `sessions.project_id` and

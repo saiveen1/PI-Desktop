@@ -1,0 +1,68 @@
+export const sessionLabels = {
+  "title": "라벨",
+  "add": "라벨 추가",
+  "name": "라벨 이름",
+  "color": "색상",
+  "delete": "라벨 삭제",
+  "deleteConfirm": "“{{name}}”을 삭제하고 대화 {{count}}개의 연결을 제거할까요? 대화는 유지됩니다.",
+  "moveUp": "위로 이동",
+  "moveDown": "아래로 이동",
+  "save": "저장",
+  "cancel": "취소",
+  "none": "라벨 없음",
+  "manage": "라벨 관리",
+  "filter": "대화 필터",
+  "clearFilters": "필터 지우기",
+  "allColors": "모든 색상",
+  "colorMark": "색상 표시",
+  "clearColor": "색상 표시 없음",
+  "overflow": "라벨 {{count}}개 더 보기",
+  "reorderBefore": "{{title}} 앞으로 이동",
+  "reorderAfter": "{{title}} 뒤로 이동",
+  "activityOrder": "활동 순서",
+  "investigation": "조사",
+  "feature": "기능",
+  "fix": "수정",
+  "colors": {
+    "red": "빨강",
+    "amber": "호박색",
+    "green": "초록",
+    "blue": "파랑",
+    "violet": "보라",
+    "pink": "분홍"
+  }
+};
+
+export const sessionDelegation = {
+  "title": "하위 에이전트 모델",
+  "customCount": "하위 에이전트 모델: {{count}}개 선택됨",
+  "scope": "모델 범위",
+  "inherit": "전역 설정 따르기",
+  "custom": "사용자 지정",
+  "inheritHint": "전역 위임 설정을 사용합니다.",
+  "taskFitHint": "각 하위 작업을 모델 설명에 따라 배정합니다. 승인 규칙은 계속 적용됩니다.",
+  "search": "모델 검색",
+  "models": "사용 가능한 하위 에이전트 모델",
+  "unavailable": "사용 불가",
+  "approvalRequired": "승인 필요",
+  "autoAllowed": "자동 허용",
+  "noModels": "일치하는 모델이 없습니다.",
+  "selectedCount": "모델 {{count}}개 선택됨",
+  "disabled": "이 대화에서는 위임이 비활성화됩니다.",
+  "busy": "대화가 유휴 상태일 때 모델 선택을 저장할 수 있습니다.",
+  "invalidSelection": "저장하기 전에 사용할 수 없는 모델을 제거하세요.",
+  "cancel": "취소",
+  "save": "저장",
+  "saving": "저장 중…"
+};
+
+export const delegationDetails = {
+  "title": "모델 선택",
+  "requested": "요청한 모델",
+  "reason": "선택 이유",
+  "actual": "실제 모델",
+  "scheduling": "일정 결정",
+  "selected": "선택됨",
+  "skipped": "건너뜀",
+  "cancelled": "취소됨"
+};

@@ -1,0 +1,68 @@
+export const sessionLabels = {
+  "title": "Etiquetas",
+  "add": "Adicionar etiqueta",
+  "name": "Nome da etiqueta",
+  "color": "Cor",
+  "delete": "Excluir etiqueta",
+  "deleteConfirm": "Excluir “{{name}}” e removê-la de {{count}} conversas? As conversas serão mantidas.",
+  "moveUp": "Mover para cima",
+  "moveDown": "Mover para baixo",
+  "save": "Salvar",
+  "cancel": "Cancelar",
+  "none": "Sem etiquetas",
+  "manage": "Gerenciar etiquetas",
+  "filter": "Filtrar conversas",
+  "clearFilters": "Limpar filtros",
+  "allColors": "Todas as cores",
+  "colorMark": "Marca de cor",
+  "clearColor": "Sem marca de cor",
+  "overflow": "Mais {{count}} etiquetas",
+  "reorderBefore": "Mover antes de {{title}}",
+  "reorderAfter": "Mover depois de {{title}}",
+  "activityOrder": "Ordem de atividade",
+  "investigation": "Investigação",
+  "feature": "Funcionalidade",
+  "fix": "Correção",
+  "colors": {
+    "red": "Vermelho",
+    "amber": "Âmbar",
+    "green": "Verde",
+    "blue": "Azul",
+    "violet": "Violeta",
+    "pink": "Rosa"
+  }
+};
+
+export const sessionDelegation = {
+  "title": "Modelos de subagentes",
+  "customCount": "Modelos de subagentes: {{count}} selecionados",
+  "scope": "Conjunto de modelos",
+  "inherit": "Seguir global",
+  "custom": "Personalizado",
+  "inheritHint": "Usa as configurações globais de delegação.",
+  "taskFitHint": "Associa cada subtarefa às descrições dos modelos. As regras de aprovação continuam válidas.",
+  "search": "Pesquisar modelos",
+  "models": "Modelos de subagentes disponíveis",
+  "unavailable": "Indisponível",
+  "approvalRequired": "Requer aprovação",
+  "autoAllowed": "Permitido automaticamente",
+  "noModels": "Nenhum modelo correspondente.",
+  "selectedCount": "{{count}} modelos selecionados",
+  "disabled": "A delegação está desativada nesta conversa.",
+  "busy": "A seleção pode ser salva quando a conversa estiver inativa.",
+  "invalidSelection": "Remova os modelos indisponíveis antes de salvar.",
+  "cancel": "Cancelar",
+  "save": "Salvar",
+  "saving": "Salvando…"
+};
+
+export const delegationDetails = {
+  "title": "Seleção de modelo",
+  "requested": "Modelo solicitado",
+  "reason": "Motivo da seleção",
+  "actual": "Modelo utilizado",
+  "scheduling": "Decisões de agendamento",
+  "selected": "Selecionado",
+  "skipped": "Ignorado",
+  "cancelled": "Cancelado"
+};

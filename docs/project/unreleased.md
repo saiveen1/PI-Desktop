@@ -10,6 +10,17 @@
   zero now means no minimum consistently, and malformed admission input fails
   before cycling through the model pool. Final integration validation is pending.
 
+- Add persistent conversation activity order with same-project drag ordering;
+  accepted user messages raise a conversation while reading and assistant output
+  preserve its position. Add editable global labels, multiple labels per
+  conversation, independent color marks and combined filters.
+- Add a per-conversation subagent model pool. Custom pools match individual
+  tasks to model descriptions, retrieved on demand through TaskModels; inherited
+  pools retain existing policy. Approval and fallback stay inside the effective
+  pool. Ordinary delegation details retain the original selection rationale and
+  show actual model and scheduling decisions separately. Candidate validation
+  is pending at the user's request.
+
 - Show recent session updates in seconds, minutes or hours instead of zero days,
   and align message clocks with full local date/time/timezone details without
   rewriting stored timestamps. Running statuses expose a shared details dialog

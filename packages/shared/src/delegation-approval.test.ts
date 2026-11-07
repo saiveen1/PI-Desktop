@@ -216,11 +216,12 @@ describe("additive delegation policy compatibility", () => {
     expect(snapshot).not.toHaveProperty("settings");
   });
 
-  it("preserves the three-field run policy and accepted legacy checkpoint validation", () => {
-    const legacy = { ...DEFAULT_DELEGATION_RUN_POLICY, checkpointInterval: 12, maxCheckpointRequests: 2 };
+  it("accepts legacy run policy while leaving report recovery disabled", () => {
+    const legacy = { maxToolCalls: 0, maxDurationSeconds: 0, finalReportTimeoutSeconds: 60, checkpointInterval: 12, maxCheckpointRequests: 2 };
     const settings = { ...legacyDelegationSettings([]), runPolicy: legacy };
     expect(isDelegationSettings(settings)).toBe(true);
     expect(resolveDelegationRunPolicy(legacy)).toEqual({ maxToolCalls: 0, maxDurationSeconds: 0, finalReportTimeoutSeconds: 60, reportRecoveryAttempts: 0 });
-    expect(Object.keys(DEFAULT_DELEGATION_RUN_POLICY)).toEqual(["maxToolCalls", "maxDurationSeconds", "finalReportTimeoutSeconds"]);
+    expect(DEFAULT_DELEGATION_RUN_POLICY.reportRecoveryAttempts).toBe(0);
+    expect(legacy).not.toHaveProperty("reportRecoveryAttempts");
   });
 });

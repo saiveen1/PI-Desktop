@@ -184,6 +184,8 @@ export function withProjectDisplayName(
 export function preferencesFromState(state: Pick<
   AppState,
   | "sessionMeta"
+  | "sessionLabels"
+  | "sessionFilter"
   | "projectMeta"
   | "projectSort"
   | "sessionView"
@@ -191,6 +193,8 @@ export function preferencesFromState(state: Pick<
 >) {
   return {
     sessionMeta: state.sessionMeta,
+    sessionLabels: state.sessionLabels,
+    sessionFilter: state.sessionFilter,
     projectMeta: state.projectMeta,
     projectSort: state.projectSort,
     sessionView: state.sessionView,

@@ -30,7 +30,8 @@ export function isDelegationAuthorizationRequest(value: unknown): value is Deleg
 
 /** Never turn unsupported/malformed snapshots into an authoritative empty pool. */
 export function delegationPolicySnapshot(value: unknown): DelegationPolicySnapshot {
-  if (!record(value) || Object.keys(value).some(key => !["settings", "revision", "modelKeys"].includes(key))
+  if (!record(value) || Object.keys(value).some(key => !["settings", "revision", "modelKeys", "selectionMode"].includes(key))
+    || (value.selectionMode !== undefined && value.selectionMode !== "task-fit")
     || !id(value.revision, 256) || !Array.isArray(value.modelKeys)
     || value.modelKeys.some(key => typeof key !== "string" || !key.trim() || key !== key.trim()
       || key.indexOf("/") <= 0 || key.endsWith("/"))
@@ -41,6 +42,7 @@ export function delegationPolicySnapshot(value: unknown): DelegationPolicySnapsh
   const settings = value.settings;
   return {
     revision: value.revision,
+    ...(value.selectionMode === "task-fit" ? { selectionMode: "task-fit" as const } : {}),
     modelKeys: [...value.modelKeys] as string[],
     ...(settings !== undefined && isDelegationSettings(settings) ? { settings: {
       version: 1 as const, approvalTimeoutSeconds: settings.approvalTimeoutSeconds,

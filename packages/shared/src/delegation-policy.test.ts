@@ -5,6 +5,13 @@ const model = (modelId: string, priority = 1): DelegationModel => ({ providerId:
 const settings = (models: DelegationModel[]): DelegationSettings => ({ version: 1, approvalTimeoutSeconds: 60, models });
 
 describe("delegation policy", () => {
+  it("honors task fit in a custom session pool while preserving inherited priority", () => {
+    const policy = settings([model("general", 1), model("specialist", 90)]);
+    expect(orderDelegationModels(policy, { preferredKey: "account/specialist", selectionMode: "task-fit" })[0].modelId).toBe("specialist");
+    expect(orderDelegationModels(policy, { preferredKey: "account/specialist" })[0].modelId).toBe("general");
+    expect(orderDelegationModels(settings([]), { preferredKey: "account/specialist", selectionMode: "task-fit" })).toEqual([]);
+    expect(orderDelegationModels(policy, { preferredKey: "account/missing", selection: "require", selectionMode: "task-fit" })).toEqual([]);
+  });
   it("rejects malformed run policy instead of silently accepting it", () => {
     for (const runPolicy of [null, [], { maxToolCalls: -1 }, { checkpointInterval: 0 }, { maxDurationSeconds: "900" }]) {
       expect(isDelegationSettings({ ...settings([]), runPolicy })).toBe(false);

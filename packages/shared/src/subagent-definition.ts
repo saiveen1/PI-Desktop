@@ -109,6 +109,7 @@ export const SUBAGENT_INHERIT_TOKEN = "inherit";
 export const SUBAGENT_INHERIT_DENY_TOOLS: readonly string[] = [
   "Task",
   "TaskWait",
+  "TaskModels",
   "TaskList",
   "TaskStop",
   "EnterPlanMode",

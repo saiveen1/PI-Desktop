@@ -1,5 +1,6 @@
 import { SubagentRunPolicySummary } from "./SubagentRunPolicySummary";
 import { SubagentDiagnosticsSummary } from "./SubagentDiagnosticsSummary";
+import { DelegationSelectionSummary } from "../../features/chat/transcript/DelegationSelectionSummary";
 import { toolResultPayload } from "../../lib/tool-presentation";
 import { SubagentStopButton } from "../../features/chat/transcript/SubagentStopButton";
 import { collectDelegationStatuses, subagentOutcome } from "../../lib/subagent-topology";
@@ -142,6 +143,7 @@ function SubagentTranscriptSurface({ delegationId }: { delegationId: string }) {
           tabIndex={0}
         >
           <div ref={contentRef} className="subagent-transcript-list">
+            <DelegationSelectionSummary payload={delegateSettings.payload} />
             <SubagentRunPolicySummary payload={delegateSettings.payload} />
             <SubagentDiagnosticsSummary payload={delegateSettings.payload} />
             {transcriptResult ? (

@@ -64,6 +64,8 @@ export type SessionSummary = {
    * omit it, meaning off.
    */
   fastMode?: boolean;
+  /** Absent inherits global delegation; an empty custom pool disables it. */
+  delegationModelKeys?: string[];
   /** Effective capability for this session's exact provider/model pair. */
   supportsReasoning?: boolean;
   /** Effective image-input capability for this session's exact model. */

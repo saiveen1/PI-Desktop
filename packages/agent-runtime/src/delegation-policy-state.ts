@@ -2,6 +2,7 @@ import { isDelegationSettings, type DelegationPolicySnapshot, type DelegationSet
 
 export type CurrentDelegationPolicy = {
   settings?: DelegationSettings;
+  selectionMode?: "task-fit";
   /** Undefined only for a legacy host; an authoritative empty list means unavailable. */
   modelKeys?: readonly string[];
 };
@@ -13,7 +14,8 @@ function snapshot(value: unknown): DelegationPolicySnapshot {
       !Array.isArray(row.modelKeys) || row.modelKeys.length > 128 ||
       row.modelKeys.some(key => typeof key !== "string" || !key.trim() || key !== key.trim() || key.length > 385 || key.indexOf("/") < 1) ||
       new Set(row.modelKeys).size !== row.modelKeys.length ||
-      (row.settings !== undefined && !isDelegationSettings(row.settings))) {
+      (row.settings !== undefined && !isDelegationSettings(row.settings)) ||
+      (row.selectionMode !== undefined && row.selectionMode !== "task-fit")) {
     throw new Error("Invalid delegation policy snapshot; no new delegation was authorized.");
   }
   return structuredClone(row) as DelegationPolicySnapshot;
@@ -37,8 +39,8 @@ export class DelegationPolicyState {
   private revision?: string;
   private readonly retiredRevisions = new Set<string>();
 
-  constructor(settings: DelegationSettings | undefined, private readonly fetch: () => Promise<unknown>) {
-    this.current = { settings };
+  constructor(settings: DelegationSettings | undefined, private readonly fetch: () => Promise<unknown>, selectionMode?: "task-fit") {
+    this.current = { settings, selectionMode };
   }
 
   get value(): CurrentDelegationPolicy { return this.current; }
@@ -79,7 +81,7 @@ export class DelegationPolicyState {
         throw new Error("Stale delegation policy snapshot; retry after the host publishes its current revision.");
       }
       if (next.revision === this.revision) {
-        if (JSON.stringify(this.current) !== JSON.stringify({ settings: next.settings, modelKeys: next.modelKeys })) {
+        if (JSON.stringify(this.current) !== JSON.stringify({ settings: next.settings, modelKeys: next.modelKeys, selectionMode: next.selectionMode })) {
           throw new Error("Delegation policy changed without a new revision");
         }
         return this.current;
@@ -87,7 +89,7 @@ export class DelegationPolicyState {
       if (this.revision) this.retiredRevisions.add(this.revision);
       this.supported = true;
       this.revision = next.revision;
-      this.current = { settings: next.settings, modelKeys: next.modelKeys };
+      this.current = { settings: next.settings, modelKeys: next.modelKeys, selectionMode: next.selectionMode };
       return this.current;
     }
   }

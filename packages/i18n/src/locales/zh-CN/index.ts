@@ -1,8 +1,12 @@
 import { approvalCenter } from "./delegation-approval.js";
 import { delegationReliabilitySettings, delegationDiagnostics } from "./delegation-reliability.js";
+import { sessionLabels, sessionDelegation, delegationDetails } from "./session-management.js";
 import { en, type EnglishCatalog } from "../en/index.js";
 
 export const zhCN = {
+  sessionLabels,
+  sessionDelegation,
+  delegationDetails,
   sessionOrganization: {
     select: "多选", selectVisible: "全选可见任务", selectSession: "选择“{{title}}”",
     done: "完成", selected: "已选 {{count}} 项", unarchive: "取消归档", moveToTrash: "移入回收站",

@@ -124,7 +124,7 @@ export type DraftSessionConfiguration = {
 };
 
 
-export type AppState = {
+export type AppState = import("./slices/session-management-slice").SessionManagementState & {
   ready: boolean;
   version?: AppVersionInfo;
   healthOk: boolean;

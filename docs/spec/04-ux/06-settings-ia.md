@@ -362,10 +362,16 @@ application-window behavior rather than agent behavior.
 
 ### Conversation (`chat` tab)
 
-How a transcript is presented and how the composer takes input. Two cards:
-**Display** then **Input & links**. Nothing on this page changes what the model
+How conversations are organized, a transcript is presented and the composer
+takes input. **Labels**, **Display**, then **Input & links**. Nothing on this page changes what the model
 does or what it is allowed to do, and the Display card's caption says so once
 so no row repeats it.
+
+The Labels editor manages a single installation-local catalog. Names, colors
+and order are editable, including the seeded Investigation/Feature/Fix entries.
+A conversation may have several labels and an independent color mark. Deletion
+requires confirmation with the label name and association count, and never
+deletes conversations. Filtering lives in the sidebar; no label creates a task.
 
 - **Display** card, in rendered order: the **Show thinking** toggle with its
   **Auto-fold finished thinking** sub-row, the **Transcript display** segmented

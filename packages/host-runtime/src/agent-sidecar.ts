@@ -172,7 +172,7 @@ export class AgentSidecar {
   private trustedExtensionBridge: TrustedExtensionSidecarBridge | null = null;
   private delegationAuthorizer: DelegationAuthorizer | null = null;
   private delegationApprovalCanceller: DelegationApprovalCanceller | null = null;
-  private delegationSnapshotResolver: (() => Promise<DelegationPolicySnapshot>) | null = null;
+  private delegationSnapshotResolver: ((sessionId: string) => Promise<DelegationPolicySnapshot>) | null = null;
   private delegationApprovals = new Map<string, Pick<DelegationApprovalRequest, "sessionId" | "requestId">>();
   // Vendor-account rows this session was launched with. The sidecar can only
   // ask for auth it is already using, and a session that never bound an OAuth
@@ -451,7 +451,7 @@ export class AgentSidecar {
     this.delegationApprovalCanceller = cancel;
   }
 
-  setDelegationSnapshotResolver(resolver: () => Promise<DelegationPolicySnapshot>): void {
+  setDelegationSnapshotResolver(resolver: (sessionId: string) => Promise<DelegationPolicySnapshot>): void {
     this.delegationSnapshotResolver = resolver;
   }
 
@@ -566,7 +566,8 @@ export class AgentSidecar {
           if (!this.delegationSnapshotResolver) {
             throw Object.assign(new Error("Delegation snapshot unsupported"), { code: -32601 });
           }
-          const result = delegationPolicySnapshot(await this.delegationSnapshotResolver());
+          if (typeof params.sessionId !== "string" || !params.sessionId.trim()) throw new Error("Delegation session required");
+          const result = delegationPolicySnapshot(await this.delegationSnapshotResolver(params.sessionId));
           this.writeToChild(JSON.stringify({ jsonrpc: "2.0", id: msg.id, result }) + "\n");
           return;
         }

@@ -22,6 +22,7 @@ Each ADR includes:
 | ID | Title | Status |
 |---|---|---|
 | delegation-terminal-reliability | [Truthful delegation delivery and bounded recovery](delegation-terminal-reliability.md) | Accepted, implementation candidate |
+| session-organization-and-scoped-delegation | [Session organization and scoped on-demand delegation](session-organization-and-scoped-delegation.md) | Accepted, implementation candidate |
 | unified-core-notifications | [Unified core notification delivery](unified-core-notifications.md) | Accepted, implementation candidate |
 | steering-local-tool-interruption | [Steering waits for confirmed tool settlement](steering-local-tool-interruption.md) | Accepted |
 | composer-pasted-directory-references | [Composer pasted directory references](composer-pasted-directory-references.md) | Accepted |

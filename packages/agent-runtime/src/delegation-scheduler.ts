@@ -97,10 +97,11 @@ export class DelegationScheduler {
   }
 
   async candidates(): Promise<Candidate[]> {
-    const { settings, modelKeys } = await this.policy();
+    const { settings, modelKeys, selectionMode } = await this.policy();
     const { preferredProvider } = this.options;
     const keys = settings ? orderDelegationModels(settings, {
       preferredKey: this.preferredKey(), selection: this.options.selection,
+      selectionMode,
       reason: this.options.reason ?? (preferredProvider ? "Configured role or resumed binding" : undefined),
     }).map(model => delegationModelKey(model)) : [
       ...(preferredProvider ? [this.key(preferredProvider)] : []),

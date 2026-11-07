@@ -151,7 +151,7 @@ test("a Task row is expandable and names the delegate it used", () => {
 test("a Task node shows the effective model after the subagent name", () => {
   assert.match(
     runtimeSource,
-    /startedAt,\s*\n\s*modelId: provider\.modelId,/,
+    /const record: DelegationRecord = \{[^}]*modelId: provider\.modelId,/,
   );
   assert.match(
     transcriptSource,

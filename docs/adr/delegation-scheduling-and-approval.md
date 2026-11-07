@@ -25,9 +25,10 @@ including definition pins, session inheritance and resumed/fallback bindings.
 The settings form seeds existing opt-ins without changing persisted behavior
 until save; the old model checkbox becomes a navigation entry after adoption.
 
-Role descriptions and tools remain owned by subagent definitions. Task metadata
-is built from the role catalog and scheduling policy, so descriptions remain
-available on provider requests after compaction. The model may select peers or
+Role descriptions and tools remain owned by subagent definitions. As amended by
+[session-scoped on-demand delegation](session-organization-and-scoped-delegation.md),
+Task metadata retains role guidance while TaskModels returns model descriptions
+on demand. The full directory does not remain in every provider request. The model may select peers or
 request a lower-priority specialist with a reason. The scheduler applies enabled
 membership, deterministic tier ordering and declared capability requirements.
 Descriptions and AI explanations never grant permission.

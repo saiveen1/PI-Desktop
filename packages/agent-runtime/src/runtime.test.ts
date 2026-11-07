@@ -9734,7 +9734,7 @@ describe("DesktopAgentRuntime subagents", () => {
     subagentRuns.calls.length = 0;
     subagentRuns.deferred = false;
     subagentRuns.result = undefined;
-    expect((runtime as any).subagentModelSummary()).not.toContain("remote/remote-model");
+    expect(taskTool(runtime).description).not.toContain("remote/remote-model");
     const result = await taskTool(runtime).execute("cross-pin", {
       agent: "explorer", task: "Search.", model: "remote/remote-model",
     });
@@ -9743,7 +9743,7 @@ describe("DesktopAgentRuntime subagents", () => {
     expect(host.call).toHaveBeenCalledWith("provider.resolveSubagentModel", { key: "remote/remote-model" });
     await taskTool(runtime).execute("own-pin", { agent: "reviewer", task: "Review." });
     expect(subagentRuns.calls[0].provider).toBe(remote);
-    expect(taskTool(runtime).description).toContain("Default model: remote/remote-model");
+    expect(taskTool(runtime).description).toContain("TaskModels");
     const echoed = await taskTool(runtime).execute("own-pin-echo", {
       agent: "reviewer", task: "Review.", model: "remote/remote-model",
     });
@@ -9763,7 +9763,7 @@ describe("DesktopAgentRuntime subagents", () => {
       agent: "explorer", task: "Search.", model: "guessed/model",
     });
     for (const guidance of [
-      denied.details.error, tool.description, (runtime as any).agent.state.systemPrompt,
+      denied.details.error,
     ]) {
       expect(guidance).toContain("Settings → Models");
       expect(guidance).toContain("Advanced");
@@ -9805,8 +9805,8 @@ describe("DesktopAgentRuntime subagents", () => {
     });
     subagentRuns.calls.length = 0;
     subagentRuns.deferred = false;
-    expect((runtime as any).subagentModelSummary()).toContain("allowed/selected-model");
-    expect((runtime as any).subagentModelSummary()).not.toContain("remote/remote-model");
+    expect(taskTool(runtime).description).not.toContain("allowed/selected-model");
+    expect(taskTool(runtime).description).not.toContain("remote/remote-model");
     await taskTool(runtime).execute("allowed", { agent: "reviewer", task: "Review.", model: "allowed/selected-model" });
     expect(subagentRuns.calls[0].provider).toBe(selected);
     expect(runtimeMatches(runtime)).toBe(true);
@@ -10006,9 +10006,7 @@ describe("DesktopAgentRuntime subagents", () => {
     subagentRuns.calls.length = 0;
     subagentRuns.result = undefined;
 
-    expect((runtime as any).agent.state.systemPrompt).toContain(
-      "Omit the `model` parameter on Task to use the definition's default model, or inherit the parent conversation's selected model when no default is pinned.",
-    );
+    expect(tool.description).toContain("Omit model to retain configured role/session defaults");
     const result = await tool.execute("task-1", {
       agent: "explorer",
       task: "Inspect the project.",

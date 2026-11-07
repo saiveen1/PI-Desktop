@@ -116,7 +116,9 @@ fn apply_entity(
         validate_application_references(st, &entity.payload)?;
         if let Some(limit) = entity.payload.get("unknownUpstreamRetryLimit") {
             if !crate::provider_retry::is_unknown_upstream_retry_limit(limit) {
-                bail!("CONFIG_SYNC_INVALID: unknownUpstreamRetryLimit must be an integer from 0 to 3");
+                bail!(
+                    "CONFIG_SYNC_INVALID: unknownUpstreamRetryLimit must be an integer from 0 to 3"
+                );
             }
         }
         let mut current = st.db.get_setting("app")?.unwrap_or_else(|| json!({}));

@@ -48,6 +48,7 @@ import { createSessionSlice } from "./slices/session-slice";
 import { createQueueSlice } from "./slices/queue-slice";
 import { createTranscriptSlice } from "./slices/transcript-slice";
 import { createProjectSlice } from "./slices/project-slice";
+import { createSessionManagementSlice } from "./slices/session-management-slice";
 import { createCatalogSlice } from "./slices/catalog-slice";
 import { createEventsSlice } from "./slices/events-slice";
 import { createInteractionSlice } from "./slices/interaction-slice";
@@ -190,6 +191,7 @@ export const useAppStore = create<AppState>((set, get) => {
     flushPendingSessionConfiguration,
   }),
 
+  ...createSessionManagementSlice({ get, set, persist: persistCurrentSidebar }),
   ...createProjectSlice({
     get,
     set,

@@ -278,10 +278,11 @@ output and request/stream phase changes do not. `infiniteProviderRetry` never
 removes this limit. Exhaustion produces the original terminal provider error
 and safe child cleanup once; an admitted retry keeps the owning turn open.
 
-Both budgets reset after a complete, non-error, non-aborted model response,
+Rate-limit, transient and unknown-upstream retry budgets reset after a complete,
+non-error, non-aborted model response,
 including a response that requests tools. The next model request starts with
 fresh counters and backoff, even within the same user turn. Receiving HTTP
-headers, partial text, or changing failure phase does not reset either budget.
+headers, partial text, or changing failure phase does not reset any budget.
 This rule applies to the main session and builtin subagents: a long task with
 independent recovered outages must not eventually stop because earlier tool
 rounds consumed the budget. One-shot completions still use one bounded budget
@@ -1018,14 +1019,19 @@ Saved policy, catalog availability, descriptions and priorities apply to later
 Task admissions in the same long parent turn, later resumes, pending approvals
 and naturally triggered fallback. The additive `provider.delegationSnapshot`
 callback returns `DelegationPolicySnapshot` (`settings?`, opaque string `revision`,
-`modelKeys`); runtime resolves model keys independently. Refresh the parent-facing
-catalog at a provider-request boundary, never by rewriting an in-flight payload.
+`modelKeys`, optional derived `selectionMode: "task-fit"`); runtime resolves model
+keys independently. Refresh runtime authority at a provider-request boundary,
+never by rewriting an in-flight payload. The full directory is returned only by
+the read-only `TaskModels` tool when the parent is preparing delegation; it is
+absent from the system prompt and the Task declaration.
 Already-started children retain their provider and resolved execution policy;
 saving settings neither interrupts/recreates them nor forces a model switch.
 
-Task's tool declaration carries both role and model selection guidance on every
-provider request. `modelReason` explains specialist selection ahead of a preferred
-tier. `modelSelection: prefer | require` defaults to prefer; require never
+Task's declaration carries the role catalog and a short instruction to query
+TaskModels as needed. A batch may reuse the retrieved descriptions. A custom
+session pool requires an explicit model and concise `modelReason` for each new
+Task, and honors task fit ahead of numeric priority. Missing session overrides
+retain global/legacy ordering. `modelSelection: prefer | require` defaults to prefer; require never
 substitutes another model. Optional `minContextWindow` and `requiresImages` filter
 candidates before approval. These model-authored fields do not grant permission.
 `minContextWindow` accepts an integer from 0 to 10000000: zero and omission
@@ -1063,8 +1069,11 @@ or extending; expired, cancelled, replaced or stale requests cannot revive work.
 
 Acknowledged approval is distinct from waiting for capacity or execution start.
 Provider fallback keeps successful tool history and checks the next model before
-any request. `Task` results and settlement snapshots record requested model and
-selection/skip reasons in additive `scheduling` details. Main conversation model
+any request. `Task` results and settlement snapshots record requested model, original
+`modelReason`, and selection/skip reasons in additive `scheduling` details.
+Ordinary delegation views display the original explanation separately from
+actual model identity and scheduling decisions; old records never acquire an
+inferred explanation. Main conversation model
 selection and ordinary tool permissions are unchanged. Plugin collaboration
 uses the same model gate; an existing target session is not silently rebound.
 See [the scheduling ADR](../../adr/delegation-scheduling-and-approval.md),
@@ -1121,11 +1130,12 @@ the on-demand catalog of §7.1. Execution of all four is restricted to Agent mod
   The `Task` tool accepts an optional `model` parameter
   (`"provider/modelId"`) that overrides the delegate's model for that run.
   Resolution priority: Task.model parameter → definition frontmatter pin →
-  session model. The parent agent sees a model summary in the system prompt
-  listing all models marked `availableForSubagents` in provider settings. The
-  empty-catalog system summary, Task description and rejected-override error
-  point to Settings → Models → edit service/account → model Advanced →
-  "Available for AI delegation" → save, and require an exact catalog key
+  session model. The parent reads a model directory through TaskModels when needed,
+  listing models marked `availableForSubagents` in provider settings. The
+  empty-catalog TaskModels result and Task description explain default-model
+  behavior. The rejected-override error points to Settings → Models → edit
+  service/account → model Advanced → "Available for AI delegation" → save,
+  and requires an exact catalog key
   rather than guessed provider/model keys. If
   the delegation catalog is empty, the prompt tells the model to omit `model`
   and use the definition pin, or inherit the session model when unpinned; an

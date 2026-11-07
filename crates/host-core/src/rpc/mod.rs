@@ -2958,6 +2958,17 @@ async fn handle_request(
             todos::get_from(&st, session_id)
         }
 
+        "session.delegationPolicy" => {
+            let id = params
+                .get("id")
+                .and_then(Value::as_str)
+                .ok_or_else(|| rpc_err(1002, "id required", "INVALID_PARAMS"))?;
+            let st = state.lock().await;
+            let session = sessions::session_summary(&st.db, id)
+                .map_err(|e| rpc_err(1000, e.to_string(), "INTERNAL"))?
+                .ok_or_else(|| rpc_err(1007, "session not found", "NOT_FOUND"))?;
+            Ok(json!({ "modelKeys": session.delegation_model_keys }))
+        }
         "session.configure" => {
             let id = params
                 .get("id")
@@ -2969,8 +2980,13 @@ async fn handle_request(
                 .ok_or_else(|| rpc_err(1002, "mode required", "INVALID_PARAMS"))?;
             let thinking_level = thinking_level_param(&params)?;
             let fast_mode = fast_mode_param(&params)?;
+            let delegation_keys = params
+                .get("delegationModelKeys")
+                .map(crate::session_delegation::parse)
+                .transpose()
+                .map_err(|e| rpc_err(1002, e.to_string(), "INVALID_PARAMS"))?;
             let st = state.lock().await;
-            let session = sessions::configure_session_with_fast_mode(
+            let session = sessions::configure_session_with_delegation(
                 &st.db,
                 id,
                 mode,
@@ -2979,11 +2995,14 @@ async fn handle_request(
                 thinking_level.as_deref(),
                 params.get("permissionMode").and_then(|v| v.as_str()),
                 fast_mode,
+                delegation_keys.as_ref().map(|keys| keys.as_deref()),
             )
             .map_err(|e| {
                 let message = e.to_string();
                 if message.starts_with("PLAN_") {
                     plan_rpc_err(message)
+                } else if e.is::<rusqlite::Error>() || e.is::<chrono::ParseError>() {
+                    rpc_err(1000, message, "INTERNAL")
                 } else {
                     rpc_err(1002, message, "INVALID_PARAMS")
                 }
@@ -8186,8 +8205,14 @@ mod tests {
             .unwrap();
         }
         for invalid in [
-            json!(-1), json!(4), json!(0.5), json!("1"), json!(true),
-            json!(9_007_199_254_740_991_i64), serde_json::Value::Null, json!({}),
+            json!(-1),
+            json!(4),
+            json!(0.5),
+            json!("1"),
+            json!(true),
+            json!(9_007_199_254_740_991_i64),
+            serde_json::Value::Null,
+            json!({}),
         ] {
             let error = handle_request(
                 state.clone(),

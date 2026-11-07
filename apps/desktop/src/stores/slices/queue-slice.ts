@@ -171,6 +171,7 @@ export function createQueueSlice({
           ...(attachments.length ? { attachments } : {}),
         })
         .then((entry) => {
+          get().raiseSession(sessionId);
           queuedDrafts.set(entry.id, queuedDraft);
           set((state) => ({
             queuedPrompts: removeQueuedPrompt(
@@ -342,6 +343,7 @@ export function createQueueSlice({
           sessionId, expectedTurnId, content, messageId: message.id,
           attachments: draft ? promptAttachmentsFromDraft(draft.fileReferences) : [],
         });
+        get().raiseSession(sessionId);
         return true;
       } catch (error) {
         runtime.retractOptimisticUserMessage(sessionId, message);
@@ -482,6 +484,7 @@ export function createQueueSlice({
             get().rememberModel(current ?? {});
           }
           onAccepted?.(startedIn);
+          get().raiseSession(startedIn);
           return true;
         } catch (error) {
           runtime.submittedComposerDrafts.delete(startedIn);

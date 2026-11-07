@@ -257,7 +257,14 @@ pub(super) mod tests {
             value["runPolicy"]["reportRecoveryAttempts"] = json!(attempts);
             assert!(validate(&json!({"delegation": value})).is_ok());
         }
-        for attempts in [json!(-1), json!(2), json!(0.5), json!("1"), Value::Null, json!(true)] {
+        for attempts in [
+            json!(-1),
+            json!(2),
+            json!(0.5),
+            json!("1"),
+            Value::Null,
+            json!(true),
+        ] {
             let mut value = policy();
             value["runPolicy"]["reportRecoveryAttempts"] = attempts;
             assert!(validate(&json!({"delegation": value})).is_err());
