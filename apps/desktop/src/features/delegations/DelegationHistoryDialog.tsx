@@ -116,7 +116,7 @@ export function DelegationHistoryDialog({ onClose }: { onClose: () => void }) {
     `${entry.projectTitle || entry.projectPath || t("delegationHistory.noProject")} · ${entry.sessionTitle || t("delegationHistory.untitledSession")}`;
   const date = (value: string) => { const parsed = new Date(value); return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString(); };
 
-  return portalOverlay(<OverlayBackdrop className="delegation-history-overlay" onClick={onClose}>
+  return portalOverlay(<OverlayBackdrop className="overlay delegation-history-overlay" onClick={onClose}>
     <div ref={dialogRef} className="delegation-history" role="dialog" aria-modal="true" aria-labelledby="delegation-history-title" tabIndex={-1} onClick={(event) => event.stopPropagation()} onKeyDown={keyDown}>
       <header className="delegation-history-header"><div><h2 id="delegation-history-title">{t("delegationHistory.title")}</h2><p>{t("delegationHistory.allProjects")}</p></div>
         <TooltipButton tooltip={t("delegationHistory.close")} ariaLabel={t("delegationHistory.close")} onClick={onClose}><IconClose size={16} /></TooltipButton>

@@ -107,6 +107,11 @@ test("global delegation history production dialog user path", {
     await send("Emulation.setDeviceMetricsOverride", { width: 360, height: 640, deviceScaleFactor: 1, mobile: false });
     const light = await evaluate("window.historyLayoutProbe('light')");
     assert.notEqual(dark, light, "Theme tokens must change the dialog surface");
+    const closePoint = await evaluate("window.historyPointerProbeStart()");
+    assert.equal(closePoint.hitClose, true, "Close button must receive pointer events through the portal host");
+    await send("Input.dispatchMouseEvent", { type: "mousePressed", x: closePoint.x, y: closePoint.y, button: "left", clickCount: 1 });
+    await send("Input.dispatchMouseEvent", { type: "mouseReleased", x: closePoint.x, y: closePoint.y, button: "left", clickCount: 1 });
+    assert.equal(await evaluate("window.historyPointerProbeEnd()"), true);
   } finally {
     if (cdp) { try { await cdp.send("Browser.close"); } catch { /* Closing the owned browser closes its socket. */ } cdp.close(); }
     else if (launched?.pid) {

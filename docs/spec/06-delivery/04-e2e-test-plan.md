@@ -46,7 +46,9 @@
   paginate through a filtered empty page with a cursor, inspect task/report,
   retry a read error, and attempt a deleted source. Live refresh renews the
   first-page cursor. Only explicit Open source navigates; View approval targets
-  the existing exact request/revision without navigating. Escape returns focus.
+  the existing exact request/revision without navigating. Verify the close
+  button is hit-testable through the portal host and dismisses the dialog;
+  Escape returns focus.
 - **Sidebar:** Keep group order/membership, descriptive labels and global pins
   unchanged. A running session originally beyond the first ten appears at the
   top of its own conversation group, never another group. Ungrouped reorders
@@ -148,8 +150,11 @@
 - **Groups/labels path:** Open Manage from each project or its row menu. Add,
   rename, recolor, reorder and delete a group; empty groups remain visible. Move
   a conversation between groups and back to Ungrouped using the row menu. Assign
-  multiple labels: verify exactly one conversation row and bounded descriptive
-  chips, without label headings or filters. Fold groups and verify hidden rows
+  multiple labels: verify exactly one conversation row and color-only dots before
+  its title (up to two plus a bounded overflow count), without label headings or
+  filters. Full names, including overflow labels, remain in the hover tooltip and
+  accessible name. At narrow widths, long CJK label names must not consume title
+  space, overlap timestamps or overflow the row. Fold groups and verify hidden rows
   leave range/Select visible selection. Confirm deletion names the group and
   moves its conversations to Ungrouped; cancel preserves it. Label deletion
   removes only associations in that project. No conversation/transcript is lost.

@@ -82,4 +82,21 @@ window.historyLayoutProbe = async (theme) => {
   dialog.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); await tick();
   return background;
 };
+window.historyPointerProbeStart = async () => {
+  document.getElementById("open").focus(); click("#open"); await tick();
+  const close = document.querySelector(".delegation-history-header button");
+  check(close, "Missing delegation history close button");
+  const rect = close.getBoundingClientRect();
+  const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+  return {
+    x: rect.left + rect.width / 2,
+    y: rect.top + rect.height / 2,
+    hitClose: hit === close || close.contains(hit),
+  };
+};
+window.historyPointerProbeEnd = async () => {
+  await tick();
+  check(!document.querySelector('[role="dialog"]'), "Pointer click must close the delegation history dialog");
+  return true;
+};
 window.fixtureReady = true;
