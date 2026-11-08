@@ -8,6 +8,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const transcriptSource = await readTranscriptSource();
+const tabSource = await readFile(new URL("../src/components/workpanel/SubagentTranscriptTab.tsx", import.meta.url), "utf8");
 const runtimeSource = await readFile(
   new URL("../../../packages/agent-runtime/src/runtime.ts", import.meta.url),
   "utf8",
@@ -68,7 +69,7 @@ test("a delegation card reads its outcome from the lifecycle rows", () => {
   assert.match(topologySource, /if \(isDelegationActivityItem\(item\)\) continue;/);
   assert.match(
     transcriptSource,
-    /const delegationStatuses = useMemo\(\(\) => turnDelegationStatuses \?\? collectDelegationStatuses\(delegationItems\)/,
+    /const delegationStatuses = useMemo\(\(\) => turnDelegationStatuses \?\? collectDelegationStatuses\(items\)/,
   );
   // Delegates remain live across replies split by steering in the same runtime turn.
   assert.match(
@@ -131,7 +132,7 @@ test("a terminal tool event repairs a row lost during renderer reload", () => {
 test("inline delegate runs keep the live conversation process", () => {
   assert.match(transcriptSource, /delegate\?: SubagentRun/);
   assert.match(transcriptSource, /<SubagentRunRows/);
-  assert.match(transcriptSource, /variant !== "topology" && open && hasDetails/);
+  assert.match(transcriptSource, /open && hasDetails && disclosure.parentVisible/);
   assert.match(transcriptSource, /className=\{`subagent-run-rows\$\{scrollable \? "" : " is-panel-flow"\}`\}/);
   assert.match(transcriptSource, /onScroll=\{scrollable \? handleScroll : undefined\}/);
   assert.match(transcriptSource, /\{scrollable && showJump \?/);
@@ -148,50 +149,20 @@ test("a Task row is expandable and names the delegate it used", () => {
   assert.match(transcriptSource, /case "delegate":\n\s+return <IconBot/);
 });
 
-test("a Task node shows the effective model after the subagent name", () => {
-  assert.match(
-    runtimeSource,
-    /const record: DelegationRecord = \{[^}]*modelId: provider\.modelId,/,
-  );
-  assert.match(
-    transcriptSource,
-    /const modelId = variant === "topology" \? delegateModelId\(message\) : "";/,
-  );
-  assert.match(
-    transcriptSource,
-    /className="subagent-topology-node-model"[\s\S]*?title=\{modelLabel\}/,
-  );
-  assert.match(
-    toolPresentationSource,
-    /key !== "agent" &&[\s\S]*?key !== "error" &&[\s\S]*?key !== "modelId" &&[\s\S]*?key !== "thinkingLevel"/,
-  );
-  assert.match(
-    messagesCss,
-    /\.subagent-topology-node-model \{[^}]*font-family: var\(--font-mono\)/,
-  );
+test("effective model metadata stays recorded and is presented in task details", () => {
+  assert.match(runtimeSource, /const record: DelegationRecord = \{[^}]*modelId: provider\.modelId,/);
+  assert.match(tabSource, /delegateModelId\(selected.message\)/);
+  assert.match(tabSource, /className="subagent-transcript-model"/);
+  assert.doesNotMatch(transcriptSource, /subagent-topology-node-model/);
+  assert.match(toolPresentationSource, /key !== "agent" &&[\s\S]*?key !== "error" &&[\s\S]*?key !== "modelId" &&[\s\S]*?key !== "thinkingLevel"/);
 });
 
-test("a Task node and detail header show the effective thinking level", () => {
-  assert.match(
-    runtimeSource,
-    /modelId: provider\.modelId,\s*\n\s*thinkingLevel,/,
-  );
-  assert.match(
-    runtimeSource,
-    /modelId: record\.modelId,\s*\n\s*thinkingLevel: record\.thinkingLevel,/,
-  );
+test("the task detail shows the effective thinking level, not a disabled picker", () => {
+  assert.match(runtimeSource, /modelId: provider\.modelId,\s*\n\s*thinkingLevel,/);
+  assert.match(runtimeSource, /modelId: record\.modelId,\s*\n\s*thinkingLevel: record\.thinkingLevel,/);
   assert.match(transcriptSource, /function delegateThinkingLevel\(message: UiMessage\)/);
-  assert.match(transcriptSource, /value === "off"/);
-  assert.match(transcriptSource, /const thinkingLabel = thinkingLevel \?\? "";/);
-  assert.doesNotMatch(transcriptSource, /thinkingLevel\./);
-  assert.match(
-    transcriptSource,
-    /const modelLabel = \[modelId, thinkingLabel\]\.filter\(Boolean\)\.join\(" "\);/,
-  );
-  assert.match(
-    transcriptSource,
-    /className="subagent-topology-node-model"[\s\S]*?title=\{modelLabel\}[\s\S]*?aria-label=\{modelLabel\}/,
-  );
+  assert.match(tabSource, /delegateThinkingLevel\(selected.message\)/);
+  assert.doesNotMatch(tabSource, /aria-haspopup="listbox"/);
 });
 
 test("the report is printed once: in the body, or as the nested answer", () => {
@@ -229,56 +200,16 @@ test("the nested run is visibly one level inside the call", () => {
   assert.match(messagesCss, /\.tool-row-agent \{/);
 });
 
-test("every Task row renders as one accessible delegation topology", () => {
-  // One delegation gets the same card as a fan-out: the compact row hid the
-  // outcome, runtime and step count the card states outright.
-  assert.match(
-    transcriptSource,
-    /const hasSubagentTopology = delegateItems\.length > 0/,
-  );
-  assert.match(
-    transcriptSource,
-    /<SubagentTopology\s+key="subagent-topology"\s+items=\{delegateItems\}\s+delegationStatuses=\{delegationStatuses\}\s+delegationTimings=\{delegationTimings\}\s+onUserInteraction=\{onUserInteraction\}\s*\/>/,
-  );
-  assert.match(transcriptSource, /className="subagent-topology" aria-labelledby=/);
-  assert.match(transcriptSource, /className="subagent-topology-agents"/);
+test("every task uses the same accessible list rather than a coordinator graph", () => {
+  assert.match(transcriptSource, /<SubagentTaskList/);
+  assert.match(transcriptSource, /className="subagent-task-row" role="listitem"/);
   assert.match(transcriptSource, /role="list"/);
-  assert.match(transcriptSource, /variant="topology"/);
-  assert.match(transcriptSource, /className="subagent-topology-node-header"/);
-  assert.match(transcriptSource, /aria-expanded=\{panelOpen\}/);
-  assert.match(
-    transcriptSource,
-    /aria-controls=\{panelOpen \? `work-panel-surface-subagent:\$\{panelSelectionId\}` : undefined\}/,
-  );
-  const topologyNode = transcriptSource.slice(
-    transcriptSource.indexOf('className="subagent-topology-node-header"'),
-    transcriptSource.indexOf(
-      "</button>",
-      transcriptSource.indexOf('className="subagent-topology-node-header"'),
-    ),
-  );
-  assert.doesNotMatch(topologyNode, /tool-row-caret/);
-  assert.match(
-    topologyNode,
-    /onClick=\{\s*\(\) => \{\s*if \(!hasDetails\) return;\s*onUserInteraction\?\.\(\);\s*localToolsAllowed && openSubagentTab\(panelSelectionId, agentName \|\| undefined\);\s*\}\}/,
-  );
-  assert.match(
-    transcriptSource,
-    /const openSubagentTab = useAppStore\(\(s\) => s\.openSubagentTab\)/,
-  );
-  assert.match(
-    transcriptSource,
-    /activeWorkPanelTabId === `subagent:\$\{panelSelectionId\}`/,
-  );
-  assert.match(storeSource, /openWorkPanelTab\(subagentWorkPanelTab\(id, agentName \|\| undefined\)\)/);
-  assert.match(transcriptSource, /const inlineOpen = variant !== "topology" && open;/);
+  assert.match(transcriptSource, /className="subagent-task-open"/);
+  assert.match(transcriptSource, /openTabForSession\(sessionId, subagentWorkPanelTab\(id, title\)\)/);
+  assert.doesNotMatch(transcriptSource, /subagent-topology-root|variant="topology"/);
 });
 
-test("the aggregate label counts, so a lone delegation is not called plural", () => {
-  assert.match(
-    transcriptSource,
-    /: "chat\.subagentsFinished",\n(?:\s*\/\/[^\n]*\n)*\s*\{ count: subagentSummary\.total \},/,
-  );
+test("legacy lifecycle labels retain correct singular and plural wording", () => {
   for (const [locale, source] of [
     ["en", englishCatalogSource],
     ["zh-CN", chineseCatalogSource],
@@ -305,26 +236,12 @@ test("the aggregate label counts, so a lone delegation is not called plural", ()
   assert.match(englishCatalogSource, /subagentsWorking_other: "Subagents working"/);
 });
 
-test("the topology uses semantic low-noise surfaces and responsive connectors", () => {
-  assert.match(messagesCss, /\.tool-activity-group\.has-subagents \{/);
-  assert.match(messagesCss, /\.subagent-topology \{[^}]*display: grid/);
-  // D297: nodes are raised tiles on the group's tile, connectors are tinted
-  // bars, and the dotted canvas is gone.
-  assert.match(messagesCss, /\.subagent-topology-node \{[^}]*background: var\(--ds-raised\)/);
-  assert.doesNotMatch(messagesCss, /\.subagent-topology-node \{[^}]*border:/);
-  assert.match(messagesCss, /\.tool-activity-group\.has-subagents \{[^}]*background: var\(--ds-tile\)/);
-  assert.doesNotMatch(messagesCss, /\.tool-activity-group\.has-subagents \{[^}]*border:/);
-  assert.doesNotMatch(messagesCss, /\.subagent-topology \{[^}]*background-image/);
-  assert.match(messagesCss, /\.subagent-topology-connector \{[^}]*background: var\(--ds-tile-deep\)/);
-  assert.match(messagesCss, /\.subagent-topology-node::before \{[^}]*height: 2px/);
-  assert.match(messagesCss, /\.subagent-topology-node\.outcome-completed/);
-  assert.match(messagesCss, /\.subagent-topology-node\.outcome-failed/);
-  assert.match(messagesCss, /\.subagent-topology-node\.outcome-timed-out/);
-  assert.match(
-    messagesCss,
-    /@container subagent-activity \(max-width: 520px\)[\s\S]*?\.subagent-topology/,
-  );
-  assert.match(messagesCss, /\.subagent-topology-node-header:focus-visible/);
+test("task lists use identity colors, outcome text, and visible keyboard focus", () => {
+  assert.match(messagesCss, /\.subagent-task-open:focus-visible/);
+  assert.match(messagesCss, /--task-identity: var\(--ds-task-lavender\)/);
+  assert.match(messagesCss, /data-outcome="failed"/);
+  assert.match(messagesCss, /@container subagent-tasks/);
+  assert.doesNotMatch(messagesCss, /\.subagent-topology/);
 });
 
 test("a delegate's rows scroll in place instead of growing the page (D271)", () => {
@@ -406,22 +323,8 @@ test("an expanded delegate run follows the latest output while pinned (D302)", (
   assert.doesNotMatch(messagesCss, /\.subagent-run \{[^}]*overflow/);
 });
 
-test("the delegation card keeps inset from its tile and stays live off the tail (D319)", () => {
-  // Parent Read/Grep/thinking after a Task fan-out is a later activity part, so
-  // the card is not the turn's live tail while its delegates are still running.
-  assert.match(transcriptSource, /const topologyLive = hasSubagentTopology && subagentSummary\.running > 0/);
-  assert.match(transcriptSource, /const live = isActive \|\| topologyLive/);
-  assert.match(transcriptSource, /delegationTimingBounds\(delegateItems, delegationTimings\)/);
-  assert.match(
-    messagesCss,
-    /\.subagent-topology \{[^}]*padding: 8px 16px 16px/,
-  );
-  assert.match(
-    messagesCss,
-    /\.tool-activity-group\.has-subagents \.tool-activity-header \{[^}]*padding: 10px 16px/,
-  );
-  assert.match(
-    messagesCss,
-    /\.tool-activity-group\.has-subagents \.tool-activity-body > \.tool-row \{[^}]*margin-left: 16px/,
-  );
+test("task status remains live even when the parent executes another activity", () => {
+  assert.match(transcriptSource, /const live = isActive \|\| subagentSummary.running > 0/);
+  assert.match(transcriptSource, /subagentTaskOutcome\(message, statuses\)/);
+  assert.match(transcriptSource, /delegateItems.length > 0\) return <>\{renderedItems\}/);
 });

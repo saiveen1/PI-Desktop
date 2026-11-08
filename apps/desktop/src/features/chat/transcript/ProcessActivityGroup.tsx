@@ -6,8 +6,8 @@ import {
   activityLabelBuckets,
   activityOpsText,
 } from "../../../lib/activity-group-label";
-import { cachedActivitySummary } from "../../../lib/transcript-activity-summary";
-import { IconChevronRight, IconSparkles } from "../../../components/icons";
+import { cachedActivityIssues, cachedActivitySummary } from "../../../lib/transcript-activity-summary";
+import { IconChevronRight, IconCircleAlert, IconSparkles } from "../../../components/icons";
 import { DisclosureCollapseRail } from "./shared";
 import { DisclosureScope, type useAutomaticDisclosure } from "./disclosure";
 
@@ -33,14 +33,14 @@ export function ProcessActivityGroup({
   const open = (!grouped || disclosure.open) && parentVisible;
   // A folded group is one line, so the line has to state what the group did and
   // how much of it: the composition phrase and the operation count are separate
-  // values so the count can never be the part that gets ellipsized away.
-  // Failures are not repeated here - the tool row that failed already says so.
-  const { phrase, ops } = useMemo(() => {
+  // A closed summary must still expose errors; opening the payload is optional.
+  const { phrase, ops, issues } = useMemo(() => {
     const summary = cachedActivitySummary(items);
     const { named, hidden } = activityLabelBuckets(summary.buckets);
     return {
       phrase: activityBucketPhrase(named, hidden, t),
       ops: activityOpsText(summary.tools, summary.thinking, t),
+      issues: cachedActivityIssues(items),
     };
   }, [items, t]);
   if (items.length === 0) return null;
@@ -66,7 +66,11 @@ export function ProcessActivityGroup({
               <span className="tool-activity-count tool-activity-ops">{ops}</span>
             </>
           ) : null}
-          {active ? <span className="tool-activity-count">{t("chat.running")}</span> : null}
+          {issues > 0 ? (
+            <span className="tool-row-status error" role="status">
+              <IconCircleAlert size={13} aria-hidden />{t("chat.toolFailed")} ({issues})
+            </span>
+          ) : null}
           <span className="tool-activity-caret" aria-hidden><IconChevronRight size={12} /></span>
         </button>
       ) : null}

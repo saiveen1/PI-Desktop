@@ -1,21 +1,11 @@
 import { useChatSessionCapability } from "../../../hooks/use-chat-session-capability";
-import { SubagentStopButton } from "./SubagentStopButton";
-import { SubagentRetryButton } from "./SubagentRetryButton";
 import { DelegationSelectionSummary } from "./DelegationSelectionSummary";
 import { PlanHistoryCard } from "./PlanHistoryCard";
 import { planSubmission } from "../../../lib/plan-history";
 import { reviewChangeFromMessage } from "../../../lib/workspace-review";
 import { GeneratedImages } from "./GeneratedImages";
 import "../../../styles/generated-images.css";
-import {
-  memo,
-  useCallback,
-  useEffect,
-  useId,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { memo, useCallback, useId, useLayoutEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import type { UiMessage } from "@pi-desktop/shared";
 import { useOpenPreviewTarget } from "../../../hooks/use-preview-target";
@@ -25,7 +15,6 @@ import { useFollowScroll } from "../../../hooks/use-follow-scroll";
 import { getToolPreviewTarget } from "../../../lib/chat-links";
 import { disclosureKey } from "./disclosure";
 import {
-  formatToolDuration,
   getToolAction,
   getToolDisplayName,
   getToolSummary,
@@ -45,14 +34,10 @@ import {
   type SubagentRunItem,
 } from "../../../lib/assistant-turns";
 import {
-  delegationIsCreating,
   delegationRoster,
   delegationRosterOutcome,
   delegationRosterSummary,
   lifecycleKindOf, backgroundJobRowOf,
-  subagentOutcome,
-  type SubagentOutcome,
-  type SubagentTiming,
 } from "../../../lib/subagent-topology";
 import { useAppStore } from "../../../stores/app-store";
 import { Markdown } from "../../../components/Markdown";
@@ -61,10 +46,7 @@ import { ToolChips, ToolDetailBlocks } from "../../../components/ToolDetails";
 import {
   IconArrowDown,
   IconBot,
-  IconCheck,
   IconChevronRight,
-  IconCircleAlert,
-  IconStop,
 } from "../../../components/icons";
 import { TooltipButton } from "../../../components/ui";
 import { DisclosureAnchorContext } from "../../../lib/disclosure-anchor-context";
@@ -82,11 +64,7 @@ import {
   useAutomaticDisclosure,
   useMessageRevealRequest,
 } from "./shared";
-import {
-  delegateAgentName,
-  delegateModelId,
-  delegateThinkingLevel,
-} from "./model";
+import { delegateAgentName } from "./model";
 import { PluginToolCard } from "./PluginToolCard";
 import { useSlotEntryForKey } from "../../../plugins/renderer-slots/use-slots";
 
@@ -94,74 +72,33 @@ type ToolRowProps = {
   message: UiMessage;
   /** Rows the delegate produced, when this row is a `Task` call (ADR 0062). */
   delegate?: SubagentRun;
-  /** Card treatment used when several Task calls form a delegation topology. */
-  variant?: "default" | "topology";
   /** The containing turn renders image results outside its process disclosure. */
   imagesInTurn?: boolean;
   /** Claims the containing activity group when this row is manually used. */
   onUserInteraction?: () => void;
-  /** Live delegation statuses read from the turn's lifecycle-tool rows. */
-  delegationStatuses?: ReadonlyMap<string, SubagentOutcome>;
-  /** Runtime timings read from the turn's delegation lifecycle rows. */
-  delegationTimings?: ReadonlyMap<string, SubagentTiming>;
 };
 
-function toolRowDelegationId(message: UiMessage): string | undefined {
-  const payload = toolResultPayload(message);
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-    return undefined;
-  }
-  const delegationId = (payload as { delegationId?: unknown }).delegationId;
-  return typeof delegationId === "string" ? delegationId : undefined;
-}
-
-/**
- * Streaming updates replace one message object at a time. Regular rows only
- * depend on that message and their nested run; topology rows additionally
- * depend on the status/timing for their own delegation, not on Map identity.
- */
-function toolRowPropsEqual(
-  previous: ToolRowProps,
-  next: ToolRowProps,
-): boolean {
-  if (
-    previous.message !== next.message ||
-    previous.variant !== next.variant ||
-    previous.imagesInTurn !== next.imagesInTurn ||
-    previous.onUserInteraction !== next.onUserInteraction ||
-    !subagentRunsEqual(previous.delegate, next.delegate)
-  ) {
-    return false;
-  }
-  if (previous.variant !== "topology") return true;
-  const previousId = toolRowDelegationId(previous.message);
-  const nextId = toolRowDelegationId(next.message);
-  if (previousId !== nextId) return false;
-  if (!previousId || !nextId) return true;
-  const previousTiming = previous.delegationTimings?.get(previousId);
-  const nextTiming = next.delegationTimings?.get(nextId);
-  return (
-    previous.delegationStatuses?.get(previousId) ===
-      next.delegationStatuses?.get(nextId) &&
-    previousTiming?.startedAt === nextTiming?.startedAt &&
-    previousTiming?.completedAt === nextTiming?.completedAt
-  );
+/** Ordinary rows only depend on their message and attached delegate rows. */
+function toolRowPropsEqual(previous: ToolRowProps, next: ToolRowProps): boolean {
+  return previous.message === next.message &&
+    previous.imagesInTurn === next.imagesInTurn &&
+    previous.onUserInteraction === next.onUserInteraction &&
+    subagentRunsEqual(previous.delegate, next.delegate);
 }
 
 /**
  * One tool call. A call of a plugin's own tool renders the card that plugin
  * registered for it (the `toolCard` slot); the host card below is its
- * fallback, and the only card for every other call. Topology nodes and
- * denied rows always keep the host card.
+ * fallback, and the only card for every other call. Denied rows keep the host card.
  */
 export const ToolRow = memo(function ToolRow(props: ToolRowProps) {
-  const { message, variant = "default" } = props;
+  const { message } = props;
   const cardEntry = useSlotEntryForKey(
     "toolCard",
-    variant === "default" && message.toolStatus !== "denied" ? message.toolName : undefined,
+    message.toolStatus !== "denied" ? message.toolName : undefined,
   );
   const proposal = planSubmission(message);
-  if (proposal && variant === "default" && message.toolStatus !== "denied") {
+  if (proposal && message.toolStatus !== "denied") {
     return <PlanHistoryCard message={message} proposal={proposal} onUserInteraction={props.onUserInteraction} />;
   }
   const hostRow = <HostToolRow {...props} />;
@@ -175,11 +112,8 @@ export const ToolRow = memo(function ToolRow(props: ToolRowProps) {
 function HostToolRow({
   message,
   delegate,
-  variant = "default",
   imagesInTurn = false,
   onUserInteraction,
-  delegationStatuses,
-  delegationTimings,
 }: ToolRowProps) {
   const { t } = useTranslation();
   const detailsId = useId();
@@ -187,8 +121,6 @@ function HostToolRow({
   const root = useAppStore((s) => localToolsAllowed ? s.workspace?.path : undefined);
   const openTarget = useOpenPreviewTarget();
   const { fileMenu, openFileMenu, closeFileMenu } = useChatFileMenu();
-  const openSubagentTab = useAppStore((s) => s.openSubagentTab);
-  const activeWorkPanelTabId = useAppStore((s) => s.activeWorkPanelTabId);
   const status = message.toolStatus;
   const action = getToolAction(message.toolName);
   // Classify the result once; execution and persisted statuses stay untouched.
@@ -223,7 +155,7 @@ function HostToolRow({
   // A run row keeps its command in the head and only its output in the body, so
   // the head carries the two things the body no longer offers: a copy of the
   // command, and the outcome (D226).
-  const runHead = action === "run" && variant !== "topology";
+  const runHead = action === "run";
   const command = runHead
     ? getToolSummaryValue(message.toolName, message.toolArgs)
     : "";
@@ -243,11 +175,6 @@ function HostToolRow({
     action === "delegate" && !lifecycle
       ? delegateAgentName(message, delegate)
       : "";
-  const modelId = variant === "topology" ? delegateModelId(message) : "";
-  const thinkingLevel =
-    variant === "topology" ? delegateThinkingLevel(message) : undefined;
-  const thinkingLabel = thinkingLevel ?? "";
-  const modelLabel = [modelId, thinkingLabel].filter(Boolean).join(" ");
   // The delegate's last answer row is its report, so the body must not print
   // the same text a second time.
   const nestedReport = delegate?.items.some((item) => item.kind === "answer");
@@ -258,7 +185,7 @@ function HostToolRow({
     nestedReport: boolean | undefined;
     blocks: ReturnType<typeof buildToolPresentation>;
   } | null>(null);
-  if (variant !== "topology" && open && hasDetails && disclosure.parentVisible &&
+  if (open && hasDetails && disclosure.parentVisible &&
     (presentation.current?.message !== message || presentation.current?.nestedReport !== nestedReport)) {
     presentation.current = {
       message,
@@ -269,16 +196,7 @@ function HostToolRow({
       }),
     };
   }
-  const blocks = variant !== "topology" && open && hasDetails ? presentation.current?.blocks : null;
-  const outcome =
-    variant === "topology" && !neutralStatus ? subagentOutcome(message, delegationStatuses) : null;
-  // A bare `running` Task row (no delegation result yet) is still being
-  // created: the delegate runtime is spawning and no structured snapshot
-  // exists. Show it as starting rather than a generic running state.
-  const creating =
-    variant === "topology" &&
-    outcome === "running" &&
-    delegationIsCreating(message);
+  const blocks = open && hasDetails ? presentation.current?.blocks : null;
   const toolStatusLabel = toolStatus.kind === "unknown" ? "" : t(TOOL_STATUS_LABEL_KEYS[toolStatus.kind]);
   // A lifecycle row never falls back to its arguments: while it is still
   // running it has no roster yet, and `delegationIds` would otherwise reach the
@@ -290,64 +208,8 @@ function HostToolRow({
         jobRow.state && t(`backgroundTasks.${jobRow.state}`),
       ].filter(Boolean).join(" · ")
     : lifecycle ? rosterSummary : argSummary;
-  const statusLabel = neutralStatus
-    ? toolStatusLabel
-    : creating
-      ? t("chat.subagentCreating")
-      : outcome
-        ? t(`chat.subagentStatus.${outcome}`)
-        : rosterOutcome
-          ? t(`chat.subagentStatus.${rosterOutcome}`)
-          : toolStatusLabel;
-  const delegationPayload =
-    variant === "topology" ? toolResultPayload(message) : undefined;
-  const delegationId =
-    delegationPayload && typeof delegationPayload === "object"
-      ? (delegationPayload as { delegationId?: unknown }).delegationId
-      : undefined;
-  const panelSelectionId =
-    typeof delegationId === "string" && delegationId
-      ? delegationId
-      : message.toolCallId || message.id;
-  const panelOpen =
-    variant === "topology" &&
-    activeWorkPanelTabId === `subagent:${panelSelectionId}`;
-  const renderedOpen = variant === "topology" ? panelOpen : open;
-  const inlineOpen = variant !== "topology" && open;
-  const delegationTiming =
-    typeof delegationId === "string"
-      ? delegationTimings?.get(delegationId)
-      : undefined;
-  const [now, setNow] = useState(Date.now);
-  // While a delegation is still being created it has no `startedAt` in the
-  // result, so the elapsed clock ticks from the call's own timestamp instead
-  // of waiting for the Task handle — the node never reads as stalled.
-  const nodeStartedAt =
-    delegationTiming?.startedAt !== undefined
-      ? delegationTiming.startedAt
-      : creating && message.createdAt
-        ? Date.parse(message.createdAt) || undefined
-        : undefined;
-  const durationMs =
-    nodeStartedAt !== undefined
-      ? Math.max(
-          0,
-          (delegationTiming?.completedAt ??
-            (outcome === "running" ? now : nodeStartedAt)) -
-            nodeStartedAt,
-        )
-      : message.toolDurationMs;
-  const duration =
-    typeof durationMs === "number" && durationMs > 0
-      ? formatToolDuration(durationMs / 1000)
-      : "";
-
-  useEffect(() => {
-    if (outcome !== "running") return;
-    setNow(Date.now());
-    const id = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(id);
-  }, [outcome]);
+  const statusLabel = neutralStatus ? toolStatusLabel
+    : rosterOutcome ? t(`chat.subagentStatus.${rosterOutcome}`) : toolStatusLabel;
 
   // Auto-scroll the nested `.tool-row-content` containers to their bottom
   // while the tool is still running. These elements have `max-height: 260px`
@@ -374,80 +236,11 @@ function HostToolRow({
 
   return (
     <div
-      className={`tool-row ${variant === "topology" ? "subagent-topology-node" : ""} ${
-        renderedOpen ? "open" : ""
-      } status-${toolStatus.kind === "failed" ? "error" : toolStatus.kind}${outcome ? ` outcome-${outcome.replaceAll("_", "-")}` : ""}${creating ? " outcome-creating" : ""}`}
-      role={variant === "topology" ? "listitem" : "region"}
+      className={`tool-row ${open ? "open" : ""} status-${toolStatus.kind === "failed" ? "error" : toolStatus.kind}`}
+      role="region"
       data-message-id={message.id}
-      aria-label={`${t("chat.toolCall")}: ${rawName}${agentName ? `, ${agentName}` : ""}${modelLabel ? `, ${modelLabel}` : ""}${statusLabel ? `, ${statusLabel}` : ""}`}
+      aria-label={`${t("chat.toolCall")}: ${rawName}${agentName ? `, ${agentName}` : ""}${statusLabel ? `, ${statusLabel}` : ""}`}
     >
-      {variant === "topology" ? (
-        <div className="subagent-topology-node-actions">
-        <button
-          className="subagent-topology-node-header"
-          aria-expanded={panelOpen}
-          aria-controls={panelOpen ? `work-panel-surface-subagent:${panelSelectionId}` : undefined}
-          disabled={!hasDetails}
-          title={[agentName || rawName, modelLabel, summary].filter(Boolean).join(" · ")}
-          onClick={() => {
-            if (!hasDetails) return;
-            onUserInteraction?.();
-            localToolsAllowed && openSubagentTab(panelSelectionId, agentName || undefined);
-          }}
-        >
-          <span className="subagent-topology-avatar" aria-hidden>
-            <IconBot size={15} />
-            <span className="subagent-topology-status-icon">
-              {outcome === "completed" ? (
-                <IconCheck size={8} />
-              ) : outcome === "aborted" || neutralStatus ? (
-                <IconStop size={7} />
-              ) : outcome === "running" ? (
-                <span />
-              ) : (
-                <IconCircleAlert size={8} />
-              )}
-            </span>
-          </span>
-          <span className="subagent-topology-node-copy">
-            <span className="subagent-topology-node-title-row">
-              <span className="subagent-topology-node-title">
-                {agentName || t("chat.subagentUnnamed")}
-              </span>
-              {modelLabel ? (
-                <span
-                  className="subagent-topology-node-model"
-                  title={modelLabel}
-                  aria-label={modelLabel}
-                >
-                  <span className="subagent-topology-node-model-name">{modelId}</span>
-                  {thinkingLabel ? <span className="subagent-topology-node-thinking"> {thinkingLabel}</span> : null}
-                </span>
-              ) : null}
-              <span className="subagent-topology-node-status">
-                {statusLabel}
-                {duration ? ` · ${duration}` : ""}
-              </span>
-            </span>
-            {summary ? (
-              <span className="subagent-topology-node-summary" title={summary}>
-                {summary}
-              </span>
-            ) : null}
-            {delegate?.items.length ? (
-              <span className="subagent-topology-node-steps">
-                {t("chat.processingSteps", { count: delegate.items.length })}
-              </span>
-            ) : null}
-          </span>
-          {outcome === "running" ? (
-            <span className="tool-spinner" aria-label={t("chat.running")} />
-          ) : null}
-        </button>
-        {typeof delegationId === "string" && <SubagentStopButton delegationId={delegationId} running={outcome === "running" && !creating} name={agentName} />}
-        {typeof delegationId === "string" && <SubagentRetryButton delegationId={delegationId} failed={outcome === "failed"} compact />}
-        </div>
-      ) : (
         <div className={`tool-row-head${runHead ? " is-run" : ""}`}>
           <button
             ref={titleRef}
@@ -536,12 +329,6 @@ function HostToolRow({
             </button>
           ) : null}
         </div>
-      )}
-      {variant === "topology" ? (
-        <span className="sr-only" role="status" aria-live="polite">
-          {statusLabel}
-        </span>
-      ) : null}
       {blocks && blocks.length > 0 ? (
         <div className="tool-row-body" id={detailsId} ref={disclosure.bodyRef} {...disclosure.bodyEvents}>
           <DisclosureCollapseRail
@@ -553,7 +340,7 @@ function HostToolRow({
         </div>
       ) : null}
       {!imagesInTurn && <GeneratedImages message={message} />}
-      {inlineOpen && delegate ? (
+      {open && delegate ? (
         <SubagentRunRows
           run={delegate}
           agentName={agentName}
@@ -687,7 +474,6 @@ function SubagentRunFollow({
                   key={`thinking-${item.message.id}`}
                   message={item.message}
                   streaming={item.message.status === "streaming"}
-                  autoOpen
                 />
               ) : (
                 <div

@@ -6,7 +6,7 @@ import { ReviewChangeCard } from "../../../components/ReviewChangeCard";
 import { thinkingRowStartsOpen } from "../../../lib/activity-group-folding";
 import { ThinkingRow } from "./shared";
 import { HostedSearchRow } from "./HostedSearchRow";
-import { SubagentTopology } from "./SubagentDetail";
+import { SubagentTaskList } from "./SubagentTaskList";
 import { ToolRow } from "./ToolRow";
 import { useRenderBlocks, type RenderBlock } from "./render-blocks";
 
@@ -47,12 +47,10 @@ const ActivityItemBlock = memo(function ActivityItemBlock({
     const delegation = Boolean(isDelegationActivityItem(item));
     if (delegation) {
       if (item !== topologyItem || !delegateItems) return null;
-      return <SubagentTopology
-        key="subagent-topology"
+      return <SubagentTaskList
+        key="subagent-tasks"
         items={delegateItems}
         delegationStatuses={delegationStatuses}
-        delegationTimings={delegationTimings}
-        onUserInteraction={onUserInteraction}
       />;
     }
     // A tool or hosted-search row always starts collapsed: only the user opens
@@ -82,9 +80,7 @@ const ActivityItemBlock = memo(function ActivityItemBlock({
       streaming={isActive && item.message.status === "streaming"}
       onUserInteraction={onUserInteraction}
     />;
-    // Reasoning folds once it stops streaming, unless the reader turned
-    // `autoCollapseThinking` off; the row keeps its own explicit choice either
-    // way.
+    // Live reasoning remains opt-in; an explicit reader choice is retained.
     const streaming = isActive && item.message.status === "streaming";
     return <ThinkingRow
       key={`thinking-${item.message.id}`}

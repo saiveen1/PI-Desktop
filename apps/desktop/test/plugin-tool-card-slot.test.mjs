@@ -106,11 +106,11 @@ test("a failed call reaches the card as data, a running one without a result", a
   );
 });
 
-test("denied calls, topology nodes and every other tool keep the host card", async (t) => {
+test("denied calls, built-in delegations and every other tool keep the host card", async (t) => {
   const ssr = await rows(t);
   const cases = [
     ["a denied call", call({ toolStatus: "denied" }), {}],
-    ["a topology node", call(), { variant: "topology" }],
+    ["a built-in delegation", call({ toolName: "Task" }), {}],
     ["a host tool", call({ toolName: "read" }), {}],
     ["the bare tool name", call({ toolName: "lookup" }), {}],
     ["another plugin's tool of the same name", call({ toolName: "plugin_demo_other_lookup" }), {}],

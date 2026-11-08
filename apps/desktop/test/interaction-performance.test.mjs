@@ -96,10 +96,10 @@ test("expanded live tool output stays local to the changed row", () => {
   // Bash burst does not rerender every sibling.
   assert.match(transcript, /const ToolRow = memo\(function ToolRow/);
   assert.match(transcript, /function toolRowPropsEqual\(/);
-  assert.match(transcript, /if \(previous.variant !== "topology"\) return true;/);
+  assert.match(transcript, /previous.message === next.message &&/);
   assert.doesNotMatch(transcript, /autoOpenLatest/);
-  assert.match(transcript, /if \(variant !== "topology" && open && hasDetails && disclosure\.parentVisible/);
-  assert.match(transcript, /const blocks = variant !== "topology" && open && hasDetails \? presentation\.current\?\.blocks : null/);
+  assert.match(transcript, /if \(open && hasDetails && disclosure\.parentVisible/);
+  assert.match(transcript, /const blocks = open && hasDetails \? presentation\.current\?\.blocks : null/);
 });
 
 test("stream event bursts are coalesced until a paint or terminal event", () => {
@@ -118,7 +118,7 @@ test("tool errors stay local to their rows instead of failing the activity group
   // own, failed or not.
   assert.match(toolRow, /const disclosure = useAutomaticDisclosure\(\s*false,\s*revealRequest,\s*disclosureKey\("tool", message\.id\),\s*\);/);
   assert.match(transcript, /bodyEvents: \{ onPointerDownCapture: claim, onFocusCapture: claim \}/);
-  assert.match(toolRow, /status === "error"\s*\? t\("chat.toolFailed"\)/);
+  assert.match(toolRow, /<ToolStatusBadge status=\{toolStatus\}/);
 });
 
 test("manual upward scrolling cancels pending transcript follow work", () => {

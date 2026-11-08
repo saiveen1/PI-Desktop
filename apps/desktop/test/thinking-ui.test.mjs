@@ -253,7 +253,6 @@ test("transcript keeps assistant thinking in a separate disclosure", () => {
   assert.match(transcriptSource, /thinking-prose[\s\S]*?Markdown source=\{text\}/);
   assert.match(transcriptSource, /CopyButton text=\{content\}/);
   assert.match(transcriptSource, /messageThinking as thinkingText/);
-  assert.match(transcriptSource, /onlyThinking = useMemo\(\(\) => items\.every/);
   assert.match(stylesSource, /\.thinking-prose/);
 });
 
@@ -267,8 +266,8 @@ test("expanded assistant activity rails collapse their disclosures", () => {
     /className="tool-row-body"[\s\S]*?<DisclosureCollapseRail[\s\S]*?onCollapse=\{collapseRow\}/,
   );
   assert.match(
-    transcriptActivityGroupSource,
-    /className="tool-activity-body"[\s\S]*?<DisclosureCollapseRail[\s\S]*?onCollapse=\{collapseDisclosure\}/,
+    transcriptSource,
+    /className="process-activity-body"[\s\S]*?<DisclosureCollapseRail[\s\S]*?onCollapse=\{disclosure.collapse\}/,
   );
   assert.match(
     stylesSource,
@@ -284,7 +283,7 @@ test("tool and search rows stay collapsed while reasoning follows its own switch
   assert.match(transcriptDisclosureSource, /const setManualOpen = useCallback/);
   assert.match(
     transcriptSource,
-    /const automaticallyOpen = activityGroupStartsOpen\(\{\s*turnActive,\s*groupActive: live,\s*collapseSettled: collapseSettledGroups,\s*\}\);/,
+    /activityGroupStartsOpen\(\{\s*turnActive,\s*groupActive: live,\s*collapseSettled: collapseSettledGroups,?\s*\}\)/,
   );
   assert.match(
     transcriptSource,
@@ -295,9 +294,9 @@ test("tool and search rows stay collapsed while reasoning follows its own switch
   assert.doesNotMatch(transcriptSource, /autoOpenLatest/);
   assert.doesNotMatch(transcriptSource, /<ToolRow[^>]*\sautoOpen/);
   assert.match(transcriptToolRowSource, /const disclosure = useAutomaticDisclosure\(\s*false,\s*revealRequest,\s*disclosureKey\("tool", message\.id\),\s*\);/);
-  assert.match(transcriptSource, /onClick=\{toggleDisclosure\}/);
-  assert.match(transcriptSource, /onCollapse=\{collapseDisclosure\}/);
-  assert.match(transcriptSource, /onUserInteraction=\{claimDisclosure\}/);
+  assert.match(transcriptSource, /onClick=\{disclosure.toggle\}/);
+  assert.match(transcriptSource, /onCollapse=\{disclosure.collapse\}/);
+  assert.match(transcriptSource, /onUserInteraction=\{disclosure.claim\}/);
   assert.doesNotMatch(transcriptActivityGroupSource, /const tail =|tool-activity-preview/);
 });
 

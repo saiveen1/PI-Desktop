@@ -102,6 +102,11 @@
   --ds-raised-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
   --ds-accent: var(--gray-0);
   --ds-file-link: #68b5f9;
+  /* Stable task identities, not status colors; themes may override each tone. */
+  --ds-task-lavender: #c4aeff;
+  --ds-task-teal: #83cfc7;
+  --ds-task-blue: #91bfff;
+  --ds-task-amber: #e9c07e;
   --ds-accent-hover: var(--gray-100);
   --ds-accent-soft: var(--gray-300);
   /* Focus rings / resize affordances. Tied to the accent so themes stay monochrome. */
@@ -264,6 +269,10 @@
   /* Light theme accent inverts: dark ink on pale surfaces. */
   --ds-accent: #1a1c1f;
   --ds-file-link: #0672ce;
+  --ds-task-lavender: #7655b8;
+  --ds-task-teal: #287d78;
+  --ds-task-blue: #3d70b0;
+  --ds-task-amber: #96631d;
   --ds-accent-hover: #303030;
   --ds-accent-soft: #5d5d5d;
   --ds-focus: var(--ds-accent);

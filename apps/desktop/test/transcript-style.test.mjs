@@ -57,8 +57,8 @@ test("tool rows render structured blocks instead of dumping JSON", async () => {
   assert.doesNotMatch(permissionSource, /JSON\.stringify|formatToolValue/);
   assert.match(transcriptSource, /buildToolPresentation\(message, \{\n\s+hideSummaryArg: true,/);
   // Formatting remains lazy and the cached blocks are read only while visible.
-  assert.match(transcriptSource, /if \(variant !== "topology" && open && hasDetails && disclosure\.parentVisible/);
-  assert.match(transcriptSource, /const blocks = variant !== "topology" && open && hasDetails \? presentation\.current\?\.blocks : null/);
+  assert.match(transcriptSource, /if \(open && hasDetails && disclosure\.parentVisible/);
+  assert.match(transcriptSource, /const blocks = open && hasDetails \? presentation\.current\?\.blocks : null/);
   assert.match(transcriptSource, /<ToolChips chips=\{chips\} \/>/);
   assert.match(
     transcriptSource,
@@ -118,14 +118,12 @@ test("tool block bodies stay bounded and role-coded", () => {
 
 test("tool details do not add a second visual indent", () => {
   const toolDetailStyles = stylesSource.match(
-    /\.tool-row:not\(\.thinking\):not\(\.subagent-topology-node\) > \.tool-row-body \{([^}]*)\}/
+    /\.tool-row:not\(\.thinking\) > \.tool-row-body \{([^}]*)\}/
   )?.[1];
   assert.ok(toolDetailStyles);
   assert.match(toolDetailStyles, /margin-left:\s*0;/);
   assert.match(toolDetailStyles, /padding-left:\s*0;/);
-  // Thinking and topology have separate visual hierarchies and keep their
-  // dedicated layout rules rather than inheriting the flat tool detail rule.
-  assert.match(stylesSource, /\.subagent-topology-node > \.tool-row-body,[\s\S]*?margin-left:\s*38px;/);
+  assert.doesNotMatch(stylesSource, /\.subagent-topology-node/);
 });
 
 
@@ -275,43 +273,14 @@ test("tool-call disclosure headers span the conversation band", () => {
   assert.match(row, /min-width:\s*0;/);
 });
 
-test("delegation node copy wraps within the responsive card", () => {
-  const metrics = stylesSource.match(
-    /\.subagent-activity-metrics \{([^}]*)\}/,
-  )?.[1];
-  assert.ok(metrics);
-  assert.match(metrics, /overflow-wrap:\s*anywhere;/);
-  assert.match(metrics, /white-space:\s*normal;/);
-
-  const titleRow = stylesSource.match(
-    /\.subagent-topology-node-title-row \{([^}]*)\}/,
-  )?.[1];
-  assert.ok(titleRow);
-  assert.match(titleRow, /flex-wrap:\s*wrap;/);
-
-  const title = stylesSource.match(
-    /\.subagent-topology-node-title \{([^}]*)\}/,
-  )?.[1];
-  assert.ok(title);
-  assert.match(title, /-webkit-line-clamp:\s*2;/);
-  assert.match(title, /overflow-wrap:\s*anywhere;/);
-  assert.match(title, /white-space:\s*normal;/);
-  assert.doesNotMatch(title, /white-space:\s*nowrap;/);
-
-  const summary = stylesSource.match(
-    /\.subagent-topology-node-summary \{([^}]*)\}/,
-  )?.[1];
-  assert.ok(summary);
-  assert.match(summary, /-webkit-line-clamp:\s*2;/);
-  assert.match(summary, /overflow-wrap:\s*anywhere;/);
-  assert.match(summary, /white-space:\s*normal;/);
-
-  const steps = stylesSource.match(
-    /\.subagent-topology-node-steps \{([^}]*)\}/,
-  )?.[1];
-  assert.ok(steps);
-  assert.match(steps, /overflow-wrap:\s*anywhere;/);
-  assert.match(steps, /white-space:\s*normal;/);
+test("task names and outcomes wrap within the responsive list", () => {
+  for (const selector of ["subagent-task-title", "subagent-task-status"]) {
+    const rule = stylesSource.match(new RegExp(`\\.${selector} \\{([^}]*)\\}`))?.[1];
+    assert.ok(rule);
+    assert.match(rule, /overflow-wrap:\s*anywhere;/);
+  }
+  assert.match(stylesSource, /\.subagent-task-open\.btn \{[^}]*white-space:\s*normal;/);
+  assert.doesNotMatch(stylesSource, /\.subagent-topology-node/);
 });
 
 test("assistant turns stay transparent full-width prose", () => {
@@ -337,10 +306,7 @@ test("assistant turns stay transparent full-width prose", () => {
     stylesSource,
     /\.message-row\.assistant-turn\.streaming \.message-col\s*\{[^}]*background:\s*var\(--ds-tile\)/,
   );
-  assert.match(
-    stylesSource,
-    /\.tool-activity-group\.has-subagents\s*\{[^}]*background:\s*var\(--ds-tile\)/,
-  );
+  assert.doesNotMatch(stylesSource, /\.subagent-task-list\s*\{[^}]*background:/);
 });
 test("assistant error cards follow the responsive transcript column", () => {
   const errorCard = stylesSource.match(/\n\.message-error \{([^}]*)\}/)?.[1];

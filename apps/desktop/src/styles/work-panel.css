@@ -375,12 +375,7 @@
 
 /* ---------- Subagent transcript tab ------------------------------------- */
 
-/*
- * A delegation renders as a conversation: the tab reuses the main transcript's
- * message-list classes for its rows, so the only tab-specific layout is the
- * column (scroll area above a read-only composer) and the composer itself.
- * The scroll area owns the only scrollbar; the composer never scrolls.
- */
+/* The task detail uses the transcript scroller without a read-only composer. */
 .subagent-transcript-tab {
   display: flex;
   min-width: 0;
@@ -420,46 +415,63 @@
   text-align: center;
 }
 
+.subagent-transcript-heading {
+  display: flex;
+  min-width: 0;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 12px 16px 8px;
+  color: var(--ds-text-primary);
+  font-size: var(--text-md);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--leading-body);
+  overflow-wrap: anywhere;
+}
+
+.subagent-transcript-heading > :not(button) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.subagent-transcript-model {
+  color: var(--ds-text-muted);
+  font-size: var(--text-xs-plus);
+  font-weight: var(--font-weight-normal);
+}
+
 .subagent-transcript-jump {
-  bottom: calc(var(--st-composer-dock-height, 68px) + 8px);
+  bottom: 8px;
   z-index: 6;
 }
 
-.subagent-transcript-composer {
-  flex: none;
-  border-top: 1px solid var(--ds-border-subtle);
-  padding: 10px 14px;
-}
-
-.subagent-transcript-composer textarea {
+.subagent-task-report {
+  min-width: 0;
+  color: var(--ds-text-primary);
   font-size: var(--text-base);
   line-height: var(--leading-chat);
-  display: block;
-  width: 100%;
-  min-height: calc(var(--leading-chat) * 2em);
-  resize: none;
+  overflow-wrap: anywhere;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
-.subagent-transcript-composer-controls {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding-top: 8px;
+.subagent-transcript-scroll[hidden] {
+  display: none;
 }
 
-.subagent-transcript-model-picker {
-  flex: 1 1 auto;
-  max-width: calc(100% - 36px);
-  justify-content: flex-start;
-  cursor: not-allowed;
+.subagent-task-report > summary {
+  padding-block: 6px;
+  color: var(--ds-text-muted);
+  font-size: var(--text-sm);
+  cursor: pointer;
 }
 
-.subagent-transcript-composer-controls > .stop-btn {
-  width: 26px;
-  height: 26px;
-  flex-basis: 26px;
+.subagent-task-report > summary:focus-visible {
+  outline: 2px solid var(--ds-focus);
+  outline-offset: 2px;
 }
+
 /* Shared per-tool empty state used by Files and plugin fallback surfaces. */
 .work-tab-empty {
   display: flex;

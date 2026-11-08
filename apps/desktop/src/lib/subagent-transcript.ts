@@ -17,6 +17,8 @@ export type SubagentTranscriptTurn = { task: string; rows: SubagentRunItem[] };
  */
 export type SubagentTranscript = {
   agentName?: string;
+  /** Latest call in the connected resume chain, including its effective handle. */
+  latestCall?: UiMessage;
   turns: SubagentTranscriptTurn[];
 };
 
@@ -105,7 +107,7 @@ export function buildSubagentTranscript(
   // this delegation id names; forward and backward walks share that set.
   let chain = new Set(
     calls
-      .filter((call) => delegationIdForMessage(call) === target)
+      .filter((call) => delegationIdForMessage(call) === target || call.toolCallId === target)
       .map((call) => call.toolCallId as string),
   );
   if (chain.size === 0) return null;
@@ -165,6 +167,7 @@ export function buildSubagentTranscript(
 
   return {
     ...(agentName ? { agentName } : {}),
+    latestCall: calls.findLast((call) => chain.has(call.toolCallId as string)),
     turns,
   };
 }

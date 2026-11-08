@@ -28,7 +28,8 @@ function Counts({ additions, deletions }: { additions: number; deletions: number
 }
 
 /**
- * The read-only "what did this turn change" summary under a completed reply.
+ * The read-only "what did this turn change" summary, including partial work.
+ * Counts describe recorded edits, not a repository-wide or net Git diff.
  * Each row opens the existing Review tab on that file's recorded changes; the
  * card has no diff body and no rollback of its own.
  */
@@ -73,7 +74,7 @@ export const TurnChangesCard = memo(function TurnChangesCard({
   };
 
   return (
-    <section className="turn-changes-card" aria-label={t("chat.turnChangesLabel")}>
+    <section className="turn-changes-card" aria-label={t("chat.turnChangesLabel")} data-expanded={disclosure.open}>
       <Button
         ref={disclosure.titleRef}
         type="button"
@@ -86,11 +87,10 @@ export const TurnChangesCard = memo(function TurnChangesCard({
         <span className="turn-changes-chevron" aria-hidden>
           {disclosure.open ? <IconChevronDown size={12} /> : <IconChevronRight size={12} />}
         </span>
-        <span className="turn-changes-title">{t("chat.turnChangesTitle")}</span>
-        <span className="turn-changes-meta">
-          {t("chat.toolChipFiles", { count: files.length })}
-          {dense ? ` · ${t("chat.turnChangesDirs", { count: summary.directoryCount })}` : null}
-        </span>
+        <span className="turn-changes-title">{t("chat.toolChipFiles", { count: files.length })}</span>
+        {dense && disclosure.open ? (
+          <span className="turn-changes-meta">{t("chat.turnChangesDirs", { count: summary.directoryCount })}</span>
+        ) : null}
         <span
           className="turn-changes-total"
           aria-label={t("chat.reviewChangeCounts", summary)}

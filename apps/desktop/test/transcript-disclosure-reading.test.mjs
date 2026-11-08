@@ -50,9 +50,9 @@ test("every manual title hands over the element the reader clicked", () => {
   // the header the reader sees, not on the control that was pressed.
   assert.match(
     transcript,
-    /ref=\{titleRef\}\s*className="tool-activity-header"/,
+    /className="tool-activity-header"\s*ref=\{disclosure.titleRef\}/,
   );
-  assert.match(transcript, /onClick=\{toggleDisclosure\}/);
+  assert.match(transcript, /onClick=\{disclosure.toggle\}/);
   const toolHeaders = transcript.match(
     /ref=\{titleRef\}\s*className="tool-row-header"/g,
   );
@@ -61,7 +61,7 @@ test("every manual title hands over the element the reader clicked", () => {
     3,
     "the thinking row, the tool row and the hosted search row must each anchor their own header",
   );
-  assert.match(transcript, /onCollapse=\{collapseDisclosure\}/);
+  assert.match(transcript, /onCollapse=\{disclosure.collapse\}/);
   const collapseWrappers = transcript.match(
     /onUserInteraction\?\.\(\);\s*collapseDisclosure\(\);\s*\}, \[collapseDisclosure, onUserInteraction\]\);/g,
   );

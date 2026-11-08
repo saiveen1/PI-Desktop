@@ -65,7 +65,7 @@ window.turnChangesProbe = async (stage) => {
     check(content().querySelector(".turn-changes-view-all").getClientRects().length === 0,
       "View all action escaped the collapsed body");
     const totals = heading().textContent;
-    check(totals.includes("15 files") && totals.includes("3 dirs") && totals.includes("+30") && totals.includes("−15"),
+    check(totals.includes("15 files") && totals.includes("+30") && totals.includes("−15"),
       "Collapsed heading lost summary counts");
     flushSync(() => heading().click()); await settle();
     expanded(true);

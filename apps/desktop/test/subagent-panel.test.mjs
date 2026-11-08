@@ -8,7 +8,7 @@ const tabSource = await readFile(
   "utf8",
 );
 const toolRowSource = await readFile(
-  new URL("../src/features/chat/transcript/ToolRow.tsx", import.meta.url),
+  new URL("../src/features/chat/transcript/SubagentTaskList.tsx", import.meta.url),
   "utf8",
 );
 const retryButtonSource = await readFile(
@@ -40,18 +40,10 @@ const chineseCatalogSource = await readFile(
 );
 
 
-test("a topology node opens a real subagent tab in the work panel", () => {
-  assert.match(transcriptSource, /const openSubagentTab = useAppStore\(\(s\) => s\.openSubagentTab\)/);
-  assert.match(transcriptSource, /const panelSelectionId =/);
-  assert.match(transcriptSource, /openSubagentTab\(panelSelectionId, agentName \|\| undefined\)/);
-  assert.match(
-    transcriptSource,
-    /activeWorkPanelTabId === `subagent:\$\{panelSelectionId\}`/,
-  );
-  assert.match(
-    transcriptSource,
-    /aria-controls=\{panelOpen \? `work-panel-surface-subagent:\$\{panelSelectionId\}` : undefined\}/,
-  );
+test("a task list row opens the originating session's subagent tab", () => {
+  assert.match(toolRowSource, /openTabForSession\(sessionId, subagentWorkPanelTab\(id, title\)\)/);
+  assert.match(toolRowSource, /useChatSessionCapability\("canUseLocalTools"\)/);
+  assert.match(toolRowSource, /if \(!localToolsAllowed\) return/);
   assert.match(storeSource, /openSubagentTab: \(delegationId, agentName\) => \{/);
   assert.match(
     storeSource,
@@ -100,33 +92,23 @@ test("the work panel renders the delegation tab like every other resource", () =
   assert.doesNotMatch(appSource, /subagentPanelOpen/);
 });
 
-test("the delegation tab renders a message list with a read-only composer", () => {
+test("the detail uses shared reading components without a disabled composer", () => {
   assert.match(tabSource, /data-testid="subagent-transcript-tab"/);
   assert.match(tabSource, /buildSubagentTranscript\(messages, delegationId\)/);
-  assert.match(tabSource, /className="message-row user"/);
-  assert.match(tabSource, /className="message-user-text selectable"/);
-  assert.match(tabSource, /className="message-row assistant"/);
-  assert.match(tabSource, /data-message-id=\{row\.message\.id\}/);
-  assert.match(tabSource, /<Textarea/);
-  assert.match(tabSource, /disabled/);
-  assert.match(tabSource, /rows=\{2\}/);
-  assert.match(tabSource, /placeholder=\{t\("panel\.subagentReadOnly"\)\}/);
-  assert.match(tabSource, /className="subagent-transcript-composer-controls"/);
-  assert.match(tabSource, /subagent-transcript-model-picker/);
-  assert.match(tabSource, /delegateModelId\(result\)/);
-  assert.match(tabSource, /delegateThinkingLevel\(result\)/);
-  assert.match(tabSource, /<SubagentStopButton delegationId=\{delegationId\} running compact \/>/);
-  assert.doesNotMatch(tabSource, /subagent-transcript-actions/);
-  assert.match(workPanelCss, /\.subagent-transcript-composer-controls \{/);
-  assert.match(workPanelCss, /\.subagent-transcript-model-picker \{/);
-  // Display-only: no send path may exist in the composer.
-  assert.doesNotMatch(tabSource, /onSubmit|onSend|api\.send/);
+  assert.match(tabSource, /<SubagentTurnContent/);
+  assert.match(tabSource, /<SubagentTaskList/);
+  assert.match(tabSource, /className="subagent-transcript-model"/);
+  assert.match(tabSource, /<SubagentStopButton/);
+  assert.match(tabSource, /<SubagentRetryButton/);
+  assert.match(tabSource, /TranscriptSearchContext.Provider/);
+  assert.doesNotMatch(tabSource, /<Textarea|aria-haspopup="listbox"|onSubmit|onSend|api\.send/);
+  assert.doesNotMatch(workPanelCss, /\.subagent-transcript-composer/);
 });
 
 test("the task policy snapshot is wired into the actual transcript tab", () => {
-  assert.match(tabSource, /<SubagentRunPolicySummary payload=\{delegateSettings\.payload\} \/>/);
-  assert.match(tabSource, /payload: result \? toolResultPayload\(result\) : undefined/);
-  assert.match(tabSource, /\[\.\.\.messages\]\.reverse\(\)\.find/);
+  assert.match(tabSource, /<SubagentRunPolicySummary payload=\{payload\} \/>/);
+  assert.match(tabSource, /toolResultPayload\(selected.message\)/);
+  assert.match(tabSource, /transcriptResult\?\.latestCall/);
   assert.doesNotMatch(tabSource, /state\.settings|resolveDelegationRunPolicy/);
 });
 

@@ -14,6 +14,16 @@
   (event-driven subagent timeouts), D265 (one delegation reads as a card too),
   ADR 0246 (opt-in `tools: inherit`), ADR 0279 (resumable delegations)
 
+> **Renderer presentation superseded on 2026-11-08:**
+> [Task-first transcript presentation](task-first-transcript-presentation.md)
+> replaces §6's delegation cards/coordinator topology and live-open disclosure
+> with Active / Needs attention / Completed task lists and source-session detail
+> tabs. Only Task starts become entries; lifecycle rows remain named compact
+> tools. Runtime limits, attribution, report-only parent context, lifecycle
+> precedence, permission queues, and capability gates are not changed by this
+> presentation decision. Historical card/graph language below is not the current
+> UI contract; see component spec §§5.7 and 9.9.
+
 ## Context
 
 A single agent loop pays for everything it reads. Wide searches, long build
@@ -160,6 +170,10 @@ parent turn remains the only thing that can end a turn. See ADR 0119 for the
 timeout policy and `timed_out` outcome.
 
 ### 6. Attribution is persisted, and the transcript derives its topology from it
+
+> The attribution/model-context invariants below still apply. The card, inline
+> nesting, and topology presentation is historical; the task-first ADR replaces
+> it with grouped task rows and full child transcripts in work-panel tabs.
 
 host-core stores `parentToolCallId` and `agentName` in the message `meta`
 object, so a reloaded session nests identically to a live one. The renderer
