@@ -364,3 +364,24 @@ export type AgentRetrySubagentResponse =
       resumedFrom: string;
       error: string;
     };
+
+/** User-authored text addressed to an existing child chain, never a new task. */
+export type AgentSendSubagentMessageRequest = AgentRetrySubagentRequest & {
+  messageId: string;
+  content: string;
+};
+
+export type AgentSendSubagentMessageResponse =
+  | (Extract<AgentRetrySubagentResponse, { accepted: true }> & { delivery: "steered" | "resumed" | "duplicate" })
+  | Extract<AgentRetrySubagentResponse, { accepted: false }>;
+
+export const SUBAGENT_MESSAGE_MAX_CHARS = 32_000;
+
+export function isAgentSendSubagentMessageRequest(value: unknown): value is AgentSendSubagentMessageRequest {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const request = value as Record<string, unknown>;
+  return Object.keys(request).every(key => ["sessionId", "delegationId", "messageId", "content"].includes(key)) &&
+    [request.sessionId, request.delegationId, request.messageId].every(id =>
+      typeof id === "string" && id.trim().length > 0 && id.length <= 256) &&
+    typeof request.content === "string" && request.content.trim().length > 0 && request.content.length <= SUBAGENT_MESSAGE_MAX_CHARS;
+}

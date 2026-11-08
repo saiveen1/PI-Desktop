@@ -1,7 +1,9 @@
+import { subagentControls } from "./subagent-controls.js";
 import { approvalCenter } from "./delegation-approval.js";
 import { delegationReliabilitySettings, delegationDiagnostics } from "./delegation-reliability.js";
 import { sessionLabels, sessionGroups, sessionDelegation, delegationDetails } from "./session-management.js";
 export const en = {
+  subagentControls,
   sessionLabels,
   sessionGroups,
   sessionDelegation,

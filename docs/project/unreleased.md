@@ -1,9 +1,17 @@
 # Unreleased changes
 
+
 > Historical mixed upstream/personal development notes, retained without
 > reconstructing releases. New personal release records live in
 > the repository-root `CHANGELOG.md`, generated from
 > [release history](../releases/history.json). Do not append new release entries here.
+
+- Add explicit subagent provider-failure policies to Scheduling, retaining the
+  existing behavior unless configured. Send text directly to a running child or
+  continue its retained conversation after settlement, with deduplicated input,
+  normal model authorization and cancellable recovery. Skipped delegations now
+  explain that they never started and no longer inflate active coordination.
+
 
 - Harden tool recovery: normalize background-job selectors before schema checks,
   separate Host admission pressure from edit failures, and recognize bounded

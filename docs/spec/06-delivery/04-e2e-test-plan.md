@@ -1,6 +1,7 @@
 # 04. E2E Test Plan
 
 
+
 ## E2E-PERSONAL-build-identity-and-explicit-beta
 
 - **Environment:** Isolated temporary Git repositories, existing ASAR tooling,
@@ -64,6 +65,38 @@
   `delegation-history-ui.test.mjs`, notification/sidebar unit suites, shared
   history contract tests and Host delegation history tests. Electron app/OS
   delivery verification remains separately authorized and is not implied.
+
+
+## E2E-SUBAGENT-controls-and-direct-input
+
+- **Preconditions:** Isolated worktree and synthetic providers/Host fixtures;
+  no daily profile, installed Desktop or paid provider.
+- **Steps:** Save/reload every failure mode and invalid limit. Trigger retryable
+  provider failures with infinite session retry on, require an exact model, deny
+  alternative approval, and cancel during backoff. Send child text while a tool
+  is pending, after completion and after Stop; duplicate the request ID, conflict
+  its content, change sessions/drafts during acknowledgment, and restore history.
+  Race child settlement, automatic recovery and distinct direct inputs. Present
+  skipped-only and mixed running/skipped Task groups, then start a later Task.
+- **Expected:** Explicit policies cap retries/switches while inherit preserves
+  old behavior; successful tools are not replayed. Direct input stays in its
+  chain, reaches the existing worker or a single resumed one, preserves drafts
+  on error, rejects stale turns and keeps Stop usable during consent. Retained
+  receipts prevent duplicate delivery, accepted input survives cancellation,
+  and the parent receives the eventual report once. Skipped Tasks say not
+  started with the new-input reason, have no execution duration and do not inflate
+  coordination counts. Every locale supplies the new labels.
+- **Specs:** [runtime](../03-runtime/02-agent-runtime.md),
+  [IPC](../03-runtime/01-ipc-protocol.md#direct-subagent-input),
+  [component](../04-ux/08-component-spec.md),
+  [decision](../../adr/subagent-controls-and-direct-input.md).
+- **Acceptance / milestone:** Correct child control, compatibility and safety;
+  post-MVP maintenance.
+- **Coverage:** `subagent-conversation-user-path.test.ts`,
+  `delegation-messages.test.ts`, `subagent-fallback.test.ts`, shared policy and
+  Host validation tests, and `subagent-message-ipc.test.mjs` exercise backend
+  user paths. Renderer component/model tests cover composer and topology states.
+  This is a coverage description, not a claim of installed-app verification.
 
 
 ## E2E-HARNESS-recovery-boundaries

@@ -1,3 +1,6 @@
+import { DEFAULT_DELEGATION_FAILURE_POLICY, type DelegationFailurePolicy } from "@pi-desktop/shared";
+import { DelegationMessages, subagentMessageReceipt, subagentMessageTaskId, subagentUserMessageId } from "./delegation-messages.js";
+import { isAgentSendSubagentMessageRequest, type AgentSendSubagentMessageRequest, type AgentSendSubagentMessageResponse } from "@pi-desktop/shared";
 import { DelegationRecovery } from "./delegation-recovery.js";
 import type { AgentRetrySubagentResponse } from "@pi-desktop/shared";
 import { DelegationAdmissionError, DelegationScheduler, type DelegationDecisionRecord } from "./delegation-scheduler.js";
@@ -579,9 +582,11 @@ export type DelegationRecord = {
   result?: SubagentRunResult;
   checkpoint?: PersistSubagentCheckpointResult;
   runPolicy?: Readonly<DelegationRunPolicy>;
+  failurePolicy?: Readonly<DelegationFailurePolicy>;
   completion: Promise<void>;
   resolveCompletion: () => void;
   abort: () => void;
+  sendMessage?: (message: UiMessage) => boolean;
   /** True when `TaskStop` asked for this stop, so an aborted run reads as
    * `stopped` rather than `aborted`. */
   stopRequested: boolean;
@@ -650,6 +655,7 @@ function delegationSummary(record: DelegationRecord): Record<string, unknown> {
       ? { checkpointError: record.result?.checkpointError ?? record.checkpoint?.error } : {}),
     ...(record.result ? { report: record.result.report, partial: record.result.status !== "completed" } : {}),
     ...(record.runPolicy ? { runPolicy: record.runPolicy } : {}),
+    ...(record.failurePolicy ? { failurePolicy: record.failurePolicy } : {}),
     ...(record.resumedFrom ? { resumedFrom: record.resumedFrom } : {}),
     ...(record.modelChangedFrom
       ? { modelChangedFrom: record.modelChangedFrom }
@@ -2090,6 +2096,7 @@ export class DesktopAgentRuntime {
   /** Direct retries own the whole parent continuation, not just the child. */
   private manualDelegationTurn?: { turnId: string; controller: AbortController };
   private readonly delegationRecovery: DelegationRecovery;
+  private readonly delegationMessages = new DelegationMessages();
   /** The in-flight checkpoint was cut short by Stop/dispose, not by a failure. */
   private compactionAborted = false;
   /** Set by the `new_context` tool, consumed at the next turn boundary. */
@@ -5171,6 +5178,15 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
             return this.subagentToolError(toolCallId, "The parent turn ended before delegation could start.");
           }
         }
+        // Worktree preparation can yield after the first resume check. A competing
+        // Task or direct message may have claimed this chain while it awaited Host.
+        if (resume && resumedChain) {
+          const current = this.resolveResumeChain(resume, definition.name);
+          if (!current.ok) return this.subagentToolError(toolCallId, current.message);
+          if (current.chain.latestDelegationId !== resumedChain.latestDelegationId) {
+            return this.subagentToolError(toolCallId, "The delegation was already resumed while preparing its worktree. Inspect its latest result before sending another task.");
+          }
+        }
         const controller = new AbortController();
         const thinkingLevel: SubagentThinkingLevel =
           definition.thinkingLevel === "omit"
@@ -5205,8 +5221,10 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           resumedFrom: resumedChain,
         });
         const runPolicy = resolveDelegationRunPolicy(scheduler.settings?.runPolicy);
+        const failurePolicy = Object.freeze({ ...(scheduler.settings?.failurePolicy ?? DEFAULT_DELEGATION_FAILURE_POLICY) });
         const record: DelegationRecord = {
           runPolicy,
+          failurePolicy,
           delegationId,
           parentToolCallId: toolCallId,
           writable: declaredToolNames.some((name) => PATH_MUTATING_TOOLS.has(name)),
@@ -5255,6 +5273,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
             scratchDir: this.scratchDir,
             initialReport: checkpoint?.report,
             runPolicy,
+            failurePolicy,
             onCheckpoint: (paths) => {
               record.checkpoint = paths;
               this.publishDelegationSettlement(record);
@@ -5332,6 +5351,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           );
         }
 
+        record.sendMessage = message => subagentRun.sendMessage(message);
         let runPromise: Promise<SubagentRunResult>;
         try {
           runPromise = subagentRun.run();
@@ -5374,6 +5394,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
             agent: definition.name,
             status: "running",
             runPolicy,
+            failurePolicy,
             startedAt,
             turns: record.turns,
             toolCalls: record.toolCalls,
@@ -5492,6 +5513,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
         ? "stopped"
         : result.status;
     record.result = result;
+    record.sendMessage = undefined;
     record.completedAt = Date.now();
     // Resolve before event publication or bookkeeping: none of those side
     // effects may strand TaskWait or the parent's idle auto-resume.
@@ -5626,7 +5648,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
   private keepTurnOpenForDelegates(): boolean {
     return (
       (this.runningDelegations().length > 0 ||
-        this.pendingCurrentTurnDelegations().length > 0 || this.delegationRecovery.pending(this.turnId)) &&
+        this.pendingCurrentTurnDelegations().length > 0 || this.delegationRecovery.pending(this.turnId) || this.delegationMessages.busy) &&
       !this.runCancelled &&
       !this.turnHadError
     );
@@ -5673,7 +5695,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       record.pendingToolCallIds?.delete(event.toolCallId);
       return;
     }
-    if (event.type === "message_end" && event.message.role === "assistant") {
+    if (event.type === "message_end" && (event.message.role === "assistant" || event.message.role === "user")) {
       this.appendDelegationRow(record, envelope, event.message);
     }
     if (
@@ -5980,6 +6002,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           agent: record.agentName,
           status: record.status,
           ...(record.runPolicy ? { runPolicy: record.runPolicy } : {}),
+          ...(record.failurePolicy ? { failurePolicy: record.failurePolicy } : {}),
           modelId: record.modelId,
           thinkingLevel: record.thinkingLevel,
           startedAt: record.startedAt,
@@ -6208,6 +6231,57 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     const chain = this.delegationChains.lookup(resume);
     if (!chain) throw new Error(this.unknownResumeMessage(resume));
     if (chain.latestStatus !== "failed") throw new Error(`Delegation ${resume} is not failed and cannot be force-retried.`);
+    return this.startManualDelegationTurn(turnId, signal => this.requestDelegationRecovery(resume, turnId, signal));
+  }
+
+  async sendSubagentMessage(input: AgentSendSubagentMessageRequest, durableTurnId: string, requireActiveTurn = false): Promise<AgentSendSubagentMessageResponse> {
+    if (!isAgentSendSubagentMessageRequest(input) || input.sessionId !== this.sessionId || !durableTurnId.trim()) {
+      throw Object.assign(new Error("Invalid subagent message request"), { errorCode: "INVALID_ARGUMENT" });
+    }
+    if (this.disposed) throw new Error("runtime disposed");
+    if (this.mode !== "agent" || this.remoteWorkspace) throw Object.assign(new Error("Direct child messages require a local Agent session"), { errorCode: "CAPABILITY_UNAVAILABLE" });
+    const request = { ...input, delegationId: input.delegationId.trim(), messageId: input.messageId.trim(), content: input.content.trim() };
+    const turnId = durableTurnId.trim();
+    const chain = this.delegationChains.lookup(request.delegationId);
+    if (!chain) throw new Error(this.unknownResumeMessage(request.delegationId));
+    const deliver = () => this.delegationMessages.send(chain.delegateSessionId, request, () => this.deliverSubagentMessage(request, turnId));
+    if (this.getStatus().isRunning || requireActiveTurn) {
+      this.steeringContext(turnId);
+      return deliver();
+    }
+    return this.startManualDelegationTurn(turnId, deliver);
+  }
+
+  private async deliverSubagentMessage(request: AgentSendSubagentMessageRequest, turnId: string): Promise<AgentSendSubagentMessageResponse> {
+    this.steeringContext(turnId);
+    const chain = this.delegationChains.lookup(request.delegationId);
+    if (!chain) throw new Error(this.unknownResumeMessage(request.delegationId));
+    const rows = [...this.transcriptHistory, ...[...this.delegations.values()].flatMap(record => record.taskMessage ? [record.taskMessage] : [])];
+    const receipt = subagentMessageReceipt(rows, chain, request, turnId);
+    if (receipt) return receipt;
+    let latest = chain.latestDelegationId ? this.delegations.get(chain.latestDelegationId) : undefined;
+    let delivery: "steered" | "resumed" = "steered";
+    if (latest?.status !== "running") {
+      const result = await this.requestDelegationRecovery(request.delegationId, turnId, undefined, false, request);
+      if (!result.accepted) return result;
+      this.steeringContext(turnId);
+      latest = this.delegations.get(result.delegationId);
+      if (latest?.parentToolCallId === subagentMessageTaskId(request.messageId)) delivery = "resumed";
+    }
+    if (!latest) return { accepted: false, turnId, resumedFrom: request.delegationId, error: "The child is no longer available." };
+    if (delivery === "steered") {
+      if (latest.taskTurnId !== turnId || latest.stopRequested || latest.parentErrorInterrupted || !latest.sendMessage?.({
+        id: subagentUserMessageId(request.messageId), role: "user", content: request.content,
+        createdAt: nowIso(), status: "complete", steering: true,
+        parentToolCallId: latest.parentToolCallId, agentName: latest.agentName,
+      })) return { accepted: false, turnId, resumedFrom: request.delegationId, error: "The child is settling or stopping. Send again after it settles." };
+    }
+    this.appendLiveEntry(`child-input-notice:${request.messageId}`, { role: "user", timestamp: Date.now(),
+      content: `The user sent additional input directly to delegation ${latest.delegationId}. Its existing chain is handling that input; do not duplicate the task. Incorporate its next report.` });
+    return { accepted: true, turnId, delegationId: latest.delegationId, resumedFrom: request.delegationId, delivery };
+  }
+
+  private startManualDelegationTurn<T extends ManualDelegationRetryResult>(turnId: string, start: (signal: AbortSignal) => Promise<T>): Promise<T> {
 
     this.retainPendingSteering();
     const runStartedAt = Date.now();
@@ -6226,9 +6300,9 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     this.rebuildToolCatalog();
     this.setAgentTools(this.activeTools());
 
-    let started!: (result: ManualDelegationRetryResult) => void;
+    let started!: (result: T) => void;
     let failed!: (error: unknown) => void;
-    const admission = new Promise<ManualDelegationRetryResult>((resolve, reject) => {
+    const admission = new Promise<T>((resolve, reject) => {
       started = resolve;
       failed = reject;
     });
@@ -6239,9 +6313,10 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
         this.setAgentActivity({ phase: "starting", since: Date.now() });
         this.emit({ type: "agent_start" }, turnId);
         this.emit({ type: "turn_start" }, turnId);
-        const result = await this.requestDelegationRecovery(resume, turnId, controller.signal);
+        const result = await start(controller.signal);
         started(result);
-        if (result.accepted) {
+        await this.settleRecoveryAdmissions();
+        if (result.accepted || this.pendingCurrentTurnDelegations().length > 0 || this.pendingSteering.size > 0) {
           do {
             await this.resumeAfterDelegations();
             await this.waitForIdleAndSteering();
@@ -6272,7 +6347,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     return admission;
   }
 
-  private requestDelegationRecovery(resume: string, turnId: string, parentSignal?: AbortSignal, onlyInterruptedRun = false): Promise<ManualDelegationRetryResult> {
+  private requestDelegationRecovery(resume: string, turnId: string, parentSignal?: AbortSignal, onlyInterruptedRun = false, message?: AgentSendSubagentMessageRequest): Promise<ManualDelegationRetryResult> {
     const chain = this.delegationChains.lookup(resume);
     if (!chain) throw new Error(this.unknownResumeMessage(resume));
     return this.delegationRecovery.admit(chain.delegateSessionId, turnId, async recoverySignal => {
@@ -6289,13 +6364,13 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       const latest = current?.latestDelegationId ? this.delegations.get(current.latestDelegationId) : undefined;
       // A stale failed card and automatic recovery can name different runs of the same chain.
       if (latest && latest.delegationId !== resume && latest.taskTurnId === turnId &&
-          (latest.status === "running" || latest.status === "completed")) {
+          (latest.status === "running" || (!message && latest.status === "completed"))) {
         return { accepted: true, turnId, resumedFrom: resume, delegationId: latest.delegationId };
       }
-      if (!current || current.latestStatus !== "failed" || (onlyInterruptedRun && current.latestDelegationId !== resume)) {
+      if (!current || (!message && current.latestStatus !== "failed") || (onlyInterruptedRun && current.latestDelegationId !== resume)) {
         return { accepted: false, turnId, resumedFrom: resume, error: `Delegation ${resume} is no longer the failed run selected for recovery.` };
       }
-      return this.startManualDelegationTask(current.agentName, resume, turnId, signal);
+      return this.startManualDelegationTask(current.agentName, resume, turnId, signal, message);
     });
   }
 
@@ -6322,9 +6397,10 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     resume: string,
     turnId: string,
     signal: AbortSignal,
+    message?: AgentSendSubagentMessageRequest,
   ): Promise<ManualDelegationRetryResult> {
-    const toolCallId = `manual-task-${randomUUID()}`;
-    const task = "Continue the failed subagent task and finish the remaining work. Re-check the current workspace before making further changes.";
+    const toolCallId = message ? subagentMessageTaskId(message.messageId) : `manual-task-${randomUUID()}`;
+    const task = message?.content ?? "Continue the failed subagent task and finish the remaining work. Re-check the current workspace before making further changes.";
     const args = { agent: agentName, task, resume };
     const taskTool = this.toolCatalog.get(SUBAGENT_TOOL_NAME) ?? this.buildSubagentTool();
     await this.handleAgentEvent({
@@ -6368,6 +6444,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
         error: "The subagent retry did not start.",
       };
     }
+    if (message && record.taskMessage) this.transcriptHistory.push(record.taskMessage);
     return { accepted: true, turnId, delegationId: startedId, resumedFrom: resume };
   }
 
@@ -9355,7 +9432,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       case "turn_end":
         this.batchPlanner.settleBatch(event.message);
         if (this.manualDelegationTurn) break;
-        if (!this.turnHadError && !this.runCancelled && this.delegationRecovery.deferEnd(this.turnId, event)) break;
+        if (!this.turnHadError && !this.runCancelled && this.delegationRecovery.deferEnd(this.turnId, event, this.delegationMessages.busy)) break;
         if (
           this.suppressOverflowRunEnd ||
           this.suppressProviderRetryRunEnd ||
@@ -9373,7 +9450,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
         break;
       case "agent_end":
         if (this.manualDelegationTurn) break;
-        if (!this.turnHadError && !this.runCancelled && this.delegationRecovery.deferEnd(this.turnId, event)) break;
+        if (!this.turnHadError && !this.runCancelled && this.delegationRecovery.deferEnd(this.turnId, event, this.delegationMessages.busy)) break;
         // Input admitted after pi's last queue poll still belongs to this turn.
         // Continue after the current run settles; never wake the follow-up FIFO.
         if (this.pendingSteering.size && this.acceptingSteering && !this.runCancelled && !this.turnHadError) break;
@@ -9961,6 +10038,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
   private async settleRecoveryAdmissions(): Promise<void> {
     const turnId = this.turnId;
     await this.delegationRecovery.drain(turnId);
+    await this.delegationMessages.drain();
     const ends = this.delegationRecovery.takeDeferredEnds(turnId);
     if (this.turnId !== turnId || this.disposed) return;
     for (const event of ends) await this.handleAgentEvent(event);
@@ -10046,7 +10124,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       isRunning:
         this.aborting !== undefined ||
         this.manualDelegationTurn !== undefined ||
-        this.delegationRecovery.pending(this.turnId) ||
+        this.delegationRecovery.pending(this.turnId) || this.delegationMessages.busy ||
         this.agent.state.isStreaming ||
         this.compactionInProgress ||
         this.agentActivity !== undefined ||

@@ -1,9 +1,11 @@
+import { subagentControls } from "./subagent-controls.js";
 import { approvalCenter } from "./delegation-approval.js";
 import { delegationReliabilitySettings, delegationDiagnostics } from "./delegation-reliability.js";
 import { sessionLabels, sessionGroups, sessionDelegation, delegationDetails } from "./session-management.js";
 import { en, type EnglishCatalog } from "../en/index.js";
 
 export const ptBR = {
+  subagentControls,
   sessionLabels,
   sessionGroups,
   sessionDelegation,

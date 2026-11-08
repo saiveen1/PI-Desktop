@@ -7,6 +7,7 @@ import {
   type DelegationLifecycleKind,
 } from "./tool-display";
 import { toolResultPayload } from "./tool-presentation";
+import { getToolStatus } from "./tool-status";
 
 export type DelegationActivityItem = Extract<
   AssistantActivityItem,
@@ -20,7 +21,8 @@ export type SubagentOutcome =
   | "aborted"
   | "failed"
   | "stopped"
-  | "denied";
+  | "denied"
+  | "not_started";
 
 export type SubagentTiming = {
   startedAt?: number;
@@ -51,6 +53,7 @@ const DELEGATION_STATUSES = new Set<SubagentOutcome>([
 ]);
 
 function asDelegationStatus(value: unknown): SubagentOutcome | null {
+  if (value === "interrupted") return "aborted";
   return DELEGATION_STATUSES.has(value as SubagentOutcome)
     ? (value as SubagentOutcome)
     : null;
@@ -412,6 +415,7 @@ export function subagentOutcome(
   message: UiMessage,
   statuses?: ReadonlyMap<string, SubagentOutcome>,
 ): SubagentOutcome {
+  if (delegationWasPreempted(message)) return "not_started";
   const payload = asRecord(toolResultPayload(message));
   if (payload) {
     const delegationId = payload.delegationId;
@@ -422,11 +426,17 @@ export function subagentOutcome(
     const status = asDelegationStatus(payload.status);
     if (status) return status;
   }
+  if (getToolStatus(message).kind === "interrupted") return "aborted";
   if (message.toolStatus === "running") return "running";
   if (message.toolStatus === "error") return "failed";
   if (message.toolStatus === "denied") return "denied";
   return "completed";
 }
+/** Preempted Task calls have no child runtime; keep their historical row. */
+export function delegationWasPreempted(message: UiMessage): boolean {
+  return isDelegationStartTool(message.toolName) && getToolStatus(message).kind === "skipped";
+}
+
 /**
  * Whether a running delegation is still being created rather than already
  * executing.

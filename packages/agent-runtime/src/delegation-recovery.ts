@@ -78,8 +78,8 @@ export class DelegationRecovery {
     for (const entry of this.admissions.values()) entry.controller.abort();
   }
 
-  deferEnd(turnId: string | undefined, event: EndEvent): boolean {
-    if (!turnId || !this.pending(turnId)) return false;
+  deferEnd(turnId: string | undefined, event: EndEvent, pendingMessages = false): boolean {
+    if (!turnId || (!this.pending(turnId) && !pendingMessages)) return false;
     const ends = this.deferredEnds.get(turnId) ?? new Map<EndEvent["type"], EndEvent>();
     ends.set(event.type, event);
     this.deferredEnds.set(turnId, ends);

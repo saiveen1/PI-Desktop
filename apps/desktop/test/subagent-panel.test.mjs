@@ -7,6 +7,9 @@ const tabSource = await readFile(
   new URL("../src/components/workpanel/SubagentTranscriptTab.tsx", import.meta.url),
   "utf8",
 );
+const composerSource = await readFile(
+  new URL("../src/components/workpanel/SubagentChildComposer.tsx", import.meta.url), "utf8",
+);
 const toolRowSource = await readFile(
   new URL("../src/features/chat/transcript/ToolRow.tsx", import.meta.url),
   "utf8",
@@ -100,33 +103,31 @@ test("the work panel renders the delegation tab like every other resource", () =
   assert.doesNotMatch(appSource, /subagentPanelOpen/);
 });
 
-test("the delegation tab renders a message list with a read-only composer", () => {
+test("the delegation tab renders a message list with an explicit child composer", () => {
   assert.match(tabSource, /data-testid="subagent-transcript-tab"/);
   assert.match(tabSource, /buildSubagentTranscript\(messages, delegationId\)/);
   assert.match(tabSource, /className="message-row user"/);
   assert.match(tabSource, /className="message-user-text selectable"/);
   assert.match(tabSource, /className="message-row assistant"/);
   assert.match(tabSource, /data-message-id=\{row\.message\.id\}/);
-  assert.match(tabSource, /<Textarea/);
-  assert.match(tabSource, /disabled/);
-  assert.match(tabSource, /rows=\{2\}/);
-  assert.match(tabSource, /placeholder=\{t\("panel\.subagentReadOnly"\)\}/);
-  assert.match(tabSource, /className="subagent-transcript-composer-controls"/);
+  assert.match(tabSource, /<SubagentChildComposer/);
+  assert.match(composerSource, /<Textarea rows=\{2\}/);
+  assert.match(composerSource, /api\.sendSubagentMessage/);
+  assert.match(composerSource, /<Button variant="primary"/);
+  assert.doesNotMatch(composerSource, /onKeyDown|onKeyPress/);
+  assert.match(composerSource, /className="subagent-transcript-composer-controls"/);
   assert.match(tabSource, /subagent-transcript-model-picker/);
   assert.match(tabSource, /delegateModelId\(result\)/);
   assert.match(tabSource, /delegateThinkingLevel\(result\)/);
-  assert.match(tabSource, /<SubagentStopButton delegationId=\{delegationId\} running compact \/>/);
-  assert.doesNotMatch(tabSource, /subagent-transcript-actions/);
+  assert.match(tabSource, /<SubagentStopButton delegationId=\{delegateSettings\.delegationId\} running compact \/>/);
   assert.match(workPanelCss, /\.subagent-transcript-composer-controls \{/);
   assert.match(workPanelCss, /\.subagent-transcript-model-picker \{/);
-  // Display-only: no send path may exist in the composer.
-  assert.doesNotMatch(tabSource, /onSubmit|onSend|api\.send/);
 });
 
 test("the task policy snapshot is wired into the actual transcript tab", () => {
   assert.match(tabSource, /<SubagentRunPolicySummary payload=\{delegateSettings\.payload\} \/>/);
-  assert.match(tabSource, /payload: result \? toolResultPayload\(result\) : undefined/);
-  assert.match(tabSource, /\[\.\.\.messages\]\.reverse\(\)\.find/);
+  assert.match(tabSource, /const payload = result \? toolResultPayload\(result\) : undefined/);
+  assert.match(tabSource, /const result = transcriptResult\?\.latestCall/);
   assert.doesNotMatch(tabSource, /state\.settings|resolveDelegationRunPolicy/);
 });
 
@@ -143,12 +144,12 @@ test("the tab owns one scroll surface and pins to the latest output", () => {
   assert.match(tabSource, /useTranscriptSearchFocus\(\{/);
 });
 
-test("composer copy names the driver and lives in the field, per locale", () => {
+test("child composer localization is wired into both primary catalogs", () => {
   for (const [locale, source] of [
     ["en", englishCatalogSource],
     ["zh-CN", chineseCatalogSource],
   ]) {
-    assert.match(source, /subagentReadOnly: "/);
+    assert.match(source, /import \{ subagentControls \} from "\.\/subagent-controls\.js"/);
     assert.match(source, /tabs: \{[^}]*subagent: "/s);
     assert.doesNotMatch(source, /subagentClose/);
   }

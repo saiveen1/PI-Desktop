@@ -14,6 +14,7 @@ import { SettingsCard, SettingsRow } from "../../features/settings/primitives";
 import { Button, Field, Input, SettingsToggle, Textarea } from "../ui";
 import { SettingsMenuSelect } from "./SettingsMenuSelect";
 import { SubagentRunPolicySettings } from "./SubagentRunPolicySettings";
+import { SubagentFailurePolicySettings } from "./SubagentFailurePolicySettings";
 import { NotificationPreferences } from "./NotificationPreferences";
 import "../../styles/subagent-scheduling.css";
 
@@ -57,7 +58,7 @@ export function SubagentSchedulingSettings({ saveSettings }: {
   const choice = candidates.find((model) => referenceId(model) === selected)
     ?? candidates.find((model) => model.available);
   const valid = isDelegationSettings(value);
-  const modelPolicyValid = isDelegationSettings({ ...value, runPolicy: undefined });
+  const modelPolicyValid = isDelegationSettings({ ...value, runPolicy: undefined, failurePolicy: undefined });
   const orderedModels = [...value.models].sort((a, b) =>
     (Number.isFinite(a.priority) ? a.priority : Infinity)
     - (Number.isFinite(b.priority) ? b.priority : Infinity));
@@ -153,6 +154,8 @@ export function SubagentSchedulingSettings({ saveSettings }: {
       </SettingsCard>
       <SubagentRunPolicySettings policy={value.runPolicy} disabled={saving || !settings}
         onChange={(runPolicy) => change({ ...value, runPolicy })} />
+      <SubagentFailurePolicySettings policy={value.failurePolicy} disabled={saving || !settings}
+        onChange={(failurePolicy) => change({ ...value, failurePolicy })} />
       {value.models.length === 0 ? (
         <p className="text-sm text-text-secondary">{t("settings.delegationEmpty")}</p>
       ) : null}

@@ -1,5 +1,6 @@
+import { registerSubagentRecoveryIpc } from "./subagent-recovery-ipc";
 import { expandMcpInvocation } from "../composer-mcp";
-import { IPC, ErrorCodes, compactionRecordId, composeMentionPrompt, findSkillMentions, isGlobalPermissionMode, isRpcTimeoutError, type AgentEventEnvelope, type AgentPromptRequest, type AgentSteerRequest, type UiMessage, type AgentQueuePushRequest, type AgentStopRequest, type AgentStopSubagentsRequest, type AgentRetrySubagentRequest, type AgentRetrySubagentResponse, type AskToolResolution, type GlobalPermissionMode, type MessageUsage, type PendingInteractiveRequests, type PlanExecutionFinishStatus, type PlanResolutionResult, type PlanResolveRequest, type VoiceOrigin } from "@pi-desktop/shared";
+import { IPC, ErrorCodes, compactionRecordId, composeMentionPrompt, findSkillMentions, isGlobalPermissionMode, isRpcTimeoutError, type AgentEventEnvelope, type AgentPromptRequest, type AgentSteerRequest, type UiMessage, type AgentQueuePushRequest, type AgentStopRequest, type AgentStopSubagentsRequest, type AskToolResolution, type GlobalPermissionMode, type MessageUsage, type PendingInteractiveRequests, type PlanExecutionFinishStatus, type PlanResolveRequest, type PlanResolutionResult, type VoiceOrigin } from "@pi-desktop/shared";
 import type { FinishTurn } from "../runtime/plans";
 import { expandSlashInvocation, visionFromModelConfig, type ComposerTemplate } from "@pi-desktop/agent-runtime";
 import { appendPromptFallbackPaths, durableUserMessageId, preparePromptAttachments, type PreparedPromptAttachment } from "../prompt-attachments";
@@ -708,72 +709,9 @@ export function registerAgentIpc({
     }
   });
 
-  handle(IPC.invoke.agentRetrySubagent, async (req: AgentRetrySubagentRequest): Promise<AgentRetrySubagentResponse> => {
-    if (!req || typeof req.sessionId !== "string" || !req.sessionId.trim() ||
-      typeof req.delegationId !== "string" || !req.delegationId.trim()) {
-      throw new Error("Invalid subagent retry request");
-    }
-    rejectNativeAgentOperation(req.sessionId);
-    if (req.sessionId.startsWith("remote:")) {
-      throw Object.assign(new Error("Direct subagent retry is unavailable for remote sessions"), {
-        errorCode: "CAPABILITY_UNAVAILABLE",
-      });
-    }
-    if (!host || !sidecar) throw new Error("backend unavailable");
-    const retrySidecar = sidecar;
-    const releaseSessionOperation = await acquireSessionOperation(req.sessionId);
-    let removeStartListener: (() => void) | undefined;
-    try {
-      const activeTurnId = activeTurns.get(req.sessionId);
-      if (activeTurnId) {
-        // The runtime fences stale turns; rejection must not finalize the parent.
-        // Returning the promise releases the lock before authorization settles.
-        return retrySidecar.call<AgentRetrySubagentResponse>("agent.retrySubagent", {
-          sessionId: req.sessionId,
-          turnId: activeTurnId,
-          delegationId: req.delegationId.trim(),
-        });
-      }
-      const settings = await host.call<any>("settings.get");
-      const detail = await host.call<{ session?: any }>("session.get", { id: req.sessionId });
-      if (!detail.session) throw Object.assign(new Error("Session not found"), { errorCode: ErrorCodes.NOT_FOUND });
-      const launch = await resolveAgentRuntimeLaunch(req.sessionId, detail.session, settings);
-      retrySidecar.setProjectInstructionRoot(req.sessionId, launch.workspaceRoot ?? launch.projectPath);
-      const turn = await host.call<{ turnId?: string }>("session.beginTurn", {
-        sessionId: req.sessionId,
-        providerId: launch.providerId,
-        modelId: launch.modelId,
-      });
-      const turnId = String(turn?.turnId ?? "").trim();
-      if (!turnId) throw new Error("session.beginTurn returned no turn");
-      activeTurns.set(req.sessionId, turnId);
-      recordTurnStart(req.sessionId, turnId);
-      activeTurnUsages.delete(req.sessionId);
-      // Stop needs the runtime to exist, but must not wait for model approval.
-      removeStartListener = retrySidecar.onNotification((method, params) => {
-        if (method !== "agent.event" || !params || typeof params !== "object") return;
-        const envelope = params as Partial<AgentEventEnvelope>;
-        if (envelope.sessionId !== req.sessionId || envelope.turnId !== turnId ||
-          envelope.event?.type !== "agent_start") return;
-        removeStartListener?.();
-        removeStartListener = undefined;
-        releaseSessionOperation();
-      });
-      try {
-        return await retrySidecar.call<AgentRetrySubagentResponse>("agent.retrySubagent", {
-          ...launch.sidecarParams,
-          turnId,
-          delegationId: req.delegationId.trim(),
-        });
-      } catch (error) {
-        await finishTurn(req.sessionId, "error", (error as { errorCode?: string })?.errorCode, { turnId });
-        throw error;
-      }
-    } finally {
-      removeStartListener?.();
-      releaseSessionOperation();
-    }
-  });
+  registerSubagentRecoveryIpc({ handle, getHost, getSidecar, activeTurns,
+    acquireSessionOperation, resolveAgentRuntimeLaunch, recordTurnStart,
+    activeTurnUsages, finishTurn });
 
   handle(IPC.invoke.agentStopSubagents, async (req: AgentStopSubagentsRequest) => {
     if (!req || typeof req.sessionId !== "string" || !req.sessionId.trim() ||

@@ -8,7 +8,10 @@ import { isDelegationStartTool } from "./tool-display";
 import { delegationIdForMessage } from "./subagent-panel";
 
 /** One user/assistant exchange of a delegate session. */
-export type SubagentTranscriptTurn = { task: string; rows: SubagentRunItem[] };
+export type SubagentTranscriptTurn = {
+  task: string;
+  rows: (SubagentRunItem | { kind: "user"; message: UiMessage })[];
+};
 
 /**
  * A delegate's conversation as alternating turns: each Task call of the
@@ -18,6 +21,8 @@ export type SubagentTranscriptTurn = { task: string; rows: SubagentRunItem[] };
 export type SubagentTranscript = {
   agentName?: string;
   turns: SubagentTranscriptTurn[];
+  chainId: string;
+  latestCall: UiMessage;
 };
 
 function delegateTaskDescription(call: UiMessage): string {
@@ -142,12 +147,17 @@ export function buildSubagentTranscript(
   const agentName = runAgentName || requestedName;
 
   const turns: SubagentTranscriptTurn[] = [];
+  const chainCalls = calls.filter((call) => chain.has(call.toolCallId as string));
   for (const call of calls) {
     const callId = call.toolCallId as string;
     if (!chain.has(callId)) continue;
-    const rows: SubagentRunItem[] = [];
+    const rows: SubagentTranscriptTurn["rows"] = [];
     for (const message of messages) {
       if (message.parentToolCallId !== callId) continue;
+      if (message.role === "user") {
+        rows.push({ kind: "user", message });
+        continue;
+      }
       if (message.role === "tool") {
         rows.push({ kind: "tool", message });
         continue;
@@ -164,6 +174,8 @@ export function buildSubagentTranscript(
   }
 
   return {
+    chainId: chainCalls[0].toolCallId as string,
+    latestCall: chainCalls[chainCalls.length - 1],
     ...(agentName ? { agentName } : {}),
     turns,
   };

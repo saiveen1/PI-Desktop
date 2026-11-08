@@ -398,6 +398,28 @@ Explicit Stop still cancels the child and joins cleanup.
 Pending authorization also belongs to that turn: it cannot finalize early,
 and Stop cancels and joins recovery admission before releasing ownership.
 
+### Direct subagent input
+
+`pi-desktop/agent/subagent/message` accepts
+`{ sessionId, delegationId, messageId, content }`. All identity fields are
+nonempty strings of at most 256 characters; content is nonempty text of at
+most 32000 characters. Extra request fields are rejected. This local Desktop
+channel does not accept model, permission or cross-session overrides.
+
+Success returns `{ accepted: true, turnId, delegationId, resumedFrom, delivery }`,
+where delivery is `steered`, `resumed` or `duplicate`. Refusal uses the existing
+retry response `{ accepted: false, turnId, resumedFrom, error }`.
+The runtime targets the latest member of the retained chain. Active children
+receive queued input without tool cancellation; settled chains resume with
+the user's input through existing authorization/history checks. Repeated IDs
+with the same chain/content return the prior receipt; conflicting reuse fails.
+Active parent turns are reused, and idle sends own a recovery turn. Startup
+remains fenced until the parent runtime exists, but authorization never holds
+the session-operation lock needed by Stop. Stale turns never start replacements.
+Accepted input follows normal transcript/outbox persistence; reception does not
+claim that the child has already processed it. See
+[the decision](../../adr/subagent-controls-and-direct-input.md).
+
 ### 5.2c Delegation model approval
 
 Core model consent uses dedicated allowlisted channels, not generic extension

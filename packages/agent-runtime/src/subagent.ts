@@ -1,3 +1,4 @@
+import { SubagentConversation } from "./subagent-conversation.js";
 /**
  * Subagents: bounded delegate agent loops spawned by the `Task` tool (ADR 0062).
  *
@@ -38,6 +39,9 @@ import {
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import {
   addUsage,
+  DEFAULT_DELEGATION_FAILURE_POLICY,
+  isDelegationFailurePolicy,
+  type DelegationFailurePolicy,
   resolveDelegationRunPolicy,
   resolveUnknownUpstreamRetryLimit,
   describeDelegationRunPolicy,
@@ -172,6 +176,8 @@ export type SubagentRunOptions = {
   delegateSessionId?: string;
   /** Scheduling policy captured for this run; legacy definition watchdogs stay ignored. */
   runPolicy?: Partial<DelegationRunPolicy>;
+  /** Immutable starting policy; absent/inherit retains session retry behavior. */
+  failurePolicy?: DelegationFailurePolicy;
   /** Latest validated report from this chain, kept when transcript seeding is trimmed. */
   initialReport?: string;
   /** Publish live checkpoint locations through the owning Task record. */
@@ -247,7 +253,7 @@ export function composeSubagentSystemPrompt(options: {
       : subagentToolsLabel(definition);
   const framing = [
     `You are the \"${definition.name}\" subagent inside PI-Desktop, working on one task delegated by the main agent.`,
-    `You cannot see the user, ask questions, or delegate further. Finish the task with the tools you have: ${toolList}.`,
+    `You may receive direct user follow-up messages in this task. You cannot ask questions or delegate further. Finish the task with the tools you have: ${toolList}.`,
     subagentCanMutate(definition, resolved)
       ? "You may change files, but only the ones the task is about; leave everything else untouched."
       : "You have no tools that change files or run commands, so never report an edit you could not have made.",
@@ -278,6 +284,7 @@ export { addUsage };
 export class SubagentRun {
   private readonly uniqueToolCalls: ReturnType<typeof createToolCallIdentity>;
   private readonly agent: Agent;
+  private readonly conversation: SubagentConversation;
   private readonly opts: SubagentRunOptions;
   private currentAssistant?: UiMessage;
   /** Retained progress is useful on failure, never proof of terminal delivery. */
@@ -309,11 +316,14 @@ export class SubagentRun {
   private readonly attemptedModels = new Set<string>();
   private readonly modelFailures: NonNullable<SubagentRunResult["modelFailures"]> = [];
   private readonly runPolicy: Readonly<DelegationRunPolicy>;
+  private readonly failurePolicy: Readonly<DelegationFailurePolicy>;
+  private fallbackSwitches = 0;
   private budgetTimer?: ReturnType<typeof setTimeout>;
   private budgetExceeded?: { code: "SUBAGENT_BUDGET_EXHAUSTED"; message: string };
   private readonly retryState: SubagentProviderRetryState = {
     claim: (error, phase) => this.claimProviderRetry(error, phase),
-    allowOutputLimitRepair: () => !this.finalizing,
+    // Explicit failure modes permit only classified retries, never a hidden repair request.
+    allowOutputLimitRepair: () => !this.finalizing && this.failurePolicy.mode === "inherit",
     onRetry: ({ error, attempt, delayMs }) => this.publishProviderRetry(error, attempt, delayMs),
     onAttemptStart: () => this.emit({ type: "status", status: {
       sessionId: this.opts.sessionId, isRunning: true, pendingToolConfirmations: 0,
@@ -332,6 +342,10 @@ export class SubagentRun {
   constructor(opts: SubagentRunOptions) {
     this.opts = opts;
     this.runPolicy = resolveDelegationRunPolicy(opts.runPolicy);
+    if (opts.failurePolicy !== undefined && !isDelegationFailurePolicy(opts.failurePolicy)) {
+      throw new Error("Invalid subagent failure policy");
+    }
+    this.failurePolicy = Object.freeze({ ...(opts.failurePolicy ?? DEFAULT_DELEGATION_FAILURE_POLICY) });
     this.unknownUpstreamRetryLimit = resolveUnknownUpstreamRetryLimit(opts.unknownUpstreamRetryLimit);
     const initialMessages = recoverMalformedToolCalls(opts.initialMessages ?? []);
     this.uniqueToolCalls = createToolCallIdentity(initialMessages);
@@ -410,7 +424,17 @@ export class SubagentRun {
       },
       toolExecution: "parallel",
     });
+    this.conversation = new SubagentConversation(this.agent, message => {
+      this.emit({ type: "message_start", message });
+      this.emit({ type: "message_end", message });
+      this.saveProgress();
+    });
     this.agent.subscribe((event) => this.handleEvent(event));
+  }
+
+  sendMessage(message: UiMessage): boolean {
+    if (this.runSignal().aborted || this.finalizing || this.budgetExceeded) return false;
+    return this.conversation.send(message);
   }
 
   setSystemPrompt(prompt: string): void {
@@ -458,6 +482,9 @@ export class SubagentRun {
             else if (this.streamError && await this.useNextModel()) {
               await this.agent.continue();
               await this.agent.waitForIdle();
+            } else if (!this.streamError && !this.turnAborted && this.conversation.hasPending) {
+              await this.agent.continue();
+              await this.agent.waitForIdle();
             } else break;
           }
         }
@@ -472,6 +499,7 @@ export class SubagentRun {
         await this.finalizeReport();
       }
     } finally {
+      this.conversation.close();
       signal?.removeEventListener("abort", onAbort);
       this.clearBudgetTimer();
       this.finalizeCurrentAssistant();
@@ -646,6 +674,8 @@ export class SubagentRun {
   /** Continue the same agent at the failed request; never replay completed tools. */
   private async useNextModel(): Promise<boolean> {
     if (this.finalizing || this.budgetExceeded || this.runSignal().aborted || this.turnAborted || !this.streamError || this.streamError.code === "TURN_ABORTED") return false;
+    if (this.failurePolicy.mode === "stop" || this.failurePolicy.mode === "retry" ||
+      (this.failurePolicy.mode === "fallback" && this.fallbackSwitches >= this.failurePolicy.maxFallbacks)) return false;
     const failed = this.agent.state.messages.at(-1);
     // Only terminal provider errors permit switching. Host/tool errors never do.
     if (failed?.role !== "assistant" || failed.stopReason !== "error" || readLocalRequestErrorDetails(failed)) return false;
@@ -690,6 +720,7 @@ export class SubagentRun {
       }
       if (this.runSignal().aborted) return false;
       this.provider = provider;
+      this.fallbackSwitches++;
       this.thinkingLevel = thinking;
       this.agent.state.model = binding.model;
       this.agent.state.thinkingLevel = binding.agentThinkingLevel;
@@ -726,12 +757,15 @@ export class SubagentRun {
     phase: "request" | "stream",
   ): number | undefined {
     if (this.finalizing || this.budgetExceeded || this.runSignal().aborted || error.details?.origin === "local") return undefined;
+    const inherited = this.failurePolicy.mode === "inherit";
+    if (!inherited && (this.failurePolicy.mode === "stop" ||
+      this.providerTransientRetryAttempt + this.providerRateLimitRetryAttempt + this.providerUnknownRetryAttempt >= this.failurePolicy.maxRetries)) return undefined;
     if (isUnknownUpstreamBadRequest(error)) {
       if (this.providerUnknownRetryAttempt >= this.unknownUpstreamRetryLimit) return undefined;
       return ++this.providerUnknownRetryAttempt;
     }
     if (!error.retriable) return undefined;
-    const infinite = this.opts.infiniteProviderRetry === true;
+    const infinite = inherited && this.opts.infiniteProviderRetry === true;
     if (error.code === "PROVIDER_RATE_LIMITED") {
       if (!infinite && this.providerRateLimitRetryAttempt >= PROVIDER_RATE_LIMIT_MAX_RETRIES) {
         return undefined;
@@ -751,11 +785,15 @@ export class SubagentRun {
   private publishProviderRetry(error: ReturnType<typeof classifyAgentError>, attempt: number, delayMs: number): void {
     this.providerRetries++;
     const unknown = isUnknownUpstreamBadRequest(error);
+    if (this.failurePolicy.mode !== "inherit") {
+      attempt = this.providerTransientRetryAttempt + this.providerRateLimitRetryAttempt + this.providerUnknownRetryAttempt;
+    }
     this.emit({ type: "status", status: {
       sessionId: this.opts.sessionId, isRunning: true, pendingToolConfirmations: 0,
       ...(this.opts.turnId ? { currentTurnId: this.opts.turnId } : {}),
       activity: { phase: "retrying", since: Date.now(), attempt, retryDelayMs: delayMs,
-        ...(unknown ? { maxAttempts: this.unknownUpstreamRetryLimit }
+        ...(this.failurePolicy.mode !== "inherit" ? { maxAttempts: this.failurePolicy.maxRetries }
+          : unknown ? { maxAttempts: this.unknownUpstreamRetryLimit }
           : this.opts.infiniteProviderRetry ? { infinite: true } : {}),
         error: { code: error.code, message: error.message,
           ...(typeof error.details?.providerStatus === "number" ? { providerStatus: error.details.providerStatus } : {}) },
@@ -790,7 +828,7 @@ export class SubagentRun {
             );
       this.publishProviderRetry(retryError, attempt, delayMs);
       await delayWithAbort(delayMs, this.runSignal());
-      if (this.opts.signal?.aborted) return;
+      if (this.runSignal().aborted) return;
       await this.agent.continue();
       await this.agent.waitForIdle();
     } finally {
@@ -976,6 +1014,7 @@ export class SubagentRun {
    * and a delegate finishing must never end the parent's turn.
    */
   private handleEvent(event: AgentEvent): void {
+    if (event.type === "message_start" && event.message.role === "user") this.conversation.consumed(event.message);
     switch (event.type) {
       case "turn_start":
         this.turns += 1;

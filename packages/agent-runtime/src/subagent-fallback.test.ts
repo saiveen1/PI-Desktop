@@ -26,6 +26,7 @@ function answer(res: ServerResponse, model: string, tool = false) {
 async function fixture(options: {
   fail?: string[];
   failureStatus?: Record<string, number>;
+  opaqueFailure?: boolean;
   editFirst?: boolean;
   repeatToolRounds?: number;
   onRequest?: (request: Request) => void;
@@ -46,7 +47,7 @@ async function fixture(options: {
       answer(res, request.model, true);
     } else if (status) {
       res.writeHead(status, { "content-type": "application/json", "retry-after": "0" });
-      res.end(JSON.stringify({ error: { message: status === 404 ? "model not found" : `Fixture HTTP ${status}` } }));
+      res.end(options.opaqueFailure ? "" : JSON.stringify({ error: { message: status === 404 ? "model not found" : `Fixture HTTP ${status}` } }));
     } else {
       answer(res, request.model);
     }
@@ -338,6 +339,170 @@ describe("subagent model fallback over real transport", () => {
       expect.objectContaining({ model: "primary/primary", code: "CONTEXT_TOO_LARGE" }),
       expect.objectContaining({ model: "secondary/secondary", code: "SUBAGENT_CONTEXT_OVERFLOW" }),
     ]);
+  });
+
+});
+
+describe("configurable subagent failure recovery", () => {
+  it.each([429, 503, 404])("stop disables retries and fallback after HTTP %i even with inherited infinite retry", async (status) => {
+    const controller = new AbortController();
+    let attempts = 0;
+    const f = await fixture({ failureStatus: { primary: status }, onRequest: () => {
+      if (++attempts > 3) controller.abort();
+    } });
+    const result = await f.run({ signal: controller.signal, infiniteProviderRetry: true,
+      failurePolicy: { mode: "stop", maxRetries: 2, maxFallbacks: 2 } });
+    expect(result.status).toBe("failed");
+    expect(f.requests.map(request => request.model)).toEqual(["primary"]);
+  });
+
+  it.each([0, 1, 2, 10])("retry permits exactly %i retries and never switches models", async (maxRetries) => {
+    const controller = new AbortController();
+    let attempts = 0;
+    const f = await fixture({ failureStatus: { primary: 429 }, onRequest: () => {
+      if (++attempts > 11) controller.abort();
+    } });
+    const result = await f.run({ signal: controller.signal, infiniteProviderRetry: true,
+      failurePolicy: { mode: "retry", maxRetries, maxFallbacks: 2 } });
+    expect(result.status).toBe("failed");
+    expect(f.requests.map(request => request.model)).toEqual(Array(maxRetries + 1).fill("primary"));
+    const retries = f.events.flatMap(({ event }) => event.type === "status" && event.status.activity?.phase === "retrying"
+      ? [event.status.activity] : []);
+    expect(retries).toHaveLength(maxRetries);
+    expect(retries.every(activity => activity.infinite !== true && activity.maxAttempts === maxRetries)).toBe(true);
+  });
+
+  it("shares the explicit retry limit across rate limits and transient failures", async () => {
+    const controller = new AbortController();
+    const failureStatus = { primary: 429 };
+    let attempts = 0;
+    const f = await fixture({ failureStatus, onRequest: () => {
+      failureStatus.primary = ++attempts % 2 ? 429 : 503;
+      if (attempts > 4) controller.abort();
+    } });
+    const result = await f.run({ signal: controller.signal, infiniteProviderRetry: true,
+      failurePolicy: { mode: "retry", maxRetries: 2, maxFallbacks: 2 } });
+    expect(result.status).toBe("failed");
+    expect(f.requests.map(request => request.model)).toEqual(["primary", "primary", "primary"]);
+    expect(f.events.flatMap(({ event }) => event.type === "status" && event.status.activity?.phase === "retrying"
+      ? [event.status.activity.attempt] : [])).toEqual([1, 2]);
+  });
+
+  it.each([1, 2, 10])("fallback permits at most %i distinct successful switches", async (maxFallbacks) => {
+    const chain = ["primary", ...Array.from({ length: 11 }, (_, index) => `backup-${index}`)];
+    const f = await fixture({ fail: chain });
+    const changes: string[] = [];
+    const result = await f.run({ failurePolicy: { mode: "fallback", maxRetries: 0, maxFallbacks },
+      fallbackModels: chain.slice(1).flatMap(id => [
+        { key: `${id}/${id}`, provider: f.provider(id) },
+        { key: `alias/${id}`, provider: f.provider(id) },
+      ]), onModelChange: provider => changes.push(provider.modelId) });
+    expect(result.status).toBe("failed");
+    expect(f.requests.map(request => request.model)).toEqual(chain.slice(0, maxFallbacks + 1));
+    expect(changes).toEqual(chain.slice(1, maxFallbacks + 1));
+  });
+
+  it("overrides infinite retry, resets retries after switching, and never replays completed edits", async () => {
+    const controller = new AbortController();
+    let attempts = 0;
+    const f = await fixture({ editFirst: true, failureStatus: { primary: 503, secondary: 503 },
+      onRequest: () => { if (++attempts > 8) controller.abort(); } });
+    const result = await f.run({ signal: controller.signal, infiniteProviderRetry: true,
+      failurePolicy: { mode: "fallback", maxRetries: 2, maxFallbacks: 2 },
+      fallbackModels: ["secondary", "third"].map(id => ({ key: `${id}/${id}`, provider: f.provider(id) })) });
+    expect(result.status).toBe("completed");
+    expect(f.requests.map(request => request.model)).toEqual([
+      "primary", "primary", "primary", "primary", "secondary", "secondary", "secondary", "third",
+    ]);
+    expect(f.edits()).toBe(1);
+    for (const request of f.requests.slice(1)) {
+      expect(request.messages.filter(message => message.role === "tool")).toHaveLength(1);
+    }
+  });
+
+  it("does not count unresolved, incompatible or denied candidates as switches", async () => {
+    const f = await fixture();
+    const base = f.provider("small");
+    const small = { ...base, modelConfig: { ...genericModelConfig("small", base.baseUrl!), contextWindow: 4_096, maxTokens: 1_024 } };
+    const approved: string[] = [];
+    const result = await f.run({ failurePolicy: { mode: "fallback", maxRetries: 0, maxFallbacks: 1 },
+      initialMessages: [{ role: "user", content: "z".repeat(12_000), timestamp: 1 }],
+      fallbackModels: [{ key: "missing/model" }, { key: "small/small", provider: small },
+        ...["denied", "secondary"].map(id => ({ key: `${id}/${id}`, provider: f.provider(id) }))],
+      authorizeModel: async provider => { approved.push(provider.modelId); return provider.modelId !== "denied"; } });
+    expect(result.status).toBe("completed");
+    expect(approved).toEqual(["denied", "secondary"]);
+    expect(f.requests.map(request => request.model)).toEqual(["primary", "secondary"]);
+  });
+
+  it("keeps a detached starting snapshot when caller settings change", async () => {
+    const failurePolicy: NonNullable<SubagentRunOptions["failurePolicy"]> = { mode: "fallback", maxRetries: 0, maxFallbacks: 1 };
+    const f = await fixture({ fail: ["primary", "secondary"], onRequest: () => {
+      failurePolicy.mode = "stop";
+      failurePolicy.maxFallbacks = 10;
+    } });
+    const result = await f.run({ failurePolicy,
+      fallbackModels: ["secondary", "third"].map(id => ({ key: `${id}/${id}`, provider: f.provider(id) })) });
+    expect(result.status).toBe("failed");
+    expect(f.requests.map(request => request.model)).toEqual(["primary", "secondary"]);
+  });
+
+  it.each([undefined, "inherit"] as const)("preserves legacy infinite retry for %s", async (mode) => {
+    let attempts = 0;
+    const failureStatus = { primary: 429 };
+    const f = await fixture({ failureStatus, onRequest: () => {
+      if (++attempts === 12) failureStatus.primary = 0;
+    } });
+    const result = await f.run({ infiniteProviderRetry: true,
+      ...(mode ? { failurePolicy: { mode, maxRetries: 0, maxFallbacks: 1 } } : {}) });
+    expect(result.status).toBe("completed");
+    expect(f.requests.map(request => request.model)).toEqual(Array(12).fill("primary"));
+  });
+
+  it.each(["stop", "retry", "fallback"] as const)("%s does not retry deterministic failures or switch without candidates", async mode => {
+    const f = await fixture({ failureStatus: { primary: 401 } });
+    const result = await f.run({ failurePolicy: { mode, maxRetries: 10, maxFallbacks: 10 }, fallbackModels: [] });
+    expect(result.status).toBe("failed");
+    expect(f.requests.map(request => request.model)).toEqual(["primary"]);
+  });
+
+  it("cancels during an explicit retry without sending another request or fallback", async () => {
+    const controller = new AbortController();
+    const f = await fixture({ failureStatus: { primary: 429 } });
+    const result = await f.run({ signal: controller.signal,
+      failurePolicy: { mode: "fallback", maxRetries: 2, maxFallbacks: 2 },
+      onEvent: ({ event }) => {
+        if (event.type === "status" && event.status.activity?.phase === "retrying") controller.abort();
+      } });
+    expect(result.status).toBe("aborted");
+    expect(f.requests.map(request => request.model)).toEqual(["primary"]);
+  });
+
+  it("cancels during fallback authorization without starting the candidate", async () => {
+    const controller = new AbortController();
+    const f = await fixture();
+    const result = await f.run({ signal: controller.signal,
+      failurePolicy: { mode: "fallback", maxRetries: 0, maxFallbacks: 2 },
+      authorizeModel: async () => { controller.abort(); return f.provider("selected"); } });
+    expect(result.status).toBe("aborted");
+    expect(f.requests.map(request => request.model)).toEqual(["primary"]);
+  });
+
+  it("does not fall back for tool failures or for a successful response without tool calls", async () => {
+    const f = await fixture({ editFirst: true });
+    const failed = await f.run({ failurePolicy: { mode: "fallback", maxRetries: 2, maxFallbacks: 2 },
+      resolveToolOutcome: () => ({ isError: true, terminate: true }) });
+    expect(failed.status).toBe("failed");
+    expect(f.requests.map(request => request.model)).toEqual(["primary"]);
+    const success = await fixture({ fail: [] });
+    expect((await success.run({ failurePolicy: { mode: "fallback", maxRetries: 2, maxFallbacks: 2 } })).status).toBe("completed");
+    expect(success.requests.map(request => request.model)).toEqual(["primary"]);
+  });
+  it.each(["inherit", "stop", "retry", "fallback"] as const)("%s controls the otherwise hidden opaque-request repair", async mode => {
+    const f = await fixture({ failureStatus: { primary: 400 }, opaqueFailure: true });
+    const result = await f.run({ failurePolicy: { mode, maxRetries: 0, maxFallbacks: 1 }, fallbackModels: [] });
+    expect(result.status).toBe("failed");
+    expect(f.requests.map(request => request.model)).toEqual(Array(mode === "inherit" ? 2 : 1).fill("primary"));
   });
 
 });
