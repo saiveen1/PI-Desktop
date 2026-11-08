@@ -1062,7 +1062,7 @@
   z-index: 60;
   display: flex;
   width: min(360px, calc(100vw - 24px));
-  max-height: min(560px, calc(100vh - 58px));
+  max-height: min(560px, calc(100vh - 24px));
   flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--ds-border-subtle);
@@ -1095,11 +1095,18 @@
   line-height: var(--leading-tight);
 }
 
+.notification-scroll {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  overflow-anchor: auto;
+}
+
 .notification-pending {
   display: flex;
-  min-height: 0;
-  max-height: min(240px, 40vh);
-  flex: 0 1 auto;
+  flex: none;
   flex-direction: column;
 }
 
@@ -1167,14 +1174,44 @@
   gap: 2px;
   margin: 0;
   padding: 0 6px 8px;
-  overflow-y: auto;
+  overflow: visible;
   list-style: none;
+}
+
+.notification-list > li {
+  flex: 0 0 auto;
+}
+
+.notification-clear-confirm,
+.notification-history-error {
+  flex: none;
+  padding: 8px 14px;
+  font-size: var(--text-sm);
+}
+
+.notification-clear-confirm p,
+.notification-history-error p {
+  margin: 0 0 8px;
+}
+
+.notification-receipt-detail {
+  margin: 0 9px 12px 31px;
+  color: var(--ds-text-secondary);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.notification-receipt-task {
+  white-space: pre-wrap;
 }
 
 .notification-item {
   position: relative;
   display: grid;
   width: 100%;
+  height: auto;
+  min-height: 0;
+  white-space: normal;
   grid-template-columns: 22px minmax(0, 1fr) auto;
   align-items: start;
   gap: 9px;
@@ -1207,6 +1244,18 @@
   align-items: center;
   justify-content: center;
   margin-top: 1px;
+  color: var(--ds-text-muted);
+}
+
+.notification-kind-icon.pending {
+  color: var(--ds-warning);
+}
+
+.notification-kind-icon.running {
+  color: var(--ds-accent);
+}
+
+.notification-kind-icon.success {
   color: var(--ds-success);
 }
 

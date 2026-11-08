@@ -10,11 +10,8 @@ import { projectRunSummaryIsLive } from "../lib/sidebar-project-runs";
  * row-level status dot disappears exactly when the answer is most useful.
  * The header stays visible in both states.
  *
- * Colour carries the meaning and both come from theme tokens
- * (`--ds-warning` for running, `--ds-purple` for a pending permission), so
- * light, dark, and contributed themes all recolor them. Motion is purely
- * decorative and is dropped under `prefers-reduced-motion`; the static
- * shape must stay legible on its own (see `.project-run-*` in the stylesheet).
+ * Theme tokens distinguish running, needs-action, completed, and failed.
+ * Motion is decorative and is dropped under `prefers-reduced-motion`.
  */
 
 function runLabel(
@@ -23,15 +20,13 @@ function runLabel(
 ): string {
   const parts: string[] = [];
   if (summary.running > 0) parts.push(t("nav.projectRunningCount", { count: summary.running }));
-  if (summary.waiting > 0) parts.push(t("nav.projectWaitingCount", { count: summary.waiting }));
+  if (summary.waiting > 0) parts.push(t("nav.projectNeedsActionCount", { count: summary.waiting, defaultValue: "{{count}} need action" }));
+  if (summary.completed > 0) parts.push(t("nav.projectCompletedCount", { count: summary.completed, defaultValue: "{{count}} completed" }));
+  if (summary.failed > 0) parts.push(t("nav.projectFailedCount", { count: summary.failed, defaultValue: "{{count}} failed" }));
   return parts.join(" · ");
 }
 
-/**
- * Badge (A): a count capsule after the project name. Running is the primary
- * figure; a permission wait is a second, purple capsule so the two never
- * collapse into one ambiguous number.
- */
+/** Badge (A): a separate count capsule for each state. */
 export function ProjectRunBadge({ summary }: { summary: ProjectRunSummary }) {
   const { t } = useTranslation();
   if (!projectRunSummaryIsLive(summary)) return null;
@@ -50,6 +45,8 @@ export function ProjectRunBadge({ summary }: { summary: ProjectRunSummary }) {
           {summary.waiting}
         </span>
       ) : null}
+      {summary.completed > 0 ? <span className="project-run-badge completed" aria-label={label} title={label}><span className="project-run-badge-dot" aria-hidden />{summary.completed}</span> : null}
+      {summary.failed > 0 ? <span className="project-run-badge failed" aria-label={label} title={label}><span className="project-run-badge-dot" aria-hidden />{summary.failed}</span> : null}
     </span>
   );
 }
@@ -62,7 +59,7 @@ export function ProjectRunBadge({ summary }: { summary: ProjectRunSummary }) {
  */
 export function ProjectRunRail({ summary }: { summary: ProjectRunSummary }) {
   const { t } = useTranslation();
-  if (!projectRunSummaryIsLive(summary)) return null;
+  if (summary.running === 0 && summary.waiting === 0) return null;
   const label = runLabel(t, summary);
   return (
     <span className="project-run-rail" aria-label={label} role="img">
@@ -91,6 +88,8 @@ export function ProjectRunCount({ summary }: { summary: ProjectRunSummary }) {
       {summary.waiting > 0 ? (
         <span className="project-run-pip waiting">{summary.waiting}</span>
       ) : null}
+      {summary.completed > 0 ? <span className="project-run-pip completed">{summary.completed}</span> : null}
+      {summary.failed > 0 ? <span className="project-run-pip failed">{summary.failed}</span> : null}
     </span>
   );
 }

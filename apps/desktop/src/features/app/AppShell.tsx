@@ -10,6 +10,7 @@ import { ConversationTopbar } from "../../components/ConversationTopbar";
 import { ExtensionPromptHost } from "../../components/ExtensionPromptDialog";
 import { PluginRendererHost } from "../../plugins/renderer-host/PluginRendererHost";
 import {
+  IconClock,
   IconNewSession,
   IconPanel,
   IconPanelOpen,
@@ -29,6 +30,7 @@ import { PortalVisibilityProvider } from "../../lib/portal-visibility";
 import { workPanelLayout } from "../../lib/work-panel-resize";
 import { LiveVoiceStatusHost } from "../voice/live/LiveVoiceStatusHost";
 import { CollapsedTitlebarActions, RoutePending } from "./chrome";
+import { DelegationHistoryDialog } from "../delegations/DelegationHistoryDialog";
 import { useAppShellRuntime } from "./useAppShellRuntime";
 
 const SettingsPage = lazy(() =>
@@ -102,6 +104,7 @@ export function AppShell() {
     requestedWorkPanelWidth,
   } = useAppShellRuntime();
   const [toastAnchor, setToastAnchor] = useState<HTMLElement | null>(null);
+  const [delegationsOpen, setDelegationsOpen] = useState(false);
   useCopyTex();
 
   useEffect(() => {
@@ -191,6 +194,10 @@ export function AppShell() {
                     <IconNewSession size={15} />
                   </TooltipButton>
                 )}
+                <TooltipButton type="button" className="title-nav-btn no-drag" tooltip={t("delegationHistory.title")}
+                  ariaLabel={t("delegationHistory.title")} onClick={() => setDelegationsOpen(true)}>
+                  <IconClock size={15} />
+                </TooltipButton>
                 <div className="window-chrome-drag" aria-hidden />
               </div>
             )}
@@ -204,6 +211,7 @@ export function AppShell() {
                     onToggleSidebar={toggleSidebar}
                     onNewTask={() => void runMenuCommand("newTask")}
                     onOpenSearch={() => setSearchOpen(true)}
+                    onOpenDelegations={() => setDelegationsOpen(true)}
                   />
                 ) : (
                   <div
@@ -352,6 +360,7 @@ export function AppShell() {
           </Suspense>
         ) : null}
         <SearchDialog open={searchOpen} onClose={() => setSearchOpen(false)} />
+        {delegationsOpen ? <DelegationHistoryDialog onClose={() => setDelegationsOpen(false)} /> : null}
         <ToastHost anchorElement={page === "settings" ? null : toastAnchor} />
         <LiveVoiceStatusHost />
         <PluginRendererHost />

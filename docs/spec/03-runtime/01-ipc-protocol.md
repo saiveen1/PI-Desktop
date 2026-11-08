@@ -464,6 +464,31 @@ prevents another ask wait after expiry. See
 [runtime §5f](02-agent-runtime.md#5f-subagent-delegation-d201-adr-0062-adr-0089)
 and [approval UX](../04-ux/03-permission-ux.md#9a-delegation-model-approval-center).
 
+### 5.2d Read-only global delegation history
+
+Main-window guarded additive channels use `delegation-history.ts` DTOs:
+
+| Constant | Channel | Input | Result |
+| --- | --- | --- | --- |
+| `delegationHistoryList` | `pi-desktop/delegationHistory/list` | `DelegationRunHistoryQuery` | `DelegationRunHistoryPage` |
+| `delegationApprovalHistoryList` | `pi-desktop/delegationApproval/history/list` | none | `DelegationApprovalHistory` |
+| `delegationApprovalHistoryMarkRead` | `pi-desktop/delegationApproval/history/markRead` | paired `sessionId`/`requestId`, or `{}` for all | `{ ok }` |
+| `delegationApprovalHistoryClear` | `pi-desktop/delegationApproval/history/clear` | none | `{ ok }` |
+
+Run queries accept nonnegative `offset`, `limit` 1–100, optional exact
+`projectPath`, and `status: all | running | ended`. Omitted scope is global.
+`nextOffset` advances scanned candidates, not filtered entries; empty pages may
+still have a continuation. Entries include source session/project metadata,
+delegation/message identity, recorded task/model/result/status/timestamps and
+explicit task/report truncation flags. Details are a projection, never live
+authorization. Sender and shared payload validation remain mandatory.
+
+Receipt lists contain only terminal prompts with `settledAt` and optional
+`readAt`; main awaits its serialized Host write queue before listing. Receipt
+recording is internal and not exposed to renderer IPC. Read/clear never call
+respond/extend, mutate scheduling, restore a pending request, or replay a run.
+See [history ADR](../../adr/global-delegation-history.md).
+
 ### 5.3 abort
 
 ```ts

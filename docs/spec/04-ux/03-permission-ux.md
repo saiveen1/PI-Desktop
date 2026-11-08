@@ -231,6 +231,23 @@ results cannot restore consent. Task/candidate/policy changes require a fresh
 revision and invalidate affected selections. See
 [core IPC](../03-runtime/01-ipc-protocol.md#52c-delegation-model-approval).
 
+### Durable receipts and global delegation history
+
+The transient approval center keeps its live-only collapsed entry. A separate
+persistent conversation/home toolbar entry opens global delegation history,
+even without pending requests or a selected session. It defaults to all
+projects and is not a session work-panel tab. Source metadata stays visible.
+Inspecting a task/report never navigates; only Open source changes session.
+View approval hands the exact live identity/revision to the existing center
+without changing the current session or granting consent.
+
+Terminal approval receipts are separately persisted by Host and can be read
+after restart in the notification center. Approved means consent accepted,
+not execution succeeded. Reading or clearing receipts never restores pending
+state, changes policy, reauthorizes or replays work. Pending requests are never
+rehydrated from receipt history. Run history comes from canonical Task results;
+orphaned recorded running rows project as interrupted, not live execution.
+
 ## 10. Acceptance
 
 1. Plan and Goal deny Write/Edit/plugins in every permission mode

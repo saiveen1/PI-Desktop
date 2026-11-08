@@ -269,6 +269,10 @@ export const IPC = {
     delegationApprovalList: "pi-desktop/delegationApproval/list",
     delegationApprovalRespond: "pi-desktop/delegationApproval/respond",
     delegationApprovalExtend: "pi-desktop/delegationApproval/extend",
+    delegationHistoryList: "pi-desktop/delegationHistory/list",
+    delegationApprovalHistoryList: "pi-desktop/delegationApproval/history/list",
+    delegationApprovalHistoryMarkRead: "pi-desktop/delegationApproval/history/markRead",
+    delegationApprovalHistoryClear: "pi-desktop/delegationApproval/history/clear",
     /**
      * List every paired remote `pi-host` this desktop knows, redacted so no
      * device token reaches the renderer. See ADR 0286 (R2b pairing UX).

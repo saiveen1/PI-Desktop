@@ -7,6 +7,7 @@ import { createNotificationDelivery, type NotificationEntry } from "../../lib/no
 import { delegationApprovalState } from "../../lib/delegation-approval-state";
 import { notificationIdentity, pendingNotificationTargets, type PendingNotification } from "../../lib/notification-pending";
 import { playNotificationChime } from "../../lib/notification-sound";
+import { notificationToastVariant } from "../../lib/notification-presentation";
 
 const seen = new Set<string>();
 const listeners = new Set<() => void>();
@@ -82,7 +83,7 @@ export async function activateNotificationTarget(target: NotificationTarget): Pr
 }
 function inApp(entry: NotificationEntry) {
   useAppStore.getState().showToast(`${entry.title}: ${entry.body}`, {
-    variant: entry.target.kind.endsWith("failed") ? "error" : "info",
+    variant: notificationToastVariant(entry.target.kind),
     sound: false, duration: 8000,
     sessionId: entry.target.kind === "test" ? undefined : entry.target.sessionId,
     notificationTarget: entry.target,

@@ -7,6 +7,7 @@ import { catalogs } from "@pi-desktop/i18n";
 import { IPC } from "@pi-desktop/shared";
 import { DelegationApprovalCenter } from "../../src/components/delegation-approval/DelegationApprovalCenter";
 import { notificationUserPath } from "./notification-user-path";
+import { notificationHistoryPath } from "./notification-history";
 import "../../src/styles/tokens.css";
 import "../../src/styles/ui-kit.css";
 
@@ -257,3 +258,4 @@ window.delegationLifecycleProbe = async () => {
   return { hydrationRace: true, replyRace: true, transportRetry: true, cleanup: true };
 };
 window.notificationWorkflowProbe = () => notificationUserPath({ root, i18next, until, paint });
+window.notificationHistoryProbe = () => notificationHistoryPath({ root, i18next, until, paint });

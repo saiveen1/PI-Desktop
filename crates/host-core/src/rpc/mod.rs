@@ -1,6 +1,7 @@
 mod background_jobs;
 mod computer_rpc;
 mod config_sync_rpc;
+mod delegation_history_rpc;
 mod delegation_settings;
 mod file_batches;
 mod gen_ui;
@@ -2000,6 +2001,9 @@ async fn handle_request(
     }
 
     match method {
+        method if method.starts_with("delegation.") => {
+            delegation_history_rpc::handle(state, method, params).await
+        }
         "visualizations.readFragment" => gen_ui::read_fragment(state, params).await,
         "tools.remoteComplete" | "tools.workspaceExecute" | "tools.workspaceAbort" => {
             remote_tools::handle(state, method, params, tx).await

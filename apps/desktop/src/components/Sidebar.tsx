@@ -1,7 +1,7 @@
 import { IconClock } from "./icons";
 import { ColorSwatch, SessionLabelChips, sessionGroupMenu, sessionMarkMenu } from "../features/sessions/SessionLabelControls";
 import { SidebarSessionGroups } from "../features/sessions/SidebarSessionGroups";
-import { groupSessionsByGroup, visibleGroupedSessionIds, projectGroupForPath, projectOrganizationScope, sessionOrganizationCatalog, sessionOrganizationScope, type SidebarSessionGroup } from "../lib/session-organization";
+import { groupSessionsByGroup, prioritizeRunningSessions, visibleGroupedSessionIds, projectGroupForPath, projectOrganizationScope, sessionOrganizationCatalog, sessionOrganizationScope, type SidebarSessionGroup } from "../lib/session-organization";
 import { SessionOrganizationDialog, type SessionOrganizationTarget } from "../features/sessions/SessionOrganizationDialog";
 import { ProjectFolderReferences } from "../features/sessions/ProjectFolderReferences";
 import { useSidebarProjectCatalog } from "../features/sessions/useSidebarProjectCatalog";
@@ -40,6 +40,7 @@ import { canTrashSession, type SessionOrganizationAction } from "../features/ses
 import { SessionSelectionToolbar } from "../features/sessions/SessionSelectionToolbar";
 import { SessionTrashDialog } from "../features/sessions/SessionTrashDialog";
 import { isDefaultSessionTitle, useAppStore } from "../stores/app-store";
+import { usePendingNotifications } from "../stores/runtime/notification-runtime";
 import {
   getGlobalPinnedSessions,
   normalizeProjectPath,
@@ -288,6 +289,8 @@ export function Sidebar({
   const runningSessions = useAppStore((s) => s.runningSessions);
   const sessionOutcomes = useAppStore((s) => s.sessionOutcomes);
   const pendingPermissions = useAppStore((s) => s.pendingPermissions);
+  const pendingNotifications = usePendingNotifications();
+  const pendingSessionIds = useMemo(() => new Set(pendingNotifications.map(item => item.target.sessionId)), [pendingNotifications]);
   const setPage = useAppStore((s) => s.setPage);
   const navBack = useAppStore((s) => s.navBack);
   const canNavBack = useAppStore((s) => s.canNavBack);
@@ -1064,17 +1067,17 @@ export function Sidebar({
   ), [filtered, pinnedSessionIds, compareSessions]);
   const sessionGroupsByScope = useMemo(() => {
     const groups = new Map<string, SidebarSessionGroup<SessionSummary>[]>();
-    const add = (scope: string, rows: SessionSummary[]) => groups.set(scope, groupSessionsByGroup(rows,
+    const add = (scope: string, rows: SessionSummary[]) => groups.set(scope, groupSessionsByGroup(prioritizeRunningSessions(rows, runningSessions),
       sessionOrganizationCatalog(sessionOrganization, scope, sessionLabels).groups, sessionMeta));
     add("temporary", temporarySessionHistory);
     for (const entry of projectEntries) {
-      const history = entry.sessions.filter(session => !pinnedSessionIds.has(session.id));
+      const history = prioritizeRunningSessions(entry.sessions.filter(session => !pinnedSessionIds.has(session.id)), runningSessions);
       const { visibleSessions } = getVisibleProjectSessions(history, expandedProjectSessions[entry.key] ?? false);
       add(projectOrganizationScope(entry.path, sidebarProjectGroups), visibleSessions);
     }
     for (const group of remoteProjectGroups) add(`remote:${group.project.key}`, group.sessions);
     return groups;
-  }, [temporarySessionHistory, projectEntries, pinnedSessionIds, expandedProjectSessions, remoteProjectGroups, sessionLabels, sessionMeta, sessionOrganization, sidebarProjectGroups]);
+  }, [temporarySessionHistory, projectEntries, pinnedSessionIds, expandedProjectSessions, remoteProjectGroups, sessionLabels, sessionMeta, sessionOrganization, sidebarProjectGroups, runningSessions]);
   const flatSessionOrder = useMemo(() => {
     const ids = pinnedSessions.map(session => session.id);
     const add = (scope: string) => ids.push(...visibleGroupedSessionIds(sessionGroupsByScope.get(scope) ?? [], scope, collapsedSessionGroups));
@@ -2131,7 +2134,7 @@ export function Sidebar({
     // Show the initial page by default; the remaining sessions stay folded
     // behind the Load more affordance.
     const sessionsExpanded = expandedProjectSessions[entry.key] ?? false;
-    const history = entry.sessions.filter((session) => !pinnedSessionIds.has(session.id));
+    const history = prioritizeRunningSessions(entry.sessions.filter((session) => !pinnedSessionIds.has(session.id)), runningSessions);
     const { visibleSessions, hiddenCount } = getVisibleProjectSessions(
       history,
       sessionsExpanded,
@@ -2143,6 +2146,8 @@ export function Sidebar({
       entry.sessions,
       runningSessions,
       pendingPermissions,
+      pendingSessionIds,
+      sessionOutcomes,
     );
     const runIsLive = projectRunSummaryIsLive(runSummary);
     const showRunBadge = runningAffordances.badge && runIsLive;
@@ -2621,7 +2626,8 @@ export function Sidebar({
               </div>
             </section>
           )}
-          <RemoteProjectGroups groups={remoteProjectGroups}
+          <RemoteProjectGroups groups={remoteProjectGroups} eligibleSessions={listableSessions(sessions).filter(session => showArchived || !sessionArchived(session, sessionMeta[session.id]))}
+            pendingSessionIds={pendingSessionIds} sessionOutcomes={sessionOutcomes}
             renderSessions={(_sessions, projectKey) => renderGroupedSessionRows(`remote:${projectKey}`, {
               temporary: false,
               showLastReplyDate,

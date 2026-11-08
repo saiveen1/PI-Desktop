@@ -24,6 +24,7 @@ import {
   IconFolder,
   IconSidebar,
   IconNewSession,
+  IconClock,
   IconSearch,
 } from "./icons";
 import { TooltipButton } from "./ui";
@@ -47,12 +48,14 @@ export function ConversationTopbar({
   onToggleSidebar,
   onNewTask,
   onOpenSearch,
+  onOpenDelegations,
 }: {
   sidebarCollapsed: boolean;
   workPanelOpen: boolean;
   onToggleSidebar: () => void;
   onNewTask: () => void;
   onOpenSearch: () => void;
+  onOpenDelegations: () => void;
 }) {
   const { t } = useTranslation();
   const activeSessionId = useAppStore((s) => s.activeSessionId);
@@ -322,6 +325,10 @@ export function ConversationTopbar({
 
       <div className="ct-right">
         <div className="ct-actions">
+          <TooltipButton type="button" className="ct-icon-btn" tooltip={t("delegationHistory.title")}
+            ariaLabel={t("delegationHistory.title")} onClick={onOpenDelegations}>
+            <IconClock size={15} />
+          </TooltipButton>
           <TooltipButton
             type="button"
             className="ct-icon-btn"

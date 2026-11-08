@@ -52,6 +52,7 @@ export * from "./subagent-presets.js";
 export * from "./delegation-policy.js";
 export * from "./session-delegation.js";
 export * from "./delegation-approval.js";
+export * from "./delegation-history.js";
 export * from "./delegation-admission.js";
 export * from "./provider-presets.js";
 export * from "./provider-endpoint.js";

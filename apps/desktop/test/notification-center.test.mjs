@@ -8,6 +8,8 @@ const componentSource = await readFile(
   "utf8",
 );
 const globalStyles = await loadStyles();
+const historySource = await readFile(new URL("../src/components/NotificationHistoryList.tsx", import.meta.url), "utf8");
+const presentationSource = await readFile(new URL("../src/lib/notification-presentation.ts", import.meta.url), "utf8");
 const englishCatalog = await readFile(
   new URL("../../../packages/i18n/src/locales/en/index.ts", import.meta.url),
   "utf8",
@@ -30,14 +32,14 @@ test("notification center exposes an accessible sidebar footer trigger and dialo
 });
 
 test("notification center supports filtering, bulk actions, and session navigation", () => {
-  assert.match(componentSource, /filter === "unread"/);
-  assert.match(componentSource, /notification\.readAt/);
+  assert.match(componentSource, /filter !== "unread"/);
+  assert.match(componentSource, /!row\.read \|\| row\.id === expandedReceipt/);
   assert.match(componentSource, /aria-pressed=\{filter === value\}/);
   assert.match(componentSource, /markAllNotificationsRead/);
   assert.match(componentSource, /clearNotifications/);
   assert.match(componentSource, /openNotification\(notification\.id\)/);
-  assert.match(componentSource, /notification\.kind === "task\.failed"/);
-  assert.match(componentSource, /notification\.errorCode/);
+  assert.match(historySource, /notification\?\.kind === "task\.failed"/);
+  assert.match(historySource, /notification\.errorCode/);
 });
 
 test("notification popover preserves keyboard and focus behavior", () => {
@@ -46,19 +48,19 @@ test("notification popover preserves keyboard and focus behavior", () => {
   assert.match(componentSource, /\.notification-item:not\(:disabled\)/);
   assert.match(componentSource, /Math\.max\(0,/);
   assert.match(componentSource, /Math\.min\(buttons\.length - 1,/);
-  assert.match(componentSource, /triggerRef\.current\?\.focus\(\)/);
+  assert.match(componentSource, /triggerRef\.current\?\.focus\(\{ preventScroll: true \}\)/);
   assert.match(componentSource, /rootRef\.current\?\.contains/);
   assert.match(componentSource, /popoverRef\.current\?\.contains/);
   assert.match(componentSource, /portalToBody/);
   assert.match(componentSource, /notification-popover-portaled/);
-  assert.match(componentSource, /\.notification-item\.unread, \.notification-item/);
+  assert.doesNotMatch(componentSource, /querySelector.*notification-item\.unread/);
   assert.match(componentSource, /\.notification-filter\.active/);
   assert.match(componentSource, /aria-live="polite"/);
 });
 
 test("notification content is localized and timestamps are relative", () => {
-  assert.match(componentSource, /Intl\.RelativeTimeFormat/);
-  assert.match(componentSource, /Intl\.DateTimeFormat/);
+  assert.match(presentationSource, /Intl\.RelativeTimeFormat/);
+  assert.match(presentationSource, /Intl\.DateTimeFormat/);
   assert.match(englishCatalog, /notifications:\s*\{/);
   assert.match(englishCatalog, /failedBodyWithCode:/);
   assert.match(chineseCatalog, /notifications:\s*\{/);
@@ -68,7 +70,7 @@ test("notification content is localized and timestamps are relative", () => {
 test("notification popover has bounded desktop and mobile layouts", () => {
   assert.match(
     globalStyles,
-    /\.notification-popover\s*\{[^}]*width:\s*min\(360px, calc\(100vw - 24px\)\);[^}]*max-height:\s*min\(560px, calc\(100vh - 58px\)\);/s,
+    /\.notification-popover\s*\{[^}]*width:\s*min\(360px, calc\(100vw - 24px\)\);[^}]*max-height:\s*min\(560px, calc\(100vh - 24px\)\);/s,
   );
   assert.match(
     globalStyles,
@@ -78,8 +80,10 @@ test("notification popover has bounded desktop and mobile layouts", () => {
     globalStyles,
     /\.notification-popover-portaled\s*\{[^}]*z-index:\s*60;/s,
   );
-  assert.match(componentSource, /style=\{\{ bottom: popoverPos\.bottom, left: popoverPos\.left \}\}/);
+  assert.match(componentSource, /style=\{popoverPos\}/);
+  assert.match(presentationSource, /viewportHeight - bottom - gutter/);
   assert.match(globalStyles, /\.notification-badge\s*\{[^}]*var\(--ds-bg-sidebar\)/s);
-  assert.match(globalStyles, /\.notification-list\s*\{[^}]*overflow-y:\s*auto;/s);
+  assert.match(globalStyles, /\.notification-scroll\s*\{[^}]*overflow-y:\s*auto;/s);
+  assert.match(globalStyles, /\.notification-list\s*\{[^}]*overflow:\s*visible;/s);
   assert.match(globalStyles, /\.notification-item\.unread\s*\{/);
 });

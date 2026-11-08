@@ -21,7 +21,11 @@ Each ADR includes:
 
 | ID | Title | Status |
 |---|---|---|
+
 | project-conversation-groups | [Project conversation groups and display-only labels](project-conversation-groups.md) | Accepted, implementation candidate |
+
+| global-delegation-history | [Global delegation history without a second execution truth](global-delegation-history.md) | Accepted, implementation candidate |
+
 | delegation-terminal-reliability | [Truthful delegation delivery and bounded recovery](delegation-terminal-reliability.md) | Accepted, implementation candidate |
 | session-organization-and-scoped-delegation | [Session organization and scoped on-demand delegation](session-organization-and-scoped-delegation.md) | Accepted, implementation candidate |
 | unified-core-notifications | [Unified core notification delivery](unified-core-notifications.md) | Accepted, implementation candidate |

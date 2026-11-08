@@ -1,5 +1,6 @@
 import type { CoreNotificationRequest, NotificationDeliveryResult, NotificationTarget } from "@pi-desktop/shared";
 import type { DelegationApprovalSnapshot, DelegationApprovalActionRequest, DelegationApprovalActionResult, DelegationApprovalExtendRequest, DelegationApprovalChangedEvent } from "@pi-desktop/shared";
+import type { DelegationRunHistoryQuery, DelegationRunHistoryPage, DelegationApprovalHistory, DelegationApprovalHistoryMarkRead } from "@pi-desktop/shared";
 import type { ReviewContextLines, ReviewContextResult, ReviewTurnsPage, ReviewChangesPage } from "@pi-desktop/shared";
 type ClipboardDirectoryPaste = {
   items: Array<{ kind: "directory"; path: string; name: string } | { kind: "file"; name: string }>;
@@ -1693,6 +1694,10 @@ export const api = {
   runExtensionCommand: (input: { sessionId: string; name: string; args: string }) =>
     invoke<{ ok: boolean }>(IPC.invoke.extensionsCommandRun, input),
   listDelegationApprovals: () => invoke<DelegationApprovalSnapshot>(IPC.invoke.delegationApprovalList),
+  listDelegationHistory: (query: DelegationRunHistoryQuery = {}) => invoke<DelegationRunHistoryPage>(IPC.invoke.delegationHistoryList, query),
+  listDelegationApprovalHistory: () => invoke<DelegationApprovalHistory>(IPC.invoke.delegationApprovalHistoryList),
+  markDelegationApprovalHistoryRead: (input: DelegationApprovalHistoryMarkRead = {}) => invoke<{ ok: boolean }>(IPC.invoke.delegationApprovalHistoryMarkRead, input),
+  clearDelegationApprovalHistory: () => invoke<{ ok: boolean }>(IPC.invoke.delegationApprovalHistoryClear),
   respondDelegationApproval: (input: DelegationApprovalActionRequest) =>
     invoke<DelegationApprovalActionResult>(IPC.invoke.delegationApprovalRespond, input),
   extendDelegationApproval: (input: DelegationApprovalExtendRequest) =>

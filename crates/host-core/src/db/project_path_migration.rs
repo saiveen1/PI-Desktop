@@ -5,7 +5,7 @@ pub(super) fn migrate(conn: &Connection, path: &Path, from: i64) -> Result<()> {
     let backup = create_migration_backup(conn, path, from)?;
     let tx = conn.unchecked_transaction()?;
     reconcile_project_paths(conn, None)?;
-    tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+    tx.pragma_update(None, "user_version", 28i64)?;
     tx.commit().with_context(|| {
         format!(
             "commit project path migration; backup {} remains",

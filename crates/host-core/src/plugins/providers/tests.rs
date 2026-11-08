@@ -101,10 +101,9 @@ fn a_new_database_carries_the_owner_column_at_the_current_schema_version() {
     // v19 session omit, v21 the session Todo checklist, and v22 the
     // session-list index, v23 the session title source, v24 the worktree
     // registry, v25 model discovery state, v26 lossless image storage, and v27
-    // the session Fast mode switch; v28 repairs project path aliases.
-    // A fresh database is stamped with the
-    // newest version, so the
-    // column set is the current one.
+    // the session Fast mode switch; v28 repairs project path aliases, and v29
+    // unifies that repair with the delegation Task history index.
+    // A fresh database uses the newest version and its current column set.
     let version: i64 = db
         .conn()
         .query_row("PRAGMA user_version", [], |row| row.get(0))

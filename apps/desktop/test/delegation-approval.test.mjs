@@ -20,8 +20,10 @@ function load(relative, imports = {}) {
 }
 const boundary = load("../../../packages/host-runtime/src/delegation-boundary.ts");
 const catalog = load("../electron/main/services/delegation-catalog.ts", { "@pi-desktop/host-runtime": boundary });
+const history = load("../electron/main/services/delegation-approval-history.ts");
 const { createDelegationApprovalService } = load("../electron/main/services/delegation-approval.ts", {
   "@pi-desktop/host-runtime": boundary, "./delegation-catalog": catalog,
+  "./delegation-approval-history": history,
 });
 const { registerDelegationApprovalIpc } = load("../electron/main/ipc/delegation-approval-ipc.ts");
 const { refreshSavedDelegationPolicy } = load("../electron/main/services/delegation-policy-refresh.ts");
@@ -42,10 +44,20 @@ function fixture(context, { timeout = 60, approval = "ask", legacy = false } = {
     models: [{ id: "m", alias: "Visible model", contextWindow: 8192, thinkingLevels: ["off", "high"] },
       { id: "alternate", contextWindow: 8192, thinkingLevels: ["off", "high"] }] }],
     session: { title: "Source chat", projectPath: "D:/workspace/source", projectTitle: "Source project" },
-    barrier: undefined, failed: false, sessionPools: new Map(), sessionApprovals: new Map() };
+    barrier: undefined, receiptBarrier: undefined, receiptFailure: false, receipts: [], failed: false, sessionPools: new Map(), sessionApprovals: new Map() };
   const events = [], errors = [];
   let time = Date.parse("2026-11-05T12:00:00.000Z");
   const host = { async call(method, params) {
+    if (method.startsWith("delegation.approvalHistory.")) {
+      if (state.receiptFailure) throw new Error("Receipt write unavailable");
+      if (method.endsWith("record")) { if (state.receiptBarrier) await state.receiptBarrier.promise; state.receipts.push(structuredClone(params)); }
+      if (method.endsWith("list")) return { entries: structuredClone(state.receipts) };
+      if (method.endsWith("clear")) state.receipts = [];
+      if (method.endsWith("markRead")) for (const row of state.receipts) {
+        if (!params.sessionId || (row.request.sessionId === params.sessionId && row.request.requestId === params.requestId)) row.readAt = "2026-11-05T12:00:02.000Z";
+      }
+      return { ok: true };
+    }
     if (state.failed) throw new Error("fixture failure");
     if (state.barrier) await state.barrier.promise;
     if (method === "settings.get") return structuredClone(state.settings);
@@ -362,4 +374,41 @@ test("saved settings flow refreshes a live approval through the real settings IP
   assert.equal((await done).decision, "allow");
   assert.equal(f.service.list().requests.length, 0);
   assert.deepEqual(pushed, [["agent.refreshDelegationPolicy", {}]]);
+});
+
+test("terminal publish/list race waits for queued durable receipt; reload/read/clear never grant consent", async t => {
+  const f = fixture(t);
+  const done = f.service.authorize(request); await drain();
+  const row = f.service.list().requests[0];
+  f.state.receiptBarrier = deferred();
+  await f.service.respond(action(row));
+  assert.equal((await done).decision, "allow");
+  assert.equal(f.events.at(-1).request.status, "approved");
+  let listed = false;
+  const listing = f.service.listHistory().then(value => { listed = true; return value; });
+  await drain(); assert.equal(listed, false);
+  f.state.receiptBarrier.resolve();
+  const saved = await listing; assert.equal(saved.entries.length, 1);
+  const reload = createDelegationApprovalService({ getHost: () => f.host, publish() {}, onError() {} });
+  t.after(() => reload.dispose());
+  assert.deepEqual(await reload.listHistory(), saved);
+  const next = f.service.authorize({ ...request, requestId: "still-pending" }); await drain();
+  await f.service.markHistoryRead({});
+  assert.ok((await f.service.listHistory()).entries[0].readAt);
+  await f.service.clearHistory();
+  assert.deepEqual(await f.service.listHistory(), { entries: [] });
+  assert.equal(f.service.list().requests.length, 1);
+  assert.equal(f.state.settings.delegation.models[0].approval, "ask");
+  assert.equal((await f.service.respond(action(row))).code, "not-found");
+  f.service.cancel({ ...request, requestId: "still-pending" }); await next;
+});
+
+test("receipt persistence failure is observable and cannot authorize or replay a request", async t => {
+  const f = fixture(t); const done = f.service.authorize(request); await drain();
+  f.state.receiptFailure = true;
+  await f.service.respond(action(f.service.list().requests[0], "cancel"));
+  assert.equal((await done).decision, "cancel");
+  await assert.rejects(f.service.listHistory(), /persistence failed/);
+  assert.ok(f.errors.some(error => error.includes("receipt persistence failed")));
+  assert.deepEqual(f.service.list(), { requests: [] });
 });

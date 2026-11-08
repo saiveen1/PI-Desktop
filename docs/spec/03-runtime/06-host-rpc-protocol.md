@@ -962,6 +962,29 @@ activation-scope filtering (`CAPABILITY_INVALID` for an unknown scope).
 - `notification.markAllRead`
 - `notification.clear`
 
+### Delegation history (additive, protocol v11)
+
+- `delegation.history.list({ offset?, limit?, status?, projectPath? })` returns
+  `{ entries, nextOffset }` across non-deleted sessions. Default scope is all
+  projects; `limit` is 1–100 and `status` is `all | running | ended`.
+  Offset counts indexed Task candidates, not matches, so a filtered empty page
+  may have a continuation. Canonical JSONL supplies task, report, model,
+  status and source metadata. Text is bounded at 32,768 UTF-16 units with
+  task/report truncation flags. A recorded running row without a live owning
+  turn projects as `interrupted`; reads never mutate execution.
+- `delegation.approvalHistory.list({})` returns `{ entries }`, at most 200
+  terminal prompt receipts with `settledAt` and optional `readAt`.
+- `delegation.approvalHistory.record({ request, settledAt })` is internal to Electron
+  main; pending prompts are rejected. Identity/revision deduplicate writes.
+- `delegation.approvalHistory.markRead({ sessionId?, requestId? })` accepts a
+  complete pair or neither (all); `clear({})` removes only receipt history.
+  Both return `{ ok: true }` and never settle pending approvals or replay runs.
+
+Unknown query fields and malformed identities fail validation. Terminal
+receipt payloads are allowlisted and versioned in Host-owned kv. The additive
+Task index uses schema 28; see [storage](04-data-storage.md) and the
+[history ADR](../../adr/global-delegation-history.md).
+
 ## 4a. Notification contracts (protocol v4)
 
 ```ts

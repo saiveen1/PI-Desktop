@@ -24,6 +24,36 @@ test("groups place each multi-label conversation exactly once and retain empty g
   const collapsed = new Set([sessionGroupKey("project", "fix")]);
   assert.deepEqual(visibleGroupedSessionIds(result, "project", collapsed), ["b", "plain", "orphan"]);
   assert.deepEqual(visibleGroupedSessionIds(result, "other", collapsed), ["b", "a", "plain", "orphan"]);
+  assert.notEqual(sessionGroupKey("project", null), sessionGroupKey("project", ""));
+});
+
+test("running sessions keep exclusive groups and manual order while entering the first page", async () => {
+  const { prioritizeRunningSessions } = await import("../src/lib/session-organization.ts");
+  const { getVisibleProjectSessions } = await import("../src/lib/sidebar-project-sessions.ts");
+  const rows = Object.freeze(Array.from({ length: 12 }, (_, index) => Object.freeze({ id: String(index) })));
+  const assignments = {
+    "0": { groupId: "investigation", labelIds: ["one", "two"], order: 0 },
+    "5": { groupId: "fix", order: 5 },
+    "10": { groupId: "investigation", labelIds: ["one", "two"], order: 10 },
+  };
+  const originalAssignments = structuredClone(assignments);
+  const ordered = prioritizeRunningSessions(rows, { "10": true, "11": true });
+  assert.deepEqual(ordered.map(row => row.id), ["10", "11", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]);
+  assert.equal(ordered[0], rows[10]);
+  const page = getVisibleProjectSessions(ordered, false);
+  assert.equal(page.hiddenCount, 2);
+  const catalog = [...groups, { id: "empty", name: "Empty", color: "green" }];
+  const grouped = groupSessionsByGroup(page.visibleSessions, catalog, assignments);
+  assert.deepEqual(grouped.map(row => [row.group?.id ?? null, row.sessions.map(session => session.id)]), [
+    ["investigation", ["10", "0"]], ["fix", ["5"]], ["empty", []], [null, ["11", "1", "2", "3", "4", "6", "7"]],
+  ]);
+  assert.equal(new Set(grouped.flatMap(row => row.sessions.map(session => session.id))).size, 10);
+  assert.deepEqual(visibleGroupedSessionIds(grouped, "project", new Set([sessionGroupKey("project", "investigation")])),
+    ["5", "11", "1", "2", "3", "4", "6", "7"]);
+  assert.deepEqual(prioritizeRunningSessions(rows, {}), rows);
+  assert.deepEqual(getVisibleProjectSessions(ordered, true).visibleSessions, ordered);
+  assert.deepEqual(rows.map(row => row.id), Array.from({ length: 12 }, (_, index) => String(index)));
+  assert.deepEqual(assignments, originalAssignments);
 });
 
 test("project scopes join roots, survive primary promotion and isolate remote hosts", () => {

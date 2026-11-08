@@ -25,6 +25,23 @@ export const fr = {
     label: "Approbation de délégation", title: "Approuver le modèle délégué", reason: "Motif de sélection",
     allowOnce: "Autoriser une fois", useOther: "Utiliser un autre modèle", cancel: "Annuler la délégation",
   },
+  delegationHistory: {
+    "title": "Délégations globales", "allProjects": "Tous les projets", "close": "Fermer", "back": "Retour",
+    "openSource": "Ouvrir la session source", "navigationFailed": "Impossible d’ouvrir la session source. Réessayez.",
+    "status": "Statut", "created": "Créée", "completed": "Terminée", "model": "Modèle",
+    "requestedModel": "Modèle demandé", "modelReason": "Motif du choix", "task": "Tâche", "report": "Rapport", "error": "Erreur",
+    "truncated": "Tronqué — le texte complet était trop long.",
+    "pending": "Approbations en attente", "loading": "Chargement des délégations…", "loadFailed": "Impossible de charger l’historique des délégations. Les demandes en attente restent inchangées.",
+    "retry": "Réessayer", "noPending": "Aucune approbation en attente.", "delegate": "Sous-agent", "viewApproval": "Voir l’approbation",
+    "runs": "Exécutions", "refresh": "Actualiser", "filter": "Filtrer les exécutions",
+    "filters": { "all": "Toutes", "running": "En cours", "ended": "Terminées" },
+    "empty": "Aucune exécution de délégation pour l’instant.", "loadMore": "Charger plus", "end": "Fin de l’historique des délégations",
+    "noProject": "Aucun projet", "untitledSession": "Session sans titre",
+    "statuses": {
+      "running": "En cours", "completed": "Terminée", "failed": "Échouée", "stopped": "Arrêtée",
+      "aborted": "Abandonnée", "timed_out": "Délai dépassé", "interrupted": "Interrompue"
+    }
+  },
   "worktree": {
     "menu": { "group": "Git" },
     "newIsolatedSession": "Nouvelle session isolée",
@@ -288,6 +305,9 @@ export const fr = {
     "sessionFailed": "Nécessite une attention particulière",
     "projectRunningCount": "{{count}} en cours dans ce projet",
     "projectWaitingCount": "{{count}} en attente d'approbation",
+    "projectNeedsActionCount": "{{count}} nécessitent une action",
+    "projectCompletedCount": "{{count}} terminées",
+    "projectFailedCount": "{{count}} en échec",
     "sortSessions": "Trier les projets et les discussions",
     "sortRecent": "Récemment mis à jour",
     "sortOldest": "Le plus ancien en premier",
@@ -3070,7 +3090,13 @@ sklm: {
     "planApprovalTitle": "{{sessionTitle}} plan en attente d'approbation",
     "planApprovalBody": "Le plan proposé est prêt pour examen.",
     "actionFailed": "Impossible de mettre à jour les notifications.",
-    "justNow": "À l'instant"
+    "justNow": "À l'instant",
+    "approvalHistoryTitle": "Approbation de délégation · {{sessionTitle}}",
+    "approvalHistoryBody": "{{agent}} — {{status}}",
+    "clearConfirm": "Effacer l’historique des tâches et des approbations ? Les demandes encore en attente d’action restent ouvertes.",
+    "historyLoadFailed": "Impossible de charger l’historique des approbations. Les demandes en attente restent inchangées.",
+    "emptyPendingTitle": "Rien à traiter",
+    "emptyPendingBody": "Les demandes qui attendent votre réponse apparaîtront ici."
   },
   computerUse: {
     title: "Computer use",

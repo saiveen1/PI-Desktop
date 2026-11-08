@@ -54,6 +54,13 @@ export function sessionOrganizationCatalog(organization: SessionOrganization | u
     ? organization.scopes[scope] : { groups: [], labels: legacyLabels };
 }
 
+/** Stable presentation-only partition; never changes the persisted/manual order. */
+export function prioritizeRunningSessions<T extends { id: string }>(
+  sessions: readonly T[], running: Readonly<Record<string, boolean | undefined>>,
+): T[] {
+  return [...sessions.filter(session => running[session.id]), ...sessions.filter(session => !running[session.id])];
+}
+
 /** Exclusive membership: labels never participate in conversation placement. */
 export function groupSessionsByGroup<T extends { id: string }>(sessions: readonly T[], groups: readonly SessionGroup[],
   meta: Readonly<Record<string, { groupId?: string }>>): SidebarSessionGroup<T>[] {

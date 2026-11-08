@@ -225,15 +225,15 @@ destination, chat as the home surface, tools and permissions inline.
   dense tree rather than detached cards. Hovering or focusing the project title
   reveals the full project path. Pressing the title and moving 8px reorders
   the group.
-- **Running activity**: a project group whose sessions have live work marks
-  that fact on its *header*, because a collapsed group folds its body to a
-  zero-height `inert` region and would otherwise hide every row-level status
-  dot exactly when the answer is most useful. Two independent affordances
-  share one amber `--ds-warning` vocabulary (a pending permission keeps the
-  purple `--ds-purple` used by the conversation row):
-  - a **count badge** after the project name, showing running and
-    permission-waiting counts as separate capsules so the two figures are
-    never read as one number;
+- **Project activity and outcomes**: header counts cover distinct eligible
+  sessions across every logical-project root, including folded, pinned and
+  paginated rows. Needs action
+  (ask, permission, plan or delegation approval) takes precedence over running,
+  then the latest unread completed/failed outcome. Read history remains in the
+  bell but no longer contributes an unread outcome count. Separate capsules use
+  warning for action, purple for running, success for completion and error for failure:
+  - a **count badge** after the project name, showing these categories without
+    merging their figures;
   - an **activity rail**: a 2px track down the group's left edge with a
     travelling pulse, spanning the opened conversation list and shrinking to
     the header while the group is collapsed. It also carries the counts while
@@ -249,6 +249,11 @@ destination, chat as the home surface, tools and permissions inline.
   migration is required.
   Motion is decoration only: `prefers-reduced-motion` keeps both static
   shapes legible with the animation removed.
+- **Running-first display**: within each conversation group, running sessions
+  precede idle sessions stably; Ungrouped applies the same rule to its own rows.
+  Running candidates are considered before project pagination. Group order,
+  membership, descriptive labels, global pins and persisted manual ordering
+  are unchanged; no project-level running section is introduced.
 - **Project actions**: open folder reveals the primary project directory; Edit
   project changes the host-owned logical group name and adjusts eligible
   non-primary roots (keeping renderer metadata in sync); pin/unpin changes
@@ -293,16 +298,15 @@ destination, chat as the home surface, tools and permissions inline.
   remain above normal history and do not move on send. Project groups switch
   to `manual` by dragging a title or using ArrowUp/ArrowDown on that
   title. Session `manual` remains a readable compatibility value.
-- **Labels and color marks**: Conversation settings owns one editable global
-  label catalog. A session row menu assigns multiple labels and one independent,
-  optional color mark. Within each project's current history page, collapsible
-  full-row label headings replace inline label chips. A multi-label conversation
-  appears under every assigned label, as shortcuts to the same conversation;
-  unassigned conversations appear under Unclassified. Empty groups are omitted,
-  label order follows the catalog and row order follows the current sort.
-  Temporary and remote history use the same grouping; global pins remain flat.
-  The sidebar can filter by any selected label and a color. Filters and folding
-  do not rewrite organization; bulk actions deduplicate visible conversation IDs.
+- **Groups, labels and color marks**: each logical project has its own catalog
+  shared across its roots. A session belongs to at most one conversation group;
+  unassigned sessions appear under Ungrouped, and empty named groups remain
+  visible. Multiple descriptive labels render as chips without duplicating a
+  conversation or changing its group. The optional row color remains separate.
+  Group order follows its catalog, while running-first display is a stable
+  projection of the current row order. Temporary and remote scopes retain
+  independent catalogs; global pins stay flat. Folding only changes visibility;
+  it does not rewrite membership or stored ordering.
 - **Subagent models**: A local conversation's composer opens its model-pool
   dialog. Follow global is the default; Custom enables model checkboxes and a
   separate per-model Automatically allowed / Approval required selector. Saving
@@ -491,7 +495,8 @@ shared capability contract:
 | Command palette | Cmd/Ctrl+K (also Cmd/Ctrl+Shift+P per D014) | builtin + plugin commands |
 | Model menu | Composer-right model × reasoning chip | configured provider/model choices + settings entry (D091) |
 | Profile menu | sidebar footer | Settings / Logs / Theme cycle (D041) |
-| Notification inbox | sidebar footer bell | All/Unread views, task failure rows only (successful completions are hidden, D295), mark-all-read and clear actions (D130/D117) |
+| Notification inbox | sidebar footer bell | All/Unread/Needs action; retained successful and failed tasks plus read-only approval receipts; bulk read and confirmed history-only clear |
+| Global delegations | persistent conversation/home toolbar entry | all-project paginated execution history, source-aware details without navigation, explicit Open source and handoff to existing approval controls; not a session work-panel tab |
 | Toasts | events (plugin toast, backend restored, copy) | top-center of the live main-content safe area; viewport fallback; 4s default, 8s for errors |
 | Project switcher | empty-home underlined project name | sidebar open projects + search + clone git project + open project |
 
@@ -555,17 +560,20 @@ shared capability contract:
 - Completed/failed turn not already visible → host-core appends one durable
   inbox row. A result shown in the visible, focused current chat and every
   `aborted` turn append none. Background sessions and any turn finishing while
-  the window is unfocused still append. The sidebar footer bell lists only
-  `task.failed` history rows; its badge adds current live Needs action requests to unread failures. Successful
-  completions stay in the durable record for the sidebar outcome badge and
-  native notification but never appear in the inbox (D295). Selecting a row
-  marks it read and activates its bound project/session.
+  the window is unfocused still append. The sidebar footer bell lists both
+  `task.completed` and `task.failed`, superseding the D295 failure-only filter.
+  Its badge adds live Needs action and unread terminal approval receipts to
+  unread task outcomes. Selecting a task row marks it read and activates its
+  bound project/session; receipt expansion marks read without navigation.
   Core delivery uses Settings → Notifications: Automatic is in-app while the
   app is focused and native otherwise; In-app only never requests native delivery;
   System may request it for a foreground background-session source. A separate
   live Needs action section projects asks, permissions, plans and delegation
   approvals without durable rows. Read/clear never settles consent. Arrival never
   navigates; explicit activation rechecks liveness and locates existing controls.
+  Terminal delegation approval receipts are separately persisted, capped at
+  200, and survive restart. They never restore pending consent or replay work.
+  One list scrolls below a fixed header/filter area; refresh preserves position.
 - Backend degraded → status capsule (restarting) or fatal banner with Open
   logs (D080); composer submits are rejected with readable errors while down.
   - Plan/Goal checkpoint → the originating session shows only the structured title

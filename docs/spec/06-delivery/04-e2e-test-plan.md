@@ -1,5 +1,6 @@
 # 04. E2E Test Plan
 
+
 ## E2E-PERSONAL-build-identity-and-explicit-beta
 
 - **Environment:** Isolated temporary Git repositories, existing ASAR tooling,
@@ -25,6 +26,45 @@
 - **Acceptance:** Delivery / data safety / compatibility. **Milestone:** maintenance.
 - **Status:** Offline fixture coverage; real packaging, installation, signing and
   existing-profile upgrade validation are separate, explicitly authorized work.
+
+## E2E-NOTIFICATION-global-history
+
+- **Environment:** Production React components in isolated Chromium profiles,
+  synthetic API boundaries, and temporary Host databases; no Desktop launch,
+  live profile, provider call, or native banner claim.
+- **Steps:** Mix many live requests, successful/failed task rows and terminal
+  approval receipts. Use 1280×900, 360×640 and 360×320 viewports. Scroll to both
+  ends with Home/End, refresh while scrolled, expand/read receipts under Unread,
+  retry failed history operations, and confirm Clear. Resolve an older pending
+  list response after a newer terminal refresh.
+- **Expected:** One bounded scroll owner, reachable top and bottom, fixed
+  controls, no refresh jump, distinct source/status presentation, retained read
+  outcomes, no stale receipt overwrite, and no pending settlement or navigation
+  from history read/clear. Source navigation remains explicit.
+- **Global history:** Open with no active session and across projects; filter,
+  paginate through a filtered empty page with a cursor, inspect task/report,
+  retry a read error, and attempt a deleted source. Live refresh renews the
+  first-page cursor. Only explicit Open source navigates; View approval targets
+  the existing exact request/revision without navigating. Escape returns focus.
+- **Sidebar:** Keep group order/membership, descriptive labels and global pins
+  unchanged. A running session originally beyond the first ten appears at the
+  top of its own conversation group, never another group. Ungrouped reorders
+  internally. Project counts deduplicate all logical-project roots and include
+  folded, pinned and paginated rows, with action > running > unread outcome
+  precedence. Ending a run restores its prior stored order.
+- **Host contracts:** Reopen a temporary database with terminal receipts;
+  verify read retention, bounded eviction, revision guards, rejected pending
+  writes, and read/clear isolation. Query old canonical Task rows across
+  projects, exclude deleted sessions, classify stale running as interrupted,
+  test text truncation and filtered continuation. Upgrade schema 27 and both
+  historical schema-28 shapes to 29, verify backups, project ownership, retained
+  memory, index rebuild and unchanged transcript rows. Inject a project-repair
+  failure and verify atomic rollback; reopen successfully migrated databases.
+- **Automation:** `delegation-approval-ui.test.mjs`,
+  `delegation-history-ui.test.mjs`, notification/sidebar unit suites, shared
+  history contract tests and Host delegation history tests. Electron app/OS
+  delivery verification remains separately authorized and is not implied.
+
 
 ## E2E-HARNESS-recovery-boundaries
 
@@ -200,7 +240,7 @@ being fetched on every subsequent poll.
 - Create a temporary profile, real `Alpha` directory, two conversations with
   transcript bytes, and an unrelated project/conversation. Seed the historical
   lowercase project row and move one conversation to it while the Host is stopped.
-- Restart: require schema v28 and a v27 backup retaining both original owners,
+- Restart: require schema v29 and a v27 backup retaining both original owners,
   one project, both conversations owned by it, and both
   transcripts preserved. Delete by the lowercase spelling: require both owned
   conversations/files removed, no reappearing alias row, and the unrelated
