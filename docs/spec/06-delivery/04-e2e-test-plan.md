@@ -14802,7 +14802,11 @@ are withdrawn with ADR 0165.
   `attachments/<sha256>` ref. 4) Prompt a turn that names an absolute path to a
   project file whose leaf name also exists in scratch, and click it. 5) Prompt
   a turn that names `missing-helper.js` and click it. 6) Prompt a turn that
-  names `only-here.ts` and click it.
+  names `only-here.ts` and click it. 7) Render an assistant reply with
+  `Directory: F:/export files/中文/` (the path as inline code ending in a slash),
+  then a separate table containing inline-code `report.json`. Click it and use
+  Show in folder. Add a later backup-directory paragraph, a new heading, an
+  ambiguous paragraph naming two directories, and a fenced directory example.
 - **Expected**:
   - Clicking `openimage.js` opens the project's `img/openimage.js`, although the
     scratch store holds a file with that same leaf name: the project is
@@ -14826,14 +14830,20 @@ are withdrawn with ADR 0165.
     `No file matches missing-helper.js` and opens nothing: no new work-panel
     tab, no empty panel, no blank side-browser page, and the work panel and
     transcript keep the content they already had.
+  - The table filename opens and reveals the exact file under the preceding
+    directory, not a same-name project file. A later backup directory does not
+    change an earlier link. Heading/ambiguous contexts and fenced examples do
+    not supply a directory. Explicit links and paths retain their meaning;
+    a missing composed absolute path reports failure without guessing another.
 - **Specs linked**: `03-runtime/01-ipc-protocol.md` § fs,
   `04-ux/09-interaction-patterns.md` §8a.2, ADR 0124, ADR 0163, ADR 0249,
   ADR 0262, ADR 0263
 - **Acceptance**: C (conversation & stream), D (workspace), Quality
 - **Milestone**: M5
 - **Status**: Unit-covered
-  (`apps/desktop/test/chat-ref-resolve.test.mjs`); full UI journey Draft (run
-  only in a capable environment when this surface changes)
+  (`apps/desktop/test/chat-ref-resolve.test.mjs`,
+  `markdown-file-directory.test.mjs`, `markdown-file-links.test.mjs`); full UI
+  journey Draft (run only in a capable environment when this surface changes)
 
 #### E2E-CHAT-spaced-absolute-file-paths
 

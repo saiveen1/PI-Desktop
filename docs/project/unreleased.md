@@ -1,5 +1,11 @@
 # Unreleased changes
 
+- Resolve inline-code filenames below an explicit absolute directory in assistant
+  Markdown, including export tables split into separate render blocks. Click and
+  context-menu actions share the composed exact path; headings and ambiguous
+  directory declarations clear context, and missing paths never redirect to an
+  unrelated same-name file.
+
 - Present conversation labels as collapsible full-row groups within project,
   temporary and remote history. Multi-label conversations have multiple shortcuts
   to the same data; visible selection deduplicates IDs and global pins stay flat.

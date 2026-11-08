@@ -89,3 +89,67 @@ test("file link presentation has theme tokens, wrapping and a keyboard focus aff
   assert.match(css, /\.prose-chat a\.chat-file-link:focus-visible\s*\{[^}]*text-decoration-line: underline/);
   assert.equal((tokens.match(/--ds-file-link:/g) ?? []).length, 2);
 });
+
+test("production Markdown qualifies a table filename with its explicit export directory", async (t) => {
+  const calls = [];
+  const ssr = await slotSsr(t, { plugins: [{
+    name: "export-file-interaction-probe",
+    transform(source, id) {
+      if (!id.endsWith("/components/Markdown.tsx")) return;
+      source = source.replace("function Anchor({", "function RealAnchor({")
+        .replace("openFileMenu(event, { items: fileMenuItems(target) })", "void (globalThis.exportFileMenuProbe = fileMenuItems(target))");
+      return source + `
+        function Anchor(props) {
+          const element = RealAnchor(props);
+          if (decodeURIComponent(props.href ?? "").endsWith("accounts_2fa.json")) {
+            globalThis.exportFileProbe.push(element.props.children[0]);
+          }
+          return element;
+        }
+      `;
+    },
+  }] });
+  globalThis.exportFileProbe = [];
+  globalThis.window = { piDesktop: {
+    platform: "win32",
+    async invoke(channel, input) {
+      calls.push([channel, input]);
+      if (channel === "pi-desktop/fs/resolveRef") return { ok: true, data: { match: {
+        root: "external", relativePath: "accounts_2fa.json",
+        absolutePath: input.ref, matchedBy: "exact-absolute",
+      } } };
+      assert.equal(channel, "pi-desktop/fs/reveal");
+      return { ok: true, data: {} };
+    },
+  }, matchMedia: () => ({ matches: false }), getSelection: () => null };
+  t.after(() => { delete globalThis.window; delete globalThis.exportFileProbe; delete globalThis.exportFileMenuProbe; });
+  const { useAppStore } = await ssr.load("/src/stores/app-store.ts");
+  const opened = [];
+  const state = {
+    sessions: [{ id: "session-1", title: "Local" }], activeSessionId: "session-1",
+    workspace: { path: "D:/unrelated-project" },
+    openFileInWorkPanel: (...args) => opened.push(args),
+    showToast: () => {},
+  };
+  useAppStore.setState(state);
+  Object.assign(useAppStore.getInitialState(), state);
+  const { Markdown } = await ssr.load("/src/components/Markdown.tsx");
+  const directory = "F:/export files/中文导出/";
+  const html = ssr.render(createElement(Markdown, {
+    source: "已完成。\n\n目录：`" + directory + "`\n\n| 文件 | 内容 |\n| --- | --- |\n| `accounts_2fa.json` | Synthetic fixture |\n\nBackup: `F:/backup/`",
+  }));
+  const path = directory + "accounts_2fa.json";
+  assert.ok(html.includes(encodeURIComponent(path)), "table link must retain the explicit directory across Markdown blocks");
+  assert.equal(calls.length, 0, "rendering must not query local files");
+  assert.equal(globalThis.exportFileProbe.length, 1);
+  const anchor = globalThis.exportFileProbe[0];
+  anchor.props.onClick({ preventDefault() {} });
+  await flush();
+  assert.deepEqual(opened.map(([file]) => file), [path]);
+  anchor.props.onContextMenu({ preventDefault() {}, stopPropagation() {}, clientX: 1, clientY: 1 });
+  globalThis.exportFileMenuProbe.find((item) => item.id === "reveal-in-folder").onSelect();
+  await flush();
+  assert.deepEqual(calls.filter(([channel]) => channel.endsWith("resolveRef")).map(([, input]) => input.ref), [path, path]);
+  assert.equal(calls.at(-1)[0], "pi-desktop/fs/reveal");
+  assert.equal(calls.at(-1)[1].path, path);
+});

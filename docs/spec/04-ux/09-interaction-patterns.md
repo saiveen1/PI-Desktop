@@ -1629,6 +1629,14 @@ Project drag/drop follows these patterns:
   Copy file contents, and Show in folder. Open with offers File Manager and the
   default application; HTML retains its built-in/default browser choices.
   Every action resolves the reference first. Open file preserves source positions.
+  In assistant Markdown, a standalone paragraph containing one explicit absolute
+  directory in inline code (ending in `/` or `\`) anchors subsequent inline-code
+  leaf filenames to that directory, including filenames in a later table block.
+  Another directory replaces the context; a heading or an ambiguous declaration
+  clears it. Fenced examples, authored links, paths containing separators, and
+  Markdown file previews retain their existing meaning. The composed absolute
+  reference goes through the same host checks for every action; a missing file
+  never falls back to a same-name file elsewhere. Rendering reads no file bytes.
   Save as asks for a native destination and copies exact bytes without modifying
   the source; cancel is silent. Copy contents only copies complete text previews,
   including empty text; unsupported or oversized files report an error instead.

@@ -471,6 +471,25 @@ export type MdastNode = {
   children?: MdastNode[];
 };
 
+/** A paragraph may explicitly name one directory for subsequent inline filenames. */
+export function markdownFileDirectoryAfterNode(
+  node: MdastNode,
+  current?: string,
+): string | undefined {
+  if (node.type === "heading") return undefined;
+  if (node.type !== "paragraph") return current;
+  const directories = new Set<string>();
+  for (const child of node.children ?? []) {
+    if (child.type !== "inlineCode" || !child.value) continue;
+    const path = child.value.trim().replaceAll("\\", "/");
+    if (/^(?:[A-Za-z]:\/|\/(?!\/))/.test(path) && path.endsWith("/") && !/[\0\r\n]/.test(path)) {
+      directories.add(path);
+    }
+  }
+  if (!directories.size) return current;
+  return directories.size === 1 ? [...directories][0] : undefined;
+}
+
 const SKIP_MDAST = new Set([
   "code",
   "link",
@@ -494,6 +513,7 @@ export function linkifyMdastTree(
   tree: MdastNode | null | undefined,
   root?: string | null,
   baseDir?: string | null,
+  directory?: string,
 ): void {
   const budget = createChatLinkScanBudget();
   const finishDiagnostic = beginRenderDiagnostic("markdown-linkify-tree");
@@ -546,6 +566,9 @@ export function linkifyMdastTree(
           target = spacedPathLike || !value.includes(" ")
             ? resolvePreviewTarget(value, root, baseDir)
             : null;
+          if (directory && target?.kind === "file" && !/[\\/]/.test(value)) {
+            target = { ...target, path: directory + target.path };
+          }
           if (target) budget.links += 1;
         }
         if (target) {
@@ -588,7 +611,13 @@ export function linkifyMdastTree(
         }
         continue;
       }
+      const inferDirectory = baseDir === undefined || baseDir === null;
+      if (inferDirectory && !nextSkip && child.type === "heading") directory = undefined;
+      const nextDirectory = inferDirectory && !nextSkip
+        ? markdownFileDirectoryAfterNode(child, directory)
+        : directory;
       walk(child, nextSkip);
+      directory = nextDirectory;
       next.push(child);
     }
     node.children = next;
@@ -604,10 +633,11 @@ export function linkifyMdastTree(
 export function remarkChatFileLinks(
   root?: string | null,
   baseDir?: string | null,
+  directory?: string,
 ) {
   return function remarkChatFileLinksPlugin() {
     return (tree: MdastNode) => {
-      linkifyMdastTree(tree, root, baseDir);
+      linkifyMdastTree(tree, root, baseDir, directory);
     };
   };
 }

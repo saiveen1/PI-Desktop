@@ -71,6 +71,7 @@ import { useAppStore } from "../stores/app-store";
 import { useReferencedImageDataUrl } from "../lib/use-referenced-image-data-url";
 import { absoluteImagePath, remarkLocalImagePaths } from "../lib/markdown-image-paths";
 import { remarkNormalizeWrappedMarkdownLinkDestinations } from "../lib/markdown-link-destinations";
+import { markdownFileDirectories } from "../lib/markdown-file-directory";
 import { useOpenChatFileRef } from "../hooks/use-preview-target";
 import {
   useChatFileMenuItems,
@@ -904,6 +905,7 @@ const Block = memo(function MarkdownBlock({
   renderDiagrams,
   workspaceRoot,
   baseDir,
+  fileDirectory,
 }: {
   raw: string;
   originalRaw: string;
@@ -911,6 +913,7 @@ const Block = memo(function MarkdownBlock({
   renderDiagrams: boolean;
   workspaceRoot?: string | null;
   baseDir?: string;
+  fileDirectory?: string;
 }) {
   const context = useMemo(
     () => ({
@@ -927,9 +930,9 @@ const Block = memo(function MarkdownBlock({
       // bracket-display plugin can promote them to display math after
       // remark-math parses the pre-normalized `$$ … $$` form.
       remarkLatexBracketDisplay(originalRaw),
-      remarkChatFileLinks(workspaceRoot, baseDir),
+      remarkChatFileLinks(workspaceRoot, baseDir, fileDirectory),
     ],
-    [originalRaw, workspaceRoot, baseDir],
+    [originalRaw, workspaceRoot, baseDir, fileDirectory],
   );
   const positionedRehypePlugins = useMemo(
     () => [...rehypePlugins!, [rehypeSourcePositions, { offset: sourceOffset }]] as Options["rehypePlugins"],
@@ -1020,6 +1023,10 @@ export const Markdown = memo(function Markdown({
     fullSourceTooLarge ? "" : normalizedSource,
     markdownTailLimit,
   );
+  const fileDirectories = useMemo(
+    () => baseDir !== undefined ? [] : markdownFileDirectories(blocks),
+    [baseDir, blocks],
+  );
   let sourceOffset = 0;
   return (
     <MarkdownFileMenuContext.Provider value={openMarkdownFileMenu}>
@@ -1060,6 +1067,7 @@ export const Markdown = memo(function Markdown({
               renderDiagrams={renderDiagrams}
               workspaceRoot={workspaceRoot}
               baseDir={baseDir}
+              fileDirectory={fileDirectories[i]}
             />
           );
         })}
