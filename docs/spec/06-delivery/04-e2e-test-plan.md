@@ -1,5 +1,42 @@
 # 04. E2E Test Plan
 
+## E2E-HARNESS-recovery-boundaries
+
+- **Environment:** Synthetic Host/provider boundaries and isolated fixtures;
+  never a daily profile, paid provider or production command.
+- **Steps:** Send TaskWait/TaskStop Bash jobs with delegation defaults including
+  `minCompleted: 0`; repeat invalid IDs/timeouts and delegation selectors. Return
+  Host overloads between malformed edits and across owners/classes; continue
+  after capacity returns. Return changing/repeated/partial unseen-line reveals.
+  Render the production tool row for full and truncated context requests.
+  Check explicit foreground timeout forwarding and background observation.
+  Saturate parsed-stdio ordinary slots with pending approvals, resolve/abort
+  through the bounded control reserve, and verify permit recovery. Refuse
+  background starts for missing sessions and full session/global limits before
+  the executable callback. Cancel pending spawns and retry after release. Keep
+  two session-A shells active; A's third waits while session B can start.
+- **Expected:** Bash-only irrelevant fields are removed before schema validation;
+  identity/timeout/delegation checks still reject invalid calls. Three admission
+  failures stop with HOST_OVERLOADED, not a mutation error. New complete reveals
+  earn bounded progress grace; repeats still terminate and never write blindly.
+  Context-required rows are neutral, localized and do not claim successful writes;
+  other errors remain failures. Observation intervals never rewrite deadlines.
+  Control traffic still validates requests, remains bounded and releases blocked
+  work. Admission refusal never launches a background command. Approval waiting
+  has no aggregate deadline; the full native execution timeout starts afterward.
+  Per-session and global shell limits release symmetrically on cancellation.
+- **Traceability:** Runtime Session job controls, Tools and Permissions §4d,
+  line-anchored Edit §9.3, and component tool status states.
+- **Automated entry points:** `harness-recovery-user-path.test.ts`,
+  `harness-recovery-guard.test.ts`, `background-job-tools.test.ts` and
+  `apps/desktop/test/tool-context-recovery.test.mjs`. Rust encoding, legacy Edit
+  fallback and conflicting insertion tests cover the actual file/process layer.
+  Host coverage: `rpc/admission_tests.rs`, `background_tasks/admission_tests.rs`
+  and `tool_budget/tests.rs`. See [candidate validation](../../testing/harness-recovery-2026-11-08.md).
+- **Acceptance:** C / E / Data safety / Quality. **Milestone:** maintenance.
+- **Status:** Candidate checks are reported with delivery; source tests do not
+  establish acceptance by an older installed Desktop.
+
 ## E2E-SESSION-activity-labels-and-scoped-delegation
 
 - **Environment:** Current isolated worktree, synthetic sessions/provider

@@ -46,7 +46,7 @@ registered; reserved codes in §3.7 remain intentionally absent from
 |---|---|---|
 | `PROTOCOL_MISMATCH` | no | handshake/protocol version mismatch |
 | `HOST_UNAVAILABLE` | yes | Rust host not running/reachable |
-| `HOST_OVERLOADED` | yes | bounded host RPC/tool capacity is full; retry after backpressure |
+| `HOST_OVERLOADED` | yes | bounded host RPC/tool admission failed before execution; an independent three-failure owner/class budget may end the turn with `details.kind: host-admission` and capacity guidance, without consuming mutation recovery attempts |
 | `AGENT_UNAVAILABLE` | yes | pi sidecar not running/reachable |
 | `APP_DEGRADED` | yes | app running with limited capabilities |
 | `INTERNAL` | maybe | unexpected internal failure |

@@ -2,10 +2,10 @@ import type { UiMessage } from "@pi-desktop/shared";
 import { getToolAction } from "./tool-display";
 import { runOutcome, toolResultPayload } from "./tool-presentation";
 
-export type ToolDisplayStatus = "running" | "success" | "failed" | "denied" | "skipped" | "interrupted" | "unknown";
+export type ToolDisplayStatus = "running" | "success" | "failed" | "denied" | "skipped" | "interrupted" | "context-required" | "unknown";
 export type ToolStatusPresentation = {
   kind: ToolDisplayStatus;
-  reasonKey?: "chat.toolSkippedReason" | "chat.toolInterruptedReason" | "chat.toolWaitInterruptedReason" | "chat.toolExitCodeReason";
+  reasonKey?: "chat.toolSkippedReason" | "chat.toolInterruptedReason" | "chat.toolWaitInterruptedReason" | "chat.toolExitCodeReason" | "chat.toolContextRevealReason" | "chat.toolContextReadReason";
   detail?: string;
   exitCode?: number;
 };
@@ -13,6 +13,7 @@ export type ToolStatusPresentation = {
 export const TOOL_STATUS_LABEL_KEYS = {
   running: "chat.running", success: "chat.toolCompleted", failed: "chat.toolFailed",
   denied: "chat.toolDenied", skipped: "chat.toolSkipped", interrupted: "chat.toolInterrupted",
+  "context-required": "chat.toolContextRequired",
 } as const;
 
 const SKIPPED_FOR_INPUT = "Skipped because new user input is waiting.";
@@ -58,6 +59,13 @@ export function getToolStatus(message: UiMessage): ToolStatusPresentation {
   const exitCode = isRun && typeof details?.exitCode === "number" && Number.isFinite(details.exitCode)
     ? details.exitCode : undefined;
   if (message.toolStatus === "denied") return { kind: "denied", detail: errorText?.slice(0, 600) ?? plain?.slice(0, 600) };
+  if (message.toolName === "Edit" && failed && code === "EDIT_LINES_UNSEEN" &&
+      typeof details?.unseenCount === "number" && details.unseenCount > 0) {
+    if (details.merged === true && details.revealTruncated === false) {
+      return { kind: "context-required", reasonKey: "chat.toolContextRevealReason" };
+    }
+    if (details.revealTruncated === true) return { kind: "context-required", reasonKey: "chat.toolContextReadReason" };
+  }
 
   // Actual failures outrank a later Stop marker or an interruption-looking output.
   if (exitCode !== undefined && exitCode !== 0) {

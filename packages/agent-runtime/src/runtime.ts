@@ -8,7 +8,7 @@ import { buildDelegationModelTool } from "./delegation-model-tool.js";
 import { resolveDelegationRunPolicy, describeDelegationRunPolicy, isDelegationRunPolicySnapshot, type DelegationRunPolicy, type DelegationSettings, type DelegationApprovalDecision, DelegationRequestError, resolveUnknownUpstreamRetryLimit } from "@pi-desktop/shared";
 import { buildJobTools } from "./background-job-tools.js";
 import {
-  mutationFailureKey, mutationTerminationAdvice, mutationTerminationMessage,
+  mutationFailureKey, mutationTerminationAdvice, mutationTerminationMessage, mutationTerminationCode,
 } from "./mutation-recovery.js";
 import { MutationRecoveryGuard, type MutationTermination } from "./mutation-recovery-guard.js";
 import { DESKTOP_AGENT_IDENTITY } from "./agent-identity.js";
@@ -1447,8 +1447,8 @@ function commandShellToolDescription(
     "The protocol tool remains named Bash for compatibility; write commands for the active shell dialect.",
     shellSyntaxGuidance(shell),
     `The session scratch directory variable is ${shellScratchVariable(shell)}.`,
-    `An optional timeout from 1 to ${MAX_COMMAND_TIMEOUT_SECONDS} seconds may be supplied; without it, the command defaults to a 60-second timeout.`,
-    `Set runInBackground: true for long-lived processes the user needs after the turn ends (dev servers, watchers, builds). A background call returns a backgroundTaskId immediately, survives turn aborts and timeouts, and its output is visible in the composer's running-tasks bar. In Agent mode on supported local Hosts, use TaskList to find it, TaskWait with its job reference to read results, and TaskStop with that reference to stop it. Background completion does not automatically resume the model.`,
+    `An optional timeout from 1 to ${MAX_COMMAND_TIMEOUT_SECONDS} seconds may be supplied; without it, the command defaults to a 60-second timeout. This is an execution deadline, not a progress-check interval: a 30-second observation checkpoint does not require timeout: 30.`,
+    `Use runInBackground: true before starting a build, test, or other command that may exceed an observation interval, when you need to inspect progress without terminating it. Also use it for long-lived processes needed after the turn ends (dev servers, watchers). A background call returns a backgroundTaskId immediately, survives turn aborts and foreground timeouts, and its output is visible in the composer's running-tasks bar. In Agent mode on supported local Hosts, use TaskList to find it, TaskWait with its job reference to read results, and TaskStop with that reference to stop it. TaskWait timeout only ends observation, not the command; choose and enforce a deliberate total budget, not repeated blind waits. Background completion does not automatically resume the model. After a foreground timeout, inspect existing effects and process state before deciding to rerun; do not replay side-effecting commands automatically.`,
     ...(formattedScratch ? [`The session scratch directory is ${formattedScratch}.`] : []),
   ].join(" ");
 }
@@ -2205,7 +2205,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           ]
         : []),
       // Editing workflow.
-      `Editing workflow: inside the advertised workspace, use Edit for small, uniquely anchored changes and Write for new files or intentional whole-file rewrites. Never modify the same path concurrently. Do not use shell apply_patch, git apply, patch, or hand-edited unified-diff files. On failure, diagnose the cause, refresh content or anchors with Read or a complete tool-provided reveal when needed, and correct the payload before retrying. After three failed edit attempts on the same path in one user turn, stop editing that path, report the exact error, and continue unblocked work. For an authorized worktree outside the advertised workspace, use a guarded, deterministic Bash edit that aborts on unexpected content, then verify the diff.`,
+      `Editing workflow: inside the advertised workspace, use Edit for small, uniquely anchored changes and Write for new files or intentional whole-file rewrites. Never modify the same path concurrently. Do not use shell apply_patch, git apply, patch, or hand-edited unified-diff files. On failure, classify the cause before retrying: fix malformed syntax or conflicting ranges directly; review complete revealed lines or Read stale/incomplete context. After three failed edit attempts on the same path exhaust the runtime's recovery budget in one user turn, stop editing that path, report the exact error, and continue unblocked work. Provenance recovery has bounded grace; HOST_OVERLOADED uses a separate admission budget and calls for checking capacity, not rewriting patches. Never automatically replay commands whose effects are unknown. For an authorized worktree outside the advertised workspace, use a guarded, deterministic Bash edit that aborts on unexpected content, then verify the diff.`,
       // Shell dialect and scratch variable are selected by host-core.
       commandShellGuidance(this.commandShell, this.scratchDir),
       // Session scratch directory (D114).
@@ -3477,7 +3477,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
         case "Write":
           return `Create or overwrite a file. Deliverables go into the workspace; temporary/intermediate files go into the scratch directory.${scratchPathHint}${externalPathHint}`;
         case "Edit":
-          return `Replace, insert, or delete lines in an existing file. Names positions and supplies new content only — never old_string. Required: path, tag (4 hex from the latest Read/Grep/Write/Edit), ops. Ops: PUT N.=M: replace inclusive lines N–M; PUT <N: insert before N; PUT >N: insert after N; PUT >$: append; CUT N.=M delete; REM delete the file; MV DEST rename after other ops. Body rows are + plus the final line text. Every PUT with body rows must include the trailing colon, for example PUT 48.=48:; PUT 48.=48 followed by + rows is invalid. A colonless PUT is only for a register paste such as PUT <1 @name. No -old or context rows. Ranges name only the lines being changed. A plain old_string/new_string replacement is still accepted when ops is omitted, with or without tag. Re-ground on the tag returned by every successful write. After one failed Edit, classify the error: Read the live file for a stale tag or unseen lines (or retry unchanged on a complete EDIT_LINES_UNSEEN reveal), but correct syntax or range errors directly; do not guess. Do not edit the same path concurrently.${scratchPathHint}${externalPathHint}`;
+          return `Replace, insert, or delete lines in an existing file. For line edits supply path, tag (4 hex from the latest Read/Grep/Write/Edit), and ops with new content only. Ops: PUT N.=M: replace inclusive lines N–M; PUT <N: insert before N; PUT >N: insert after N; PUT >$: append; CUT N.=M delete; REM delete the file; MV DEST rename after other ops. Body rows are + plus the final line text. Every PUT with body rows must include the trailing colon, for example PUT 48.=48:. A colonless PUT is only for a register paste such as PUT <1 @name. No -old or context rows. All line numbers refer to the tagged snapshot, not intermediate edits. Equivalent gap locators (e.g. >99 and <100), including repeated appends, require a single PUT with body rows in the intended order. A plain old_string/new_string replacement is accepted when ops is omitted or blank, with or without tag; new_string may be empty for deletion. Do not combine nonempty ops with populated legacy fields. Re-ground on the tag returned by every successful write. After a failed Edit, classify the error: Read for stale tags or incomplete unseen-line reveals; review a complete EDIT_LINES_UNSEEN reveal before retrying unchanged. Correct syntax or range conflicts directly; do not guess. HOST_OVERLOADED is admission pressure, not a bad patch. Do not edit the same path concurrently.${scratchPathHint}${externalPathHint}`;
         case "Bash":
           return `${commandShellToolDescription(this.commandShell, this.scratchDir)} Use Edit or Write instead of apply_patch, git apply, or patch; do not retry a failed shell patch command repeatedly.`;
         case "TodoWrite":
@@ -3888,7 +3888,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
             this.pendingMutationTermination = termination;
           } else {
             this.delegateMutationTerminations.set(toolCallId, {
-              code: "MUTATION_RETRY_BUDGET_EXHAUSTED",
+              code: mutationTerminationCode(termination.kind),
               message: mutationTerminationMessage(termination.kind, termination.target, termination.lastErrorCode),
             });
           }
@@ -9411,7 +9411,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       termination.lastErrorCode,
     );
     const error = {
-      code: "MUTATION_RETRY_BUDGET_EXHAUSTED",
+      code: mutationTerminationCode(termination.kind),
       message,
       retriable: true,
       details: {

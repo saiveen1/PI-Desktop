@@ -2627,12 +2627,13 @@ twice.
 | Denied | Muted `Denied` status; payload remains closed until requested | Permission result when available |
 | Skipped | Muted `Skipped` status instead of a failure when the runtime's exact new-input skip result is present; never claims execution | Original result and arguments remain available |
 | Interrupted | Muted `Interrupted` status for explicit abort evidence or a TaskWait interrupted by new input; a wait interruption does not imply the background work stopped | Original result remains available; real timeouts and nonzero command exits still show failure |
+| Context required | Muted localized `Needs context` for an Edit `EDIT_LINES_UNSEEN` result with structured reveal metadata; never a successful write | Complete reveal: review displayed lines before retrying. Truncated reveal: read missing ranges. No automatic edit; file content stays out of the status tooltip |
 
 Status labels expose a bounded reason through the shared Tooltip on hover or
 keyboard focus, with a visible focus ring and an accessible description. Known
-skip/interruption reasons are localized; errors show their existing message/code,
-not arguments or stdout. Skips and interruptions do not inflate activity issue
-counts. This is a renderer projection for both live and restored rows: persisted
+skip/interruption/context-request reasons are localized; errors show their existing
+message/code, not arguments or stdout. Skips, interruptions and structured context
+requests do not inflate activity issue counts. This is a renderer projection for both live and restored rows: persisted
 statuses, model-facing errors and plugin tool-card contracts do not change.
 
 ### 9.6 Interactions

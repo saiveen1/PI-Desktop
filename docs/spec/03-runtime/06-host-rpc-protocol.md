@@ -66,8 +66,17 @@ host and is handled by the normal Electron supervision path.
 ### 2.1 Runtime admission and backpressure
 
 Host-core does not create an unbounded task or subprocess for every request.
-The RPC dispatcher caps active requests at 32. `tools.execute` then enters a
-bounded execution budget:
+The RPC dispatcher caps ordinary active requests at 32 and keeps a separate
+bounded reserve of four completion/cancellation requests. Only existing-work
+controls (permission resolution, tool/workspace abort, remote/plugin completion,
+file-batch sealing/closing/abandonment, background stop, plan abort/finish and
+market cancellation) use the reserve; queries and new execution cannot. Both
+lanes return HOST_OVERLOADED with a lane-specific reason when full and release
+their permit on settlement/cancellation. This lets approval/abort free ordinary
+slots even while every ordinary request is awaiting consent. `tools.execute`
+has no aggregate wall-clock deadline around approval in either nested or flat
+wire shape; post-approval admission and tool execution limits remain enforced.
+It then enters a bounded execution budget:
 
 - 16 total tool executions
 - 4 concurrent `Bash` processes globally, 2 per session
@@ -81,7 +90,7 @@ Permission prompts do not consume an execution slot. A full queue returns
 `HOST_OVERLOADED` with retryable semantics in the tool result instead of
 waiting indefinitely or spawning more work. The limits are host-owned so
 Electron and the sidecar cannot independently over-admit the same resources.
-Admission reserves total, tool-class, session, and session-mutation capacity
+Admission reserves total, tool-class, session, session-shell and session-mutation capacity
 atomically. A queued call holds no execution capacity. When capacity returns,
 the oldest runnable request is admitted; a request blocked by one class or
 session does not block unrelated runnable work. Calls wait at most 30 seconds.
@@ -763,6 +772,15 @@ bounded per-stream rings. The registry lives in the host process, so every task
 stops during host shutdown and an application exit never leaves an orphan
 process.
 
+Background startup checks that the session is live and reserves its per-session
+and global background capacity atomically before invoking the runner. Pending
+spawns count toward those limits. The reservation is released on failure or
+cancellation and transferred to the registered process under the state lock;
+the lock is not held across spawning. Session stop/deletion and Host shutdown
+also signal pending spawns. Capacity or missing-session rejection before spawn
+cannot execute the submitted command. Cancellation after spawning may have
+effects and is not permission to replay the command automatically.
+
 Output chunks do not emit `backgroundTasks.changed`; the event remains a
 lifecycle invalidation, not a high-volume log transport. Clients fetch only the
 selected output preview. A terminal snapshot includes the final drained output,
@@ -793,6 +811,11 @@ pool rather than on an async worker, so a long traversal cannot delay unrelated
 RPCs. The read and mutation class limits above also bound those blocking
 threads. Results and error codes are unchanged; a blocking task that panics
 returns `INTERNAL` instead of dropping the response.
+
+On Windows, foreground and background runner children default Python standard
+streams to `PYTHONIOENCODING=utf-8` only when not inherited; explicit per-command
+environment takes precedence. No global environment or Python file encoding
+default is changed.
 
 `session.appendMessage` is idempotent by message id. An id already indexed in
 another session is remapped to `{sessionId}:{id}` before the JSONL write, and

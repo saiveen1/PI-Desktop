@@ -85,3 +85,25 @@ not observed; a new user prompt starts a fresh parent budget.
   visible error, and accept a follow-up. It also covers changed diagnostics,
   fix-then-retest, cancellation, refusals, and owner isolation.
 - E2E-140 and E2E-141 document the third-failure boundary.
+
+### Admission pressure and reveal progress (2026-11-08)
+
+Counting Host capacity failures as malformed edits encouraged the model to
+rewrite valid patches. Admission failures now have a separate three-attempt
+owner/class budget with HOST_OVERLOADED termination and capacity guidance.
+The bound prevents infinite retry loops without pretending the edit ran.
+Reads cannot erase blocked-writer pressure, and success in the same capacity
+class releases that class's counter. No automatic replay is introduced.
+
+A sequence of complete unseen-line reveals can add real context while still
+repeating the same error code. The guard retains per-code grace and recognizes
+new line/content pairs, storing digests only, for at most eight progress graces
+per path before ordinary counting resumes. Reordered or partial reveals are
+not progress. This modest finite allowance supports iterative inspection without
+opening an unlimited model loop; successful file work resets it. The UI projects
+structured reveal results as context requests but never rewrites their failure
+status or applies a patch before the model reviews the evidence.
+
+Real Agent-loop and helper regressions cover admission versus mutation counts,
+owner isolation, follow-up prompts and complete/repeated/truncated reveals.
+Production tool-row fixtures cover localized context status and unchanged errors.

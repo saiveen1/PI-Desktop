@@ -210,7 +210,8 @@ async fn global_capacity_is_released_without_reserving_waiting_class() {
     for (session, tool, count) in [
         ("reads-a", "Read", 4),
         ("reads-b", "Glob", 4),
-        ("shells", "Bash", 4),
+        ("shells-a", "Bash", 2),
+        ("shells-b", "Bash", 2),
         ("plugins", "custom_tool", 4),
     ] {
         for _ in 0..count {
@@ -394,10 +395,11 @@ async fn dispatch_skips_a_blocked_class_for_the_oldest_runnable_request() {
     for (session, tool) in [
         ("reads-a", "Read"),
         ("reads-b", "Read"),
-        ("shells", "Bash"),
+        ("shells-a", "Bash"),
+        ("shells-b", "Bash"),
         ("plugins", "plugin_tool"),
     ] {
-        for _ in 0..4 {
+        for _ in 0..if tool == "Bash" { 2 } else { 4 } {
             running.push(budget.acquire(session, tool).await.unwrap());
         }
     }
@@ -513,4 +515,39 @@ async fn an_abandoned_hold_releases_waiting_calls() {
     drop(hold);
     drop(admitted(late.as_mut()));
     drop(running);
+}
+
+#[tokio::test]
+async fn session_shell_limit_leaves_capacity_for_other_sessions_and_releases() {
+    let budget = ToolBudget::new();
+    let first = budget.acquire("a", "Bash").await.unwrap();
+    let second = budget.acquire("a", "Bash").await.unwrap();
+    let mut third = Box::pin(budget.acquire("a", "Bash"));
+    assert!(poll_once(third.as_mut()).is_pending());
+    let other = admitted(Box::pin(budget.acquire("b", "Bash")).as_mut());
+    assert_eq!(budget.snapshot().shell, 3);
+    assert_eq!(budget.snapshot().queued, 1);
+    drop(first);
+    let third = admitted(third.as_mut());
+    assert_eq!(budget.snapshot().shell, 3);
+    drop((second, third, other));
+    assert_eq!(budget.snapshot().shell, 0);
+    assert_eq!(budget.snapshot().active, 0);
+    let _first = budget.acquire("a", "Bash").await.unwrap();
+    let _second = admitted(Box::pin(budget.acquire("a", "Bash")).as_mut());
+}
+
+#[tokio::test]
+async fn cancelling_granted_session_shell_waiter_returns_its_session_slot() {
+    let budget = ToolBudget::new();
+    let first = budget.acquire("a", "Bash").await.unwrap();
+    let second = budget.acquire("a", "Bash").await.unwrap();
+    let mut waiter = Box::pin(budget.acquire("a", "Bash"));
+    assert!(poll_once(waiter.as_mut()).is_pending());
+    drop(first);
+    drop(waiter);
+    let replacement = admitted(Box::pin(budget.acquire("a", "Bash")).as_mut());
+    assert_eq!(budget.snapshot().shell, 2);
+    drop((replacement, second));
+    assert_eq!(budget.snapshot().active, 0);
 }

@@ -24,7 +24,7 @@ Three properties are enforced, in this order, before any byte is written:
 | Topic | Decision |
 |---|---|
 | `Edit` parameters | `path`, `tag`, `ops` |
-| Removed | `old_string`, `new_string`, and any mode switch between contracts |
+| Legacy compatibility | `old_string` / `new_string` lower to the same guarded apply path (§11), not a separate editing mode |
 | Tag | 4 uppercase hex, derived from the whole normalized file |
 | Tag minted by | `Read`, `Grep`, `Write`, and every successful `Edit` |
 | Anchor unit | 1-indexed original line numbers of the tagged snapshot |
@@ -286,6 +286,12 @@ an alias rejected by those checks keeps their error (for example,
    damaging authoring mistake and is what §7.4's `+`-only body rules exist to
    prevent.
 4. Two ops may not overlap, and two ops may not target the same original anchor.
+   Equivalent gap spellings count as the same target: `>99` and `<100`, or
+   `>$` and `>N` when `N` is the last line. A duplicate-gap error names both
+   1-based operation numbers (counting all ops, not body rows) and locators,
+   and directs the caller to combine the intended body rows into one `PUT`.
+   The host rejects the entire call before writing; it never merges inserts,
+   reorders replacements/deletions, or partially applies earlier valid ops.
 5. A range may not start or end inside a collapsed or clipped region. Lines
    excluded from `seen_lines` are rejected by §9's provenance gate, which covers
    this case mechanically rather than by convention.
@@ -472,10 +478,12 @@ success.
 the same way. The three recoverable codes —
 `EDIT_TAG_MISMATCH`, `EDIT_TAG_UNKNOWN`, `EDIT_LINES_UNSEEN` — each hand back
 what the retry needs: the live tag, or the content of the lines the host refused
-to write blind (§9.1). One honest retry is the designed response to them, so
-each code gets **one free attempt per path** before it counts. Every other code
-— malformed ops, an invalid range, a no-op apply — counts on its first
-occurrence, because repeating one of those means the model is guessing.
+to write blind (§9.1). Each code gets an initial free attempt per path.
+Complete `EDIT_LINES_UNSEEN` reveals with new line/content pairs earn up to eight
+progress graces per path (including the first complete reveal). Repeated or
+reordered pairs, truncated/malformed reveals and exhausted progress graces count
+normally after the initial per-code grace. Malformed ops, invalid ranges and
+no-op edits count immediately; the model must inspect reveals before retrying.
 
 | Sequence on one path within one prompt | Outcome |
 |---|---|
@@ -484,8 +492,8 @@ occurrence, because repeating one of those means the model is guessing.
 | `EDIT_PARSE_FAILED` three times | Attempt 3 — the turn stops |
 | A failure, then a successful `Edit`, then a failure | Attempt 1 — a write that landed clears that path's history |
 
-Counting a grace is per code, not per call, so a stale tag followed by unseen
-lines is two distinct honest failures while the same code twice is not.
+Initial graces are per code; a stale tag followed by unseen lines gets both.
+Only bounded, demonstrably new complete reveals earn additional progress grace.
 
 The runtime identifies an existing target by its filesystem canonical path,
 resolved against the session project (or scratch root for a temporary session)
@@ -525,6 +533,15 @@ a separate per-command diagnostic budget, reset by successful file work or a
 changed result as specified in [03-tools-and-permissions](03-tools-and-permissions.md)
 §4d. The runtime owns this bookkeeping in `MutationRecoveryGuard`; tool execution,
 permission checks, Edit provenance, and provider retry budgets remain unchanged.
+
+`HOST_OVERLOADED` is a pre-execution admission failure, not an incorrect edit.
+It uses a separate owner/capacity-class budget of three failures, without
+spending or clearing file/command recovery. Exhaustion stops with HOST_OVERLOADED
+and `details.kind: host-admission`; capacity guidance never recommends changing
+the patch. A successful call in that class resets the admission counter. No
+automatic replay is added. In the renderer, a structured unseen-line reveal
+is a neutral context request, not successful execution or a red tool failure;
+persisted results and the model-facing rejection remain unchanged.
 
 For delegates, exhaustion is reported on the Task result as `failed` with
 `MUTATION_RETRY_BUDGET_EXHAUSTED`. Earlier report text is preserved but cannot
@@ -585,7 +602,14 @@ unchanged; `Edit` no longer reports version or provenance problems as the generi
 `TOOL_FAILED`, because both are recoverable with a specific next action.
 
 A legacy `old_string` / `new_string` call without `ops` is a compatibility
-input, not a second contract. A model that half-migrated still echoes the
+input, not a second contract. Empty or whitespace-only `ops` is treated as
+omitted only with a complete legacy pair: a nonempty string `old_string` and
+a string `new_string`. An empty `new_string` is valid deletion, not a missing
+field. Blank `ops` without that pair keeps the existing empty-ops error;
+it never becomes an implicit edit or successful no-op. Nonempty `ops` with
+either populated legacy string is `INVALID_ARGUMENT`: callers must choose
+one intent, not silently discard one. Empty legacy string defaults alongside
+nonempty `ops` remain accepted. A model that half-migrated still echoes the
 schema's required `tag` alongside the legacy pair; that shape is accepted too,
 and the supplied `tag` remains the provenance gate, so a tag that does not hash
 the live file still fails with `EDIT_TAG_MISMATCH` / `EDIT_TAG_UNKNOWN` instead
@@ -679,6 +703,36 @@ only", "re-ground after every edit", and the worked anti-patterns
 (empty `PUT` used as a delete, range sized to post-edit content, `-`/context
 rows, widened `PUT` for a pure insertion, `>N*` anchored on a closer, body rows
 under a register paste).
+
+### 13.7 Windows command pipe encoding
+
+The shared foreground/background shell-runner environment defaults
+`PYTHONIOENCODING` to `utf-8` on Windows only when the variable is not inherited.
+Explicit `ToolRunnerStartConfig.extra_env` values are applied last and win over
+that default and inherited values (Windows names are case insensitive). A shell
+command can still override its own environment. The same environment setup is
+used by the production hidden runner and the direct-shell unit-test path.
+This is subprocess-only stdio configuration: no global environment mutation,
+`PYTHONUTF8` setting, Python default file-encoding change, or non-Windows default.
+
+### 13.8 Focused harness regression scenarios
+
+Use isolated synthetic workspaces and Host data, with no provider/network call:
+
+- Read a file, then Edit with a matching tag, blank/whitespace `ops`, and a
+  unique legacy pair. Verify replacement, empty-string deletion, and a new tag.
+  Missing pairs, duplicate/missing matches, no-ops, stale tags and unseen lines
+  must preserve the file and retain their established errors/reveal metadata.
+- Reject populated legacy fields alongside nonempty ops; accept empty legacy
+  defaults with ordinary ops.
+- Submit equivalent-gap inserts (`>99` / `<100`), repeated appends, and a
+  replacement/insert collision after another valid op. Verify deterministic
+  operation/locator diagnostics, no file/move side effects, and that an authored
+  single-PUT correction keeps the specified row order.
+- On Windows, run Python emitting Chinese and emoji to stdout and stderr through
+  foreground and detached-background tools. Verify UTF-8 by default, inherited
+  and explicit overrides, and foreground extra-env precedence. Isolate inherited
+  variables in child test processes rather than mutating the test host globally.
 
 ## 14. Deliberate deviations from `oh-my-pi`'s `hashline`
 

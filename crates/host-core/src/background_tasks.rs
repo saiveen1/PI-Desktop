@@ -129,6 +129,28 @@ pub struct BackgroundTaskRegistry {
     pub(crate) tasks: HashMap<String, BackgroundTask>,
     /// Insertion order, for stable oldest-first pruning of finished entries.
     order: Vec<String>,
+    /// Reserved before spawn; the RAII owner releases synchronously on cancellation.
+    pending: Arc<std::sync::Mutex<HashMap<String, PendingSpawnEntry>>>,
+}
+
+#[derive(Debug)]
+struct PendingSpawnEntry {
+    session_id: String,
+    stop: watch::Sender<bool>,
+}
+
+struct PendingSpawn {
+    id: String,
+    pending: Arc<std::sync::Mutex<HashMap<String, PendingSpawnEntry>>>,
+}
+
+impl Drop for PendingSpawn {
+    fn drop(&mut self) {
+        self.pending
+            .lock()
+            .expect("background reservations lock is not poisoned")
+            .remove(&self.id);
+    }
 }
 
 /// Process-wide change counter. Every start, exit, and stop bumps it; the RPC
@@ -163,6 +185,11 @@ impl BackgroundTaskRegistry {
             .values()
             .filter(|task| Self::is_running(task))
             .count()
+            + self
+                .pending
+                .lock()
+                .expect("background reservations lock is not poisoned")
+                .len()
     }
 
     /// Running tasks owned by one session. This is the limit a user hits in
@@ -172,6 +199,13 @@ impl BackgroundTaskRegistry {
             .values()
             .filter(|task| task.session_id == session_id && Self::is_running(task))
             .count()
+            + self
+                .pending
+                .lock()
+                .expect("background reservations lock is not poisoned")
+                .values()
+                .filter(|entry| entry.session_id == session_id)
+                .count()
     }
 
     /// Stop signals for every running task of one session. Signal-only on
@@ -188,6 +222,19 @@ impl BackgroundTaskRegistry {
                 continue;
             }
             if task.stop.send(true).is_ok() {
+                signalled += 1;
+            }
+        }
+        for entry in self
+            .pending
+            .lock()
+            .expect("background reservations lock is not poisoned")
+            .values()
+        {
+            if entry.session_id != session_id || *entry.stop.borrow() {
+                continue;
+            }
+            if entry.stop.send(true).is_ok() {
                 signalled += 1;
             }
         }
@@ -234,45 +281,100 @@ pub(crate) async fn spawn_background_task_detached(
     workspace: &std::path::Path,
     scratch: Option<&std::path::Path>,
 ) -> Result<String, (String, String)> {
-    let on_changed: Arc<dyn Fn() + Send + Sync> = Arc::new(bump_change_counter);
     let config = resolve_runner_config(command_shell_id, command, workspace, scratch)?;
-    let runner = tools::spawn_tool_runner(&config).await?;
-    let mut st = state.lock().await;
-    // A task started for a session that no longer exists would belong to no
-    // visible container and outlive the thing it was started from, so refuse it
-    let session_alive = crate::sessions::session_exists(&st.db, session_id)
-        .map_err(|error| ("INTERNAL".to_string(), error.to_string()))?;
-    if !session_alive {
-        drop(runner);
-        return Err((
+    spawn_background_task_with(
+        state,
+        session_id,
+        command,
+        command_shell_id,
+        config,
+        |config| async move { tools::spawn_tool_runner(&config).await },
+    )
+    .await
+}
+
+fn ensure_session_alive(
+    st: &crate::state::AppState,
+    session_id: &str,
+) -> Result<(), (String, String)> {
+    if st.shutting_down {
+        return Err(("TOOL_ABORTED".into(), "host is shutting down".into()));
+    }
+    if crate::sessions::session_exists(&st.db, session_id)
+        .map_err(|error| ("INTERNAL".to_string(), error.to_string()))?
+    {
+        Ok(())
+    } else {
+        Err((
             "TOOL_FAILED".into(),
             "cannot start a background task for a session that no longer exists".into(),
-        ));
+        ))
     }
-    let running_here = st.background_tasks.running_count_for(session_id);
-    if running_here >= MAX_RUNNING_TASKS_PER_SESSION {
-        // Runner dropped here kills its process tree (kill-on-drop / job close).
-        drop(runner);
-        return Err((
-            "TOOL_FAILED".into(),
-            format!(
-                "this session already runs {running_here} background tasks \
-                 (limit {MAX_RUNNING_TASKS_PER_SESSION}); stop one first"
-            ),
-        ));
+}
+
+/// Reserve under AppState, then spawn outside it. The callback is the executable
+/// boundary: refused requests never reach it, and cancellation drops the lease.
+async fn spawn_background_task_with<F, Fut>(
+    state: &tokio::sync::Mutex<crate::state::AppState>,
+    session_id: &str,
+    command: &str,
+    command_shell_id: &str,
+    config: tools::ToolRunnerStartConfig,
+    spawn: F,
+) -> Result<String, (String, String)>
+where
+    F: FnOnce(tools::ToolRunnerStartConfig) -> Fut,
+    Fut: std::future::Future<Output = Result<tools::SpawnedToolRunner, (String, String)>>,
+{
+    let (stop, mut stop_rx) = watch::channel(false);
+    let reservation = {
+        let st = state.lock().await;
+        ensure_session_alive(&st, session_id)?;
+        let running_here = st.background_tasks.running_count_for(session_id);
+        if running_here >= MAX_RUNNING_TASKS_PER_SESSION {
+            return Err(("TOOL_FAILED".into(), format!(
+                "this session already runs {running_here} background tasks (limit {MAX_RUNNING_TASKS_PER_SESSION}); stop one first"
+            )));
+        }
+        if st.background_tasks.running_count() >= MAX_RUNNING_TASKS_TOTAL {
+            return Err(("TOOL_FAILED".into(), format!(
+                "the host is already running its maximum of {MAX_RUNNING_TASKS_TOTAL} background tasks across all sessions; stop one first"
+            )));
+        }
+        let pending = st.background_tasks.pending.clone();
+        let id = uuid::Uuid::new_v4().to_string();
+        pending
+            .lock()
+            .expect("background reservations lock is not poisoned")
+            .insert(
+                id.clone(),
+                PendingSpawnEntry {
+                    session_id: session_id.into(),
+                    stop,
+                },
+            );
+        PendingSpawn { id, pending }
+    };
+    let aborted = || {
+        (
+            "TOOL_ABORTED".into(),
+            "background task start cancelled".into(),
+        )
+    };
+    let runner = tokio::select! {
+        biased;
+        _ = stop_rx.changed() => return Err(aborted()),
+        runner = spawn(config) => runner?,
+    };
+    let mut st = state.lock().await;
+    ensure_session_alive(&st, session_id)?;
+    if *stop_rx.borrow() {
+        return Err(aborted());
     }
-    // The process-wide ceiling is a host safety net, not a session rule, so it
-    // reports itself separately instead of reading like the per-session limit.
-    if st.background_tasks.running_count() >= MAX_RUNNING_TASKS_TOTAL {
-        drop(runner);
-        return Err((
-            "TOOL_FAILED".into(),
-            format!(
-                "the host is already running its maximum of {MAX_RUNNING_TASKS_TOTAL} background tasks \
-                 across all sessions; stop one first"
-            ),
-        ));
-    }
+    // Transfer the reservation to the registered process atomically under
+    // AppState. Dropping runner before this point kills its owned process tree.
+    drop(reservation);
+    let on_changed: Arc<dyn Fn() + Send + Sync> = Arc::new(bump_change_counter);
     let task = register_spawned_task(
         &mut st.background_tasks,
         session_id,
@@ -511,6 +613,14 @@ pub fn stop_all_running_sync(registry: &BackgroundTaskRegistry) {
     for task in registry.tasks.values() {
         let _ = task.stop.send(true);
     }
+    for entry in registry
+        .pending
+        .lock()
+        .expect("background reservations lock is not poisoned")
+        .values()
+    {
+        let _ = entry.stop.send(true);
+    }
 }
 
 impl BackgroundTaskRegistry {
@@ -537,6 +647,9 @@ impl BackgroundTaskRegistry {
 
 #[cfg(all(windows, test))]
 mod windows_tests;
+
+#[cfg(test)]
+mod admission_tests;
 
 #[cfg(test)]
 mod tests {

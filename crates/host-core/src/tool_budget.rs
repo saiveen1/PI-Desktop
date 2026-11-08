@@ -8,6 +8,7 @@ use tokio::sync::Notify;
 
 pub const MAX_IN_FLIGHT_TOOLS: usize = 16;
 pub const MAX_IN_FLIGHT_SHELL: usize = 4;
+pub const MAX_IN_FLIGHT_SHELL_PER_SESSION: usize = 2;
 pub const MAX_IN_FLIGHT_READS: usize = 8;
 pub const MAX_IN_FLIGHT_MUTATIONS: usize = 2;
 pub const MAX_IN_FLIGHT_MUTATIONS_PER_SESSION: usize = 1;
@@ -15,10 +16,9 @@ const MAX_IN_FLIGHT_COORDINATED_MUTATIONS_PER_SESSION: usize = 2;
 pub const MAX_IN_FLIGHT_PLUGINS: usize = 4;
 pub const MAX_IN_FLIGHT_PER_SESSION: usize = 4;
 pub const MAX_QUEUED_TOOLS: usize = 64;
-/// How long a call waits for execution capacity before admission fails. A call
-/// waits here after the permission gate and before it runs, so the transport
-/// deadline has to carry it too. Mirrored by `TOOL_QUEUE_WAIT_MS` in
-/// `packages/shared/src/rpc-timeouts.ts`.
+/// How long a call waits for capacity after approval and before execution.
+/// This bounded admission wait is independent of the indefinite approval wait.
+/// Mirrored by `TOOL_QUEUE_WAIT_MS` in `packages/shared/src/rpc-timeouts.ts`.
 pub const TOOL_QUEUE_WAIT_MS: u64 = 30_000;
 const QUEUE_WAIT: Duration = Duration::from_millis(TOOL_QUEUE_WAIT_MS);
 
@@ -222,6 +222,7 @@ impl Request {
 #[derive(Default)]
 struct SessionUsage {
     active: usize,
+    shell: usize,
     mutations: usize,
     conservative_mutations: usize,
     /// Of `active`, calls rooted in a subagent's own worktree.
@@ -322,6 +323,8 @@ impl BudgetState {
         }
         self.sessions.get(&request.session_id).is_none_or(|usage| {
             usage.active < MAX_IN_FLIGHT_PER_SESSION
+                && (request.class != ToolClass::Shell
+                    || usage.shell < MAX_IN_FLIGHT_SHELL_PER_SESSION)
                 && (request.class != ToolClass::Mutation
                     || if request.coordinated_mutation() {
                         usage.conservative_mutations == 0
@@ -346,6 +349,9 @@ impl BudgetState {
         self.classes[request.class as usize] += 1;
         let usage = self.sessions.entry(request.session_id.clone()).or_default();
         usage.active += 1;
+        if request.class == ToolClass::Shell {
+            usage.shell += 1;
+        }
         if request.class == ToolClass::Mutation {
             usage.mutations += 1;
             if !request.coordinated_mutation() {
@@ -380,6 +386,9 @@ impl BudgetState {
             .get_mut(&request.session_id)
             .expect("admitted tool owns session capacity");
         usage.active -= 1;
+        if request.class == ToolClass::Shell {
+            usage.shell -= 1;
+        }
         if request.class == ToolClass::Mutation {
             usage.mutations -= 1;
             if !request.coordinated_mutation() {

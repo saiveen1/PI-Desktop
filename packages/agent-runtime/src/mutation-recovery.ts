@@ -5,7 +5,11 @@ import { resolve } from "node:path";
 export const MAX_MUTATION_RECOVERY_FAILURES = 3;
 export const BASH_PATCH_FAILURE_KEY = "__bash_patch_command__";
 export const BASH_COMMAND_FAILURE_KEY_PREFIX = "__bash_command__";
-export type MutationRecoveryKind = "edit" | "write" | "patch-command" | "command";
+export type MutationRecoveryKind = "edit" | "write" | "patch-command" | "command" | "host-admission";
+
+export function mutationTerminationCode(kind: MutationRecoveryKind): string {
+  return kind === "host-admission" ? "HOST_OVERLOADED" : "MUTATION_RETRY_BUDGET_EXHAUSTED";
+}
 
 export function bashCommandFailureKey(command: unknown): string | undefined {
   if (typeof command !== "string" || command.trim() === "") return undefined;
@@ -15,10 +19,10 @@ export function bashCommandFailureKey(command: unknown): string | undefined {
 /**
  * Edit failures the line-anchored contract expects and already answers: each
  * one hands back the live tag, or the content of the lines it refused to write
- * blind (spec 18-line-anchored-edit-contract §9.3). One honest retry is the designed response, so each of
- * these codes gets a single free attempt per path before it counts toward the
- * recovery guard. Everything else — malformed ops, bad ranges, a no-op apply —
- * counts immediately, because a second one is the model guessing.
+ * blind (spec 18-line-anchored-edit-contract §9.3). Each code gets an initial
+ * grace; additional complete reveals containing new lines get bounded progress
+ * graces. Malformed ops, bad ranges and no-op edits count immediately. Host
+ * admission failures use a separate budget, not the file mutation budget.
  */
 export const RECOVERABLE_MUTATION_ERROR_CODES = new Set([
   "EDIT_TAG_MISMATCH",
@@ -30,6 +34,9 @@ export function mutationTerminationAdvice(
   kind: MutationRecoveryKind,
   errorCode?: string,
 ): string {
+  if (kind === "host-admission") {
+    return "Host admission failed before execution. Inspect active work and capacity diagnostics, then continue when capacity is available. Do not rewrite the patch or replay unrelated commands; no automatic retry was performed.";
+  }
   if (kind === "patch-command") {
     return "Use Edit on the specific lines instead of repeating a shell patch command.";
   }
@@ -420,6 +427,9 @@ export function mutationTerminationMessage(
   errorCode?: string,
 ): string {
   const recovery = mutationTerminationAdvice(kind, errorCode);
+  if (kind === "host-admission") {
+    return `Stopped after repeated Host capacity admission failures for ${target}. ${recovery}`;
+  }
   const lastError = errorCode ? ` Last error: ${errorCode}.` : "";
   if (kind === "edit" || kind === "write") {
     const tool = kind === "write" ? "Write" : "Edit";

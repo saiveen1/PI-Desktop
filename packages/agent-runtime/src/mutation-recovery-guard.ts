@@ -6,6 +6,9 @@ import {
   type MutationRecoveryKind,
 } from "./mutation-recovery.js";
 
+export const MAX_HOST_ADMISSION_FAILURES = 3;
+export const MAX_REVEAL_PROGRESS_GRACES = 8;
+
 export type MutationTermination = {
   kind: MutationRecoveryKind;
   target: string;
@@ -13,10 +16,11 @@ export type MutationTermination = {
 };
 
 type ToolResult = { ok: boolean; denied?: boolean; errorCode?: string; content: unknown };
-type PathFailures = { count: number; graces: Set<string> };
+type PathFailures = { count: number; graces: Set<string>; revealed: Set<string>; revealGraces: number };
 type OwnerFailures = {
   paths: Map<string, PathFailures>;
   commands: Map<string, { count: number; signature: string }>;
+  admission: Map<string, number>;
 };
 
 /** Ignore transport timing/review metadata and retain only a digest of diagnostics. */
@@ -26,6 +30,23 @@ function commandFailureSignature(result: ToolResult): string {
     result.errorCode, body.code, body.exitCode, body.stdout, body.stderr, body.error,
     typeof result.content === "string" ? result.content : undefined,
   ])).digest("hex");
+}
+
+function hasNewCompleteReveal(content: unknown, failures: PathFailures): boolean {
+  if (failures.revealGraces >= MAX_REVEAL_PROGRESS_GRACES || !isRecord(content) ||
+      content.merged !== true || content.revealTruncated !== false ||
+      !Array.isArray(content.unseenLines) || content.unseenLines.length === 0 ||
+      content.unseenLines.length > 128 || content.unseenCount !== content.unseenLines.length) return false;
+  const keys: string[] = [];
+  for (const row of content.unseenLines) {
+    if (!isRecord(row) || typeof row.line !== "number" || !Number.isSafeInteger(row.line) || row.line < 1 ||
+        typeof row.text !== "string" || row.clipped !== false) return false;
+    keys.push(createHash("sha256").update(JSON.stringify([row.line, row.text])).digest("hex"));
+  }
+  if (keys.every(key => failures.revealed.has(key))) return false;
+  for (const key of keys) failures.revealed.add(key);
+  failures.revealGraces++;
+  return true;
 }
 
 /** Budgets belong to the executing agent; successful file work permits a retest. */
@@ -46,8 +67,20 @@ export class MutationRecoveryGuard {
     const patch = toolName === "Bash" && isPatchCommand(command);
     const commandKey = toolName === "Bash" && !patch ? bashCommandFailureKey(command) : undefined;
     const key = fileTool ? pathKey : patch ? BASH_PATCH_FAILURE_KEY : commandKey;
-    if (!key) return undefined;
+    const admissionClass = fileTool ? "mutation" : ["Read", "Glob", "Grep"].includes(toolName) ? "read" : toolName;
     let state = this.owners.get(owner);
+    if (!result.ok && result.errorCode === "HOST_OVERLOADED") {
+      if (!state) {
+        state = { paths: new Map(), commands: new Map(), admission: new Map() };
+        this.owners.set(owner, state);
+      }
+      const count = (state.admission.get(admissionClass) ?? 0) + 1;
+      state.admission.set(admissionClass, count);
+      return count < MAX_HOST_ADMISSION_FAILURES ? undefined
+        : { kind: "host-admission", target: toolName, lastErrorCode: "HOST_OVERLOADED" };
+    }
+    if (result.ok) state?.admission.delete(admissionClass);
+    if (!key) return undefined;
     if (result.ok) {
       if (!state) return undefined;
       if (commandKey) state.commands.delete(commandKey);
@@ -59,7 +92,7 @@ export class MutationRecoveryGuard {
       return undefined;
     }
     if (!state) {
-      state = { paths: new Map(), commands: new Map() };
+      state = { paths: new Map(), commands: new Map(), admission: new Map() };
       this.owners.set(owner, state);
     }
     let count: number;
@@ -69,8 +102,12 @@ export class MutationRecoveryGuard {
       count = previous?.signature === signature ? previous.count + 1 : 1;
       state.commands.set(commandKey, { count, signature });
     } else {
-      const failures = state.paths.get(key) ?? { count: 0, graces: new Set<string>() };
+      const failures = state.paths.get(key) ?? { count: 0, graces: new Set<string>(), revealed: new Set<string>(), revealGraces: 0 };
       state.paths.set(key, failures);
+      if (toolName === "Edit" && result.errorCode === "EDIT_LINES_UNSEEN" && hasNewCompleteReveal(result.content, failures)) {
+        failures.graces.add(result.errorCode);
+        return undefined;
+      }
       if (toolName === "Edit" && result.errorCode &&
         RECOVERABLE_MUTATION_ERROR_CODES.has(result.errorCode) && !failures.graces.has(result.errorCode)) {
         failures.graces.add(result.errorCode);

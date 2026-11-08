@@ -1,5 +1,20 @@
 # Unreleased changes
 
+- Harden tool recovery: normalize background-job selectors before schema checks,
+  separate Host admission pressure from edit failures, and recognize bounded
+  progress from newly revealed lines. Context-required edits have a neutral,
+  localized status without changing their stored results. Shell guidance separates
+  execution deadlines from observation intervals and forbids automatic replay
+  after uncertain command effects.
+
+  Windows Python standard streams default to UTF-8 without changing file encoding
+  or explicit overrides. Blank Edit ops can use a valid legacy replacement pair;
+  insertion conflicts identify both operations before any write.
+
+- Keep bounded RPC capacity available for approval/completion/cancellation even
+  when ordinary requests are saturated. Reserve background capacity before
+  launching commands, exclude approval waiting from aggregate tool deadlines,
+  and enforce the documented two-foreground-shell limit per session.
 - Resolve inline-code filenames below an explicit absolute directory in assistant
   Markdown, including export tables split into separate render blocks. Click and
   context-menu actions share the composed exact path; headings and ambiguous

@@ -1630,15 +1630,18 @@ describe("DesktopAgentRuntime configuration matching", () => {
     const edit = (runtime as any).agent.state.tools.find(
       (tool: any) => tool.name === "Edit",
     );
-    expect(edit.description).toContain("never old_string");
+    expect(edit.description).toContain("ops with new content only");
     expect(edit.description).toContain("same path concurrently");
     expect(edit.description).toContain("PUT N.=M:");
     expect(edit.description).toContain("PUT 48.=48:");
-    expect(edit.description).toContain("followed by + rows is invalid");
+    expect(edit.description).toContain("Every PUT with body rows must include the trailing colon");
     expect(edit.description).toContain("classify the error");
     expect(edit.description).toContain(
-      "A plain old_string/new_string replacement is still accepted when ops is omitted",
+      "A plain old_string/new_string replacement is accepted when ops is omitted or blank",
     );
+    expect(edit.description).toContain("Do not combine nonempty ops with populated legacy fields");
+    expect(edit.description).toContain("All line numbers refer to the tagged snapshot");
+    expect(edit.description).toContain("Equivalent gap locators");
     expect(edit.parameters.properties.ops.description).toContain(
       "PUT 48.=48:",
     );

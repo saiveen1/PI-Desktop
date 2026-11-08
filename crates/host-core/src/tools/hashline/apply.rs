@@ -86,10 +86,10 @@ fn lower(ops: &ParsedOps, line_count: usize) -> Result<Plan, ToolError> {
         mv: None,
     };
     let mut ir_lines = 0usize;
-    let mut occupied_inserts: BTreeSet<usize> = BTreeSet::new();
+    let mut occupied_inserts: BTreeMap<usize, (usize, String)> = BTreeMap::new();
     let mut occupied_deletes: BTreeSet<u32> = BTreeSet::new();
 
-    for op in &ops.ops {
+    for (op_index, op) in ops.ops.iter().enumerate() {
         match op {
             ParsedOp::Rem => {
                 if plan.rem {
@@ -133,7 +133,7 @@ fn lower(ops: &ParsedOps, line_count: usize) -> Result<Plan, ToolError> {
                             plan.anchors.insert(line);
                         }
                         let at = (*start as usize).saturating_sub(1);
-                        claim_insert(&mut occupied_inserts, at)?;
+                        claim_insert(&mut occupied_inserts, at, op_index + 1, locator)?;
                         plan.inserts.entry(at).or_default().extend(text);
                     }
                     Locator::Before { line } => {
@@ -141,19 +141,19 @@ fn lower(ops: &ParsedOps, line_count: usize) -> Result<Plan, ToolError> {
                         plan.anchors
                             .insert(if *line == 1 { HEAD_ANCHOR } else { *line });
                         let at = (*line as usize).saturating_sub(1);
-                        claim_insert(&mut occupied_inserts, at)?;
+                        claim_insert(&mut occupied_inserts, at, op_index + 1, locator)?;
                         plan.inserts.entry(at).or_default().extend(text);
                     }
                     Locator::After { line } => {
                         validate_line(*line, line_count)?;
                         plan.anchors.insert(*line);
                         let at = *line as usize;
-                        claim_insert(&mut occupied_inserts, at)?;
+                        claim_insert(&mut occupied_inserts, at, op_index + 1, locator)?;
                         plan.inserts.entry(at).or_default().extend(text);
                     }
                     Locator::End => {
                         plan.anchors.insert(EOF_ANCHOR);
-                        claim_insert(&mut occupied_inserts, line_count)?;
+                        claim_insert(&mut occupied_inserts, line_count, op_index + 1, locator)?;
                         plan.inserts.entry(line_count).or_default().extend(text);
                     }
                     Locator::Block { .. } | Locator::AfterBlock { .. } => unreachable!(),
@@ -259,11 +259,19 @@ fn claim_range(
     Ok(())
 }
 
-fn claim_insert(occupied: &mut BTreeSet<usize>, at: usize) -> Result<(), ToolError> {
-    if !occupied.insert(at) {
+fn claim_insert(
+    occupied: &mut BTreeMap<usize, (usize, String)>,
+    at: usize,
+    op_number: usize,
+    locator: &Locator,
+) -> Result<(), ToolError> {
+    let header = format!("PUT {}", locator_echo(locator));
+    if let Some((first_op, first_header)) = occupied.insert(at, (op_number, header.clone())) {
         return Err(ToolError::new(
             "EDIT_RANGE_INVALID",
-            format!("two ops target the same insert gap (index {at})"),
+            format!(
+                "op {first_op} ({first_header}) and op {op_number} ({header}) target the same original insert gap; combine their body rows in the intended order into a single PUT at that gap; do not reorder replacements or CUTs"
+            ),
         ));
     }
     Ok(())

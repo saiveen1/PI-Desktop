@@ -546,10 +546,12 @@ keeps only the ordering and loop-guard rules. The agent mutation workflow is:
    issued in parallel.
 
 An `EDIT_LINES_UNSEEN` rejection whose reveal was complete is exempt from step
-3's re-read: the error already displayed the missing lines and merged them into
-the session's provenance, so the same `tag` retried unchanged applies. That
-retry is also the one grace `EDIT_LINES_UNSEEN` gets on the path, so a second
-one does count toward the guard.
+3's re-read: the model must review the revealed lines before an unchanged retry.
+Each path keeps the initial per-code grace and up to eight complete-reveal
+progress graces (including the first complete reveal), only when previously
+unrevealed line/content pairs appear. Reordered/repeated, malformed or truncated
+reveals do not earn additional progress grace. Counts remain bounded and reset
+after a successful file write; no edit executes automatically after a reveal.
 
 Ordinary foreground `Bash` commands also have a three-failure budget, scoped
 by the executing owner and exact command text (stored as a digest). A changed
@@ -565,6 +567,22 @@ terminal error. No command is automatically retried, rewritten, or authorized.
 This exact-match guard deliberately does not infer shell equivalence or track
 changes made externally; varied output/text can avoid counting and a user's new
 prompt resets the parent's counters.
+
+Host admission failures use a separate three-failure budget per executing owner
+and capacity class (Edit/Write, Read/Glob/Grep, or the other tool name). They do
+not spend or clear mutation/command budgets. A successful call in the same
+class clears admission pressure; a successful Read cannot hide a blocked writer.
+Exhaustion returns `HOST_OVERLOADED` with `details.kind: host-admission` and
+capacity guidance, never advice to rewrite the patch. Owner cleanup and new-turn
+reset remain unchanged. No automatic wait, replay, increased concurrency or
+permission bypass is introduced.
+
+Bash `timeout` is an execution deadline, not an observation interval. A 30-second
+progress checkpoint does not imply a 30-second command deadline. Start known
+long checks in the background when observation must return early, use TaskWait
+to observe without killing the process, and enforce a deliberate total budget.
+Explicit foreground timeouts and the 60-second default remain unchanged. After
+a timeout, inspect existing effects and process state before deciding to rerun.
 
 Serialization also protects the snapshot store, which both producers and `Edit`
 mutate: without the per-session permit, a concurrent record could land between a

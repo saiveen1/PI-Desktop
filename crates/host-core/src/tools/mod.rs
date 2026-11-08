@@ -26,9 +26,14 @@ use crate::workspace::{
 #[cfg(test)]
 mod file_lease_tests;
 mod grep_rg;
+#[cfg(test)]
+mod harness_regression_tests;
 pub mod hashline;
 pub mod ignore_rules;
 mod image_dimensions;
+#[cfg(all(windows, test))]
+mod runner_encoding_tests;
+mod runner_environment;
 mod search;
 mod search_control;
 pub mod shell;
@@ -484,15 +489,7 @@ pub async fn run_internal_tool_runner() -> Result<i32> {
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .kill_on_drop(true);
-    if let Some(scratch_dir) = config.scratch_dir.as_deref() {
-        command.env("PI_SCRATCH_DIR", scratch_dir);
-    }
-    if let Some(path) = config.env_path.as_deref() {
-        command.env("PATH", path);
-    }
-    for (name, value) in &config.extra_env {
-        command.env(name, value);
-    }
+    runner_environment::apply(&mut command, &config);
     #[cfg(windows)]
     {
         command.creation_flags(0x0800_0000);
@@ -1827,12 +1824,20 @@ fn tool_edit(
     let legacy_old = args.get("old_string").and_then(Value::as_str);
     let legacy_new = args.get("new_string").and_then(Value::as_str);
     let tag_arg = args.get("tag").and_then(Value::as_str);
-    let (tag, ops) = match (
-        tag_arg,
-        args.get("ops").and_then(Value::as_str),
-        legacy_old,
-        legacy_new,
-    ) {
+    let ops_arg = args.get("ops").and_then(Value::as_str);
+    let legacy_populated = legacy_old.is_some_and(|old| !old.is_empty())
+        || legacy_new.is_some_and(|new| !new.is_empty());
+    if ops_arg.is_some_and(|ops| !ops.trim().is_empty()) && legacy_populated {
+        return Err(hashline::ToolError::new(
+            "INVALID_ARGUMENT",
+            "nonempty ops cannot be combined with populated old_string/new_string; send only ops or only the legacy replacement pair",
+        ));
+    }
+    // Some model schemas emit optional strings as empty defaults. Treat blank
+    // ops as omitted only for a complete legacy replacement (deletion is valid).
+    let valid_legacy_pair = legacy_old.is_some_and(|old| !old.is_empty()) && legacy_new.is_some();
+    let ops_arg = ops_arg.filter(|ops| !ops.trim().is_empty() || !valid_legacy_pair);
+    let (tag, ops) = match (tag_arg, ops_arg, legacy_old, legacy_new) {
         (Some(tag), Some(ops), _, _) => (tag.to_string(), ops.to_string()),
         (supplied_tag, None, Some(old), Some(new)) => {
             let file = hashline::normalize_file(&live);
@@ -2532,15 +2537,7 @@ pub(crate) async fn spawn_tool_runner(
     #[cfg(test)]
     {
         command.args(&config.args).current_dir(&config.workspace);
-        if let Some(scratch_dir) = config.scratch_dir.as_deref() {
-            command.env("PI_SCRATCH_DIR", scratch_dir);
-        }
-        if let Some(path) = config.env_path.as_deref() {
-            command.env("PATH", path);
-        }
-        for (name, value) in &config.extra_env {
-            command.env(name, value);
-        }
+        runner_environment::apply(&mut command, config);
     }
 
     #[cfg(not(test))]
@@ -3057,10 +3054,10 @@ pub fn builtin_tool_defs() -> Value {
         },
         {
             "name": "Edit",
-            "description": "Replace, insert, or delete lines in an existing file. Names positions and supplies new content only — never old_string. Required args: path, tag (4 hex from the latest Read/Grep/Write/Edit), ops. A plain old_string/new_string replacement is still accepted when ops is omitted, with or without tag. \
+            "description": "Replace, insert, or delete lines in an existing file. Names positions and supplies new content only — never old_string. Required args: path, tag (4 hex from the latest Read/Grep/Write/Edit), ops. A plain old_string/new_string replacement is still accepted when ops is omitted or blank, with or without tag; new_string may be empty for deletion. Do not combine nonempty ops with populated legacy fields. \
     Ops: `PUT N.=M:` replace inclusive lines N–M (body rows required); `PUT <N:` insert before N; `PUT >N:` insert after N; `PUT >$:` append; `CUT N.=M` delete; `REM` delete the file; `MV DEST` rename after other ops. \
     Body rows are `+` plus the final line text; a bare `+` is an empty line. Every PUT with body rows must include the trailing colon, for example `PUT 48.=48:` followed by a `+replacement` row; `PUT 48.=48` followed by `+` rows is invalid. A colonless PUT is only for a register paste such as `PUT <1 @name`. No `-old` or context rows. Ranges name only the lines being changed — a pure insert uses a gap locator, not a widened PUT that restates survivors. \
-    All line numbers refer to the tagged snapshot and are 1-indexed. Re-ground on the tag returned by every successful write. After one failed Edit, classify the error: Read the live file for a stale tag or unseen lines (or retry unchanged on a complete EDIT_LINES_UNSEEN reveal), but correct syntax or range errors directly; do not guess.",
+    All line numbers refer to the tagged snapshot and are 1-indexed. Equivalent gap locators (e.g. >99 and <100) must use a single PUT with body rows in the intended order; repeated appends also conflict. Re-ground on the tag returned by every successful write. After one failed Edit, classify the error: Read the live file for a stale tag or unseen lines (or retry unchanged on a complete EDIT_LINES_UNSEEN reveal), but correct syntax or range errors directly; do not guess.",
             "risk": "high",
             "parameters": {
                 "type": "object",

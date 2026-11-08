@@ -313,13 +313,106 @@ fn spawn_stdout_writer(
         })
 }
 
+const MAX_IN_FLIGHT_RPC: usize = 32;
+const MAX_IN_FLIGHT_CONTROL_RPC: usize = 4;
+
+struct RequestSlots {
+    ordinary: Arc<Semaphore>,
+    control: Arc<Semaphore>,
+}
+
+impl RequestSlots {
+    fn new() -> Self {
+        Self {
+            ordinary: Arc::new(Semaphore::new(MAX_IN_FLIGHT_RPC)),
+            control: Arc::new(Semaphore::new(MAX_IN_FLIGHT_CONTROL_RPC)),
+        }
+    }
+
+    fn acquire(&self, method: &str) -> Result<tokio::sync::OwnedSemaphorePermit, JsonRpcError> {
+        // Only completions/cancellation that release existing work may use the
+        // reserve. Queries, new execution and unknown methods stay ordinary.
+        let control = matches!(
+            method,
+            "permissions.resolve"
+                | "tools.abort"
+                | "tools.workspaceAbort"
+                | "tools.remoteComplete"
+                | "plugins.resolveExecution"
+                | "tools.fileBatchSeal"
+                | "tools.fileBatchClose"
+                | "tools.fileBatchAbandon"
+                | "backgroundTasks.stop"
+                | "backgroundJobs.stop"
+                | "plans.abort"
+                | "plans.finishExecution"
+                | "market.cancelInstall"
+        );
+        let slots = if control {
+            &self.control
+        } else {
+            &self.ordinary
+        };
+        slots.clone().try_acquire_owned().map_err(|_| JsonRpcError {
+            code: -32029,
+            message: "host RPC capacity is exhausted".into(),
+            data: Some(json!({
+                "errorCode": "HOST_OVERLOADED",
+                "reason": if control { "rpc_control_capacity" } else { "rpc_capacity" }
+            })),
+        })
+    }
+}
+
+/// The parsed-stdio dispatcher, also exercised by admission lifecycle tests.
+fn dispatch_request(
+    slots: &RequestSlots,
+    tasks: &mut tokio::task::JoinSet<()>,
+    state: Arc<Mutex<AppState>>,
+    tx: mpsc::UnboundedSender<String>,
+    req: JsonRpcRequest,
+) {
+    let Some(id) = req.id else { return };
+    let method = req.method;
+    let params = req.params.unwrap_or(json!({}));
+    let permit = match slots.acquire(&method) {
+        Ok(permit) => permit,
+        Err(error) => {
+            let response = JsonRpcResponse {
+                jsonrpc: "2.0",
+                id,
+                result: None,
+                error: Some(error),
+            };
+            if let Ok(raw) = serde_json::to_string(&response) {
+                let _ = tx.send(format!("{raw}\n"));
+            }
+            return;
+        }
+    };
+    tasks.spawn(async move {
+        let _permit = permit;
+        let budget = request_budget_ms(&method, &params);
+        // Commit deferred checkpoints after the handler releases AppState and
+        // before replying. Transcript appends sync in their own write path.
+        let (handled, committed) = transcripts::commit_writes_of(with_request_budget(
+            budget,
+            handle_request(state, &method, params, tx.clone()),
+        ))
+        .await;
+        let out = response_for(id, handled, committed);
+        if let Ok(raw) = serde_json::to_string(&out) {
+            let _ = tx.send(format!("{raw}\n"));
+        }
+    });
+}
+
+#[cfg(test)]
+mod admission_tests;
+
 pub async fn serve(state: Arc<Mutex<AppState>>) -> Result<()> {
     let (tx, rx) = mpsc::unbounded_channel::<String>();
-    // Keep request tasks bounded as well as tool executions. Tool calls have
-    // their own class/session budgets below; this cap protects the host from
-    // non-tool RPC bursts and prevents an unbounded tokio task fan-out.
-    const MAX_IN_FLIGHT_RPC: usize = 32;
-    let request_slots = Arc::new(Semaphore::new(MAX_IN_FLIGHT_RPC));
+    let request_slots = RequestSlots::new();
     let mut request_tasks = tokio::task::JoinSet::new();
 
     // Keep stdio off Tokio's blocking pool. Under process/thread pressure,
@@ -436,54 +529,7 @@ pub async fn serve(state: Arc<Mutex<AppState>>) -> Result<()> {
                     }
                 };
 
-                if req.id.is_none() {
-                    continue 'serve;
-                }
-
-                let id = req.id.clone().unwrap_or(Value::Null);
-                let method = req.method.clone();
-                let params = req.params.unwrap_or(json!({}));
-                let state = state.clone();
-                let tx = tx.clone();
-                let permit = match request_slots.clone().try_acquire_owned() {
-                    Ok(permit) => permit,
-                    Err(_) => {
-                        let response = JsonRpcResponse {
-                            jsonrpc: "2.0",
-                            id,
-                            result: None,
-                            error: Some(rpc_err(
-                                -32029,
-                                "host RPC capacity is exhausted",
-                                "HOST_OVERLOADED",
-                            )),
-                        };
-                        if let Ok(raw) = serde_json::to_string(&response) {
-                            let _ = tx.send(format!("{raw}\n"));
-                        }
-                        continue 'serve;
-                    }
-                };
-
-                request_tasks.spawn(async move {
-                    let _permit = permit;
-                    let budget = request_budget_ms(&method, &params);
-                    // Deferred checkpoint writes are committed after the
-                    // handler releases the state lock and before the response
-                    // leaves. Transcript appends are synced inside their write
-                    // path before derived SQLite rows are committed.
-                    let (handled, committed) = transcripts::commit_writes_of(
-                        with_request_budget(
-                            budget,
-                            handle_request(state, &method, params, tx.clone()),
-                        ),
-                    )
-                    .await;
-                    let out = response_for(id, handled, committed);
-                    if let Ok(raw) = serde_json::to_string(&out) {
-                        let _ = tx.send(format!("{raw}\n"));
-                    }
-                });
+                dispatch_request(&request_slots, &mut request_tasks, state.clone(), tx.clone(), req);
             }
             result = &mut writer_done_rx => {
                 writer_done = true;
@@ -540,65 +586,18 @@ pub async fn serve(state: Arc<Mutex<AppState>>) -> Result<()> {
 /// Keep this slightly beyond the shared 130s client deadline (issue #1071).
 const RPC_REQUEST_BUDGET_MS: u64 = 135_000;
 
-/// Grace window added on top of a tool's own effective timeout. A
-/// `tools.execute` may legitimately run for hours (Bash allows up to 6h), so
-/// its budget is derived from the tool timeout rather than the fixed budget;
-/// the grace covers host-side bookkeeping around the actual execution.
-const RPC_TOOL_BUDGET_GRACE_MS: u64 = 90_000;
-
-/// Cap added to the `tools.execute` budget for the permission prompt. Before
-/// the tool runs, the handler may legitimately wait for the user to answer an
-/// ask prompt for tens of seconds — that wait must not eat the tool's own
-/// execution budget, or "slow approval + full-length Bash" would be killed
-/// mid-execution. Unattended callers reject at their own ask budget (~120s),
-/// so the cap matches that order.
-const RPC_PERMISSION_WAIT_CAP_MS: u64 = 120_000;
-
-/// Budget for one request. `configSync.syncNow` has no aggregate wall-clock
-/// deadline because the Host owns a multi-step cloud operation. `tools.execute`
-/// follows its own effective tool timeout (plus permission cap and grace); all
-/// other methods use the fixed budget.
-fn request_budget_ms(method: &str, params: &Value) -> Option<u64> {
-    if method == "configSync.syncNow" {
-        // One sync may contain arbitrarily many individually bounded S3
-        // requests. Keep the Host-owned workflow alive across renderer routes.
-        return None;
+/// Approval waits have no transport deadline. Execution still uses the Host's
+/// per-tool timeout, bounded admission queue and explicit cancellation paths.
+/// Sync likewise owns individually bounded operations rather than one deadline.
+fn request_budget_ms(method: &str, _params: &Value) -> Option<u64> {
+    if matches!(
+        method,
+        "configSync.syncNow" | "tools.execute" | "tools.workspaceExecute"
+    ) {
+        None
+    } else {
+        Some(RPC_REQUEST_BUDGET_MS)
     }
-    if !matches!(method, "tools.execute" | "tools.workspaceExecute") {
-        return Some(RPC_REQUEST_BUDGET_MS);
-    }
-    // A background Bash call returns as soon as the process is spawned; the
-    // task lives in the registry, not in this request. The sidecar relay must
-    // not budget it like a foreground execution or the turn's abort path
-    // would race the spawn.
-    let run_in_background = params
-        .get("runInBackground")
-        .or_else(|| params.get("run_in_background"))
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
-    if run_in_background {
-        return Some(RPC_REQUEST_BUDGET_MS + RPC_TOOL_BUDGET_GRACE_MS);
-    }
-    // `ToolsExecuteParams` is `#[serde(rename_all = "camelCase")]`, so the wire
-    // carries `toolName` / `timeoutMs`. Reading the snake_case spellings here
-    // would see an empty tool name and no timeout on every real request,
-    // leaving tools.execute unbounded again (review on #1208). Accept the
-    // snake_case spelling as a fallback so the helper stays honest about both
-    // shapes.
-    let tool_name = params
-        .get("toolName")
-        .or_else(|| params.get("tool_name"))
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
-    let timeout_ms = params
-        .get("timeoutMs")
-        .or_else(|| params.get("timeout_ms"))
-        .and_then(|v| v.as_u64());
-    crate::tools::effective_timeout_ms(tool_name, timeout_ms).map(|timeout| {
-        timeout
-            .saturating_add(RPC_PERMISSION_WAIT_CAP_MS)
-            .saturating_add(RPC_TOOL_BUDGET_GRACE_MS)
-    })
 }
 
 /// Wrap one request's handler future in its wall-clock budget (issue #1071).
@@ -6080,43 +6079,18 @@ mod tests {
         assert_eq!(request_budget_ms("configSync.syncNow", &json!({})), None);
     }
     #[test]
-    fn request_budget_for_tools_execute_follows_tool_timeout() {
-        // The real wire shape: ToolsExecuteParams is serde-renamed to
-        // camelCase, so the runtime sends toolName / timeoutMs (review on
-        // #1208 — the snake_case spellings are never on the wire).
-        let bash = json!({"toolName": "Bash", "timeoutMs": 60000});
-        assert_eq!(
-            request_budget_ms("tools.execute", &bash),
-            Some(60_000 + 120_000 + 90_000)
-        );
-        // Bash without an explicit timeout falls back to the Bash default.
-        let bash_default = json!({"toolName": "Bash"});
-        assert_eq!(
-            request_budget_ms("tools.execute", &bash_default),
-            Some(60_000 + 120_000 + 90_000)
-        );
-        // A tool with no effective timeout keeps the old unbounded behavior.
-        let read = json!({"toolName": "Read"});
-        assert_eq!(request_budget_ms("tools.execute", &read), None);
-    }
-
-    #[test]
-    fn request_budget_reads_the_camel_case_wire_shape_regression_1208() {
-        // Regression for the #1208 review: the runtime's real Bash payload —
-        // `toolName` / `timeoutMs` — must produce the tool-timeout budget,
-        // not an unbounded one. A 6h Bash must never be clipped to the fixed
-        // budget, and an unknown snake/camel mixture must still resolve.
-        let six_hours = json!({"toolName": "Bash", "timeoutMs": 21600000});
-        assert_eq!(
-            request_budget_ms("tools.execute", &six_hours),
-            Some(21_600_000 + 120_000 + 90_000)
-        );
-        // The snake_case fallback keeps hand-rolled callers honest.
-        let snake = json!({"tool_name": "Bash", "timeout_ms": 60000});
-        assert_eq!(
-            request_budget_ms("tools.execute", &snake),
-            Some(60_000 + 120_000 + 90_000)
-        );
+    fn tool_approval_requests_have_no_aggregate_budget_in_any_wire_shape() {
+        for method in ["tools.execute", "tools.workspaceExecute"] {
+            for params in [
+                json!({"toolName": "Bash", "timeoutMs": 60000}),
+                json!({"toolName": "Bash"}),
+                json!({"tool_name": "Bash", "timeout_ms": 60000}),
+                json!({"toolName": "Bash", "runInBackground": true}),
+                json!({"toolName": "Read"}),
+            ] {
+                assert_eq!(request_budget_ms(method, &params), None);
+            }
+        }
     }
 
     #[tokio::test]
@@ -6249,19 +6223,21 @@ mod tests {
     }
 
     #[test]
-    fn tools_execute_budget_covers_bash_max_and_unbounded_tools() {
-        // Bash may legally run up to 6h: the budget must never clip it to the
-        // fixed 135s, only pad the tool's own timeout with grace. Wire shape
-        // is camelCase (see the #1208 regression test).
+    fn tools_execute_preserves_host_execution_limits_without_an_approval_deadline() {
         let six_hours = json!({"toolName": "Bash", "timeoutMs": 21600000});
+        assert_eq!(request_budget_ms("tools.execute", &six_hours), None);
         assert_eq!(
-            request_budget_ms("tools.execute", &six_hours),
-            Some(21_600_000 + 120_000 + 90_000)
+            crate::tools::effective_timeout_ms("Bash", Some(21_600_000)),
+            Some(21_600_000)
         );
-        // A tool without an effective timeout stays unbounded (None), exactly
-        // like before this change.
-        let unbounded = json!({"toolName": "Glob"});
-        assert_eq!(request_budget_ms("tools.execute", &unbounded), None);
+        assert_eq!(
+            crate::tools::effective_timeout_ms("Bash", None),
+            Some(60_000)
+        );
+        assert_eq!(
+            request_budget_ms("tools.execute", &json!({"toolName": "Glob"})),
+            None
+        );
     }
 
     #[test]

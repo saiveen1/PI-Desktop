@@ -2292,9 +2292,11 @@ selectors then identify the same single delegation. TaskWait's `mode` and
 multi-target or malformed identifier lists are rejected before dispatch,
 with a job-only retry example; the runtime never guesses which target wins.
 A Bash job ID is the sole target for that call; delegation-only selectors
-(`delegationIds`, `mode` and `minCompleted`) accompanying it are ignored. This
-keeps irrelevant model-supplied defaults from failing an otherwise unambiguous
-wait or stop. Matching a delegation job's ID to `delegationIds` remains a
+(`delegationIds`, `mode` and `minCompleted`) accompanying it are removed from a
+copy of the call by pi's `prepareArguments`, before schema validation. This
+also tolerates irrelevant values such as `minCompleted: 0` without weakening
+delegation, job identity, timeout or ownership validation. Raw call arguments
+remain unchanged for diagnostics. Matching a delegation job's ID remains a
 runtime check. Omitting `job` preserves the existing delegation defaults,
 including stop-all-delegates. A Bash job never joins those implicit target sets.
 A legacy backgroundTaskId can be addressed as `{kind: "bash", id: backgroundTaskId}`.

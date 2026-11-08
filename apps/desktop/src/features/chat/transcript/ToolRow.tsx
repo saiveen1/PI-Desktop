@@ -193,7 +193,7 @@ function HostToolRow({
   const action = getToolAction(message.toolName);
   // Classify the result once; execution and persisted statuses stay untouched.
   const toolStatus = getToolStatus(message);
-  const neutralStatus = toolStatus.kind === "skipped" || toolStatus.kind === "interrupted";
+  const neutralStatus = toolStatus.kind === "skipped" || toolStatus.kind === "interrupted" || toolStatus.kind === "context-required";
   // A tool call never opens itself: the payload waits for the user, and a
   // failure or denial stays in the row head either way.
   const revealRequest = useMessageRevealRequest(message.id);
