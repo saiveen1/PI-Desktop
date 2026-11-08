@@ -26,6 +26,7 @@ import { registerScheduledIpc } from "./scheduled-ipc";
 import { registerSessionIpc } from "./session-ipc";
 import { registerSettingsIpc } from "./settings-ipc";
 import { registerDelegationApprovalIpc } from "./delegation-approval-ipc";
+import { registerDelegationHistoryIpc } from "./delegation-history-ipc";
 import type { createDelegationApprovalService } from "../services/delegation-approval";
 import { registerStorageIpc } from "../storage/ipc";
 import { registerConfigSyncIpc } from "./config-sync-ipc";
@@ -271,6 +272,7 @@ export function registerIpcHandlers(dependencies: RegisterIpcDependencies) {
     assertMainWindowSender,
   };
   registerDelegationApprovalIpc({ registrar, approvals: dependencies.delegationApproval });
+  registerDelegationHistoryIpc({ registrar, getHost });
 
   registerAppIpc({
     registrar,

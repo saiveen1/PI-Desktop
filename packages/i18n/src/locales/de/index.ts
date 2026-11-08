@@ -24,6 +24,23 @@ export const de = {
     label: "Delegationsfreigabe", title: "Delegiertes Modell freigeben", reason: "Auswahlgrund",
     allowOnce: "Einmal erlauben", useOther: "Anderes Modell verwenden", cancel: "Delegation abbrechen",
   },
+  delegationHistory: {
+    "title": "Globale Delegationen", "allProjects": "Alle Projekte", "close": "Schließen", "back": "Zurück",
+    "openSource": "Quellsitzung öffnen", "navigationFailed": "Quellsitzung konnte nicht geöffnet werden. Erneut versuchen.",
+    "status": "Status", "created": "Erstellt", "completed": "Abgeschlossen", "model": "Modell",
+    "requestedModel": "Angefordertes Modell", "modelReason": "Auswahlgrund", "task": "Aufgabe", "report": "Bericht", "error": "Fehler",
+    "truncated": "Gekürzt — der vollständige Text war zu lang.",
+    "pending": "Offene Freigaben", "loading": "Delegationen werden geladen…", "loadFailed": "Delegationsverlauf konnte nicht geladen werden. Offene Anfragen bleiben unverändert.",
+    "retry": "Erneut versuchen", "noPending": "Keine offenen Freigaben.", "delegate": "Unteragent", "viewApproval": "Freigabe ansehen",
+    "runs": "Läufe", "refresh": "Aktualisieren", "filter": "Läufe filtern",
+    "filters": { "all": "Alle", "running": "Laufend", "ended": "Beendet" },
+    "empty": "Noch keine Delegationsläufe.", "loadMore": "Mehr laden", "end": "Ende des Delegationsverlaufs",
+    "noProject": "Kein Projekt", "untitledSession": "Unbenannte Sitzung",
+    "statuses": {
+      "running": "Läuft", "completed": "Abgeschlossen", "failed": "Fehlgeschlagen", "stopped": "Angehalten",
+      "aborted": "Abgebrochen", "timed_out": "Zeitüberschreitung", "interrupted": "Unterbrochen"
+    }
+  },
   "worktree": {
     "menu": { "group": "Git" },
     "newIsolatedSession": "Neue isolierte Sitzung",
@@ -286,6 +303,9 @@ export const de = {
     "sessionCompleted": "Fertig",
     "sessionFailed": "Benötigt Aufmerksamkeit",
     "projectRunningCount": "{{count}} laufen in diesem Projekt",
+    "projectNeedsActionCount": "{{count}} benötigen Aktion",
+    "projectCompletedCount": "{{count}} abgeschlossen",
+    "projectFailedCount": "{{count}} fehlgeschlagen",
     "projectWaitingCount": "{{count}} warten auf Freigabe",
     "sortSessions": "Projekte und Chats sortieren",
     "sortRecent": "Kürzlich aktualisiert",
@@ -3052,7 +3072,13 @@ sklm: {
     "planApprovalTitle": "{{sessionTitle}} Plan wartet auf Genehmigung",
     "planApprovalBody": "Ein vorgeschlagener Plan ist zur Überprüfung bereit.",
     "actionFailed": "Benachrichtigungen konnten nicht aktualisiert werden.",
-    "justNow": "Gerade eben"
+    "justNow": "Gerade eben",
+    "approvalHistoryTitle": "Delegationsfreigabe · {{sessionTitle}}",
+    "approvalHistoryBody": "{{agent}} — {{status}}",
+    "clearConfirm": "Verlauf von Aufgaben und Freigaben löschen? Anfragen, die noch Aktion benötigen, bleiben offen.",
+    "historyLoadFailed": "Freigabeverlauf konnte nicht geladen werden. Offene Anfragen bleiben unverändert.",
+    "emptyPendingTitle": "Nichts zu tun",
+    "emptyPendingBody": "Anfragen, die Ihre Antwort brauchen, erscheinen hier."
   },
   computerUse: {
     title: "Computer use",

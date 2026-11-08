@@ -15,14 +15,18 @@
 export type ProjectRunSummary = {
   /** Sessions with an in-flight turn. */
   running: number;
-  /** Sessions blocked on a permission prompt. */
+  /** Sessions needing user action. */
   waiting: number;
+  completed: number;
+  failed: number;
   /** Sessions shown under this project (used for the `n / total` read). */
   total: number;
 };
 
 export const EMPTY_PROJECT_RUN_SUMMARY: ProjectRunSummary = {
   running: 0,
+  completed: 0,
+  failed: 0,
   waiting: 0,
   total: 0,
 };
@@ -67,29 +71,34 @@ export function resolveSidebarRunningAffordances(
 }
 
 /**
- * Classify one project's sessions. `runningSessions` and `pendingPermissions`
- * are keyed by session id, matching the store's shape.
+ * Classify distinct sessions; action takes precedence over running and unread outcomes.
  */
 export function summarizeProjectRuns(
   sessions: readonly ProjectRunSession[],
   runningSessions: Record<string, boolean | undefined>,
   pendingPermissions: Record<string, readonly unknown[] | undefined>,
+  pendingSessionIds: ReadonlySet<string> = new Set(),
+  outcomes: Readonly<Record<string, "completed" | "failed" | undefined>> = {},
 ): ProjectRunSummary {
   let running = 0;
   let waiting = 0;
+  let completed = 0;
+  let failed = 0;
+  const unique = new Set<string>();
   for (const session of sessions) {
-    if ((pendingPermissions[session.id]?.length ?? 0) > 0) {
-      waiting += 1;
-    } else if (runningSessions[session.id]) {
-      running += 1;
-    }
+    if (unique.has(session.id)) continue;
+    unique.add(session.id);
+    if (pendingSessionIds.has(session.id) || (pendingPermissions[session.id]?.length ?? 0) > 0) waiting++;
+    else if (runningSessions[session.id]) running++;
+    else if (outcomes[session.id] === "completed") completed++;
+    else if (outcomes[session.id] === "failed") failed++;
   }
-  return { running, waiting, total: sessions.length };
+  return { running, waiting, completed, failed, total: unique.size };
 }
 
 /** True when the group deserves an affordance at all. */
 export function projectRunSummaryIsLive(summary: ProjectRunSummary): boolean {
-  return summary.running > 0 || summary.waiting > 0;
+  return summary.running > 0 || summary.waiting > 0 || summary.completed > 0 || summary.failed > 0;
 }
 
 /** Total live sessions across every group; drives the section-level summary. */
@@ -97,7 +106,7 @@ export function totalRunningProjects(
   summaries: readonly ProjectRunSummary[],
 ): number {
   return summaries.reduce(
-    (count, summary) => count + (projectRunSummaryIsLive(summary) ? 1 : 0),
+    (count, summary) => count + (summary.running > 0 || summary.waiting > 0 ? 1 : 0),
     0,
   );
 }

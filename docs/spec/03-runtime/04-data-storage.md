@@ -1,4 +1,4 @@
-# 04. Data Storage (Schema v27)
+# 04. Data Storage (Schema v28)
 
 
 ### Lossless tool-image storage (#1868)
@@ -26,6 +26,29 @@ from misreading a new encoded file. It does not alter user configuration or
 rewrite transcripts at startup. Downgrading to an old application requires a
 complete compatible backup, not merely swapping the SQLite file. No external
 blob directory, new file cleanup lifecycle or lossy image transform is added.
+
+### Global delegation history (schema 28)
+
+Migration 27 → 28 backs up schema 27 and adds the partial
+`idx_messages_task_history` index on `(created_at DESC, mid DESC)` for
+`tool_name = 'Task'`. It changes no transcript content or execution status.
+The index is rebuildable from existing message metadata. A schema-27 app
+cannot open schema 28; downgrade requires a compatible backup.
+
+Run history reads indexed candidates and bounded canonical JSONL windows;
+it does not create a second execution ledger. Source sessions marked deleted
+are excluded. The candidate cursor remains resumable after status/project
+filtering, including empty result pages.
+
+Terminal approval receipts use the existing Host-owned kv namespace
+`delegationApprovalHistory`, key `v1`, envelope `{ version: 1, entries }`.
+The latest 200 terminal prompts are retained by `(sessionId, requestId)` with
+revision guards, `settledAt` and optional `readAt`. Missing history is empty;
+unsupported versions fail closed. Writes explicitly allowlist prompt/model
+metadata and do not copy provider credentials. Mark-read preserves rows;
+clear removes receipts only. No history row can restore consent, change
+scheduling or replay work. Older builds ignore this additive kv namespace.
+See [ADR global delegation history](../../adr/global-delegation-history.md).
 
 
 ## 0. Ownership decision

@@ -58,3 +58,20 @@ test("sidebar label headers span separate rows and fold only their own entries",
   assert.equal(moved[0].label, null);
   assert.equal(moved[0].sessions[0], sessions[0]);
 });
+
+test("running history is stable, stays in its labels, and is prioritized before paging", async () => {
+  const { prioritizeRunningSessions } = await import("../src/lib/sidebar-label-groups.ts");
+  const rows = Array.from({ length: 12 }, (_, i) => ({ id: String(i) }));
+  const assignments = { "0": { labelIds: ["investigation"] }, "10": { labelIds: ["investigation", "bug"] } };
+  const ordered = prioritizeRunningSessions(rows, { "10": true, "11": true });
+  assert.deepEqual(ordered.map(x => x.id), ["10", "11", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]);
+  const { getVisibleProjectSessions } = await import("../src/lib/sidebar-project-sessions.ts");
+  const page = getVisibleProjectSessions(ordered, false);
+  assert.equal(page.hiddenCount, 2);
+  const groups = groupSessionsByLabel(page.visibleSessions, labels, assignments);
+  assert.deepEqual(groups.map(g => [g.label?.id ?? null, g.sessions.map(x => x.id)]), [
+    ["investigation", ["10", "0"]], ["bug", ["10"]], [null, ["11", "1", "2", "3", "4", "5", "6", "7"]],
+  ]);
+  assert.deepEqual(prioritizeRunningSessions(rows, {}).map(x => x.id), rows.map(x => x.id));
+  assert.equal(rows[0].id, "0");
+});

@@ -1,5 +1,40 @@
 # 04. E2E Test Plan
 
+## E2E-NOTIFICATION-global-history
+
+- **Environment:** Production React components in isolated Chromium profiles,
+  synthetic API boundaries, and temporary Host databases; no Desktop launch,
+  live profile, provider call, or native banner claim.
+- **Steps:** Mix many live requests, successful/failed task rows and terminal
+  approval receipts. Use 1280×900, 360×640 and 360×320 viewports. Scroll to both
+  ends with Home/End, refresh while scrolled, expand/read receipts under Unread,
+  retry failed history operations, and confirm Clear. Resolve an older pending
+  list response after a newer terminal refresh.
+- **Expected:** One bounded scroll owner, reachable top and bottom, fixed
+  controls, no refresh jump, distinct source/status presentation, retained read
+  outcomes, no stale receipt overwrite, and no pending settlement or navigation
+  from history read/clear. Source navigation remains explicit.
+- **Global history:** Open with no active session and across projects; filter,
+  paginate through a filtered empty page with a cursor, inspect task/report,
+  retry a read error, and attempt a deleted source. Live refresh renews the
+  first-page cursor. Only explicit Open source navigates; View approval targets
+  the existing exact request/revision without navigating. Escape returns focus.
+- **Sidebar:** Keep label order/membership and global pins unchanged. A running
+  session originally beyond the first ten appears at the top of its own label,
+  never another label. Unclassified only reorders internally. Project counts
+  deduplicate sessions and include folded/paginated/filter-hidden rows, with
+  action > running > unread outcome precedence.
+- **Host contracts:** Reopen a temporary database with terminal receipts;
+  verify read retention, bounded eviction, revision guards, rejected pending
+  writes, and read/clear isolation. Query old canonical Task rows across
+  projects, exclude deleted sessions, classify stale running as interrupted,
+  test text truncation and filtered continuation. Upgrade schema 27 to 28,
+  verify backup/index rebuild and unchanged source rows.
+- **Automation:** `delegation-approval-ui.test.mjs`,
+  `delegation-history-ui.test.mjs`, notification/sidebar unit suites, shared
+  history contract tests and Host delegation history tests. Electron app/OS
+  delivery verification remains separately authorized and is not implied.
+
 ## E2E-HARNESS-recovery-boundaries
 
 - **Environment:** Synthetic Host/provider boundaries and isolated fixtures;

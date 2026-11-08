@@ -24,7 +24,7 @@ function notification(overrides) {
   };
 }
 
-test("inbox hides successful completions and keeps failures in order", () => {
+test("inbox retains completed and failed history in source order", () => {
   const rows = inboxNotifications([
     notification({ id: "done-1" }),
     notification({ id: "failed-1", kind: "task.failed" }),
@@ -33,11 +33,11 @@ test("inbox hides successful completions and keeps failures in order", () => {
   ]);
   assert.deepEqual(
     rows.map((row) => row.id),
-    ["failed-1", "failed-2"],
+    ["done-1", "failed-1", "done-2", "failed-2"],
   );
 });
 
-test("inbox unread count ignores unread completions", () => {
+test("inbox unread count includes unread completions without counting read history", () => {
   assert.equal(
     inboxUnreadCount([
       notification({ id: "done-1" }),
@@ -45,9 +45,9 @@ test("inbox unread count ignores unread completions", () => {
       notification({ id: "failed-1", kind: "task.failed" }),
       notification({ id: "failed-2", kind: "task.failed", readAt: "2026-09-04T10:02:00.000Z" }),
     ]),
-    1,
+    3,
   );
-  assert.equal(inboxUnreadCount([notification({ id: "done-1" })]), 0);
+  assert.equal(inboxUnreadCount([notification({ id: "done-1" })]), 1);
 });
 
 test("notification center renders the filtered inbox instead of the raw store", () => {
@@ -55,9 +55,10 @@ test("notification center renders the filtered inbox instead of the raw store", 
   assert.match(componentSource, /inboxUnreadCount\(storedNotifications\)/);
 });
 
-test("notification center actions can clear taskbar-only completed outcomes", () => {
+test("notification center bulk actions include completed outcomes and independent receipts", () => {
   assert.match(componentSource, /const allUnreadCount = useAppStore\(/);
   assert.match(componentSource, /state\.unreadNotificationCount/);
-  assert.match(componentSource, /disabled=\{busy \|\| allUnreadCount === 0\}/);
-  assert.match(componentSource, /disabled=\{busy \|\| storedNotifications\.length === 0\}/);
+  assert.match(componentSource, /disabled=\{busy \|\| allUnreadCount \+ receiptUnread === 0\}/);
+  assert.match(componentSource, /disabled=\{busy \|\| !hasHistory\}/);
+  assert.match(componentSource, /storedNotifications\.length > 0 \|\| receipts\.entries\.length > 0/);
 });

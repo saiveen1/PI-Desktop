@@ -7,14 +7,18 @@ import {
   resolveSidebarRunningAffordances,
   summarizeProjectRuns,
 } from "../../lib/sidebar-project-runs";
+import { isRemoteSession } from "../../lib/remote-session-safety";
 import { useAppStore } from "../../stores/app-store";
 import { ProjectRunBadge, ProjectRunCount, ProjectRunRail } from "../ProjectRunIndicator";
 import { IconFolder, IconNewProject } from "../icons";
 import { Button, TooltipButton } from "../ui";
 
 /** The same project/chat hierarchy, keyed by Host identity rather than local paths. */
-export function RemoteProjectGroups({ groups, renderSessions }: {
+export function RemoteProjectGroups({ groups, renderSessions, eligibleSessions, pendingSessionIds, sessionOutcomes }: {
   groups: RemoteProjectGroup[]; renderSessions: (sessions: SessionSummary[], projectKey: string) => ReactNode;
+  eligibleSessions: SessionSummary[];
+  pendingSessionIds: ReadonlySet<string>;
+  sessionOutcomes: Readonly<Record<string, "completed" | "failed" | undefined>>;
 }) {
   const { t } = useTranslation();
   const [busy, setBusy] = useState<string | null>(null);
@@ -32,7 +36,8 @@ export function RemoteProjectGroups({ groups, renderSessions }: {
     finally { setBusy(null); }
   };
   return <>{groups.map(({ project, sessions }) => {
-    const runSummary = summarizeProjectRuns(sessions, runningSessions, pendingPermissions);
+    const projectSessions = eligibleSessions.filter(session => isRemoteSession(session) && session.remoteHostKey === project.hostKey && session.remoteProjectId === project.projectId);
+    const runSummary = summarizeProjectRuns(projectSessions, runningSessions, pendingPermissions, pendingSessionIds, sessionOutcomes);
     const runIsLive = projectRunSummaryIsLive(runSummary);
     const showRunBadge = runAffordances.badge && runIsLive;
     const showRunRail = runAffordances.rail && runIsLive;

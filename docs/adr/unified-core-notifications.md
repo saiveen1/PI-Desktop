@@ -50,9 +50,11 @@ sound remains silent when the application supplies its existing soft chime.
 
 ## Consequences
 
-There is one reminder preferences source without a new database table or durable
-approval-history schema. Source state and history remain usable with reminders
-disabled or delivery failures. Every timer, subscription and native object has
+There is one reminder preferences source. The later
+[global delegation history decision](global-delegation-history.md) adds bounded
+terminal approval receipts owned by Host persistence, never durable pending
+consent. Source state and history remain usable with reminders disabled or
+delivery failures. Every timer, subscription and native object has
 an owner and retirement path. Verification uses isolated production components,
 synthetic events, controlled clocks and mocked native/audio boundaries; actual
 Windows banners, Do Not Disturb and physical audio are not inferred from tests.

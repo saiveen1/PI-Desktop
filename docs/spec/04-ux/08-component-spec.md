@@ -4438,9 +4438,10 @@ Sidebar footer                                        Popover (360px max)
   duplicate. A compact badge renders `1`–`99` and `99+`; its accessible label
   retains the exact count (the durable store is capped at 200).
 - Popover: width `min(360px, calc(100vw - 24px))`, opens above and to the right
-  of the footer, and is no taller than the available window. Live Needs action
-  and durable task history have bounded, independently scrollable row lists.
-- Header: localized title, `All` / `Unread` segmented filter, Lucide
+  of the footer, and is no taller than the space above its actual anchor. One
+  scroll container owns both live Needs action and durable history; title and
+  filters stay fixed. Resize recomputes the available height.
+- Header: localized title, `All` / `Unread` / `Needs action` filter, Lucide
   `CheckCheck` mark-all-read button, and Lucide `Trash2` clear button. Icon-only
   actions carry localized tooltips and accessible names.
 - Row: unread dot, semantic completion/failure icon, localized event label,
@@ -4451,9 +4452,13 @@ Sidebar footer                                        Popover (360px max)
   and optional `errorCode`; no localized title/body string is persisted.
 - A separate live Needs action section projects current questions, permissions,
   plans and delegation approvals. Bell count includes these live requests plus
-  unread visible task failures; completions remain hidden by the existing filter.
+  unread task outcomes and terminal approval receipts.
   Selecting a pending row locates its exact live request using existing controls.
   It never grants consent. Settlement removes the row; read/clear do not affect it.
+- Approval receipts use a delegate icon and explicit source/status. Pending is
+  warning-colored, running is accent, successful task/approved receipt is
+  success, failure/timeout is error, and other terminal receipts are neutral.
+  Approval success means consent was accepted, not that execution succeeded.
 
 ### 20.3 States
 
@@ -4469,8 +4474,11 @@ Sidebar footer                                        Popover (360px max)
 ### 20.4 Interactions
 
 - Bell toggles the popover. Opening does not implicitly mark anything read.
-- `All` shows the newest retained rows; `Unread` filters to `readAt == null`.
-- Selecting a row first calls `notification.markRead`, closes the popover, then
+- `All` shows retained read and unread history; `Unread` filters unread history
+  while keeping an expanded receipt visible until filter change or close.
+  `Needs action` shows only live requests. Pending entries remain visible in
+  All/Unread and never become read history merely by viewing them.
+- Selecting a task row first calls `notification.markRead`, closes the popover, then
   activates the row's durable session (including its project when applicable)
   and scrolls the transcript to its latest content. The successful read also
   dismisses the matching task-native banner before a late activation can
@@ -4479,11 +4487,13 @@ Sidebar footer                                        Popover (360px max)
   outcome's session is already visible in the chat marks that session's
   matching durable notifications read; it does not mark outcomes belonging to
   other sessions.
-- Mark all read is idempotent and preserves rows; it dismisses every outstanding
-  task-native banner. Clear deletes every inbox row, dismisses all task-native
-  banners, and leaves sessions, transcripts, and turns intact. These actions
-  remain available for successful completions hidden from the failure-only
-  bell list, so the taskbar unread badge can be cleared from the popover.
+- Mark all read is idempotent and preserves task rows and approval receipts;
+  it dismisses outstanding task-native banners. Clear requires confirmation,
+  deletes task history and approval receipts, dismisses task-native banners,
+  and leaves pending requests, sessions, transcripts and turns intact.
+- Selecting a receipt expands read-only details and marks it read without
+  navigation. Only its explicit source action navigates. No history action
+  authorizes, retries, resumes or replays an execution.
 - `notification.changed` updates the visible list and badge only for a new
   durable id. A duplicate id, or a delayed event for an acknowledged/cleared
   row, is ignored. Opening the
@@ -4506,9 +4516,9 @@ Sidebar footer                                        Popover (360px max)
 
 - Popover is a labelled, non-modal `role="dialog"`; the row collection is a
   semantic list and every row is one button with a complete localized name.
-- Opening focuses the first unread row, otherwise the first row, otherwise the
-  `All` filter. `ArrowUp` / `ArrowDown`, `Home`, and `End` move among rows;
-  `Enter` / `Space` activate the focused row.
+- Opening focuses the active filter without scrolling. Refresh does not move
+  focus or scroll position. `ArrowUp` / `ArrowDown`, `Home`, and `End` move
+  among all rows through the single scroll container; `Enter` / `Space` activate.
 - `Tab` follows DOM order through filters, header actions, and rows without a
   focus trap. `Escape` or outside press closes the popover; Escape restores
   focus to the bell.
@@ -4520,11 +4530,11 @@ Sidebar footer                                        Popover (360px max)
 
 ### 20.6 Constraints
 
-- The list contains only `task.completed` and `task.failed` records produced
-  from unseen terminal agent turns. Visible-current results and `aborted` turns
-  are intentionally silent.
-- At most 200 newest durable rows are retained globally, without pagination.
-  Pending consent has no new history schema. Notification preferences are
+- Task history contains `task.completed` and `task.failed` from unseen terminal
+  turns. Visible-current results and `aborted` turns remain silent.
+- Task history and terminal approval receipts each retain at most 200 entries.
+  Receipts survive restart independently of live consent; they are never
+  loaded into the pending authorization store. Notification preferences remain
   device-local; plugin-native delivery keeps its existing permission-gated API.
   Native API acceptance is not proof of visible OS delivery. Reminders stop on
   settlement/expiry/disposal; opt-in repeats never reset source deadlines.

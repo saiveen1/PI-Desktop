@@ -7,6 +7,7 @@ import {
 } from "@pi-desktop/shared";
 import { isDelegationAuthorizationRequest } from "@pi-desktop/host-runtime";
 import { createDelegationCatalog, type DelegationCatalogDependencies } from "./delegation-catalog";
+import { createDelegationApprovalHistory } from "./delegation-approval-history";
 
 type Dependencies = DelegationCatalogDependencies & {
   publish: (event: DelegationApprovalChangedEvent) => void;
@@ -38,6 +39,7 @@ export function createDelegationApprovalService(deps: Dependencies) {
   let revision = 0;
   let disposed = false;
   const report = (message: string) => (deps.onError ?? console.error)(message);
+  const history = createDelegationApprovalHistory({ getHost: deps.getHost, report, now });
   const live = (entry: Entry) => !disposed && pending.get(identity(entry.input)) === entry;
   function publish(entry: Entry) {
     if (!entry.prompt) return;
@@ -59,6 +61,7 @@ export function createDelegationApprovalService(deps: Dependencies) {
       const chosen = selected && entry.prompt.candidates.find(row => sameModel(row, selected));
       entry.prompt = { ...entry.prompt, status, revision: ++revision, schedulingReason: result.reason,
         ...(chosen ? { candidate: { ...chosen } } : {}) };
+      history.record(entry.prompt);
       publish(entry);
     }
     entry.resolve(result);
@@ -222,6 +225,7 @@ export function createDelegationApprovalService(deps: Dependencies) {
   }
   return {
     authorize, respond, extend, cancel,
+    listHistory: history.listHistory, markHistoryRead: history.markHistoryRead, clearHistory: history.clearHistory,
     list(): DelegationApprovalSnapshot {
       for (const entry of pending.values()) if (now() >= entry.expires) expire(entry);
       return { requests: [...pending.values()].flatMap(entry => entry.prompt ? [structuredClone(entry.prompt)] : []) };

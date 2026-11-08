@@ -24,6 +24,23 @@ export const es = {
     label: "Aprobación de delegación", title: "Aprobar modelo delegado", reason: "Motivo de selección",
     allowOnce: "Permitir una vez", useOther: "Usar otro modelo", cancel: "Cancelar delegación",
   },
+  delegationHistory: {
+    "title": "Delegaciones globales", "allProjects": "Todos los proyectos", "close": "Cerrar", "back": "Volver",
+    "openSource": "Abrir sesión de origen", "navigationFailed": "No se pudo abrir la sesión de origen. Reintenta.",
+    "status": "Estado", "created": "Creada", "completed": "Completada", "model": "Modelo",
+    "requestedModel": "Modelo solicitado", "modelReason": "Motivo de selección", "task": "Tarea", "report": "Informe", "error": "Error",
+    "truncated": "Truncado — el texto completo era demasiado largo.",
+    "pending": "Aprobaciones pendientes", "loading": "Cargando delegaciones…", "loadFailed": "No se pudo cargar el historial de delegaciones. Las solicitudes pendientes no cambian.",
+    "retry": "Reintentar", "noPending": "No hay aprobaciones pendientes.", "delegate": "Subagente", "viewApproval": "Ver aprobación",
+    "runs": "Ejecuciones", "refresh": "Actualizar", "filter": "Filtrar ejecuciones",
+    "filters": { "all": "Todas", "running": "En ejecución", "ended": "Finalizadas" },
+    "empty": "Aún no hay ejecuciones de delegación.", "loadMore": "Cargar más", "end": "Fin del historial de delegaciones",
+    "noProject": "Sin proyecto", "untitledSession": "Sesión sin título",
+    "statuses": {
+      "running": "En ejecución", "completed": "Completada", "failed": "Fallida", "stopped": "Detenida",
+      "aborted": "Abortada", "timed_out": "Agotó el tiempo", "interrupted": "Interrumpida"
+    }
+  },
   "worktree": {
     "menu": { "group": "Git" },
     "newIsolatedSession": "Nueva sesión aislada",
@@ -286,6 +303,9 @@ export const es = {
     "sessionCompleted": "Listo",
     "sessionFailed": "Necesita atención",
     "projectRunningCount": "{{count}} en ejecución en este proyecto",
+    "projectNeedsActionCount": "{{count}} requieren acción",
+    "projectCompletedCount": "{{count}} completadas",
+    "projectFailedCount": "{{count}} fallidas",
     "projectWaitingCount": "{{count}} esperando aprobación",
     "sortSessions": "Ordenar proyectos y chats",
     "sortRecent": "Actualizado recientemente",
@@ -3052,7 +3072,13 @@ sklm: {
     "planApprovalTitle": "{{sessionTitle}} plan pendiente de aprobación",
     "planApprovalBody": "El plan propuesto está listo para su revisión.",
     "actionFailed": "No se pudieron actualizar las notificaciones.",
-    "justNow": "Justo ahora"
+    "justNow": "Justo ahora",
+    "approvalHistoryTitle": "Aprobación de delegación · {{sessionTitle}}",
+    "approvalHistoryBody": "{{agent}} — {{status}}",
+    "clearConfirm": "¿Borrar el historial de tareas y aprobaciones? Las solicitudes que aún requieren acción siguen pendientes.",
+    "historyLoadFailed": "No se pudo cargar el historial de aprobaciones. Las solicitudes pendientes no cambian.",
+    "emptyPendingTitle": "Nada requiere acción",
+    "emptyPendingBody": "Las solicitudes que necesitan tu respuesta aparecerán aquí."
   },
   computerUse: {
     title: "Computer use",

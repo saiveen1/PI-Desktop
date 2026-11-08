@@ -80,6 +80,9 @@ export async function notificationUserPath({ root, i18next, until, paint }) {
   api.onDelegationApprovalChanged = subscribe("approval"); api.listDelegationApprovals = async () => ({ requests: [] });
   api.listNotifications = async () => ({ notifications: [], unreadCount: 0 });
   api.clearNotifications = async () => ({ ok: true }); api.markAllNotificationsRead = async () => ({ ok: true });
+  api.listDelegationApprovalHistory = async () => ({ entries: [] });
+  api.markDelegationApprovalHistoryRead = async () => ({ ok: true });
+  api.clearDelegationApprovalHistory = async () => ({ ok: true });
   api.getSession = async id => ({ session: { id, title: "Source session", source: "desktop", mode: "agent", providerId: "fixture", modelId: "fixture", messages: [] } });
   api.pendingPlans = async () => ({ plans: [] });
   api.pendingInteractive = async id => ({ asks: useAppStore.getState().pendingAsks[id] ?? [], permissions: [] });
@@ -104,6 +107,7 @@ export async function notificationUserPath({ root, i18next, until, paint }) {
       type: "asktool_request", request: { sessionId: "a", requestId, questions: [{ question: "Private question body", options: ["Continue", "Stop"], multiSelect: false }] },
     } }));
     const target = useAppStore.getState().toasts.find(item => item.notificationTarget?.requestId === "exact-question").notificationTarget;
+    check(useAppStore.getState().toasts.find(item => item.notificationTarget?.requestId === "exact-question").variant === "warning", "Pending reminders are warning-colored, never successful");
     check(useAppStore.getState().page === "settings", "Arrival never steals navigation");
     flushSync(() => document.querySelector(".notification-trigger").click());
     await until(() => document.querySelectorAll(".notification-pending .notification-item").length === 2);

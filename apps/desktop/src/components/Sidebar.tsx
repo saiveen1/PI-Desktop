@@ -1,7 +1,7 @@
 import { IconClock } from "./icons";
 import { ColorSwatch, SessionFilterControl, sessionMarkMenu } from "../features/sessions/SessionLabelControls";
 import { SidebarLabelGroups } from "../features/sessions/SidebarLabelGroups";
-import { groupSessionsByLabel, visibleLabelSessionIds, type SidebarLabelGroup } from "../lib/sidebar-label-groups";
+import { groupSessionsByLabel, prioritizeRunningSessions, visibleLabelSessionIds, type SidebarLabelGroup } from "../lib/sidebar-label-groups";
 import { matchesSessionFilter } from "../lib/session-labels";
 import { RemoteProjectGroups } from "./remote/RemoteProjectGroups";
 import { groupRemoteProjectSessions } from "../lib/remote-project-catalog";
@@ -38,6 +38,7 @@ import { canTrashSession, type SessionOrganizationAction } from "../features/ses
 import { SessionSelectionToolbar } from "../features/sessions/SessionSelectionToolbar";
 import { SessionTrashDialog } from "../features/sessions/SessionTrashDialog";
 import { isDefaultSessionTitle, useAppStore } from "../stores/app-store";
+import { usePendingNotifications } from "../stores/runtime/notification-runtime";
 import {
   getGlobalPinnedSessions,
   normalizeProjectPath,
@@ -281,6 +282,8 @@ export function Sidebar({
   const runningSessions = useAppStore((s) => s.runningSessions);
   const sessionOutcomes = useAppStore((s) => s.sessionOutcomes);
   const pendingPermissions = useAppStore((s) => s.pendingPermissions);
+  const pendingNotifications = usePendingNotifications();
+  const pendingSessionIds = useMemo(() => new Set(pendingNotifications.map(item => item.target.sessionId)), [pendingNotifications]);
   const setPage = useAppStore((s) => s.setPage);
   const navBack = useAppStore((s) => s.navBack);
   const canNavBack = useAppStore((s) => s.canNavBack);
@@ -1054,16 +1057,16 @@ export function Sidebar({
   ), [filtered, pinnedSessionIds, compareSessions]);
   const labelGroupsByScope = useMemo(() => {
     const groups = new Map<string, SidebarLabelGroup<SessionSummary>[]>();
-    const add = (scope: string, rows: SessionSummary[]) => groups.set(scope, groupSessionsByLabel(rows, sessionLabels, sessionMeta));
+    const add = (scope: string, rows: SessionSummary[]) => groups.set(scope, groupSessionsByLabel(prioritizeRunningSessions(rows, runningSessions), sessionLabels, sessionMeta));
     add("temporary", temporarySessionHistory);
     for (const entry of projectEntries) {
-      const history = entry.sessions.filter(session => !pinnedSessionIds.has(session.id));
+      const history = prioritizeRunningSessions(entry.sessions.filter(session => !pinnedSessionIds.has(session.id)), runningSessions);
       const { visibleSessions } = getVisibleProjectSessions(history, expandedProjectSessions[entry.key] ?? false);
       add(`project:${entry.key}`, visibleSessions);
     }
     for (const group of remoteProjectGroups) add(`remote:${group.project.key}`, group.sessions);
     return groups;
-  }, [temporarySessionHistory, projectEntries, pinnedSessionIds, expandedProjectSessions, remoteProjectGroups, sessionLabels, sessionMeta]);
+  }, [temporarySessionHistory, projectEntries, pinnedSessionIds, expandedProjectSessions, remoteProjectGroups, sessionLabels, sessionMeta, runningSessions]);
   // Follow visible shortcuts, but select and mutate every conversation only once.
   const flatSessionOrder = useMemo(() => {
     const ids = pinnedSessions.map(session => session.id);
@@ -2118,9 +2121,12 @@ export function Sidebar({
     // The live counts cover every session in the group, including pinned and
     // folded ones, because the header answers for the whole project.
     const runSummary = summarizeProjectRuns(
-      entry.sessions,
+      listableSessions(sessions).filter(session =>
+        normalizeProjectPath(session.projectPath) === entry.key && (showArchived || !sessionArchived(session, sessionMeta[session.id]))),
       runningSessions,
       pendingPermissions,
+      pendingSessionIds,
+      sessionOutcomes,
     );
     const runIsLive = projectRunSummaryIsLive(runSummary);
     const showRunBadge = runningAffordances.badge && runIsLive;
@@ -2603,7 +2609,8 @@ export function Sidebar({
               </div>
             </section>
           )}
-          <RemoteProjectGroups groups={remoteProjectGroups}
+          <RemoteProjectGroups groups={remoteProjectGroups} eligibleSessions={listableSessions(sessions).filter(session => showArchived || !sessionArchived(session, sessionMeta[session.id]))}
+            pendingSessionIds={pendingSessionIds} sessionOutcomes={sessionOutcomes}
             renderSessions={(_sessions, projectKey) => renderGroupedSessionRows(`remote:${projectKey}`, {
               temporary: false,
               showLastReplyDate,

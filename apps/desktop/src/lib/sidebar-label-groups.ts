@@ -5,6 +5,13 @@ export type SidebarLabelGroup<T extends { id: string } = { id: string }> = {
   sessions: T[];
 };
 
+/** Stable presentation-only partition; never changes the persisted/manual order. */
+export function prioritizeRunningSessions<T extends { id: string }>(
+  sessions: readonly T[], running: Readonly<Record<string, boolean | undefined>>,
+): T[] {
+  return [...sessions.filter(session => running[session.id]), ...sessions.filter(session => !running[session.id])];
+}
+
 /** Presentation only: every group keeps references to the original conversations. */
 export function groupSessionsByLabel<T extends { id: string }>(
   sessions: readonly T[],

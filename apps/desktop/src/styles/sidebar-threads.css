@@ -438,7 +438,7 @@
   width: 2px;
   overflow: hidden;
   border-radius: var(--radius-full);
-  background: color-mix(in oklab, var(--ds-warning) 28%, transparent);
+  background: color-mix(in oklab, var(--ds-purple) 28%, transparent);
   pointer-events: none;
 }
 
@@ -451,8 +451,8 @@
   background: linear-gradient(
     180deg,
     transparent 0%,
-    color-mix(in oklab, var(--ds-warning) 85%, transparent) 45%,
-    var(--ds-warning) 60%,
+    color-mix(in oklab, var(--ds-purple) 85%, transparent) 45%,
+    var(--ds-purple) 60%,
     transparent 100%
   );
   animation: project-run-comet 2.2s cubic-bezier(0.45, 0, 0.55, 1) infinite;
@@ -527,3 +527,14 @@
     animation: none;
   }
 }
+
+/* Distinct semantic colours: action yellow, running purple, outcomes green/red. */
+.project-run-badge.running { background: color-mix(in oklab, var(--ds-purple) 18%, transparent); }
+.project-run-badge.running .project-run-badge-dot, .project-run-pip.running::before { background: var(--ds-purple); }
+.project-run-badge.waiting, .project-group.is-collapsed .project-run-badge.waiting { background: color-mix(in oklab, var(--ds-warning) 18%, transparent); }
+.project-run-badge.waiting .project-run-badge-dot, .project-run-pip.waiting::before { background: var(--ds-warning); }
+.project-group.is-collapsed .project-run-badge.running { background: color-mix(in oklab, var(--ds-purple) 26%, transparent); }
+.project-run-badge.completed, .project-group.is-collapsed .project-run-badge.completed { background: color-mix(in oklab, var(--ds-success) 18%, transparent); }
+.project-run-badge.failed, .project-group.is-collapsed .project-run-badge.failed { background: color-mix(in oklab, var(--ds-error) 18%, transparent); }
+.project-run-badge.completed .project-run-badge-dot, .project-run-pip.completed::before { background: var(--ds-success); animation: none; }
+.project-run-badge.failed .project-run-badge-dot, .project-run-pip.failed::before { background: var(--ds-error); animation: none; }

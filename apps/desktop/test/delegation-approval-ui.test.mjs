@@ -121,6 +121,13 @@ test("delegation approval production component: selected-only ACK user path, wid
     assert.deepEqual(lifecycle, { hydrationRace: true, replyRace: true, transportRetry: true, cleanup: true });
     const notifications = await evaluate("window.notificationWorkflowProbe()");
     assert.deepEqual(notifications, { settings: true, failureRecovery: true, inheritance: true, exactCard: true, lateClick: true, locales: 9 });
+    const history = [];
+    for (const [width, height] of [[1280, 900], [360, 640], [360, 320]]) {
+      await send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: false });
+      history.push(await evaluate("window.notificationHistoryProbe()"));
+    }
+    assert.equal(history.length, 3);
+    console.log("NOTIFICATION_HISTORY_UI_PROBE " + JSON.stringify(history));
     console.log("CORE_NOTIFICATION_UI_PROBE " + JSON.stringify(notifications));
     console.log("DELEGATION_UI_PROBE " + JSON.stringify({ workflow, layouts, lifecycle, locales: 9, keyboard: true }));
   } finally {

@@ -3,7 +3,8 @@ import { useTranslation } from "react-i18next";
 import type { NotificationEntry } from "../lib/notification-delivery";
 import { activateNotificationTarget } from "../stores/runtime/notification-runtime";
 import { Button } from "./ui";
-import { IconCircleAlert } from "./icons";
+import { IconBot, IconCircleAlert } from "./icons";
+import { notificationTone } from "../lib/notification-presentation";
 
 /** Live source state only; history bulk actions never acknowledge these requests. */
 export function PendingNotificationList({ items, onNavigate, onError }: {
@@ -19,12 +20,15 @@ export function PendingNotificationList({ items, onNavigate, onError }: {
     <ul className="notification-list">
       {items.map(item => <li key={item.id}>
         <Button variant="ghost" className="notification-item unread" disabled={opening !== null}
+          data-notification-source={item.target.kind}
           onClick={() => {
             setOpening(item.id);
             void activateNotificationTarget(item.target).then(opened => { if (opened) onNavigate(); })
               .catch(onError).finally(() => setOpening(null));
           }}>
-          <span className="notification-kind-icon"><IconCircleAlert size={15} aria-hidden /></span>
+          <span className={`notification-kind-icon ${notificationTone(item.target.kind)}`}>
+            {item.target.kind === "delegation-approval" ? <IconBot size={15} aria-hidden /> : <IconCircleAlert size={15} aria-hidden />}
+          </span>
           <span className="notification-copy">
             <span className="notification-item-title">{item.title}</span>
             <span className="notification-item-body">{item.body}</span>

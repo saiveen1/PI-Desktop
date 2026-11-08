@@ -7,6 +7,8 @@ mod computer;
 mod config_sync;
 mod data_relocation;
 mod db;
+mod delegation_approval_history;
+mod delegation_history;
 mod file_batches;
 mod file_resources;
 mod keyboard;

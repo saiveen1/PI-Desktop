@@ -23,19 +23,19 @@ test("counts running and permission-blocked sessions separately", () => {
     { c: [{}] },
   );
   // `d` runs but its permission list is absent, so it is not a wait.
-  assert.deepEqual(summary, { running: 3, waiting: 1, total: 4 });
+  assert.deepEqual(summary, { running: 3, waiting: 1, completed: 0, failed: 0, total: 4 });
 });
 
 test("a session waiting for permission is not also counted as running", () => {
   // The store can hold both flags; the row shows the permission dot, so the
   // group must not double-count the same session.
   const summary = summarizeProjectRuns(sessions("a"), { a: true }, { a: [{}] });
-  assert.deepEqual(summary, { running: 0, waiting: 1, total: 1 });
+  assert.deepEqual(summary, { running: 0, waiting: 1, completed: 0, failed: 0, total: 1 });
 });
 
 test("an empty project is not live", () => {
   const summary = summarizeProjectRuns([], {}, {});
-  assert.deepEqual(summary, { running: 0, waiting: 0, total: 0 });
+  assert.deepEqual(summary, { running: 0, waiting: 0, completed: 0, failed: 0, total: 0 });
   assert.equal(projectRunSummaryIsLive(summary), false);
 });
 
@@ -142,7 +142,7 @@ test("remote project groups carry the same affordances", async () => {
     new URL("../src/components/remote/RemoteProjectGroups.tsx", import.meta.url),
     "utf8",
   );
-  assert.match(remote, /summarizeProjectRuns\(sessions, runningSessions, pendingPermissions\)/);
+  assert.match(remote, /summarizeProjectRuns\(projectSessions, runningSessions, pendingPermissions, pendingSessionIds, sessionOutcomes\)/);
   assert.match(remote, /showRunRail \? <ProjectRunRail summary=\{runSummary\} \/>/);
   assert.match(remote, /showRunBadge \? <ProjectRunBadge summary=\{runSummary\} \/>/);
   assert.match(remote, /showRunCount \? <ProjectRunCount summary=\{runSummary\} \/>/);
@@ -164,4 +164,23 @@ test("both affordance colours resolve through theme tokens", async () => {
   assert.match(block, /--ds-purple/);
   // Motion is decoration only: it must be dropped under reduced motion.
   assert.match(block, /@media \(prefers-reduced-motion: reduce\)/);
+});
+
+test("deduplicates sessions and gives action then running precedence over unread outcomes", () => {
+  const summary = summarizeProjectRuns(sessions("a", "a", "b", "c", "d", "e"),
+    { a: true, b: true }, { a: [{}, {}] }, new Set(["a", "e"]),
+    { a: "failed", b: "failed", c: "completed", d: "failed", e: "completed" });
+  assert.deepEqual(summary, { running: 1, waiting: 2, completed: 1, failed: 1, total: 5 });
+  assert.deepEqual(summarizeProjectRuns(sessions("c", "d"), {}, {}, new Set(), {}),
+    { running: 0, waiting: 0, completed: 0, failed: 0, total: 2 });
+});
+
+test("header counts use eligible unfiltered sessions and semantic state colors", async () => {
+  const sidebar = await readFile(new URL("../src/components/Sidebar.tsx", import.meta.url), "utf8");
+  assert.match(sidebar, /summarizeProjectRuns\(\s*listableSessions\(sessions\)\.filter/);
+  assert.match(sidebar, /pendingSessionIds,\s*sessionOutcomes/);
+  const css = await readFile(new URL("../src/styles/sidebar-threads.css", import.meta.url), "utf8");
+  assert.match(css, /project-run-badge\.waiting \.project-run-badge-dot[^\n]*--ds-warning/);
+  assert.match(css, /project-run-badge\.completed \.project-run-badge-dot[^\n]*--ds-success/);
+  assert.match(css, /project-run-badge\.failed \.project-run-badge-dot[^\n]*--ds-error/);
 });
