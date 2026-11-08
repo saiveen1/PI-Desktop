@@ -171,7 +171,7 @@ window.sidebarLabelGroupingProbe = async () => {
   const group = id => project.querySelector('[data-sidebar-session-group="' + id + '"]');
   const rows = () => [...project.querySelectorAll('[data-sidebar-session-row="project-00"]')];
   check(rows().length === 1, "multiple labels duplicated a conversation row");
-  check(rows()[0].querySelectorAll(".session-label-chip").length === 2, "descriptive labels disappeared");
+  check(rows()[0].querySelectorAll(".session-row-labels .session-color-swatch").length === 2, "descriptive labels disappeared");
   check(!document.querySelector("[data-sidebar-label-group]"), "labels still create sidebar groups");
   click(rows()[0].querySelector(".thread-item-main"));
   check(opened.join() === "project-00", "grouped row opened another conversation");
@@ -198,6 +198,15 @@ window.sidebarLabelGroupingProbe = async () => {
       check(name.clientWidth >= 100, "group heading collapsed into a sliver");
       check(bounds.width >= group("investigation").getBoundingClientRect().width - 1, "group heading does not occupy its own row");
       check(!header.querySelector("time"), "timestamp competes with group heading");
+      const sessionRow = rows()[0];
+      const labels = sessionRow.querySelector(".session-row-labels");
+      const title = sessionRow.querySelector(".thread-item-title");
+      const date = sessionRow.querySelector(".thread-item-meta");
+      check(labels.textContent === "" && labels.title && labels.getAttribute("aria-label"), "color-only labels lost their names");
+      check(labels.getBoundingClientRect().right <= title.getBoundingClientRect().left, "labels must precede the title");
+      check(labels.getBoundingClientRect().width <= 44, "labels exceeded their compact width");
+      check(title.getBoundingClientRect().right <= date.getBoundingClientRect().left, "title overlaps the date");
+      check(sessionRow.scrollWidth <= sessionRow.clientWidth, "session row overflows at narrow width");
       header.focus();
       check(document.activeElement === header, "group heading is not keyboard focusable");
     }
@@ -225,7 +234,7 @@ window.organizationProbe = async () => {
   flushSync(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
   check(!button("Filter conversations"), "display-only labels still expose the retired filter");
   check(row("beta") && row("alpha"), "descriptive labels filtered unrelated conversations");
-  check(row("beta").querySelectorAll(".session-label-chip").length === 2, "multiple descriptive labels were lost");
+  check(row("beta").querySelectorAll(".session-row-labels .session-color-swatch").length === 2, "multiple descriptive labels were lost");
   click(row("project-01").querySelector('[data-action="session-menu"]'));
   click(await waitFor(() => document.querySelector('[data-action="session-move-up"]'), "move action"));
   const orderBefore = useAppStore.getState().sessionMeta["project-01"].order;

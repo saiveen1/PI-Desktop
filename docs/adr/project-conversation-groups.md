@@ -17,8 +17,9 @@ Keep organization in renderer-local sidebar preferences, with an additive
 version-1 organization record. Each project scope owns ordered groups and a label
 catalog. A conversation has at most one group ID; unknown or deleted groups
 render under Ungrouped. Moving changes placement only. Deleting a group clears
-membership, never conversations. Labels remain multi-valued descriptive chips,
-not headings or filters. Catalog editing is reached through Manage, separately
+membership, never conversations. Labels remain multi-valued descriptive color
+dots before the title, with full names in hover/accessibility text, not headings
+or filters. Catalog editing is reached through Manage, separately
 from project folder editing and global Conversation settings.
 
 Logical projects use their stable Host group ID across root/primary changes;

@@ -1531,9 +1531,11 @@ folded and unloaded rows. Existing labels are retained, never guessed into group
 A compact Manage entry and the project menu open a scoped Groups/Labels editor.
 Names, colors and order are editable; confirmed group deletion moves conversations
 to Ungrouped, while label deletion only removes marks. Conversation menus separate
-Move to group from multi-label assignment. Labels are display-only chips (up to
-two plus an overflow count), never containers or filters. Independent color marks
-do not replace run/unread/error status. Presets and a keyboard/pointer custom HSV
+Move to group from multi-label assignment. Labels are display-only color dots
+before the title (up to two plus an overflow count in a bounded 44px lane), never
+containers or filters. Label text appears only in the hover tooltip and accessible
+name, including overflow labels; long names do not consume title or timestamp
+space. Independent color marks do not replace run/unread/error status. Presets and a keyboard/pointer custom HSV
 picker accept validated HEX RGB colors. Multi-folder project titles expose a
 folder-count popover, primary first, rather than another conversation hierarchy.
 See [project conversation groups](../../adr/project-conversation-groups.md).

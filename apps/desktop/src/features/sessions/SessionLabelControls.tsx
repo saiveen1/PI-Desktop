@@ -1,7 +1,6 @@
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { IconFolder, IconPalette } from "../../components/icons";
-import { Badge } from "../../components/ui";
 import { SESSION_COLORS, type SessionColor, type SessionLabel } from "../../lib/session-labels";
 import { sidebarMenuAction, sidebarMenuSubmenu } from "../../lib/sidebar-menu";
 import type { SessionMeta } from "../../lib/sidebar-preferences";
@@ -24,12 +23,10 @@ export function SessionLabelChips({ labels, meta }: { labels: SessionLabel[]; me
   const { t } = useTranslation();
   const selected = labels.filter(label => meta.labelIds?.includes(label.id));
   if (!selected.length) return null;
-  return <span className="session-row-labels" aria-label={t("sessionLabels.title")}>
-    {selected.slice(0, 2).map(label => <span key={label.id} className="session-label-chip-wrap" title={sessionLabelName(label, t)}><Badge className="session-label-chip">
-      <ColorSwatch color={label.color} /><span>{sessionLabelName(label, t)}</span>
-    </Badge></span>)}
-    {selected.length > 2 ? <span className="session-label-overflow" title={selected.slice(2).map(label => sessionLabelName(label, t)).join(", ")}
-      aria-label={t("sessionLabels.overflow", { count: selected.length - 2 })}>+{selected.length - 2}</span> : null}
+  const names = selected.map(label => sessionLabelName(label, t)).join(", ");
+  return <span className="session-row-labels" role="img" title={names} aria-label={`${t("sessionLabels.title")}: ${names}`}>
+    {selected.slice(0, 2).map(label => <ColorSwatch key={label.id} color={label.color} />)}
+    {selected.length > 2 ? <span className="session-label-overflow" aria-hidden="true">+{selected.length - 2}</span> : null}
   </span>;
 }
 

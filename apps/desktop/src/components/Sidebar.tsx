@@ -2076,8 +2076,8 @@ export function Sidebar({
           ) : null}
           {isRemoteSession(session) && <span className="thread-item-source" title={session.remoteHostLabel}>{t("remote:remote")}</span>}
           <WorktreeBadge worktree={session.worktree} sessionId={session.id} />
-          <span className="thread-item-title">{taskTitle(session.title)}</span>
           <SessionLabelChips labels={sessionOrganizationCatalog(sessionOrganization, sessionOrganizationScope(session, sidebarProjectGroups), sessionLabels).labels} meta={meta} />
+          <span className="thread-item-title">{taskTitle(session.title)}</span>
           {options?.global ? (
             <span className="thread-item-project">
               {owningProject}

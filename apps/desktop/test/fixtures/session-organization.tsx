@@ -50,7 +50,7 @@ function Fixture() {
         onToggle={key => setCollapsed(previous => { const next = new Set(previous); if (next.has(key)) next.delete(key); else next.add(key); return next; })}
         onManage={() => setTarget({ scope, name: "pi desktop" })}
         renderSessions={rows => rows.map(session => <div key={session.id} className="thread-item" data-session-id={session.id}>
-          <Button variant="ghost" className="thread-item-main" onClick={() => setSelected(session.id)}><span className="thread-item-title">{session.title}</span><SessionLabelChips labels={catalog.labels} meta={meta[session.id] ?? {}} /></Button>
+          <Button variant="ghost" className="thread-item-main" onClick={() => setSelected(session.id)}><SessionLabelChips labels={catalog.labels} meta={meta[session.id] ?? {}} /><span className="thread-item-title">{session.title}</span></Button>
         </div>)} />
     </section>
     <section><h1>Isolated production-component fixture</h1><p>No Host, provider or daily profile is connected.</p>

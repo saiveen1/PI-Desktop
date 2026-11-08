@@ -30,15 +30,24 @@ test("sidebar groups render multi-label conversations once, keep empty groups an
   assert.match(folded, /data-session-id="plain"/);
 });
 
-test("labels render as bounded descriptive chips, never conversation containers", async t => {
+test("labels render as bounded color dots with complete accessible names", async t => {
   const ssr = await slotSsr(t);
   const { SessionLabelChips } = await ssr.load("/src/features/sessions/SessionLabelControls.tsx");
-  const labels = ["A", "B", "C"].map((name, index) => ({ id: String(index), name, color: "#1a8acc" }));
-  const html = ssr.render(createElement(SessionLabelChips, { labels, meta: { labelIds: ["0", "1", "2", "removed"] } }));
-  assert.equal((html.match(/class="badge /g) ?? []).length, 2);
+  const names = ["排查一个很长的标签名称", "Another long label", "C"];
+  const labels = names.map((name, index) => ({ id: String(index), name, color: "#1a8acc" }));
+  const render = labelIds => ssr.render(createElement(SessionLabelChips, { labels, meta: { labelIds } }));
+  const html = render(["0", "1", "2", "removed"]);
+  assert.equal((html.match(/class="session-color-swatch"/g) ?? []).length, 2);
   assert.match(html, /\+1/);
   assert.match(html, /background-color:#1a8acc/);
-  assert.doesNotMatch(html, /aria-expanded|data-sidebar-session-group|<button/);
+  assert.match(html, /role="img"/);
+  assert.ok(html.includes(`title="${names.join(", ")}"`));
+  assert.ok(html.includes(`aria-label="Labels: ${names.join(", ")}"`));
+  assert.equal(html.replace(/<[^>]*>/g, ""), "+1", "label names must not take row space");
+  assert.doesNotMatch(html, /class="badge |aria-expanded|data-sidebar-session-group|<button/);
+  assert.equal(render(["removed"]), "");
+  assert.equal(render([]), "");
+  assert.equal(render(["0"]).replace(/<[^>]*>/g, ""), "");
 });
 
 test("row menu moves membership independently from multi-label marking", async t => {
@@ -102,6 +111,8 @@ test("the production sidebar keeps running rows and complete status counts acros
   const html = render();
   assert.equal((html.match(/data-sidebar-project-group=/g) ?? []).length, 1);
   assert.equal((html.match(/data-sidebar-session-row="root-0"/g) ?? []).length, 1);
+  const pinnedRow = html.slice(html.indexOf('data-sidebar-session-row="root-0"'));
+  assert.ok(pinnedRow.indexOf('class="session-row-labels"') < pinnedRow.indexOf('class="thread-item-title"'), "label dots precede the title in the production row");
   assert.equal((html.match(/data-sidebar-session-row="root-1"/g) ?? []).length, 1);
   assert.equal((html.match(/data-sidebar-session-row="root-11"/g) ?? []).length, 1);
   assert.doesNotMatch(html, /data-sidebar-session-row="root-10"/);

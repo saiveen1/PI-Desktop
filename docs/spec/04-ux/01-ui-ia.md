@@ -301,8 +301,9 @@ destination, chat as the home surface, tools and permissions inline.
 - **Groups, labels and color marks**: each logical project has its own catalog
   shared across its roots. A session belongs to at most one conversation group;
   unassigned sessions appear under Ungrouped, and empty named groups remain
-  visible. Multiple descriptive labels render as chips without duplicating a
-  conversation or changing its group. The optional row color remains separate.
+  visible. Multiple descriptive labels render as compact color dots before the
+  title, with full names in the hover tooltip and accessible name, without
+  duplicating a conversation or changing its group. The optional row color remains separate.
   Group order follows its catalog, while running-first display is a stable
   projection of the current row order. Temporary and remote scopes retain
   independent catalogs; global pins stay flat. Folding only changes visibility;
