@@ -265,6 +265,15 @@ Native file and search tools enforce distinct path shapes (D208, ADR 0069):
   retain the optional user-installed `rg` backend and native fallback (D315,
   amended by the search-isolation ADR). Result modes and tag contracts remain.
 
+`Read` also reads local PNG, JPEG, GIF and WebP files as structured image blocks.
+Its model-facing description advertises this entry point: existing images do not
+need a browser screenshot. Text offsets, line limits and Edit anchors apply only
+to text files. The Host retains its file-signature, 10,000,000-byte and 8000-pixel
+longest-edge checks; missing, invalid or oversized files return explicit errors.
+The same permission, sensitive-path and containment rules apply to image reads.
+Runtime image-input admission and transcript previews are described in
+[Agent runtime](02-agent-runtime.md) and [tool image results](21-image-generation.md#tool-image-inspection-results).
+
 Workspace-relative paths in tool results use `/` for platform separators.
 On POSIX, a literal backslash in a filename remains a backslash so the result
 can be passed back to `Read` or `Edit`; Windows path separators are normalized

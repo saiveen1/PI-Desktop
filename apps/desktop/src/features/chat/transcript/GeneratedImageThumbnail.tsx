@@ -1,26 +1,32 @@
+import { useState } from "react";
+import type { ToolResultImage } from "../../../lib/tool-result-images";
 import { useTranslation } from "react-i18next";
 import { TooltipButton } from "../../../components/ui";
 import { useReferencedImageDataUrl } from "../../../lib/use-referenced-image-data-url";
 
-export type GeneratedImageRef = { path: string; mimeType?: string; index: number };
+export type GeneratedImageRef = ToolResultImage;
 
 export function GeneratedImageThumbnail({ image, selected, onSelect, className }: {
   image: GeneratedImageRef;
   selected: boolean;
-  onSelect: () => void;
+  onSelect: (trigger: HTMLButtonElement) => void;
   className: string;
 }) {
   const { t } = useTranslation();
-  const src = useReferencedImageDataUrl(image.path, image.mimeType);
+  const referencedSrc = useReferencedImageDataUrl(image.dataUrl ? null : image.path, image.mimeType);
+  const src = image.dataUrl ?? referencedSrc;
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const label = image.label ?? t("settings.generatedImage", { index: image.index + 1 });
   return (
     <TooltipButton
       type="button"
       className={className}
-      tooltip={t("settings.generatedImage", { index: image.index + 1 })}
+      tooltip={label}
       aria-current={selected ? "true" : undefined}
-      onClick={onSelect}
+      onClick={(event) => onSelect(event.currentTarget)}
     >
-      {src ? <img src={src} alt="" /> : <span aria-hidden="true">{image.index + 1}</span>}
+      {src && src !== failedSrc ? <img src={src} alt="" onError={() => setFailedSrc(src)} />
+        : <span role="status">{t("settings.imagePreviewUnavailable")}</span>}
     </TooltipButton>
   );
 }

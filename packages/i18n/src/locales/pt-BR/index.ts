@@ -5,6 +5,14 @@ import { sessionLabels, sessionGroups, sessionDelegation, delegationDetails } fr
 import { en, type EnglishCatalog } from "../en/index.js";
 
 export const ptBR = {
+  toolImages: {
+    title: "Imagens da ferramenta", image: "Imagem {{index}}", returned: "{{count}} imagens retornadas",
+    returned_one: "{{count}} imagem retornada", returned_other: "{{count}} imagens retornadas",
+    readHint: "Imagens retornadas pela ferramenta. Isso não significa que o modelo terminou de analisá-las.",
+    MODEL_NO_VISION: "O modelo usado nesta chamada não aceita imagens de entrada. As imagens não foram enviadas ao modelo.",
+    IMAGE_TOO_LARGE: "Algumas imagens excedem o limite de entrada e não podem ser enviadas ao modelo.",
+    IMAGE_INVALID: "Alguns dados de imagem são inválidos e não podem ser usados como entrada do modelo.",
+  },
   subagentControls,
   sessionLabels,
   sessionGroups,

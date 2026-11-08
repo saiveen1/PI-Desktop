@@ -997,9 +997,9 @@ describe("rebuildChainsFromTranscript settled copies and replay (ADR 0279)", () 
 });
 
 describe("chainRowsToMessages tool result content", () => {
-  // Long enough that stringifying the payload into a text block would dump
-  // image bytes into the resumed delegate prompt (#1073 / #1360).
-  const imageData = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ".repeat(20);
+  // A real PNG keeps restore parity meaningful: image bytes must remain on a
+  // provider image block rather than becoming JSON text.
+  const imageData = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==";
 
   function resumedToolResult(row: UiMessage) {
     const messages = chainRowsToMessages(

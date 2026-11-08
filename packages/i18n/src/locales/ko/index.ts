@@ -5,6 +5,14 @@ import { sessionLabels, sessionGroups, sessionDelegation, delegationDetails } fr
 import { en, type EnglishCatalog } from "../en/index.js";
 
 export const ko = {
+  toolImages: {
+    title: "도구 이미지", image: "이미지 {{index}}", returned: "이미지 {{count}}개 반환됨",
+    returned_one: "이미지 {{count}}개 반환됨", returned_other: "이미지 {{count}}개 반환됨",
+    readHint: "도구가 반환한 이미지입니다. 모델이 분석을 완료했다는 의미는 아닙니다.",
+    MODEL_NO_VISION: "이번 호출에 사용된 모델은 이미지 입력을 지원하지 않습니다. 이미지가 모델에 전송되지 않았습니다.",
+    IMAGE_TOO_LARGE: "일부 이미지가 입력 제한을 초과하여 모델에 전송할 수 없습니다.",
+    IMAGE_INVALID: "일부 이미지 데이터가 유효하지 않아 모델 입력으로 사용할 수 없습니다.",
+  },
   subagentControls,
   sessionLabels,
   sessionGroups,

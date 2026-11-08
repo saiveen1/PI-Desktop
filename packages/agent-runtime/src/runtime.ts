@@ -1,3 +1,4 @@
+import { activeToolSupportsImages } from "./tool-image-context.js";
 import { DEFAULT_DELEGATION_FAILURE_POLICY, type DelegationFailurePolicy } from "@pi-desktop/shared";
 import { DelegationMessages, subagentMessageReceipt, subagentMessageTaskId, subagentUserMessageId } from "./delegation-messages.js";
 import { isAgentSendSubagentMessageRequest, type AgentSendSubagentMessageRequest, type AgentSendSubagentMessageResponse } from "@pi-desktop/shared";
@@ -172,7 +173,7 @@ import {
   usageToPi,
 } from "./agent-messages.js";
 import {
-  hostContentBlockText,
+  normalizeToolResultContent,
   restoredToolResultContent,
 } from "./tool-result-content.js";
 import { withExplicitRequired } from "./tool-schema.js";
@@ -1687,30 +1688,6 @@ function selectRetainedUserMessages(
   return selected.reverse();
 }
 
-/**
- * JSON text fallback for a host result that produced no text blocks. Image
- * `data` and resource `blob` bytes stay off the text channel; type, mimeType,
- * and uri remain so the model still sees what was attached.
- */
-function withoutInlineBinary(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map((entry) => withoutInlineBinary(entry));
-  if (!isRecord(value)) return value;
-  const next: Record<string, unknown> = {};
-  for (const [key, entry] of Object.entries(value)) {
-    if (key === "data" && value.type === "image") continue;
-    if (key === "resource" && value.type === "resource" && isRecord(entry)) {
-      const resource: Record<string, unknown> = {};
-      for (const [resourceKey, resourceValue] of Object.entries(entry)) {
-        if (resourceKey === "blob") continue;
-        resource[resourceKey] = withoutInlineBinary(resourceValue);
-      }
-      next.resource = resource;
-      continue;
-    }
-    next[key] = withoutInlineBinary(entry);
-  }
-  return next;
-}
 
 /** Rebuild a pi-ai tool result from a persisted tool row. Rows that never
  * finished (app quit / abort mid-tool) restore as errored results so the
@@ -2427,7 +2404,11 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           });
         });
         return alignRetainedReasoningIdentity(
-          convertToLlm(this.dropDuplicateToolCalls(messages)), this.reasoningReplayIdentity(),
+          convertToLlm(
+            this.dropDuplicateToolCalls(messages),
+            this.agent.state.model.input.includes("image"),
+          ),
+          this.reasoningReplayIdentity(),
         );
       },
       prepareRequest: async ({ context }) => {
@@ -3458,11 +3439,11 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           return "Open an HTML file in PI-Desktop's built-in browser panel. `path` may be relative to a project folder or this session's scratch directory, or an absolute path inside those roots. No project is required for scratch previews. The preview live-reloads on later edits to the file or its sibling assets, so call once per page.";
         case "Read":
           return (
-            "Read a bounded window from an existing regular text file, never a directory. " +
-            "The result always includes `totalLines` so you know the file\'s scale upfront. " +
-            "`content` is line-numbered (`N:`) under a `[path#TAG]` header; `tag` is the whole-file 4-hex Edit anchor. " +
-            "`truncated` is true only when this window was cut short, not merely because the file continues. " +
-            "For files beyond the default window, use Grep to locate the target content first, then Read " +
+            "Read a bounded window from an existing regular text file, or inspect a local PNG, JPEG, GIF, or WebP image file; never a directory. " +
+            "Text results always include `totalLines` so you know the file's scale upfront. " +
+            "Text `content` is line-numbered (`N:`) under a `[path#TAG]` header; `tag` is the whole-file 4-hex Edit anchor. " +
+            "For text results, `truncated` is true only when this window was cut short, not merely because the file continues. " +
+            "For text files beyond the default window, use Grep to locate the target content first, then Read " +
             "the relevant range with `offset` and `limit`. Activate and use Glob " +
             "when a directory must be listed or the file name is uncertain." +
             `${scratchPathHint}${externalPathHint}`
@@ -3903,92 +3884,32 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           }
         }
         const rawContent = result.content;
-        const imageBlocks: Array<{ type: "image"; data: string; mimeType: string }> = [];
-        let text: string;
+        const normalized = normalizeToolResultContent(
+          rawContent,
+          activeToolSupportsImages(this.agent.state.model.input.includes("image")),
+          true,
+        );
+        const imageBlocks = normalized.content.filter(
+          (block): block is Extract<typeof block, { type: "image" }> => block.type === "image",
+        );
+        const textParts = normalized.content.flatMap((block) =>
+          block.type === "text" ? [block.text] : [],
+        );
+        let text = textParts.join("\n");
+        if (!text && imageBlocks.length > 0) text = "[Image result attached.]";
         let details: unknown = rawContent;
-        const vision = visionFromModelConfig(this.provider.modelConfig);
-        // Collect image blocks from a content-block array; only well-formed
-        // image entries ({ type, data, mimeType }) are accepted.
-        const collectImageBlocks = (blocks: unknown[]): void => {
-          for (const block of blocks) {
-            if (
-              isRecord(block) &&
-              block.type === "image" &&
-              typeof block.data === "string" &&
-              typeof block.mimeType === "string"
-            ) {
-              if (vision) {
-                imageBlocks.push({
-                  type: "image",
-                  data: block.data,
-                  mimeType: block.mimeType,
-                });
-              }
-            }
-          }
-        };
-        if (typeof rawContent === "string") {
-          text = rawContent;
-        } else if (Array.isArray(rawContent)) {
-          // Plugin tools may return a bare content-block array
-          // ([{ type: "text" }, { type: "image" }]); render the text blocks
-          // and hand images to the model instead of stringifying (#1360).
-          const textParts: string[] = [];
-          for (const block of rawContent) {
-            const blockText = hostContentBlockText(block);
-            if (blockText !== undefined) textParts.push(blockText);
-          }
-          collectImageBlocks(rawContent);
-          text =
-            textParts.join("\n") ||
-            JSON.stringify(withoutInlineBinary(rawContent), null, 2);
-          details = { blocks: rawContent, imageCount: imageBlocks.length };
-        } else if (isRecord(rawContent) && Array.isArray(rawContent.content)) {
-          // MCP tools return `content: [{ type: "image" | "text", ... }]`.
-          const contentBlocks = rawContent.content;
-          const textParts: string[] = [];
-          for (const block of contentBlocks) {
-            const blockText = hostContentBlockText(block);
-            if (blockText !== undefined) textParts.push(blockText);
-          }
-          collectImageBlocks(contentBlocks);
-          text =
-            textParts.join("\n") ||
-            JSON.stringify(withoutInlineBinary(rawContent), null, 2);
-          details = { ...rawContent, imageCount: imageBlocks.length };
-        } else if (isRecord(rawContent) && Array.isArray(rawContent.images)) {
-          text =
-            typeof rawContent.text === "string"
-              ? rawContent.text
-              : JSON.stringify(
-                  { ...rawContent, images: undefined },
-                  null,
-                  2,
-                );
-          for (const image of rawContent.images) {
-            if (
-              !isRecord(image) ||
-              typeof image.data !== "string" ||
-              typeof image.mimeType !== "string"
-            ) {
-              continue;
-            }
-            if (vision) {
-              imageBlocks.push({
-                type: "image",
-                data: image.data,
-                mimeType: image.mimeType,
-              });
-            }
-          }
-          const { images: _images, ...rest } = rawContent;
+        if (Array.isArray(rawContent)) {
           details = {
-            ...rest,
-            ...(typeof rawContent.path === "string" ? { path: rawContent.path } : {}),
+            blocks: rawContent,
             imageCount: imageBlocks.length,
+            ...(normalized.imageInput ? { imageInput: normalized.imageInput } : {}),
           };
-        } else {
-          text = JSON.stringify(rawContent, null, 2);
+        } else if (isRecord(rawContent)) {
+          details = {
+            ...rawContent,
+            ...(Array.isArray(rawContent.content) || Array.isArray(rawContent.images) ? { imageCount: imageBlocks.length } : {}),
+            ...(normalized.imageInput ? { imageInput: normalized.imageInput } : {}),
+          };
         }
         if (!result.ok) this.failedHostToolCalls.add(toolCallId);
         // A visualization fragment gets one cheap static check in its Write

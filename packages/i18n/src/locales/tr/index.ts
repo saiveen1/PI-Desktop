@@ -5,6 +5,14 @@ import { sessionLabels, sessionGroups, sessionDelegation, delegationDetails } fr
 import { en, type EnglishCatalog } from "../en/index.js";
 
 export const tr = {
+  toolImages: {
+    title: "Araç görselleri", image: "Görsel {{index}}", returned: "{{count}} görsel döndürüldü",
+    returned_one: "{{count}} görsel döndürüldü", returned_other: "{{count}} görsel döndürüldü",
+    readHint: "Aracın döndürdüğü görsellerdir. Bu, modelin analizini tamamladığı anlamına gelmez.",
+    MODEL_NO_VISION: "Bu çağrıda kullanılan model görsel girdisini desteklemiyor. Görseller modele gönderilmedi.",
+    IMAGE_TOO_LARGE: "Bazı görseller girdi sınırını aşıyor ve modele gönderilemiyor.",
+    IMAGE_INVALID: "Bazı görsel verileri geçersiz ve model girdisi olarak kullanılamıyor.",
+  },
   subagentControls,
   sessionLabels,
   sessionGroups,

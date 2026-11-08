@@ -68,6 +68,23 @@ test("Read renders file content as code with a path-derived language", () => {
   assert.equal(content.text, "export const App = () => null;\n");
 });
 
+test("text-only Read preserves JSON source that happens to describe an image", () => {
+  const content = '{ "type": "image", "mimeType": "image/png", "data": "fixture-data" }';
+  const blocks = buildToolPresentation({
+    toolName: "Read", toolResult: envelope({ path: "fixture.json", content }),
+  });
+  assert.equal(blocks[0].text, content);
+});
+
+test("image Read and plugin details hide binary while retaining the image result", () => {
+  const image = { type: "image", mimeType: "image/png", data: "aW1hZ2U=" };
+  for (const details of [{ images: [image] }, { content: [image] }, { blocks: [image] }]) {
+    const message = { toolName: "Read", toolResult: envelope(details) };
+    assert.ok(!JSON.stringify(buildToolPresentation(message)).includes(image.data));
+    assert.ok(JSON.stringify(message).includes(image.data));
+  }
+});
+
 test("Read keeps oversized or exceptionally long-line content as plain text", () => {
   for (const content of ["x".repeat(100_001), "x".repeat(2_001)]) {
     const blocks = buildToolPresentation(

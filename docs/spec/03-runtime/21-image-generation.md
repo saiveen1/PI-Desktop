@@ -137,6 +137,38 @@ previews, editing a generated file, collapsed results, and setup navigation.
 Live verification is opt-in via `scripts/test-image-generation-live.mjs`, limited
 to one generation plus one edit and never a default test command.
 
+## Tool image inspection results
+
+The default transcript recognizes actual image content and typed references in
+tool results, not a `GenerateImages` tool-name allowlist. Host `Read.images`, MCP
+`content` blocks, bare plugin content arrays and restored runtime envelopes share
+one compact presentation. Generated-result contracts retain their existing card,
+download, setup navigation and partial-failure behavior.
+
+Each inspection result shows a localized image count, the originating tool and
+80-pixel thumbnails outside the turn's process disclosure. Expanding tool details
+does not duplicate the gallery or dump typed Base64 image fields. Mirrored copies
+inside one result are displayed once. Different tool calls and turns retain their
+own results; subagent turns use the same presentation.
+
+The count means images returned by the tool, not model analysis completed. Image
+input diagnostics explicitly distinguish unsupported vision, invalid data and
+input limits. Failed reads without image content never produce a success count.
+The original retained image remains viewable when model input is unavailable.
+
+Thumbnails reuse the full-window image viewer, keyboard previous/next, Escape,
+focus restoration, zoom and download. Typed inline raster bytes are displayed
+without rereading the source file. File references use the existing session-bound
+contained image reader; no network URLs or arbitrary text paths are inferred as
+images. Missing/unreadable previews have a visible unavailable state. Viewer and
+selection state reset when the owning session or tool message changes.
+
+History uses the existing lossless tool-result storage and decoded image blocks;
+there is no new attachment store, persistence format or migration. Persisted
+inline images remain viewable after their original file is removed. Reference-only
+results depend on the referenced resource remaining available. Tests use isolated
+profiles and synthetic images, not the installed Desktop or a paid provider.
+
 ## Pi 1.1.0 operation boundary
 
 Image generation and edits execute through account-scoped Pi `Models.generateImages`.

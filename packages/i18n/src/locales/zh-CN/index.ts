@@ -5,6 +5,14 @@ import { sessionLabels, sessionGroups, sessionDelegation, delegationDetails } fr
 import { en, type EnglishCatalog } from "../en/index.js";
 
 export const zhCN = {
+  toolImages: {
+    title: "工具图像", image: "图像 {{index}}", returned: "已返回 {{count}} 张图像",
+    returned_one: "已返回 {{count}} 张图像", returned_other: "已返回 {{count}} 张图像",
+    readHint: "这是工具返回的图像，不代表模型已经完成分析。",
+    MODEL_NO_VISION: "本次调用使用的模型不支持图像输入，图片未送入模型。",
+    IMAGE_TOO_LARGE: "部分图片超出图像输入限制，无法送入模型。",
+    IMAGE_INVALID: "部分图片数据无效，无法用于模型输入。",
+  },
   subagentControls,
   sessionLabels,
   sessionGroups,

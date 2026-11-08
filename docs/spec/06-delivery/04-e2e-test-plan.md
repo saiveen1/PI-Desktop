@@ -19501,6 +19501,7 @@ the latest destination. These assertions measure work counts, not device FPS.
 | --- | --- | --- | --- |
 | E2E-IMAGE-generation-and-editing | Image capability and recovery | 03-runtime/21-image-generation | Host and UI suites above |
 | E2E-IMAGES-result-download | Download and locate a generated result | 03-runtime/21-image-generation | `scripts/e2e-image-chat.mjs` |
+| E2E-IMAGES-tool-inspection | Local read, truthful input feedback and history previews | 03-runtime/02-agent-runtime; 03-runtime/21-image-generation | Runtime image tests; `tool-result-images-user-path.test.mjs` |
 
 ### E2E-IMAGES-result-download
 
@@ -19511,6 +19512,33 @@ the latest destination. These assertions measure work counts, not device FPS.
 - **Acceptance:** Result actions and image browsing work without changing image storage or preview access.
 - **Milestone:** Post-MVP.
 - **Status:** Download and viewer interactions automated by `scripts/e2e-image-chat.mjs`; folder reveal uses the existing contained IPC path.
+
+### E2E-IMAGES-tool-inspection
+
+- **Preconditions:** Current task candidate; isolated test profile and synthetic
+  PNG/JPEG inputs; stub model transport. No live Desktop profile or paid provider.
+- **Steps:** Read a saved image through the existing Read tool. Inspect the next
+  vision-model request for actual image blocks. Repeat with a text-only model,
+  invalid image data and oversized input. Return two images through MCP/plugin
+  content blocks, including mirrored copies in details. Reload the transcript,
+  open thumbnails, navigate with left/right, close with Escape, switch sessions
+  with identical message IDs, and open process details. Repeat with missing refs
+  and a generated-image batch containing both successes and failures.
+- **Expected:** Image bytes reach a compatible model; unsupported/invalid/oversize
+  images produce explicit omission feedback without claiming analysis. Compact
+  thumbnails remain associated with the originating call and appear only once.
+  Persisted inline bytes are viewable without the source file. Keyboard selection,
+  download targets, focus restoration and session isolation work. Missing resources
+  display an unavailable state without a download. Tool details contain no typed
+  binary dump. Generation retains its original cards and error/setup actions.
+- **Specs:** 03-runtime/02-agent-runtime; 03-runtime/03-tools-and-permissions;
+  03-runtime/21-image-generation.
+- **Acceptance:** Discoverable local image reads and honest, recoverable image history.
+- **Milestone:** Personal-edition maintenance.
+- **Status:** Runtime request/content tests and desktop parser tests;
+  `apps/desktop/test/tool-result-images-user-path.test.mjs` exercises production
+  React components in isolated Chromium with API-boundary fixtures. This is not
+  a live-provider analysis test or an installed-build verification.
 
 #### E2E-CHAT-parenthesized-url: Complete URLs in user messages
 

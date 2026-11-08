@@ -1,3 +1,4 @@
+import { toolResultImageSet, withoutToolImageData } from "./tool-result-images";
 import type { UiMessage } from "@pi-desktop/shared";
 import {
   delegationLifecycleKind,
@@ -743,7 +744,9 @@ export function buildToolPresentation(
   const action = getToolAction(message.toolName);
   const args = asRecord(message.toolArgs);
   const payload = toolResultPayload(message);
-  const blocks = resultBlocks(action, message, args, payload, options);
+  const images = toolResultImageSet(message);
+  const displayPayload = images.images.length || images.issueCodes.length ? withoutToolImageData(payload) : payload;
+  const blocks = resultBlocks(action, message, args, displayPayload, options);
   if (!args) return blocks;
 
   // Failed lifecycle calls need their selectors visible so the next call can correct them.

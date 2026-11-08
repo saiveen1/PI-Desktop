@@ -3,7 +3,7 @@ import { DelegationSelectionSummary } from "./DelegationSelectionSummary";
 import { PlanHistoryCard } from "./PlanHistoryCard";
 import { planSubmission } from "../../../lib/plan-history";
 import { reviewChangeFromMessage } from "../../../lib/workspace-review";
-import { GeneratedImages } from "./GeneratedImages";
+import { ToolResultImages } from "./ToolResultImages";
 import "../../../styles/generated-images.css";
 import { memo, useCallback, useId, useLayoutEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
@@ -342,7 +342,7 @@ function HostToolRow({
           <ToolDetailBlocks blocks={blocks} plain={runHead} streaming={status === "running"} />
         </div>
       ) : null}
-      {!imagesInTurn && <GeneratedImages message={message} />}
+      {!imagesInTurn && <ToolResultImages message={message} />}
       {open && delegate ? (
         <SubagentRunRows
           run={delegate}

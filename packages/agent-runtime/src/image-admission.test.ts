@@ -1,7 +1,7 @@
 import type { Message } from "@earendil-works/pi-ai";
 import type { UiMessage } from "@pi-desktop/shared";
 import { describe, expect, it } from "vitest";
-import { omitOversizedImages } from "./image-admission.js";
+import { admitImageInput, omitInadmissibleImages, omitOversizedImages } from "./image-admission.js";
 import { convertToLlm } from "./pi-runtime-messages.js";
 import { toolResultFromUi } from "./runtime.js";
 
@@ -45,14 +45,30 @@ describe("omitOversizedImages", () => {
       { role: "user", content: "plain text", timestamp: 1 },
       {
         role: "user",
-        content: [
-          { type: "image", data: NORMAL, mimeType: "image/png" },
-          { type: "image", data: "not-an-image", mimeType: "image/png" },
-        ],
+        content: [{ type: "image", data: NORMAL, mimeType: "image/png" }],
         timestamp: 2,
       },
     ];
     expect(omitOversizedImages(messages)).toBe(messages);
+  });
+
+  it("replaces malformed input with an explicit omission notice", () => {
+    expect(admitImageInput({ type: "image", data: "not-an-image", mimeType: "image/png" }, true))
+      .toEqual({ issue: { code: "IMAGE_INVALID", message: "[Image omitted: image input is invalid.]" } });
+  });
+
+  it("explains no-vision model omissions without retaining image blocks", () => {
+    const [message] = omitInadmissibleImages([{
+      role: "toolResult",
+      toolCallId: "call-1",
+      toolName: "Read",
+      isError: false,
+      content: [{ type: "image", data: NORMAL, mimeType: "image/png" }],
+      timestamp: 1,
+    }], false);
+    expect(message?.content).toEqual([
+      { type: "text", text: "[Image omitted: the selected model does not support image input.]" },
+    ]);
   });
 
   it("heals a restored session whose Read result holds an oversized image", () => {
@@ -70,12 +86,13 @@ describe("omitOversizedImages", () => {
       },
     } as unknown as UiMessage;
     const restored = toolResultFromUi(row, 1);
-    expect(restored.content.some((block) => block.type === "image")).toBe(true);
+    expect(restored.content).toEqual([
+      { type: "text", text: expect.stringContaining("page.png") },
+      { type: "text", text: NOTICE },
+    ]);
 
     const [outgoing] = convertToLlm([restored]);
     expect(outgoing?.role).toBe("toolResult");
-    const content = outgoing?.content as Array<{ type: string; text?: string }>;
-    expect(content.some((block) => block.type === "image")).toBe(false);
-    expect(content.at(-1)).toEqual({ type: "text", text: NOTICE });
+    expect(outgoing?.content).toEqual(restored.content);
   });
 });

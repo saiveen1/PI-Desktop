@@ -1,7 +1,7 @@
 import type { Message } from "@earendil-works/pi-ai";
 import { hostedSearchReplayProjection } from "@earendil-works/pi-ai/utils/hosted-search";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import { omitOversizedImages } from "./image-admission.js";
+import { omitInadmissibleImages } from "./image-admission.js";
 
 export type CompactionSummaryMessage = {
   role: "compactionSummary";
@@ -94,7 +94,10 @@ function bashExecutionToText(message: BashExecutionMessage): string {
 }
 
 /** Convert desktop-only transcript rows into provider messages. */
-export function convertToLlm(messages: AgentMessage[]): Message[] {
+export function convertToLlm(
+  messages: AgentMessage[],
+  supportsVision = true,
+): Message[] {
   const converted: Message[] = [];
   for (const message of messages) {
     const runtimeMessage = message as RuntimeMessage;
@@ -147,8 +150,8 @@ export function convertToLlm(messages: AgentMessage[]): Message[] {
     }
   }
   // Every provider request passes through here, including restored history
-  // that already holds an image the provider would reject (issue #1913).
-  return omitOversizedImages(converted);
+  // that already holds an image the active model cannot accept.
+  return omitInadmissibleImages(converted, supportsVision);
 }
 
 function asProviderMessage(message: unknown): Message {

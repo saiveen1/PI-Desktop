@@ -42,9 +42,32 @@ crates/host-core (tool execution + permissions)
 - returns normalized tool results
 
 The Node runtime normalizes text and image content from host tool results,
-including MCP `content` blocks and bare plugin content-block arrays. Well-formed
-image blocks are passed to vision-capable models and retained when tool history
-is restored; malformed image entries are ignored without failing the tool call.
+including MCP `content` blocks, bare plugin content-block arrays, and Host
+`Read` image results. `Read` remains line-windowed for text and also describes
+its local PNG/JPEG/GIF/WebP inspection path. The original accepted source bytes
+remain in the result details (`images`, MCP `content`, or plugin `blocks`) for
+the transcript/UI; binary bytes are never stringified into model text.
+
+Every candidate image is admitted at the shared provider boundary: recognized
+PNG/JPEG/GIF/WebP bytes with matching MIME, the 10 MB byte ceiling, the 8000 px
+longest-edge ceiling, and the selected model's image-input capability. The
+model-visible content retains only admitted image blocks; malformed, oversized,
+and text-only-model candidates become an explicit text omission notice without
+failing the tool. A result that had candidates records
+`details.imageInput: { imageCount, includedCount, issues }`, where each issue
+is `{ index, code: "MODEL_NO_VISION" | "IMAGE_TOO_LARGE" | "IMAGE_INVALID", message }`.
+`index` is the zero-based candidate order and `includedCount` means prepared for
+the model, not that an image was analysed. Restored history uses the same source
+normalization, and the final provider projection reapplies the active model's
+capability so a text-only replay gives the model the same clear omission notice.
+The existing `details.imageCount` remains available as the admitted-image count.
+Delegated tools resolve capability from the invoking delegate, including a
+fallback model, through an async execution scope rather than the parent model.
+Parallel calls cannot inherit another delegate's capability. The final request
+projection still checks the active model independently.
+Transport contract tests (`tool-image-input.test.ts`) capture actual Responses,
+Chat Completions and Anthropic request bodies at a stub fetch boundary. They do
+not call a real provider or claim that a model completed image analysis.
 Embedded MCP text resources contribute their `resource.text`, and MCP resource
 links contribute a one-line `[resource link]` reference, to the model-visible
 text alongside sibling text blocks; binary resources are not inlined. When no

@@ -3,6 +3,14 @@ import { approvalCenter } from "./delegation-approval.js";
 import { delegationReliabilitySettings, delegationDiagnostics } from "./delegation-reliability.js";
 import { sessionLabels, sessionGroups, sessionDelegation, delegationDetails } from "./session-management.js";
 export const en = {
+  toolImages: {
+    title: "Tool images", image: "Image {{index}}", returned: "Returned {{count}} images",
+    returned_one: "Returned {{count}} image", returned_other: "Returned {{count}} images",
+    readHint: "Images returned by this tool. This does not mean the model has finished analyzing them.",
+    MODEL_NO_VISION: "The model used for this call does not support image input. Images were not sent to the model.",
+    IMAGE_TOO_LARGE: "Some images exceed the image input limit and cannot be sent to the model.",
+    IMAGE_INVALID: "Some image data is invalid and cannot be used as model input.",
+  },
   subagentControls,
   sessionLabels,
   sessionGroups,

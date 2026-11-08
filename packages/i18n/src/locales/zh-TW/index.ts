@@ -5,6 +5,14 @@ import { sessionLabels, sessionGroups, sessionDelegation, delegationDetails } fr
 import { en, type EnglishCatalog } from "../en/index.js";
 
 export const zhTW = {
+  toolImages: {
+    title: "工具圖像", image: "圖像 {{index}}", returned: "已傳回 {{count}} 張圖像",
+    returned_one: "已傳回 {{count}} 張圖像", returned_other: "已傳回 {{count}} 張圖像",
+    readHint: "這是工具傳回的圖像，不代表模型已完成分析。",
+    MODEL_NO_VISION: "此次呼叫使用的模型不支援圖像輸入，圖片未傳入模型。",
+    IMAGE_TOO_LARGE: "部分圖片超過圖像輸入限制，無法傳入模型。",
+    IMAGE_INVALID: "部分圖片資料無效，無法用於模型輸入。",
+  },
   subagentControls,
   sessionLabels,
   sessionGroups,

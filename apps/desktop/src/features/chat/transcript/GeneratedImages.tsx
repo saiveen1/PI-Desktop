@@ -54,7 +54,6 @@ export function GeneratedImages({ message }: { message: UiMessage }) {
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const focusReturnRef = useRef<HTMLElement | null>(null);
-  if (message.toolName !== "GenerateImages") return null;
   const payload = toolResultPayload(message);
   const record =
     payload && typeof payload === "object" ? (payload as Record<string, unknown>) : null;

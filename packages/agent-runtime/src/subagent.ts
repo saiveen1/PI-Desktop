@@ -1,3 +1,4 @@
+import { withToolImageCapability } from "./tool-image-context.js";
 import { SubagentConversation } from "./subagent-conversation.js";
 /**
  * Subagents: bounded delegate agent loops spawned by the `Task` tool (ADR 0062).
@@ -373,7 +374,10 @@ export class SubagentRun {
       streamFn: binding.streamFn,
       getApiKey: binding.getApiKey,
       convertToLlm: (messages) =>
-        convertToLlm(this.dedupeToolCalls(messages)),
+        convertToLlm(
+          this.dedupeToolCalls(messages),
+          this.agent.state.model.input.includes("image"),
+        ),
       // The same turn-boundary context protection the session has (ADR 0299):
       // re-estimate at each boundary, compact before the next request, degrade
       // before failing. The budget derives from this run's resolved model.
@@ -410,7 +414,7 @@ export class SubagentRun {
         tools: tools.map((tool) =>
           withDynamicTaskExecutionMode(
             {
-              ...tool,
+              ...withToolImageCapability(tool, () => this.agent.state.model.input.includes("image")),
               executionMode:
                 tool.executionMode === "parallel"
                   ? toolExecutionMode(tool.name, true)

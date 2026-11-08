@@ -27,7 +27,7 @@ export function GeneratedImageViewer({ images, selectedIndex, onSelect, onClose,
   const localToolsAllowed = useChatSessionCapability("canUseLocalTools");
   const dialogRef = useRef<HTMLDialogElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
-  const knownNaturalSizesRef = useRef(new Map<string, { width: number; height: number }>());
+  const knownNaturalSizesRef = useRef(new Map<number, { width: number; height: number }>());
   const navigationRequestRef = useRef(0);
   const pendingIndexRef = useRef<number | null>(null);
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
@@ -35,9 +35,11 @@ export function GeneratedImageViewer({ images, selectedIndex, onSelect, onClose,
   const [manualZoom, setManualZoom] = useState<{ src: string; value: number } | null>(null);
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const selected = images[selectedIndex];
-  const src = useReferencedImageDataUrl(selected?.path, selected?.mimeType);
+  const referencedSrc = useReferencedImageDataUrl(selected?.dataUrl ? null : selected?.path, selected?.mimeType);
+  const src = selected?.dataUrl ?? referencedSrc;
+  const label = selected?.label ?? t("settings.generatedImage", { index: (selected?.index ?? 0) + 1 });
   const size = selected && src && failedSrc !== src
-    ? knownNaturalSizesRef.current.get(selected.path) ?? (natural?.src === src ? natural : null)
+    ? knownNaturalSizesRef.current.get(selected.index) ?? (natural?.src === src ? natural : null)
     : null;
   const fit = size && viewport.width > 0 && viewport.height > 0
     ? Math.min(1, viewport.width / size.width, viewport.height / size.height)
@@ -77,7 +79,7 @@ export function GeneratedImageViewer({ images, selectedIndex, onSelect, onClose,
       return;
     }
     pendingIndexRef.current = nextIndex;
-    const thumbnail = dialogRef.current?.querySelectorAll<HTMLImageElement>(".generated-image-viewer-thumb img")[nextIndex];
+    const thumbnail = dialogRef.current?.querySelectorAll(".generated-image-viewer-thumb")[nextIndex]?.querySelector("img");
     if (thumbnail?.src) {
       try {
         await thumbnail.decode();
@@ -86,7 +88,7 @@ export function GeneratedImageViewer({ images, selectedIndex, onSelect, onClose,
       }
       if (request !== navigationRequestRef.current) return;
       if (thumbnail.naturalWidth > 0 && thumbnail.naturalHeight > 0) {
-        knownNaturalSizesRef.current.set(images[nextIndex].path, {
+        knownNaturalSizesRef.current.set(images[nextIndex].index, {
           width: thumbnail.naturalWidth,
           height: thumbnail.naturalHeight,
         });
@@ -109,7 +111,7 @@ export function GeneratedImageViewer({ images, selectedIndex, onSelect, onClose,
     if (src) setManualZoom({ src, value: Math.min(4, Math.max(Math.min(0.1, fit), value)) });
   };
   const reveal = async () => {
-    if (!localToolsAllowed || !nativeFilesAllowed || !selected) return;
+    if (!localToolsAllowed || !nativeFilesAllowed || !selected?.path) return;
     try {
       await api.fsReveal(selected.path, sessionId);
     } catch {
@@ -122,7 +124,7 @@ export function GeneratedImageViewer({ images, selectedIndex, onSelect, onClose,
     <dialog
       ref={dialogRef}
       className="generated-image-viewer"
-      aria-label={t("settings.generatedImage", { index: selected.index + 1 })}
+      aria-label={label}
       onCancel={(event) => { event.preventDefault(); closeViewer(); }}
       onKeyDown={(event) => {
         event.stopPropagation();
@@ -134,28 +136,28 @@ export function GeneratedImageViewer({ images, selectedIndex, onSelect, onClose,
     >
       <header className="generated-image-viewer-header">
         <TooltipButton type="button" autoFocus onClick={closeViewer} tooltip={t("common.close")}><IconClose size={18} /></TooltipButton>
-        <strong>{t("settings.generatedImage", { index: selected.index + 1 })}</strong>
+        <strong>{label}</strong>
         <div className="generated-image-viewer-header-actions">
-          <TooltipButton type="button" onClick={() => { closeViewer(); void openFile(selected.path); }} tooltip={t("chat.previewFile")}><IconExternal size={18} /></TooltipButton>
-          {nativeFilesAllowed ? <TooltipButton type="button" onClick={() => void reveal()} tooltip={t("settings.revealGeneratedImage")}><IconFolder size={18} /></TooltipButton> : null}
-          {src && downloadName ? <a href={src} download={downloadName} aria-label={t("settings.downloadGeneratedImage")} title={t("settings.downloadGeneratedImage")}><IconDownload size={18} /></a> : null}
+          {selected.path ? <TooltipButton type="button" onClick={() => { closeViewer(); void openFile(selected.path); }} tooltip={t("chat.previewFile")}><IconExternal size={18} /></TooltipButton> : null}
+          {nativeFilesAllowed && selected.path ? <TooltipButton type="button" onClick={() => void reveal()} tooltip={t("settings.revealGeneratedImage")}><IconFolder size={18} /></TooltipButton> : null}
+          {src && failedSrc !== src && downloadName ? <a href={src} download={downloadName} aria-label={t("settings.downloadGeneratedImage")} title={t("settings.downloadGeneratedImage")}><IconDownload size={18} /></a> : null}
         </div>
       </header>
       <div className="generated-image-viewer-body">
         {images.length > 1 ? <nav className="generated-image-viewer-thumbs" aria-label={t("chat.imagePreview.title")}>
-          {images.map((image, index) => <GeneratedImageThumbnail key={image.path} image={image} selected={index === selectedIndex} onSelect={() => void selectImage(index)} className="generated-image-viewer-thumb" />)}
+          {images.map((image, index) => <GeneratedImageThumbnail key={image.index} image={image} selected={index === selectedIndex} onSelect={() => void selectImage(index)} className="generated-image-viewer-thumb" />)}
         </nav> : null}
         <div className="generated-image-viewer-viewport" ref={viewportRef}>
           {src && failedSrc !== src ? <img
             src={src}
-            alt={t("settings.generatedImage", { index: selected.index + 1 })}
+            alt={label}
             draggable={false}
             data-sized={size ? "true" : undefined}
             style={size ? { width: size.width * zoom, height: size.height * zoom } : undefined}
             onLoad={(event) => {
               const { naturalWidth: width, naturalHeight: height } = event.currentTarget;
               if (width > 0 && height > 0) {
-                knownNaturalSizesRef.current.set(selected.path, { width, height });
+                knownNaturalSizesRef.current.set(selected.index, { width, height });
                 setNatural({ src, width, height });
               }
             }}

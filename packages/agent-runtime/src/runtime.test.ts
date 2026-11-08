@@ -13902,6 +13902,16 @@ describe("DesktopAgentRuntime summary conversation key", () => {
 
 describe("toolResultFromUi image restoration (issue #1073)", () => {
   const timestamp = 1;
+  const IMAGE_DATA = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==";
+
+  const pngBase64 = (width: number, height: number): string => {
+    const bytes = Buffer.alloc(33);
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]).copy(bytes);
+    bytes.write("IHDR", 12, "latin1");
+    bytes.writeUInt32BE(width, 16);
+    bytes.writeUInt32BE(height, 20);
+    return bytes.toString("base64");
+  };
 
   it("restores a host Read image result as real image content blocks", () => {
     const row = {
@@ -13915,7 +13925,7 @@ describe("toolResultFromUi image restoration (issue #1073)", () => {
       toolResult: {
         path: "shot.png",
         text: "Image file shot.png (17 bytes, image/png); the image is attached to this result.",
-        images: [{ data: "cG5nLWJ5dGVz", mimeType: "image/png" }],
+        images: [{ data: IMAGE_DATA, mimeType: "image/png" }],
       },
       toolStatus: "success" as const,
       isError: false,
@@ -13923,11 +13933,11 @@ describe("toolResultFromUi image restoration (issue #1073)", () => {
     const restored = toolResultFromUi(row, timestamp);
     expect(restored.content).toEqual([
       { type: "text", text: expect.stringContaining("shot.png") },
-      { type: "image", data: "cG5nLWJ5dGVz", mimeType: "image/png" },
+      { type: "image", data: IMAGE_DATA, mimeType: "image/png" },
     ]);
   });
 
-  it("drops malformed image entries instead of failing the restore", () => {
+  it("records malformed image omissions instead of silently dropping them", () => {
     const row = {
       id: "call-2",
       role: "tool" as const,
@@ -13943,7 +13953,12 @@ describe("toolResultFromUi image restoration (issue #1073)", () => {
       isError: false,
     };
     const restored = toolResultFromUi(row, timestamp);
-    expect(restored.content).toEqual([{ type: "text", text: expect.stringContaining("broken.png") }]);
+    expect(restored.content).toEqual([
+      { type: "text", text: expect.stringContaining("broken.png") },
+      { type: "text", text: "[Image omitted: image input is invalid.]" },
+      { type: "text", text: "[Image omitted: image input is invalid.]" },
+      { type: "text", text: "[Image omitted: image input is invalid.]" },
+    ]);
   });
 
   it("restores a bare plugin content-block array without flattening it to JSON (#1360)", () => {
@@ -13958,7 +13973,7 @@ describe("toolResultFromUi image restoration (issue #1073)", () => {
       // object with `content` or a top-level `images` field.
       toolResult: [
         { type: "text", text: "here is the screenshot" },
-        { type: "image", data: "cG5nLWJ5dGVz", mimeType: "image/png" },
+        { type: "image", data: IMAGE_DATA, mimeType: "image/png" },
       ],
       toolStatus: "success" as const,
       isError: false,
@@ -13966,7 +13981,7 @@ describe("toolResultFromUi image restoration (issue #1073)", () => {
     const restored = toolResultFromUi(row, timestamp);
     expect(restored.content).toEqual([
       { type: "text", text: "here is the screenshot" },
-      { type: "image", data: "cG5nLWJ5dGVz", mimeType: "image/png" },
+      { type: "image", data: IMAGE_DATA, mimeType: "image/png" },
     ]);
   });
 
@@ -13996,7 +14011,7 @@ describe("toolResultFromUi image restoration (issue #1073)", () => {
       uri: "https://raw.githubusercontent.com/acme/app/main/big.json",
       name: "big.json",
     },
-    { type: "image" as const, data: "cG5nLWJ5dGVz", mimeType: "image/png" },
+    { type: "image" as const, data: IMAGE_DATA, mimeType: "image/png" },
   ];
 
   it.each([
@@ -14059,7 +14074,7 @@ describe("toolResultFromUi image restoration (issue #1073)", () => {
           type: "text",
           text: "[resource link] big.json: https://raw.githubusercontent.com/acme/app/main/big.json",
         },
-        { type: "image", data: "cG5nLWJ5dGVz", mimeType: "image/png" },
+        { type: "image", data: IMAGE_DATA, mimeType: "image/png" },
       ]);
     },
   );
@@ -14102,7 +14117,7 @@ describe("toolResultFromUi image restoration (issue #1073)", () => {
       {
         content: [
           { type: "text", text: "MCP returned a screenshot" },
-          { type: "image", data: "cG5nLWJ5dGVz", mimeType: "image/png" },
+          { type: "image", data: IMAGE_DATA, mimeType: "image/png" },
         ],
         isError: false,
       },
@@ -14111,7 +14126,7 @@ describe("toolResultFromUi image restoration (issue #1073)", () => {
       "plugin bare content-block array",
       [
         { type: "text", text: "Plugin returned a screenshot" },
-        { type: "image", data: "cG5nLWJ5dGVz", mimeType: "image/png" },
+        { type: "image", data: IMAGE_DATA, mimeType: "image/png" },
       ],
     ],
   ])("normalizes %s into model image blocks", async (_shape, rawContent) => {
@@ -14133,11 +14148,13 @@ describe("toolResultFromUi image restoration (issue #1073)", () => {
         : "Plugin returned a screenshot";
     const expected = [
       { type: "text", text: expectedText },
-      { type: "image", data: "cG5nLWJ5dGVz", mimeType: "image/png" },
+      { type: "image", data: IMAGE_DATA, mimeType: "image/png" },
     ];
 
     expect(result.content).toEqual(expected);
-    expect(result.details).toMatchObject({ imageCount: 1 });
+    expect(result.details).toMatchObject({
+      imageInput: { imageCount: 1, includedCount: 1, issues: [] },
+    });
 
     const restored = toolResultFromUi(
       {
@@ -14162,14 +14179,14 @@ describe("toolResultFromUi image restoration (issue #1073)", () => {
       "MCP content property",
       {
         content: [
-          { type: "image", data: "cG5nLWJ5dGVz", mimeType: "image/png" },
+          { type: "image", data: IMAGE_DATA, mimeType: "image/png" },
         ],
         isError: false,
       },
     ],
     [
       "plugin bare content-block array",
-      [{ type: "image", data: "cG5nLWJ5dGVz", mimeType: "image/png" }],
+      [{ type: "image", data: IMAGE_DATA, mimeType: "image/png" }],
     ],
   ])(
     "keeps image bytes out of the text fallback for an image-only %s",
@@ -14192,14 +14209,16 @@ describe("toolResultFromUi image restoration (issue #1073)", () => {
         );
         expect(textBlocks.length).toBeGreaterThan(0);
         for (const block of textBlocks) {
-          expect(block.text).not.toContain("cG5nLWJ5dGVz");
+          expect(block.text).not.toContain(IMAGE_DATA);
         }
         expect(result.content).toContainEqual({
           type: "image",
-          data: "cG5nLWJ5dGVz",
+          data: IMAGE_DATA,
           mimeType: "image/png",
         });
-        expect(result.details).toMatchObject({ imageCount: 1 });
+        expect(result.details).toMatchObject({
+          imageInput: { imageCount: 1, includedCount: 1, issues: [] },
+        });
       } finally {
         await runtime.dispose();
       }
@@ -14247,11 +14266,9 @@ describe("toolResultFromUi image restoration (issue #1073)", () => {
     }
   });
 
-  it("keeps image bytes out of the text fallback for a non-vision model", async () => {
+  it("retains source bytes but gives a text-only model a visible omission diagnostic", async () => {
     const rawContent = {
-      content: [
-        { type: "image", data: "cG5nLWJ5dGVz", mimeType: "image/png" },
-      ],
+      content: [{ type: "image", data: IMAGE_DATA, mimeType: "image/png" }],
       isError: false,
     };
     const host = {
@@ -14267,30 +14284,73 @@ describe("toolResultFromUi image restoration (issue #1073)", () => {
       host,
       provider: {
         ...provider,
-        modelConfig: {
-          ...provider.modelConfig!,
-          input: ["text"],
-        },
+        modelConfig: { ...provider.modelConfig!, input: ["text"] },
       },
     });
     try {
       const read = (runtime as any).toolCatalog.get("Read");
       const result = await read.execute("image-only-text-model", { path: "screenshot.png" });
-      const textBlocks = result.content.filter(
-        (block: { type: string }) => block.type === "text",
-      );
-      expect(textBlocks.length).toBeGreaterThan(0);
-      for (const block of textBlocks) {
-        expect(block.text).not.toContain("cG5nLWJ5dGVz");
-      }
-      expect(result.content.some((block: { type: string }) => block.type === "image")).toBe(
-        false,
-      );
+      expect(result.content).toEqual([
+        { type: "text", text: "[Image omitted: the selected model does not support image input.]" },
+      ]);
+      expect(result.details).toMatchObject({
+        content: rawContent.content,
+        imageInput: {
+          imageCount: 1,
+          includedCount: 0,
+          issues: [{ index: 0, code: "MODEL_NO_VISION", message: expect.stringContaining("does not support") }],
+        },
+      });
+      const restored = toolResultFromUi({
+        id: "image-only-text-model", role: "tool", content: "", createdAt: new Date(timestamp).toISOString(),
+        toolCallId: "image-only-text-model", toolName: "Read", toolResult: result, toolStatus: "success", isError: false,
+      }, timestamp);
+      expect(restored.content).toContainEqual({ type: "image", data: IMAGE_DATA, mimeType: "image/png" });
     } finally {
       await runtime.dispose();
     }
   });
 
+
+  it("records an oversized image as an explicit model omission", async () => {
+    const rawContent = {
+      images: [{ data: pngBase64(8001, 1), mimeType: "image/png" }],
+      path: "wide.png",
+    };
+    const host = { call: vi.fn((method: string) => Promise.resolve(
+      method === "project.instructions.resolve" ? { entries: [] } : { ok: true, content: rawContent },
+    )) };
+    const runtime = createRuntime({ host });
+    try {
+      const result = await (runtime as any).toolCatalog.get("Read").execute("wide-image", { path: "wide.png" });
+      const [omission] = result.content;
+      expect(omission).toMatchObject({
+        type: "text",
+        text: expect.stringContaining("8001x1 px exceeds the 8000 px"),
+      });
+      expect((omission.text as string)).not.toContain(rawContent.images[0].data);
+      expect(result.details).toMatchObject({
+        images: rawContent.images,
+        imageInput: {
+          imageCount: 1,
+          includedCount: 0,
+          issues: [{ index: 0, code: "IMAGE_TOO_LARGE", message: expect.stringContaining("8001x1") }],
+        },
+      });
+    } finally {
+      await runtime.dispose();
+    }
+  });
+
+  it("describes Read image support alongside its bounded text window", async () => {
+    const runtime = createRuntime();
+    try {
+      expect(runtimeTool(runtime, "Read").description).toContain("PNG, JPEG, GIF, or WebP image file");
+      expect(runtimeTool(runtime, "Read").description).toContain("bounded window");
+    } finally {
+      await runtime.dispose();
+    }
+  });
   it("keeps embedded MCP text resources and resource links next to a status text block", async () => {
     // github-mcp-server `get_file_contents` answers with a status line plus the
     // file body as an embedded resource, and with a resource link for large files.
