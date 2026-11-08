@@ -41,6 +41,7 @@ import {
   isDelegationActivityItem,
   lifecycleKindOf,
   summarizeSubagentActivity,
+  delegationWasPreempted,
   type SubagentOutcome,
   type SubagentTiming,
 } from "../../../lib/subagent-topology";
@@ -245,6 +246,7 @@ export const ActivityGroup = memo(function ActivityGroup({
     delegateItems,
     delegationStatuses,
   ), [delegateItems, delegationStatuses]);
+  const allPreempted = hasSubagentTopology && delegateItems.every(item => delegationWasPreempted(item.message));
   // Parent tools after a Task fan-out live in a later activity part (D319), so
   // this card is not the turn's live tail while its delegates are still running.
   const topologyLive = hasSubagentTopology && subagentSummary.running > 0;
@@ -302,7 +304,7 @@ export const ActivityGroup = memo(function ActivityGroup({
     lastItem?.kind === "thinking" &&
     lastItem.message.status === "streaming";
   const onlyThinking = useMemo(() => items.every((item) => item.kind === "thinking"), [items]);
-  const label = hasSubagentTopology
+  const label = allPreempted ? t("subagentControls.notStartedTasks") : hasSubagentTopology
     ? t(
         live
           ? "chat.subagentsWorking"
@@ -389,7 +391,7 @@ export const ActivityGroup = memo(function ActivityGroup({
           {label}
         </span>
         {live ? <span className="activity-marker" aria-hidden /> : null}
-        {hasSubagentTopology ? (
+        {hasSubagentTopology && !allPreempted ? (
           <span className="subagent-activity-metrics">
             {t("chat.subagentCount", { count: subagentSummary.total })}
             <span aria-hidden> · </span>

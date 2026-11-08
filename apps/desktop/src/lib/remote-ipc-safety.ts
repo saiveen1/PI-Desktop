@@ -10,6 +10,7 @@ const localOnly = new Set<string>([
   IPC.invoke.sessionGetScratchPath, IPC.invoke.sessionOpenScratchPath,
   IPC.invoke.agentSteer, IPC.invoke.agentQueuePush, IPC.invoke.agentQueueList,
   IPC.invoke.agentStopSubagents, IPC.invoke.agentRetrySubagent,
+  IPC.invoke.agentSendSubagentMessage,
   IPC.invoke.workspaceReviewRollback,
   IPC.invoke.workspaceReviewTurns, IPC.invoke.workspaceReviewChanges, IPC.invoke.workspaceReviewContext,
   IPC.invoke.workspaceReviewOpenFile, IPC.invoke.workspaceReviewRollbackFile,

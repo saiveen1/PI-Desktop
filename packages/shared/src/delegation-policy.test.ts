@@ -91,3 +91,44 @@ describe("subagent run policy", () => {
     expect(() => resolveDelegationRunPolicy({ finalReportTimeoutSeconds: 0 })).toThrow("Invalid subagent run policy");
   });
 });
+
+describe("subagent failure policy", () => {
+  it("exports immutable visible defaults through the shared barrel", async () => {
+    const { DEFAULT_DELEGATION_FAILURE_POLICY, DELEGATION_FAILURE_POLICY_LIMITS } = await import("./index.js");
+    expect(DEFAULT_DELEGATION_FAILURE_POLICY).toEqual({ mode: "inherit", maxRetries: 2, maxFallbacks: 2 });
+    expect(Object.isFrozen(DEFAULT_DELEGATION_FAILURE_POLICY)).toBe(true);
+    expect(DELEGATION_FAILURE_POLICY_LIMITS).toEqual({ maxRetries: { min: 0, max: 10 }, maxFallbacks: { min: 1, max: 10 } });
+  });
+
+  it("accepts complete policies without adding defaults to legacy settings", async () => {
+    const { isDelegationFailurePolicy } = await import("./delegation-policy.js");
+    const legacy = legacyDelegationSettings([]);
+    expect(isDelegationSettings(legacy)).toBe(true);
+    expect(legacy).not.toHaveProperty("failurePolicy");
+    for (const mode of ["inherit", "stop", "retry", "fallback"]) {
+      for (const maxRetries of [0, 10]) for (const maxFallbacks of [1, 10]) {
+        const failurePolicy = { mode, maxRetries, maxFallbacks };
+        expect(isDelegationFailurePolicy(failurePolicy)).toBe(true);
+        expect(isDelegationSettings({ ...settings([]), failurePolicy })).toBe(true);
+      }
+    }
+  });
+
+  it("rejects malformed policies at the settings boundary", async () => {
+    const { isDelegationFailurePolicy } = await import("./delegation-policy.js");
+    const valid = { mode: "fallback", maxRetries: 2, maxFallbacks: 2 };
+    const invalid: unknown[] = [null, [], true, {}, { ...valid, mode: "always" }, { ...valid, typo: 1 }];
+    for (const field of ["mode", "maxRetries", "maxFallbacks"]) {
+      invalid.push(Object.fromEntries(Object.entries(valid).filter(([key]) => key !== field)));
+    }
+    for (const [field, min, max] of [["maxRetries", 0, 10], ["maxFallbacks", 1, 10]] as const) {
+      for (const value of [min - 1, max + 1, 0.5, NaN, Infinity, "2", null, true]) {
+        invalid.push({ ...valid, [field]: value });
+      }
+    }
+    for (const failurePolicy of invalid) {
+      expect(isDelegationFailurePolicy(failurePolicy)).toBe(false);
+      expect(isDelegationSettings({ ...settings([]), failurePolicy })).toBe(false);
+    }
+  });
+});

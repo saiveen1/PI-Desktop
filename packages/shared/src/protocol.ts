@@ -151,6 +151,7 @@ export const IPC = {
     agentStopSubagents: "pi-desktop/agent/stop-subagents",
     agentStop: "pi-desktop/agent/stop",
     agentRetrySubagent: "pi-desktop/agent/retry-subagent",
+    agentSendSubagentMessage: "pi-desktop/agent/subagent/message",
     agentQueuePush: "pi-desktop/agent/queue/push",
     agentQueueList: "pi-desktop/agent/queue/list",
     agentQueueRemove: "pi-desktop/agent/queue/remove",

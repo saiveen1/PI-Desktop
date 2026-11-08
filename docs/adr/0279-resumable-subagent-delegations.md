@@ -131,10 +131,11 @@ stopped status. Recovery does not relabel cancellation as a provider failure.
 
 ### 6. One live record per chain, ever
 
-There is no queuing and no message-append. A chain has at most one running
-record at a time; a `resume` while the chain is running is rejected with the
-TaskWait error above. This keeps the chain a strict straight line with no
-forking successors.
+A chain has at most one running record at a time; a model-originated `resume`
+while it runs is rejected with the TaskWait error above. The
+[direct input amendment](subagent-controls-and-direct-input.md) allows explicit
+user messages to that existing worker at a safe boundary, or a normal resumed
+run after settlement. It never forks a chain or creates overlapping workers.
 
 ### 7. Resumable chains are bounded, LRU, per agent name
 

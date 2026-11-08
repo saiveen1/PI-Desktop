@@ -18,6 +18,9 @@ pub(super) fn validate(settings: &Value) -> Result<(), &'static str> {
     if let Some(run_policy) = policy.get("runPolicy") {
         validate_run_policy(run_policy)?;
     }
+    if let Some(failure_policy) = policy.get("failurePolicy") {
+        validate_failure_policy(failure_policy)?;
+    }
     let models = policy
         .get("models")
         .and_then(Value::as_array)
@@ -84,6 +87,31 @@ fn validate_run_policy(value: &Value) -> Result<(), &'static str> {
         if !integer_in_range(Some(value), min, max) {
             return Err("delegation.runPolicy values must be integers within the supported range");
         }
+    }
+    Ok(())
+}
+
+fn validate_failure_policy(value: &Value) -> Result<(), &'static str> {
+    let policy = value
+        .as_object()
+        .ok_or("delegation.failurePolicy must be an object")?;
+    if policy
+        .keys()
+        .any(|key| !matches!(key.as_str(), "mode" | "maxRetries" | "maxFallbacks"))
+    {
+        return Err("delegation.failurePolicy contains an unknown field");
+    }
+    if !matches!(
+        policy.get("mode").and_then(Value::as_str),
+        Some("inherit" | "stop" | "retry" | "fallback")
+    ) {
+        return Err("delegation.failurePolicy.mode must be inherit, stop, retry or fallback");
+    }
+    if !integer_in_range(policy.get("maxRetries"), 0.0, 10.0) {
+        return Err("delegation.failurePolicy.maxRetries must be an integer from 0 to 10");
+    }
+    if !integer_in_range(policy.get("maxFallbacks"), 1.0, 10.0) {
+        return Err("delegation.failurePolicy.maxFallbacks must be an integer from 1 to 10");
     }
     Ok(())
 }
@@ -244,10 +272,62 @@ pub(super) mod tests {
                 cases.push(value);
             }
         }
+        let valid_failure = json!({"mode": "fallback", "maxRetries": 2, "maxFallbacks": 2});
+        let mut invalid_failures = vec![Value::Null, json!([]), json!(true), json!({})];
+        for field in ["mode", "maxRetries", "maxFallbacks"] {
+            let mut incomplete = valid_failure.clone();
+            incomplete.as_object_mut().unwrap().remove(field);
+            invalid_failures.push(incomplete);
+        }
+        for (field, invalid) in [
+            ("mode", json!("always")),
+            ("mode", Value::Null),
+            ("typo", json!(1)),
+            ("maxRetries", json!(-1)),
+            ("maxRetries", json!(11)),
+            ("maxFallbacks", json!(0)),
+            ("maxFallbacks", json!(11)),
+        ] {
+            let mut value = valid_failure.clone();
+            value[field] = invalid;
+            invalid_failures.push(value);
+        }
+        for field in ["maxRetries", "maxFallbacks"] {
+            for invalid in [json!(1.5), json!("2"), Value::Null, json!(false)] {
+                let mut value = valid_failure.clone();
+                value[field] = invalid;
+                invalid_failures.push(value);
+            }
+        }
+        for failure_policy in invalid_failures {
+            let mut value = policy();
+            value["failurePolicy"] = failure_policy;
+            cases.push(value);
+        }
         let mut duplicate = policy();
         duplicate["models"][1]["modelId"] = json!("economy");
         cases.push(duplicate);
         cases
+    }
+
+    #[test]
+    fn delegation_settings_failure_policy_preserves_legacy_and_accepts_boundaries() {
+        let legacy = json!({"delegation": policy()});
+        assert!(validate(&legacy).is_ok());
+        assert!(legacy["delegation"].get("failurePolicy").is_none());
+        for mode in ["inherit", "stop", "retry", "fallback"] {
+            for max_retries in [0, 10] {
+                for max_fallbacks in [1, 10] {
+                    let mut value = policy();
+                    value["failurePolicy"] = json!({"mode": mode,
+                        "maxRetries": max_retries, "maxFallbacks": max_fallbacks});
+                    let settings = json!({"delegation": value});
+                    let before = settings.clone();
+                    assert!(validate(&settings).is_ok());
+                    assert_eq!(settings, before);
+                }
+            }
+        }
     }
 
     #[test]

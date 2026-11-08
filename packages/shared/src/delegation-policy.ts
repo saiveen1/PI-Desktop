@@ -79,6 +79,36 @@ export function describeDelegationRunPolicy(policy: Readonly<DelegationRunPolicy
     "These are the effective Subagent Scheduling settings; an active run keeps its starting snapshot.";
 }
 
+export type DelegationFailurePolicy = {
+  mode: "inherit" | "stop" | "retry" | "fallback";
+  maxRetries: number;
+  maxFallbacks: number;
+};
+
+export const DEFAULT_DELEGATION_FAILURE_POLICY: Readonly<DelegationFailurePolicy> = Object.freeze({
+  mode: "inherit",
+  maxRetries: 2,
+  maxFallbacks: 2,
+});
+
+export const DELEGATION_FAILURE_POLICY_LIMITS = {
+  maxRetries: { min: 0, max: 10 },
+  maxFallbacks: { min: 1, max: 10 },
+} as const;
+
+/** Complete opt-in policy; legacy absence is not rewritten to visible defaults. */
+export function isDelegationFailurePolicy(value: unknown): value is DelegationFailurePolicy {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const policy = value as Record<string, unknown>;
+  if (typeof policy.mode !== "string" || !["inherit", "stop", "retry", "fallback"].includes(policy.mode) ||
+    Object.keys(policy).some(key =>
+      key !== "mode" && !Object.hasOwn(DELEGATION_FAILURE_POLICY_LIMITS, key))) return false;
+  return Object.entries(DELEGATION_FAILURE_POLICY_LIMITS).every(([key, limits]) => {
+    const number = policy[key];
+    return typeof number === "number" && Number.isInteger(number) && number >= limits.min && number <= limits.max;
+  });
+}
+
 export type DelegationSettings = {
   version: 1;
   /** Zero skips models requiring approval, for unattended work. */
@@ -86,6 +116,8 @@ export type DelegationSettings = {
   models: DelegationModel[];
   /** Execution/recovery settings for Task delegates; omitted fields use visible defaults. */
   runPolicy?: Partial<DelegationRunPolicy>;
+  /** Missing or inherit preserves the session's existing retry/fallback behavior. */
+  failurePolicy?: DelegationFailurePolicy;
 };
 
 /** New and legacy-seeded settings wait five minutes; saved values stay intact. */
@@ -160,6 +192,7 @@ export function isDelegationSettings(value: unknown): value is DelegationSetting
     Number(config.approvalTimeoutSeconds) < 0 || Number(config.approvalTimeoutSeconds) > 300 ||
     !Array.isArray(config.models) || config.models.length > 128) return false;
   if (config.runPolicy !== undefined && !isDelegationRunPolicy(config.runPolicy)) return false;
+  if (config.failurePolicy !== undefined && !isDelegationFailurePolicy(config.failurePolicy)) return false;
   const identities = new Set<string>();
   for (const value of config.models) {
     if (!value || typeof value !== "object") return false;

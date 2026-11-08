@@ -1,3 +1,4 @@
+import { isAgentSendSubagentMessageRequest } from "@pi-desktop/shared";
 import { parseMcpServerIds, parseMcpToolNames } from "./mcp-tool-selection.js";
 /**
  * Node pi agent sidecar.
@@ -592,6 +593,16 @@ async function handle(method: string, params: any): Promise<unknown> {
         await runtime.abort();
       }
       return { ok: true };
+    }
+    case "agent.sendSubagentMessage": {
+      const request = { sessionId: params.sessionId, delegationId: params.delegationId, messageId: params.messageId, content: params.content };
+      if (!isAgentSendSubagentMessageRequest(request) || typeof params.turnId !== "string" || !params.turnId.trim()) {
+        throw Object.assign(new Error("Invalid subagent message request"), { errorCode: "INVALID_ARGUMENT" });
+      }
+      const active = params.provider === undefined;
+      const runtime = active ? runtimes.get(request.sessionId) : await runtimeFor(params);
+      if (!runtime) throw Object.assign(new Error("The target turn is no longer accepting input"), { errorCode: "TURN_NOT_FOUND" });
+      return runtime.sendSubagentMessage(request, params.turnId, active);
     }
     case "agent.retrySubagent": {
       const sessionId = String(params.sessionId ?? "").trim();

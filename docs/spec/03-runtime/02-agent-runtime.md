@@ -2322,3 +2322,32 @@ parent turn open. Delegation report delivery and resumability retain their
 existing lifecycle. Runtime capability probing is connection-scoped; older
 Hosts and remote workspaces explicitly report Bash controls unavailable,
 while delegation controls remain usable. Transport and Host failures propagate.
+
+## Subagent controls: failure policy and direct conversation
+
+Scheduling may persist `failurePolicy: { mode, maxRetries, maxFallbacks }`.
+Modes are inherit/stop/retry/fallback. Missing or inherit preserves the prior
+session policy. Explicit modes override infinite provider retry: stop disables
+retry and switching, retry caps same-model retries, and fallback additionally
+caps authorized model switches. Limits are integers 0–10 retries and 1–10
+switches. The UI's unset defaults are inherit with limits of two and two, not
+an implicit opt-in. Each admitted child snapshots the policy; saved edits affect
+subsequent admissions. Exact-model constraints, compatible model pools and
+approval remain mandatory. Only provider failures can lead to model switching;
+ordinary tool errors or time without tool calls do not trigger it.
+
+The local direct-input API routes user text to an existing chain. Active children
+queue it through the same Agent's steering mechanism without aborting tools;
+settled chains resume using bounded retained history and checkpoints. A stable
+message ID coalesces retries, conflicting reuse is rejected, and distinct inputs
+to a chain serialize through admission. Accepted input is recorded in child
+history even when Stop precedes its processing. Direct resumed Task inputs are
+projected back as child user history on later resumes. Parent context receives
+a notification and subsequent reports rather than the full child conversation.
+Admission keeps the durable parent owner alive and remains cancellable.
+
+This adds no database table or tool authority. The existing transcript/outbox
+owns persistence, and ordinary cancellation never causes automatic restart.
+Opening a transcript is read-only; sending after Stop is an explicit resume.
+See [the ADR](../../adr/subagent-controls-and-direct-input.md) and
+[the IPC contract](01-ipc-protocol.md#direct-subagent-input).

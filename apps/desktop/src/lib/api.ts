@@ -32,6 +32,8 @@ import type {
   AgentStopSubagentsResponse,
   AgentRetrySubagentRequest,
   AgentRetrySubagentResponse,
+  AgentSendSubagentMessageRequest,
+  AgentSendSubagentMessageResponse,
   AgentQueueChangedEvent,
   AgentQueuePushRequest,
   QueuedTurnSummary,
@@ -1249,6 +1251,8 @@ export const api = {
     invoke<AgentStopSubagentsResponse>(IPC.invoke.agentStopSubagents, req),
   retrySubagent: (req: AgentRetrySubagentRequest) =>
     invoke<AgentRetrySubagentResponse>(IPC.invoke.agentRetrySubagent, req),
+  sendSubagentMessage: (req: AgentSendSubagentMessageRequest) =>
+    invoke<AgentSendSubagentMessageResponse>(IPC.invoke.agentSendSubagentMessage, req),
   stop: (sessionId: string, turnId?: string) =>
     invoke<AgentStopResponse>(IPC.invoke.agentStop, { sessionId, ...(turnId ? { turnId } : {}) }),
   queuePrompt: (req: AgentQueuePushRequest) =>

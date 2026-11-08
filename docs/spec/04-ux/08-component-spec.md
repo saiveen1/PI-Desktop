@@ -2783,7 +2783,7 @@ as a conversation:
 │                    └──────────────────────┘ │
 │ ● Edit composer.tsx                         │
 ├──────────────────────────────────────────────┤
-│ [ Subagents are driven by the main agent… ] │
+│ [ Message this subagent…          ] [Send] │
 └──────────────────────────────────────────────┘
 ```
 
@@ -2792,9 +2792,19 @@ as a conversation:
   bubble), and the delegate's thinking, tool, and answer rows under that call
   render with the same message-list language, so a follow-up prompt reads as
   the next user turn.
-- The composer at the foot is a disabled two-row textarea whose placeholder
-  says subagents are driven by the main agent and cannot take input; the tab
-  is display-only and has no send path.
+- The two-row composer accepts text for local Desktop Agent sessions. Active
+  children show Send; settled children show Continue or Send and resume. The
+  target is the chain's latest run, including after recovery or fallback.
+  Pending sends prevent duplicate clicks, preserve newer drafts and isolate
+  acknowledgments by session/chain. Transport retries reuse a message ID; errors
+  remain visible without deleting the draft. Remote/native and missing-chain
+  views remain unavailable for direct input. Persisted child user messages render
+  as user bubbles, not assistant output. The input does not introduce a new
+  hard-coded keyboard shortcut or grant additional tools.
+- A Task skipped because new parent input arrived says it was not started and
+  explains why, without a misleading execution duration. Such records do not
+  count as actively coordinated children. Mixed active/skipped groups count only
+  the active work; history remains visible and no automatic redispatch occurs.
 - Tab labels carry the agent name captured when the tab opened, with a
   strip-order `#n` suffix when the same name occurs more than once; a
   localization fallback covers a delegate with no name.

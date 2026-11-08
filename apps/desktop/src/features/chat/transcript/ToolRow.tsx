@@ -46,6 +46,7 @@ import {
 } from "../../../lib/assistant-turns";
 import {
   delegationIsCreating,
+  delegationWasPreempted,
   delegationRoster,
   delegationRosterOutcome,
   delegationRosterSummary,
@@ -194,6 +195,7 @@ function HostToolRow({
   // Classify the result once; execution and persisted statuses stay untouched.
   const toolStatus = getToolStatus(message);
   const neutralStatus = toolStatus.kind === "skipped" || toolStatus.kind === "interrupted" || toolStatus.kind === "context-required";
+  const notStarted = delegationWasPreempted(message);
   // A tool call never opens itself: the payload waits for the user, and a
   // failure or denial stays in the row head either way.
   const revealRequest = useMessageRevealRequest(message.id);
@@ -290,8 +292,9 @@ function HostToolRow({
         jobRow.state && t(`backgroundTasks.${jobRow.state}`),
       ].filter(Boolean).join(" · ")
     : lifecycle ? rosterSummary : argSummary;
-  const statusLabel = neutralStatus
-    ? toolStatusLabel
+  const statusLabel = notStarted
+    ? t("subagentControls.notStarted")
+    : neutralStatus ? toolStatusLabel
     : creating
       ? t("chat.subagentCreating")
       : outcome
@@ -338,7 +341,7 @@ function HostToolRow({
         )
       : message.toolDurationMs;
   const duration =
-    typeof durationMs === "number" && durationMs > 0
+    !notStarted && typeof durationMs === "number" && durationMs > 0
       ? formatToolDuration(durationMs / 1000)
       : "";
 
@@ -689,6 +692,12 @@ function SubagentRunFollow({
                   streaming={item.message.status === "streaming"}
                   autoOpen
                 />
+              ) : item.message.role === "user" ? (
+                <div className="message-row user" data-message-id={item.message.id} key={item.message.id}>
+                  <div className="message-col"><div className="message-bubble">
+                    <div className="message-user-text selectable">{item.message.content}</div>
+                  </div></div>
+                </div>
               ) : (
                 <div
                   className="subagent-answer"

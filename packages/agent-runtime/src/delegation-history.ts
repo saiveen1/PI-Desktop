@@ -174,12 +174,16 @@ export function selectChainRows(
   chain: Pick<DelegationChain, "toolCallIds" | "agentName">,
 ): UiMessage[] {
   const calls = new Set(chain.toolCallIds);
-  return transcript.filter(
-    (row) =>
-      typeof row.parentToolCallId === "string" &&
-      calls.has(row.parentToolCallId) &&
-      row.agentName === chain.agentName,
-  );
+  return transcript.flatMap((row): UiMessage[] => {
+    if (row.parentToolCallId && calls.has(row.parentToolCallId) && row.agentName === chain.agentName) return [row];
+    // Direct follow-ups start a resumed Task whose text is the user's input.
+    if (row.toolName === "Task" && row.toolCallId?.startsWith("subagent-message:") && calls.has(row.toolCallId) &&
+        isRecord(row.toolArgs) && typeof row.toolArgs.task === "string") {
+      return [{ id: `input:${row.toolCallId}`, role: "user", content: row.toolArgs.task,
+        createdAt: row.createdAt, parentToolCallId: row.toolCallId, agentName: chain.agentName }];
+    }
+    return [];
+  }).sort((left, right) => timestampMs(left.createdAt) - timestampMs(right.createdAt));
 }
 
 /**

@@ -1,5 +1,11 @@
 # Unreleased changes
 
+- Add explicit subagent provider-failure policies to Scheduling, retaining the
+  existing behavior unless configured. Send text directly to a running child or
+  continue its retained conversation after settlement, with deduplicated input,
+  normal model authorization and cancellable recovery. Skipped delegations now
+  explain that they never started and no longer inflate active coordination.
+
 - Harden tool recovery: normalize background-job selectors before schema checks,
   separate Host admission pressure from edit failures, and recognize bounded
   progress from newly revealed lines. Context-required edits have a neutral,
