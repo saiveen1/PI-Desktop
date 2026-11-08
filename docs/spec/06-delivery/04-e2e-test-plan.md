@@ -65,28 +65,30 @@
 
 ## E2E-SESSION-activity-labels-and-scoped-delegation
 
-- **Environment:** Current isolated worktree, synthetic sessions/provider
-  boundaries and isolated renderer/Host data. No daily profile or paid provider.
+- **Environment:** Current checkout, synthetic sessions/provider boundaries and
+  isolated renderer/Host data. No daily profile or paid provider.
 - **Organization path:** Drag an old conversation within its project, open it,
   stream assistant output, accept a new prompt, queue a prompt and execute it.
   Switch Name/Created/Oldest views; drag back into Activity order. Repeat with
-  pins, archived rows, filtered/hidden siblings, standalone rows and restarts.
+  pins, archived rows, folded/hidden siblings, standalone rows and restarts.
   Failed sends leave order unchanged; queued execution never raises twice.
-- **Labels path:** Add, rename, recolor, reorder and delete labels from
-  Conversation settings. Assign multiple labels and an independent color from
-  the row menu. Filter by multiple labels (any match) and color (intersection),
-  clear filters, reload, then delete a default label. Only explicit deletion
-  removes associations; conversations and their transcripts survive.
-  Under each project/current page, temporary bucket and remote project, verify
-  full-row label headings, indented conversations, independent folding and an
-  Unclassified group. A conversation assigned to two labels appears twice but
-  opens the same session and counts once in selection/actions. Fold one group:
-  its exclusive members leave visible selection, shared members remain through
-  their other entry. Folded groups have no focusable conversation rows. Rename,
-  remove or delete labels and check reclassification without data duplication.
-  Global pins remain flat and project paging still counts original sessions.
-  Check long CJK labels at narrow/sidebar-resized widths, keyboard focus and
-  both themes; label headers never share space with session timestamps.
+- **Groups/labels path:** Open Manage from each project or its row menu. Add,
+  rename, recolor, reorder and delete a group; empty groups remain visible. Move
+  a conversation between groups and back to Ungrouped using the row menu. Assign
+  multiple labels: verify exactly one conversation row and bounded descriptive
+  chips, without label headings or filters. Fold groups and verify hidden rows
+  leave range/Select visible selection. Confirm deletion names the group and
+  moves its conversations to Ungrouped; cancel preserves it. Label deletion
+  removes only associations in that project. No conversation/transcript is lost.
+  Verify old labels survive upgrade with no automatic grouping. Edit a project
+  catalog without affecting another project. Reload to check membership, order,
+  empty catalogs and custom colors. Use presets, pointer/keyboard HSV controls
+  and valid/invalid HEX drafts; invalid colors never persist. Check long CJK
+  names, narrow widths and both themes. Global pins remain flat; project paging
+  still counts original conversations. A multi-root project's folder-count
+  popover lists primary first, with paths available, not conversation buckets;
+  its roots share one catalog through primary changes. Remote Host/project and
+  standalone scopes remain independent.
 - **Delegation path:** Open the local conversation's model-pool dialog, save a
   custom subset and per-model approval in both directions, switch sessions,
   reopen, reload and fork. Change approval without toggling model membership;
@@ -110,6 +112,12 @@
   main-process authorization/launch tests, isolated renderer user-path tests and
   Host RPC persistence tests. Earlier unrelated organization scenarios retain
   their own validation status; no installed-app or paid-provider check is implied.
+  Project-group, display-only-label and custom-color changes are an implementation
+  candidate: focused unit/component and isolated browser results are reported in
+  task delivery. Full Electron/installed-profile acceptance is not implied.
+  Specs: [SessionList](../04-ux/08-component-spec.md#6-sessionlist),
+  [renderer preferences](../03-runtime/04-data-storage.md#renderer-sidebar-preferences-d093),
+  [project groups ADR](../../adr/project-conversation-groups.md).
 
 ## E2E-COMPOSER-DIRECTORY-PASTE: Native folder cards and lazy context
 

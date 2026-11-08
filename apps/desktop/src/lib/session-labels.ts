@@ -1,5 +1,5 @@
-export const SESSION_COLORS = ["red", "amber", "green", "blue", "violet", "pink"] as const;
-export type SessionColor = typeof SESSION_COLORS[number];
+import { sessionColor, type SessionColor } from "./session-colors.ts";
+export { SESSION_COLORS, sessionColor, type SessionColor } from "./session-colors.ts";
 export type SessionLabel = { id: string; name: string; color: SessionColor; defaultName?: "investigation" | "feature" | "fix" };
 export type SessionFilter = { labelIds: string[]; color?: SessionColor };
 export const DEFAULT_SESSION_LABELS: SessionLabel[] = [
@@ -7,9 +7,6 @@ export const DEFAULT_SESSION_LABELS: SessionLabel[] = [
   { id: "feature", name: "Feature", color: "green", defaultName: "feature" },
   { id: "fix", name: "Fix", color: "amber", defaultName: "fix" },
 ];
-export function sessionColor(value: unknown): SessionColor | undefined {
-  return typeof value === "string" && (SESSION_COLORS as readonly string[]).includes(value) ? value as SessionColor : undefined;
-}
 export function labelIds(value: unknown): string[] {
   return Array.isArray(value) ? [...new Set(value.filter((id): id is string =>
     typeof id === "string" && id.length > 0 && id.length <= 128))].slice(0, 128) : [];

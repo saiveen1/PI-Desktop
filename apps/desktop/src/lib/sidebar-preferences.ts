@@ -1,5 +1,6 @@
 import type { ProjectWorkspace, SessionSort } from "@pi-desktop/shared";
 import { cleanSessionLabels, cleanSessionFilter, labelIds, sessionColor, type SessionLabel, type SessionFilter, type SessionColor } from "./session-labels.ts";
+import { cleanSessionOrganization, type SessionOrganization } from "./session-organization.ts";
 export type { SessionSort } from "@pi-desktop/shared";
 export { sortSessions, sessionIsPinned, sessionIsArchived } from "@pi-desktop/shared";
 
@@ -19,6 +20,8 @@ export function normalizeProjectPath(projectPath?: string | null): string | null
 
 export type ProjectSort = "recent" | "created" | "oldest" | "name" | "manual";
 export type SessionMeta = {
+  groupId?: string;
+  organizationScope?: string;
   labelIds?: string[];
   color?: SessionColor;
   pinned?: boolean;
@@ -37,6 +40,7 @@ export type ProjectMeta = {
   order?: number;
 };
 export type SidebarPreferences = {
+  sessionOrganization: SessionOrganization;
   sessionLabels: SessionLabel[];
   sessionFilter: SessionFilter;
   sessionMeta: Record<string, SessionMeta>;
@@ -112,6 +116,8 @@ function cleanSessionMeta(value: unknown): Record<string, SessionMeta> {
   for (const [id, raw] of Object.entries(value)) {
     if (!id || !object(raw)) continue;
     const item: SessionMeta = {};
+    if (typeof raw.groupId === "string" && raw.groupId.length > 0 && raw.groupId.length <= 128) item.groupId = raw.groupId;
+    if (typeof raw.organizationScope === "string" && raw.organizationScope.length <= 2048) item.organizationScope = raw.organizationScope;
     if (Array.isArray(raw.labelIds)) item.labelIds = labelIds(raw.labelIds);
     const color = sessionColor(raw.color);
     if (color) item.color = color;
@@ -177,6 +183,7 @@ export function loadSidebarPreferences(): SidebarPreferences {
   const root = object(raw) ? raw : {};
   const view = object(root.sessionView) ? root.sessionView : {};
   const result: SidebarPreferences = {
+    sessionOrganization: cleanSessionOrganization(root.sessionOrganization),
     sessionLabels: cleanSessionLabels(root.sessionLabels),
     sessionFilter: cleanSessionFilter(root.sessionFilter),
     sessionMeta: cleanSessionMeta(root.sessionMeta),
@@ -213,16 +220,18 @@ export function loadSidebarPreferences(): SidebarPreferences {
       }
     }
   }
-  const knownLabels = new Set(result.sessionLabels.map(label => label.id));
-  result.sessionFilter.labelIds = result.sessionFilter.labelIds.filter(id => knownLabels.has(id));
+  const legacyLabels = new Set(result.sessionLabels.map(label => label.id));
+  const allLabels = new Set([...legacyLabels, ...Object.values(result.sessionOrganization.scopes).flatMap(catalog => catalog.labels.map(label => label.id))]);
+  result.sessionFilter.labelIds = result.sessionFilter.labelIds.filter(id => legacyLabels.has(id));
   for (const meta of Object.values(result.sessionMeta)) {
-    if (meta.labelIds) meta.labelIds = meta.labelIds.filter(id => knownLabels.has(id));
+    if (meta.labelIds) meta.labelIds = meta.labelIds.filter(id => allLabels.has(id));
   }
   return result;
 }
 
-export function saveSidebarPreferences(value: Omit<SidebarPreferences, "sessionLabels" | "sessionFilter"> & Partial<Pick<SidebarPreferences, "sessionLabels" | "sessionFilter">>): void {
+export function saveSidebarPreferences(value: Omit<SidebarPreferences, "sessionLabels" | "sessionFilter" | "sessionOrganization"> & Partial<Pick<SidebarPreferences, "sessionLabels" | "sessionFilter" | "sessionOrganization">>): void {
   write(SIDEBAR_PREFERENCES_KEY, {
+    sessionOrganization: cleanSessionOrganization(value.sessionOrganization),
     sessionLabels: cleanSessionLabels(value.sessionLabels),
     sessionFilter: cleanSessionFilter(value.sessionFilter),
     sessionMeta: cleanSessionMeta(value.sessionMeta),

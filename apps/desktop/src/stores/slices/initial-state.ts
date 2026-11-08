@@ -24,6 +24,8 @@ export function createInitialState(): AppStateData {
     healthOk: false,
     sessions: [],
     sessionMeta: initialSidebarPreferences.sessionMeta,
+    sessionOrganization: initialSidebarPreferences.sessionOrganization,
+    sidebarProjectGroups: [],
     sessionLabels: initialSidebarPreferences.sessionLabels,
     sessionFilter: initialSidebarPreferences.sessionFilter,
     sessionView: {

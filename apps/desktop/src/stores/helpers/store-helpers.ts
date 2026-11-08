@@ -185,6 +185,7 @@ export function preferencesFromState(state: Pick<
   AppState,
   | "sessionMeta"
   | "sessionLabels"
+  | "sessionOrganization"
   | "sessionFilter"
   | "projectMeta"
   | "projectSort"
@@ -194,6 +195,7 @@ export function preferencesFromState(state: Pick<
   return {
     sessionMeta: state.sessionMeta,
     sessionLabels: state.sessionLabels,
+    sessionOrganization: state.sessionOrganization,
     sessionFilter: state.sessionFilter,
     projectMeta: state.projectMeta,
     projectSort: state.projectSort,

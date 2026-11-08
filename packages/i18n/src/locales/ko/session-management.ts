@@ -1,4 +1,6 @@
 export const sessionLabels = {
+  customColor: "사용자 지정 색상", hexColor: "HEX 색상", hue: "색조", saturation: "채도", brightness: "명도",
+  colorPreview: "색상 미리 보기", invalidColor: "올바른 HEX 색상을 입력하세요(#RGB 또는 #RRGGBB).",
   "title": "라벨",
   "add": "라벨 추가",
   "name": "라벨 이름",
@@ -32,6 +34,15 @@ export const sessionLabels = {
     "violet": "보라",
     "pink": "분홍"
   }
+};
+
+export const sessionGroups = {
+  title: "그룹", manage: "관리…", name: "그룹 이름", add: "그룹 추가", delete: "그룹 삭제",
+  deleteConfirm: "\"{{name}}\"을 삭제하고 대화 {{count}}개를 미분류로 옮길까요? 대화는 유지됩니다.",
+  ungrouped: "미분류", moveTo: "그룹으로 이동",
+  description: "각 대화는 이 프로젝트의 한 그룹에 속합니다. 그룹을 삭제해도 대화는 유지됩니다.",
+  labelsDescription: "라벨은 대화를 설명하며 그룹화하거나 필터링하지 않습니다. 변경 사항은 이 프로젝트에만 적용됩니다.",
+  usage: "대화 {{count}}개", folders: "폴더 {{count}}개", primary: "기본",
 };
 
 export const sessionDelegation = {

@@ -1,4 +1,6 @@
 export const sessionLabels = {
+  customColor: "Eigene Farbe", hexColor: "HEX-Farbe", hue: "Farbton", saturation: "Sättigung", brightness: "Helligkeit",
+  colorPreview: "Farbvorschau", invalidColor: "Eine gültige HEX-Farbe eingeben (#RGB oder #RRGGBB).",
   "title": "Labels",
   "add": "Label hinzufügen",
   "name": "Labelname",
@@ -32,6 +34,15 @@ export const sessionLabels = {
     "violet": "Violett",
     "pink": "Rosa"
   }
+};
+
+export const sessionGroups = {
+  title: "Gruppen", manage: "Verwalten…", name: "Gruppenname", add: "Gruppe hinzufügen", delete: "Gruppe löschen",
+  deleteConfirm: "„{{name}}“ löschen und {{count}} Unterhaltungen nach Nicht gruppiert verschieben? Die Unterhaltungen bleiben erhalten.",
+  ungrouped: "Nicht gruppiert", moveTo: "In Gruppe verschieben",
+  description: "Jede Unterhaltung gehört zu einer Gruppe dieses Projekts. Beim Löschen einer Gruppe bleiben die Unterhaltungen erhalten.",
+  labelsDescription: "Labels beschreiben Unterhaltungen, ohne sie zu gruppieren oder zu filtern. Änderungen gelten nur für dieses Projekt.",
+  usage: "{{count}} Unterhaltungen", folders: "{{count}} Ordner", primary: "Primär",
 };
 
 export const sessionDelegation = {

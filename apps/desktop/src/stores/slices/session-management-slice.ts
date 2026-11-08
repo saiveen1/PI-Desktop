@@ -1,13 +1,13 @@
 import type { StoreAccess } from "./types";
 import type { AppState } from "../app-state";
-import { cleanSessionFilter, cleanSessionLabels, labelIds, sessionColor, type SessionColor, type SessionFilter, type SessionLabel } from "../../lib/session-labels";
+import { labelIds, sessionColor, type SessionColor, type SessionFilter, type SessionLabel } from "../../lib/session-labels";
 import { activityOrder, orderedSessionMeta, reorderSession } from "../../lib/session-activity-order";
+import { sessionOrganizationCatalog, sessionOrganizationScope } from "../../lib/session-organization";
+import { createSessionOrganizationActions, type SessionOrganizationState } from "./session-organization-actions";
 
-export type SessionManagementState = {
+export type SessionManagementState = SessionOrganizationState & {
   sessionLabels: SessionLabel[];
   sessionFilter: SessionFilter;
-  setSessionLabels: (labels: SessionLabel[]) => void;
-  setSessionFilter: (filter: SessionFilter) => void;
   markSession: (id: string, patch: { labelIds?: string[]; color?: SessionColor | null }) => void;
   ensureSessionOrder: () => void;
   raiseSession: (id: string) => void;
@@ -15,25 +15,17 @@ export type SessionManagementState = {
 };
 export function createSessionManagementSlice({ get, set, persist }: StoreAccess & {
   persist: (get: () => AppState) => void;
-}): Pick<SessionManagementState, "setSessionLabels" | "setSessionFilter" | "markSession" | "ensureSessionOrder" | "raiseSession" | "reorderSession"> {
+}): Omit<SessionManagementState, "sessionLabels" | "sessionFilter" | "sessionOrganization" | "sidebarProjectGroups"> {
   return {
-    setSessionLabels: (input) => {
-      const labels = cleanSessionLabels(input);
-      const ids = new Set(labels.map(row => row.id));
-      set(state => ({
-        sessionLabels: labels,
-        sessionMeta: Object.fromEntries(Object.entries(state.sessionMeta).map(([id, meta]) =>
-          [id, meta.labelIds ? { ...meta, labelIds: meta.labelIds.filter(key => ids.has(key)) } : meta])),
-        sessionFilter: { ...state.sessionFilter, labelIds: state.sessionFilter.labelIds.filter(id => ids.has(id)) },
-      }));
-      persist(get);
-    },
-    setSessionFilter: (filter) => { set({ sessionFilter: cleanSessionFilter(filter) }); persist(get); },
+    ...createSessionOrganizationActions({ get, set, persist }),
     markSession: (id, patch) => {
       const state = get();
-      if (!state.sessions.some(row => row.id === id)) return;
-      const next = { ...state.sessionMeta[id] };
-      if (patch.labelIds !== undefined) next.labelIds = labelIds(patch.labelIds).filter(key => state.sessionLabels.some(row => row.id === key));
+      const session = state.sessions.find(row => row.id === id);
+      if (!session) return;
+      const scope = sessionOrganizationScope(session, state.sidebarProjectGroups ?? []);
+      const catalog = sessionOrganizationCatalog(state.sessionOrganization, scope, state.sessionLabels);
+      const next = { ...state.sessionMeta[id], organizationScope: scope };
+      if (patch.labelIds !== undefined) next.labelIds = labelIds(patch.labelIds).filter(key => catalog.labels.some(row => row.id === key));
       if (patch.color !== undefined) {
         const color = sessionColor(patch.color);
         if (color) next.color = color; else delete next.color;
@@ -57,7 +49,7 @@ export function createSessionManagementSlice({ get, set, persist }: StoreAccess 
     },
     reorderSession: (id, targetId, after) => {
       const state = get();
-      const sessionMeta = reorderSession(state.sessions, state.sessionMeta, id, targetId, after);
+      const sessionMeta = reorderSession(state.sessions, state.sessionMeta, id, targetId, after, state.sidebarProjectGroups ?? []);
       if (!sessionMeta) return;
       set({ sessionMeta, sessionView: { ...state.sessionView, sort: "recent", sortBy: "recent" } });
       persist(get);

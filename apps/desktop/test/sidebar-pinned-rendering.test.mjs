@@ -180,8 +180,9 @@ test("sidebar renders global pins once, outside project folding and history limi
       withEmptyProject.match(/data-sidebar-project-group="\/empty"[\s\S]*?<\/section>/)?.[0] ?? "";
     assert.match(
       emptyGroup,
-      /<div class="sidebar-session-group-clip"><div class="sidebar-session-group-list"><div class="sidebar-session-empty">/,
+      /<div class="sidebar-session-group-clip"><div class="sidebar-session-group-list">[\s\S]*?<div class="sidebar-session-empty">/,
     );
+    assert.match(emptyGroup, /class="btn btn-ghost sidebar-organization-manage"/, "empty projects retain their management entry");
     assert.deepEqual(rows(emptyGroup), [], "an empty project renders no session rows");
     const restored = render({ sessionView: { sort: "recent", archived: true } });
     assert.equal(rows(pinnedSection(restored)).length, pins.length);

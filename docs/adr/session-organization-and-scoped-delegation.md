@@ -28,11 +28,11 @@ projections; a drag returns to Activity order. Global pins stay independent of
 send activity. Archived and ordinary rows never cross their organization bucket.
 Filtering changes visibility, not the underlying sequence or host timestamps.
 
-A local global label catalog supports editable names, colors and order. A
-conversation may reference multiple labels and independently have one color
-mark. Deletion removes label associations, not conversations. Multiple selected
-label filters match any selected label; the selected color filter is combined
-with that result. Defaults are ordinary editable entries. No label, including
+The original global label/filter presentation is superseded by
+[project conversation groups](project-conversation-groups.md). Each project now
+owns exclusive conversation groups and descriptive multi-label marks. Labels do
+not generate containers or filters; existing associations remain compatible.
+Deleting a group or label never deletes a conversation. No label, including
 TODO, creates tasks, notifications or other automation.
 
 The Rust Host owns an optional per-session list of exact delegation model

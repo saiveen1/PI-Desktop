@@ -1,8 +1,10 @@
 import { IconClock } from "./icons";
-import { ColorSwatch, SessionFilterControl, sessionMarkMenu } from "../features/sessions/SessionLabelControls";
-import { SidebarLabelGroups } from "../features/sessions/SidebarLabelGroups";
-import { groupSessionsByLabel, visibleLabelSessionIds, type SidebarLabelGroup } from "../lib/sidebar-label-groups";
-import { matchesSessionFilter } from "../lib/session-labels";
+import { ColorSwatch, SessionLabelChips, sessionGroupMenu, sessionMarkMenu } from "../features/sessions/SessionLabelControls";
+import { SidebarSessionGroups } from "../features/sessions/SidebarSessionGroups";
+import { groupSessionsByGroup, visibleGroupedSessionIds, projectGroupForPath, projectOrganizationScope, sessionOrganizationCatalog, sessionOrganizationScope, type SidebarSessionGroup } from "../lib/session-organization";
+import { SessionOrganizationDialog, type SessionOrganizationTarget } from "../features/sessions/SessionOrganizationDialog";
+import { ProjectFolderReferences } from "../features/sessions/ProjectFolderReferences";
+import { useSidebarProjectCatalog } from "../features/sessions/useSidebarProjectCatalog";
 import { RemoteProjectGroups } from "./remote/RemoteProjectGroups";
 import { groupRemoteProjectSessions } from "../lib/remote-project-catalog";
 import { isRemoteSession, sessionAllows } from "../lib/remote-session-safety";
@@ -139,6 +141,8 @@ type ProjectEntry = {
   displayPath?: string;
   key: string;
   name: string;
+  groupId?: string;
+  roots?: import("@pi-desktop/shared").ProjectGroupRoot[];
   sessions: SessionSummary[];
   open: boolean;
   active: boolean;
@@ -266,6 +270,9 @@ export function Sidebar({
   onAnimationEnd?: ReactAnimationEventHandler<HTMLElement>;
 }) {
   const { t, i18n } = useTranslation();
+  const { projects: sidebarProjectGroups, refresh: refreshSidebarProjects } = useSidebarProjectCatalog();
+  const sessionOrganization = useAppStore(state => state.sessionOrganization);
+  const [organizationFor, setOrganizationFor] = useState<SessionOrganizationTarget | null>(null);
   const sessions = useAppStore((s) => s.sessions);
   const activeSessionId = useAppStore((s) => s.activeSessionId);
   const selectingSessionId = useAppStore((s) => s.selectingSessionId);
@@ -341,8 +348,8 @@ export function Sidebar({
     registerDismissGuard: registerSessionHoverCardDismissGuard,
   } = useSessionHoverCard();
   const [expandedProjectSessions, setExpandedProjectSessions] = useState<Record<string, boolean>>({});
-  const [collapsedLabelGroups, setCollapsedLabelGroups] = useState<ReadonlySet<string>>(() => new Set());
-  const toggleLabelGroup = useCallback((key: string) => setCollapsedLabelGroups(previous => {
+  const [collapsedSessionGroups, setCollapsedSessionGroups] = useState<ReadonlySet<string>>(() => new Set());
+  const toggleSessionGroup = useCallback((key: string) => setCollapsedSessionGroups(previous => {
     const next = new Set(previous);
     if (next.has(key)) next.delete(key);
     else next.add(key);
@@ -351,7 +358,6 @@ export function Sidebar({
   const [draggingSessionId, setDraggingSessionId] = useState<string | null>(null);
   const [sessionDrop, setSessionDrop] = useState<{ id: string; after: boolean } | null>(null);
   const sessionLabels = useAppStore(state => state.sessionLabels);
-  const sessionFilter = useAppStore(state => state.sessionFilter);
   const ensureSessionOrder = useAppStore(state => state.ensureSessionOrder);
   const reorderSession = useAppStore(state => state.reorderSession);
   useLayoutEffect(() => { ensureSessionOrder(); }, [sessions, ensureSessionOrder]);
@@ -695,13 +701,12 @@ export function Sidebar({
     // can still resolve its title, source, and capabilities when it is opened
     // from there.
     const candidates = listableSessions(sessions)
-      .filter((session) => (showArchived || !sessionArchived(session, sessionMeta[session.id])) &&
-        matchesSessionFilter(sessionMeta[session.id], sessionFilter));
+      .filter((session) => showArchived || !sessionArchived(session, sessionMeta[session.id]));
     // Empty sessions are durable sidebar rows now. Their message count, not
     // their title, controls New Task reuse, so a manual rename never changes
     // the empty-slot behavior.
     return candidates;
-  }, [sessions, showArchived, sessionMeta, sessionFilter]);
+  }, [sessions, showArchived, sessionMeta]);
 
   const compareSessions = useCallback((a: SessionSummary, b: SessionSummary) => {
     const aMeta = sessionMeta[a.id] ?? {};
@@ -755,6 +760,8 @@ export function Sidebar({
   const projectEntries = useMemo(() => {
     const byPath = new Map<string, ProjectEntry>();
     const add = (rawPath: string, name?: string, branch?: string, open = false) => {
+      const group = projectGroupForPath(rawPath, sidebarProjectGroups);
+      rawPath = group?.primaryPath ?? rawPath;
       const normalized = normalizeProjectPath(rawPath);
       if (!normalized) return;
       const existing = byPath.get(normalized);
@@ -770,10 +777,12 @@ export function Sidebar({
         displayPath: openProjects.find((project) => normalizeProjectPath(project.path) === normalized)?.remote?.path
           ?? (normalizeProjectPath(workspace?.path) === normalized ? workspace?.remote?.path : undefined),
         key: normalized,
-        name: projectName(rawPath, meta.name ?? name),
+        name: projectName(rawPath, meta.name ?? group?.name ?? name),
+        groupId: group?.id,
+        roots: group?.roots,
         sessions: [],
         open,
-        active: normalized === activeProjectPath,
+        active: normalized === normalizeProjectPath(projectGroupForPath(activeProjectPath, sidebarProjectGroups)?.primaryPath ?? activeProjectPath),
         meta,
         branch,
       });
@@ -786,7 +795,7 @@ export function Sidebar({
     }
     if (workspace?.path) add(workspace.path, workspace.name, workspace.branch, true);
     for (const session of filtered) {
-      const sessionPath = normalizeProjectPath(session.projectPath);
+      const sessionPath = normalizeProjectPath(projectGroupForPath(session.projectPath, sidebarProjectGroups)?.primaryPath ?? session.projectPath);
       if (!sessionPath) continue;
       // A closed project remains discoverable in Projects, but its historical
       // sessions must not recreate a sidebar tab that the user just closed.
@@ -835,6 +844,7 @@ export function Sidebar({
     return result;
   }, [
     filtered,
+    sidebarProjectGroups,
     openProjectPaths,
     openProjects,
     workspace,
@@ -1052,29 +1062,29 @@ export function Sidebar({
   const remoteProjectGroups = useMemo(() => groupRemoteProjectSessions(
     filtered.filter((session) => isRemoteSession(session) && !pinnedSessionIds.has(session.id)), compareSessions,
   ), [filtered, pinnedSessionIds, compareSessions]);
-  const labelGroupsByScope = useMemo(() => {
-    const groups = new Map<string, SidebarLabelGroup<SessionSummary>[]>();
-    const add = (scope: string, rows: SessionSummary[]) => groups.set(scope, groupSessionsByLabel(rows, sessionLabels, sessionMeta));
+  const sessionGroupsByScope = useMemo(() => {
+    const groups = new Map<string, SidebarSessionGroup<SessionSummary>[]>();
+    const add = (scope: string, rows: SessionSummary[]) => groups.set(scope, groupSessionsByGroup(rows,
+      sessionOrganizationCatalog(sessionOrganization, scope, sessionLabels).groups, sessionMeta));
     add("temporary", temporarySessionHistory);
     for (const entry of projectEntries) {
       const history = entry.sessions.filter(session => !pinnedSessionIds.has(session.id));
       const { visibleSessions } = getVisibleProjectSessions(history, expandedProjectSessions[entry.key] ?? false);
-      add(`project:${entry.key}`, visibleSessions);
+      add(projectOrganizationScope(entry.path, sidebarProjectGroups), visibleSessions);
     }
     for (const group of remoteProjectGroups) add(`remote:${group.project.key}`, group.sessions);
     return groups;
-  }, [temporarySessionHistory, projectEntries, pinnedSessionIds, expandedProjectSessions, remoteProjectGroups, sessionLabels, sessionMeta]);
-  // Follow visible shortcuts, but select and mutate every conversation only once.
+  }, [temporarySessionHistory, projectEntries, pinnedSessionIds, expandedProjectSessions, remoteProjectGroups, sessionLabels, sessionMeta, sessionOrganization, sidebarProjectGroups]);
   const flatSessionOrder = useMemo(() => {
     const ids = pinnedSessions.map(session => session.id);
-    const add = (scope: string) => ids.push(...visibleLabelSessionIds(labelGroupsByScope.get(scope) ?? [], scope, collapsedLabelGroups));
+    const add = (scope: string) => ids.push(...visibleGroupedSessionIds(sessionGroupsByScope.get(scope) ?? [], scope, collapsedSessionGroups));
     add("temporary");
     for (const entry of projectEntries) {
-      if (!(entry.meta.collapsed ?? projectCollapsed[entry.key] ?? false)) add(`project:${entry.key}`);
+      if (!(entry.meta.collapsed ?? projectCollapsed[entry.key] ?? false)) add(projectOrganizationScope(entry.path, sidebarProjectGroups));
     }
     for (const group of remoteProjectGroups) add(`remote:${group.project.key}`);
     return [...new Set(ids)];
-  }, [pinnedSessions, labelGroupsByScope, collapsedLabelGroups, projectEntries, projectCollapsed, remoteProjectGroups]);
+  }, [pinnedSessions, sessionGroupsByScope, collapsedSessionGroups, projectEntries, projectCollapsed, remoteProjectGroups, sidebarProjectGroups]);
   const selection = useSessionSelection(flatSessionOrder);
   const { selectedIds } = selection;
   const selectedSessions = sessions.filter((session) => selectedIds.has(session.id));
@@ -1087,12 +1097,12 @@ export function Sidebar({
     if (!selection.active) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented) return;
-      if (sessionMenu || projectMenu || sectionMenu || sortOpen || trashOpen || organizationBusy) return;
+      if (sessionMenu || projectMenu || sectionMenu || sortOpen || trashOpen || organizationFor || organizationBusy) return;
       selection.exit();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [selection.active, selection.exit, sessionMenu, projectMenu, sectionMenu, sortOpen, trashOpen, organizationBusy]);
+  }, [selection.active, selection.exit, sessionMenu, projectMenu, sectionMenu, sortOpen, trashOpen, organizationFor, organizationBusy]);
 
   const renderSessionStatus = (status: SidebarSessionStatus) => {
     const labelKey =
@@ -1498,11 +1508,14 @@ export function Sidebar({
   const sessionMenuContent = useCallback(
     (session: SessionSummary): SidebarMenuPanelContent => {
       const meta = sessionMeta[session.id] ?? {};
+      const scope = sessionOrganizationScope(session, sidebarProjectGroups);
+      const catalog = sessionOrganizationCatalog(sessionOrganization, scope, sessionLabels);
+      const manage = (tab: "groups" | "labels") => { closeMenus(); setOrganizationFor({ scope, name: taskTitle(session.title), tab }); };
       const archived = sessionArchived(session, meta);
       const pinned = sessionPinned(session, meta);
       const native = session.source === "pi-native";
-      const siblings = filtered.filter(row => normalizeProjectPath(row.projectPath) === normalizeProjectPath(session.projectPath) &&
-        !sessionPinned(row, sessionMeta[row.id]) && sessionArchived(row, sessionMeta[row.id]) === archived).sort(compareSessions);
+      const siblings = filtered.filter(row => sessionOrganizationScope(row, sidebarProjectGroups) === scope &&
+        sessionMeta[row.id]?.groupId === meta.groupId && !sessionPinned(row, sessionMeta[row.id]) && sessionArchived(row, sessionMeta[row.id]) === archived).sort(compareSessions);
       const position = siblings.findIndex(row => row.id === session.id);
       const gitItems = [
         ...(native || !sessionAllows(session, "canEditMessages")
@@ -1522,9 +1535,8 @@ export function Sidebar({
       return {
         label: t("nav.sessionActions", { defaultValue: "Session actions" }),
         items: [
-          ...sessionMarkMenu(session.id, sessionLabels, meta, t, () => {
-            closeMenus(); setSettingsTab("chat");
-          }),
+          sessionGroupMenu(session.id, catalog.groups, meta, t, () => manage("groups")),
+          ...sessionMarkMenu(session.id, catalog.labels, meta, t, () => manage("labels")),
           ...(!pinned ? [-1, 1].map(offset => sidebarMenuAction({
             id: offset < 0 ? "session-move-up" : "session-move-down",
             label: t(offset < 0 ? "sessionLabels.moveUp" : "sessionLabels.moveDown"),
@@ -1644,6 +1656,8 @@ export function Sidebar({
       sessionMeta,
       sessionWorktreeItems,
       sessionLabels,
+      sessionOrganization,
+      sidebarProjectGroups,
       filtered,
       compareSessions,
       reorderSession,
@@ -1662,6 +1676,8 @@ export function Sidebar({
       return {
         label: t("project.openActions", { name: entry.name }),
         items: [
+          sidebarMenuAction({ id: "manage-project-sessions", label: t("sessionGroups.manage"), icon: <IconSettings size={14} />,
+            onSelect: () => { closeMenus(); setOrganizationFor({ scope: projectOrganizationScope(entry.path, sidebarProjectGroups), name: entry.name }); } }),
           sidebarMenuAction({
             id: "open-project-folder",
             label: t("project.openFolder", { defaultValue: "Open folder" }),
@@ -1737,6 +1753,7 @@ export function Sidebar({
       archiveProject,
       openProjectFolder,
       projectIsolationItems,
+      sidebarProjectGroups,
       copyTextToClipboard,
       requestDeleteProject,
       t,
@@ -1854,7 +1871,7 @@ export function Sidebar({
     const sessionId = sessionIdForDragOver(event.dataTransfer, draggingSessionId);
     if (!sessionId) return;
     const dragged = sessions.find((item) => item.id === sessionId);
-    if (!dragged || normalizeProjectPath(dragged.projectPath) === entry.key) return;
+    if (!dragged || sessionOrganizationScope(dragged, sidebarProjectGroups) === projectOrganizationScope(entry.path, sidebarProjectGroups)) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
     setDropProjectKey(entry.key);
@@ -1881,6 +1898,7 @@ export function Sidebar({
     if (!dragged) return;
     event.preventDefault();
     event.stopPropagation();
+    if (sessionOrganizationScope(dragged, sidebarProjectGroups) === projectOrganizationScope(entry.path, sidebarProjectGroups)) return;
     void moveSessionToProject(dragged.id, entry.path, entry.name);
   };
 
@@ -1966,7 +1984,8 @@ export function Sidebar({
         onDragOver={(event) => {
           const source = sessions.find(row => row.id === draggingSessionId);
           if (!source || source.id === session.id || sessionPinned(source, sessionMeta[source.id]) ||
-            sessionPinned(session, meta) || normalizeProjectPath(source.projectPath) !== normalizedProjectPath ||
+            sessionPinned(session, meta) || sessionMeta[source.id]?.groupId !== meta.groupId ||
+            sessionOrganizationScope(source, sidebarProjectGroups) !== sessionOrganizationScope(session, sidebarProjectGroups) ||
             sessionArchived(source, sessionMeta[source.id]) !== archived) return;
           event.preventDefault();
           event.stopPropagation();
@@ -1981,7 +2000,7 @@ export function Sidebar({
           const id = sessionIdFromDrag(event.dataTransfer);
           const source = sessions.find(row => row.id === id);
           if (!id || !source || id === session.id || sessionPinned(source, sessionMeta[id]) || sessionPinned(session, meta) ||
-            normalizeProjectPath(source.projectPath) !== normalizedProjectPath ||
+            sessionMeta[id]?.groupId !== meta.groupId || sessionOrganizationScope(source, sidebarProjectGroups) !== sessionOrganizationScope(session, sidebarProjectGroups) ||
             sessionArchived(source, sessionMeta[id]) !== archived) return;
           event.preventDefault();
           event.stopPropagation();
@@ -2016,7 +2035,7 @@ export function Sidebar({
           );
         }}
       >
-        {meta.color ? <ColorSwatch color={meta.color} label={t(`sessionLabels.colors.${meta.color}`)} /> : null}
+        {meta.color ? <ColorSwatch color={meta.color} label={meta.color.startsWith("#") ? meta.color : t(`sessionLabels.colors.${meta.color}`)} /> : null}
         {selection.active ? <Checkbox className="session-selection-checkbox" label={<span className="sr-only">{t("sessionOrganization.selectSession", { title: taskTitle(session.title) })}</span>}
           checked={selectedIds.has(session.id)} disabled={organizationBusy} onChange={() => selection.toggle(session.id)} />
           : status ? renderSessionStatus(status) : null}
@@ -2055,6 +2074,7 @@ export function Sidebar({
           {isRemoteSession(session) && <span className="thread-item-source" title={session.remoteHostLabel}>{t("remote:remote")}</span>}
           <WorktreeBadge worktree={session.worktree} sessionId={session.id} />
           <span className="thread-item-title">{taskTitle(session.title)}</span>
+          <SessionLabelChips labels={sessionOrganizationCatalog(sessionOrganization, sessionOrganizationScope(session, sidebarProjectGroups), sessionLabels).labels} meta={meta} />
           {options?.global ? (
             <span className="thread-item-project">
               {owningProject}
@@ -2096,8 +2116,10 @@ export function Sidebar({
   });
 
   const renderGroupedSessionRows = (scope: string, options?: Parameters<typeof renderSessionRows>[1]) => (
-    <SidebarLabelGroups key={scope} groups={labelGroupsByScope.get(scope) ?? []}
-      scope={scope} collapsed={collapsedLabelGroups} onToggle={toggleLabelGroup}
+    <SidebarSessionGroups key={scope} groups={sessionGroupsByScope.get(scope) ?? []}
+      scope={scope} collapsed={collapsedSessionGroups} onToggle={toggleSessionGroup}
+      onManage={() => setOrganizationFor({ scope, name: projectEntries.find(entry => projectOrganizationScope(entry.path, sidebarProjectGroups) === scope)?.name
+        ?? remoteProjectGroups.find(group => `remote:${group.project.key}` === scope)?.project.label ?? t("nav.sessions") })}
       renderSessions={rows => renderSessionRows(rows, options)} />
   );
 
@@ -2131,7 +2153,7 @@ export function Sidebar({
 
     const renderProjectSessions = (sessions: SessionSummary[]) => {
       const result: React.ReactNode[] = [
-        renderGroupedSessionRows(`project:${entry.key}`, {
+        renderGroupedSessionRows(projectOrganizationScope(entry.path, sidebarProjectGroups), {
           projectPath: entry.path,
           showLastReplyDate,
         }),
@@ -2251,6 +2273,7 @@ export function Sidebar({
             {showRunCount ? <ProjectRunCount summary={runSummary} /> : null}
             {entry.active ? <span className="sidebar-project-active-dot" aria-label={t("project.active", { defaultValue: "Active" })} /> : null}
           </TooltipButton>
+          <ProjectFolderReferences roots={entry.roots ?? []} primaryPath={entry.path} />
           <span id={`${projectId}-path-description`} className="sr-only">
             {entry.displayPath ?? entry.path}
             {". "}
@@ -2296,9 +2319,8 @@ export function Sidebar({
         >
           <div className="sidebar-session-group-clip">
             <div className="sidebar-session-group-list">
-              {entry.sessions.length > 0 ? renderProjectSessions(visibleSessions) : (
-                <div className="sidebar-session-empty">{t("nav.noProjectSessions")}</div>
-              )}
+              {renderProjectSessions(visibleSessions)}
+              {entry.sessions.length === 0 ? <div className="sidebar-session-empty">{t("nav.noProjectSessions")}</div> : null}
             </div>
           </div>
         </div>
@@ -2480,7 +2502,6 @@ export function Sidebar({
               {t("nav.sessions", { defaultValue: "Sessions" })}
             </span>
             <div className="sidebar-toolbar-actions">
-              <SessionFilterControl />
               <TooltipButton className="sidebar-toolbar-button" data-action="select-sessions"
                 tooltip={t("sessionOrganization.select")} ariaLabel={t("sessionOrganization.select")}
                 aria-pressed={selection.active} disabled={organizationBusy}
@@ -2536,11 +2557,8 @@ export function Sidebar({
               openSectionMenu("sessions", event.clientX, event.clientY);
             }}
           >
-            {temporarySessionHistory.length > 0 ? (
-              renderGroupedSessionRows("temporary", { temporary: true })
-            ) : temporarySessions.length === 0 ? (
-              <div className="sidebar-session-empty">{t("nav.noTemporarySessions")}</div>
-            ) : null}
+            {renderGroupedSessionRows("temporary", { temporary: true })}
+            {temporarySessions.length === 0 ? <div className="sidebar-session-empty">{t("nav.noTemporarySessions")}</div> : null}
           </div>
         </section>
 
@@ -2683,6 +2701,7 @@ export function Sidebar({
       </div>
       {renderFloatingMenu()}
       {trashOpen && <SessionTrashDialog onClose={() => setTrashOpen(false)} />}
+      {organizationFor && <SessionOrganizationDialog key={organizationFor.scope} target={organizationFor} onClose={() => setOrganizationFor(null)} />}
       {sessionHoverCard ? (
         <SessionHoverCard
           key={sessionHoverCard.session.id}
@@ -2711,6 +2730,7 @@ export function Sidebar({
           project={editProjectFor}
           onClose={() => setEditProjectFor(null)}
           onSaved={(group) => {
+            refreshSidebarProjects();
             editProjectEntry(editProjectFor, group.name);
             // A promoted primary owns the group name from now on, so the entry
             // that opens there later already carries it.

@@ -1,8 +1,9 @@
 import { approvalCenter } from "./delegation-approval.js";
 import { delegationReliabilitySettings, delegationDiagnostics } from "./delegation-reliability.js";
-import { sessionLabels, sessionDelegation, delegationDetails } from "./session-management.js";
+import { sessionLabels, sessionGroups, sessionDelegation, delegationDetails } from "./session-management.js";
 export const en = {
   sessionLabels,
+  sessionGroups,
   sessionDelegation,
   delegationDetails,
   sessionOrganization: {

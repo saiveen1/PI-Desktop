@@ -1,4 +1,6 @@
 export const sessionLabels = {
+  customColor: "自訂顏色", hexColor: "HEX 色碼", hue: "色相", saturation: "飽和度", brightness: "明度",
+  colorPreview: "顏色預覽", invalidColor: "請輸入有效的 HEX 色碼（#RGB 或 #RRGGBB）。",
   "title": "標籤",
   "add": "新增標籤",
   "name": "標籤名稱",
@@ -32,6 +34,15 @@ export const sessionLabels = {
     "violet": "紫色",
     "pink": "粉紅色"
   }
+};
+
+export const sessionGroups = {
+  title: "群組", manage: "管理…", name: "群組名稱", add: "新增群組", delete: "刪除群組",
+  deleteConfirm: "刪除「{{name}}」並將 {{count}} 個對話移至未分組？對話將會保留。",
+  ungrouped: "未分組", moveTo: "移動到群組",
+  description: "每個對話只屬於目前專案的一個群組。刪除群組不會刪除對話。",
+  labelsDescription: "標籤僅用於描述對話，不參與分組或篩選。變更僅套用至目前專案。",
+  usage: "{{count}} 個對話", folders: "{{count}} 個資料夾", primary: "主要",
 };
 
 export const sessionDelegation = {

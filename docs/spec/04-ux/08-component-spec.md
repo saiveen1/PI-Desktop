@@ -1537,21 +1537,23 @@ It does not render separate Details or Output tabs.
 
 ## 6. SessionList
 
-The sidebar's Activity order persists accepted-send and same-project drag
-placement, independently of the last-reply timestamp. The row menu supports
-multiple labels, one separate color mark, and keyboard-accessible move actions.
-Labels are full-width collapsible headings, not chips competing with the title
-and timestamp. Each nonempty group follows catalog order; its indented rows
-retain the current sort and source identity. Multiple labels produce multiple
-shortcuts to one conversation, not copies. Unassigned or deleted-label-only
-sessions appear in Unclassified. Folding is scoped to its project/temporary/
-remote bucket and lasts for the current Sidebar mount. Global pins stay flat.
-Project paging still limits original conversations before label grouping; load
-more reveals the rest. Selection and batch mutations deduplicate conversation
-IDs and exclude folded-only, filtered and unloaded rows. Independent color
-marks do not replace run, unread or error status. Filters match any chosen label
-and intersect with color, preserving hidden rows' order. See
-[interaction patterns](09-interaction-patterns.md#organization-actions).
+The sidebar's Activity order persists accepted-send and same-group drag placement,
+independently of the last-reply timestamp. Each project owns an ordered group
+catalog; a conversation has at most one group, and appears once regardless of
+its labels. Unknown or absent membership renders under Ungrouped. Group headings
+are independently collapsible, including empty groups; global pins stay flat.
+Project paging counts original conversations before grouping. Selection excludes
+folded and unloaded rows. Existing labels are retained, never guessed into groups.
+
+A compact Manage entry and the project menu open a scoped Groups/Labels editor.
+Names, colors and order are editable; confirmed group deletion moves conversations
+to Ungrouped, while label deletion only removes marks. Conversation menus separate
+Move to group from multi-label assignment. Labels are display-only chips (up to
+two plus an overflow count), never containers or filters. Independent color marks
+do not replace run/unread/error status. Presets and a keyboard/pointer custom HSV
+picker accept validated HEX RGB colors. Multi-folder project titles expose a
+folder-count popover, primary first, rather than another conversation hierarchy.
+See [project conversation groups](../../adr/project-conversation-groups.md).
 
 ### 6.1 Purpose
 

@@ -1,4 +1,6 @@
 export const sessionLabels = {
+  customColor: "Özel renk", hexColor: "HEX rengi", hue: "Ton", saturation: "Doygunluk", brightness: "Parlaklık",
+  colorPreview: "Renk önizlemesi", invalidColor: "Geçerli bir HEX rengi girin (#RGB veya #RRGGBB).",
   "title": "Etiketler",
   "add": "Etiket ekle",
   "name": "Etiket adı",
@@ -32,6 +34,15 @@ export const sessionLabels = {
     "violet": "Mor",
     "pink": "Pembe"
   }
+};
+
+export const sessionGroups = {
+  title: "Gruplar", manage: "Yönet…", name: "Grup adı", add: "Grup ekle", delete: "Grubu sil",
+  deleteConfirm: "\"{{name}}\" silinsin ve {{count}} konuşma Gruplanmamış bölümüne taşınsın mı? Konuşmalar korunacak.",
+  ungrouped: "Gruplanmamış", moveTo: "Gruba taşı",
+  description: "Her konuşma bu projedeki bir gruba aittir. Grubu silmek konuşmaları silmez.",
+  labelsDescription: "Etiketler konuşmaları açıklar; gruplamaz veya filtrelemez. Değişiklikler yalnızca bu proje için geçerlidir.",
+  usage: "{{count}} konuşma", folders: "{{count}} klasör", primary: "Birincil",
 };
 
 export const sessionDelegation = {

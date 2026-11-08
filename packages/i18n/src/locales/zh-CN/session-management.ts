@@ -1,4 +1,6 @@
 export const sessionLabels = {
+  customColor: "自定义颜色", hexColor: "HEX 色值", hue: "色相", saturation: "饱和度", brightness: "明度",
+  colorPreview: "颜色预览", invalidColor: "请输入有效的 HEX 色值（#RGB 或 #RRGGBB）。",
   "title": "标签",
   "add": "添加标签",
   "name": "标签名称",
@@ -32,6 +34,15 @@ export const sessionLabels = {
     "violet": "紫色",
     "pink": "粉色"
   }
+};
+
+export const sessionGroups = {
+  title: "分组", manage: "管理…", name: "分组名称", add: "添加分组", delete: "删除分组",
+  deleteConfirm: "删除“{{name}}”并将 {{count}} 个会话移至未分组？会话会被保留。",
+  ungrouped: "未分组", moveTo: "移动到分组",
+  description: "每个会话只属于当前项目的一个分组。删除分组不会删除会话。",
+  labelsDescription: "标签只用于描述会话，不参与分组或筛选。修改仅对当前项目生效。",
+  usage: "{{count}} 个会话", folders: "{{count}} 个文件夹", primary: "主要",
 };
 
 export const sessionDelegation = {

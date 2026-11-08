@@ -1,4 +1,6 @@
 export const sessionLabels = {
+  customColor: "Cor personalizada", hexColor: "Cor HEX", hue: "Matiz", saturation: "Saturação", brightness: "Brilho",
+  colorPreview: "Prévia da cor", invalidColor: "Digite uma cor HEX válida (#RGB ou #RRGGBB).",
   "title": "Etiquetas",
   "add": "Adicionar etiqueta",
   "name": "Nome da etiqueta",
@@ -32,6 +34,15 @@ export const sessionLabels = {
     "violet": "Violeta",
     "pink": "Rosa"
   }
+};
+
+export const sessionGroups = {
+  title: "Grupos", manage: "Gerenciar…", name: "Nome do grupo", add: "Adicionar grupo", delete: "Excluir grupo",
+  deleteConfirm: "Excluir \"{{name}}\" e mover {{count}} conversas para Sem grupo? As conversas serão mantidas.",
+  ungrouped: "Sem grupo", moveTo: "Mover para grupo",
+  description: "Cada conversa pertence a um grupo deste projeto. Excluir um grupo mantém suas conversas.",
+  labelsDescription: "As etiquetas descrevem conversas sem agrupá-las ou filtrá-las. As alterações se aplicam apenas a este projeto.",
+  usage: "{{count}} conversas", folders: "{{count}} pastas", primary: "Principal",
 };
 
 export const sessionDelegation = {

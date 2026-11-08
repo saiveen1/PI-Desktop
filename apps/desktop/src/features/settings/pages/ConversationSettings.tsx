@@ -7,7 +7,6 @@
  * does — the Display card says so once, so no row has to repeat it.
  */
 import type { AppSettings } from "@pi-desktop/shared";
-import { SessionLabelsSettings } from "./SessionLabelsSettings";
 import { useTranslation } from "react-i18next";
 import { SettingsToggle } from "../../../components/ui";
 import { ShowThinkingRow } from "../../../components/settings/ShowThinkingRow";
@@ -34,7 +33,6 @@ export function ConversationSettings({
   const { t } = useTranslation();
   return (
     <div className="settings-stack">
-      <SessionLabelsSettings />
       <SettingsCard title={t("settings.chatDisplay")} caption={t("settings.chatDisplayCaption")}>
         <ShowThinkingRow settings={settings} saveSettings={saveSettings} />
         <AutoCollapseThinkingRow settings={settings} saveSettings={saveSettings} />

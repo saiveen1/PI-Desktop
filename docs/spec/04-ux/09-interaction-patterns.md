@@ -325,7 +325,7 @@ may be retained while exactly one workspace supplies the visible shell context.
   a stable path order until they are moved.
 - Each project group shows the ten most-recent rows in the active sort order
   by default; the remaining sessions fold behind a **Load N more…** control.
-  The expanded list remains flat. When Session time is enabled, each project
+  The expanded list uses exclusive conversation groups. When Session time is enabled, each project
   session row shows its title and localized last-reply age through seven
   calendar days, then a month/day date; hover or keyboard focus replaces the
   date with the session actions. Expanded state is per-group, for the current
@@ -333,18 +333,24 @@ may be retained while exactly one workspace supplies the visible shell context.
 - Presentation changes are saved best-effort. Storage failure must not block
   project activation, session selection, or agent execution.
 
-- **Labels** are global editable metadata with a name, color and catalog order.
-  Conversation settings supports add, rename, recolor, reorder and confirmed
-  deletion. Deletion names the affected label and association count and removes
-  only those references. Session menus support multiple label assignments.
-- **Color mark** is one optional per-conversation color independent of labels.
-  Its swatch remains distinct from running, unread and failure indicators.
-  The row shows compact labels with an overflow affordance. Label colors are
-  not a replacement for the independent mark.
-- **Filters** match any selected label, then intersect with a selected color.
-  Clearing filters restores the same order. Visible/range selection respects
-  filtered rows, collapsed projects and folded history. A TODO label has no
-  effect on the task, reminder or notification systems.
+- **Manage** opens the current project's Groups/Labels editor, not global
+  Conversation settings. Ordered groups own exclusive membership; the row menu
+  moves a conversation to one group or Ungrouped. Unknown membership falls back
+  to Ungrouped. Empty groups remain visible. Confirmed group deletion keeps all
+  conversations and clears membership; Cancel keeps the group unchanged.
+- **Labels** are descriptive multi-valued marks. Project-scoped catalogs support
+  add, rename, recolor, reorder and confirmed deletion. Deletion names the label
+  and association count and removes only that project's references. Existing
+  global labels remain a fallback; no label-to-group conversion is inferred.
+  Up to two chips plus overflow appear on a conversation, without duplicate rows
+  or label/color filtering. A TODO label has no effect on tasks or notifications.
+- **Colors** retain semantic presets and accept custom validated HEX RGB through
+  an HSV board/sliders and text input. Invalid drafts do not propagate. Text and
+  status indicators stay readable independently of chosen label/group colors.
+  One optional independent conversation mark remains separate from labels.
+- **Folder references** appear through a compact folder-count popover in
+  multi-root project headers, primary first, instead of another hierarchy.
+  Registered roots share the logical project's organization catalog.
 
 #### Session isolation across tabs
 

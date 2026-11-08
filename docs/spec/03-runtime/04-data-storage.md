@@ -546,7 +546,9 @@ type SidebarPreferences = {
     archived?: boolean;
     order?: number; // renderer-local manual order
     labelIds?: string[];
-    color?: "red" | "amber" | "green" | "blue" | "violet" | "pink";
+    groupId?: string; // exclusive renderer-local conversation group
+    organizationScope?: string; // metadata provenance while in recycle bin
+    color?: "red" | "amber" | "green" | "blue" | "violet" | "pink" | `#${string}`;
   }>;
   projectMeta: Record<string, {
     pinned?: boolean;
@@ -562,6 +564,13 @@ type SidebarPreferences = {
   openProjectPaths: string[];
   sessionLabels: { id: string; name: string; color: string; defaultName?: string }[];
   sessionFilter: { labelIds: string[]; color?: string };
+  sessionOrganization: {
+    version: 1;
+    scopes: Record<string, {
+      groups: { id: string; name: string; color: string }[];
+      labels: { id: string; name: string; color: string; defaultName?: string }[];
+    }>;
+  };
 };
 ```
 
@@ -580,10 +589,17 @@ type SidebarPreferences = {
   never blocks a host operation.
 - The record never contains transcript content, tool arguments, provider
   configuration, or secrets. Clearing it changes presentation only.
-- Label IDs are stable references to one local global catalog. Renaming and
-  recoloring keep associations; confirmed deletion prunes them. An explicitly
-  empty catalog stays empty on reload instead of restoring defaults. Independent
-  session color marks and label/color filters are also presentation-only.
+- The additive version-1 `sessionOrganization` record owns project-scoped ordered
+  groups and display-only label catalogs. Logical projects use stable Host group
+  IDs across primary-root changes; legacy paths, standalone sessions and remote
+  Host/project identities use distinct scopes. A conversation stores one group
+  ID. Deleted/unknown membership appears in Ungrouped; deletion never removes a
+  conversation. The old global label catalog is retained as a fallback until a
+  scope is edited, without automatic label-to-group conversion. Scoped catalog
+  edits prune only their own associations; empty catalogs remain empty. The old
+  filter field is readable for compatibility but no longer filters the sidebar.
+  Colors retain legacy semantic names or normalize validated #RGB/#RRGGBB to
+  lowercase #rrggbb. No Host schema or protocol version changes.
 - Authoritative delegation model restrictions do not live in these preferences.
   Host `kv(ns="sessionDelegation", key=sessionId)` reads legacy exact-key arrays
   and a version-1 object containing `modelKeys` and optional `modelApprovals`

@@ -1,0 +1,19 @@
+.session-color-picker { min-width: 0; }
+.session-color-presets { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; }
+.session-color-preset { min-width: 24px; min-height: 24px; padding: 4px; }
+.session-color-preset[aria-pressed="true"] { outline: 2px solid var(--ds-text-primary); outline-offset: -2px; border-radius: var(--radius-sm); }
+.session-picker-swatch { display: block; width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--ds-border-default); }
+.session-custom-color-toggle.btn { font-size: var(--text-xs); min-height: 24px; padding: 2px 6px; }
+.session-custom-color { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(120px, 1fr); gap: 12px; max-width: 460px; padding: 12px 0 4px; }
+/* The board's white/black ramps and hue are color coordinates, not theme surfaces. */
+.session-color-board { position: relative; min-height: 128px; border-radius: var(--radius-sm); background-image: linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, transparent); touch-action: none; cursor: crosshair; border: 1px solid var(--ds-border-default); }
+.session-color-board:focus-visible { outline: 2px solid var(--ds-accent); outline-offset: 2px; }
+.session-color-board-cursor { position: absolute; width: 10px; height: 10px; border: 2px solid #fff; box-shadow: 0 0 0 1px #000; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; }
+.session-color-sliders { display: grid; align-content: center; gap: 8px; }
+.session-color-sliders label { display: grid; gap: 2px; font-size: var(--text-xs); color: var(--ds-text-secondary); }
+.session-color-sliders input[type="range"] { width: 100%; min-width: 0; height: 18px; padding: 0; accent-color: var(--ds-accent); }
+.session-color-hex { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: var(--text-sm); }
+.session-color-hex input { max-width: 112px; }
+.session-color-preview { display: inline-block; flex: 0 0 28px; height: 28px; border-radius: var(--radius-sm); border: 1px solid var(--ds-border-default); }
+.session-color-error { grid-column: 1 / -1; margin: 0; color: var(--ds-error); font-size: var(--text-xs); }
+@media (max-width: 400px) { .session-custom-color { grid-template-columns: 1fr; } }
