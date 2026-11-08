@@ -78,5 +78,6 @@ resume, duplicated and conflicting requests, authorization races, cancellation,
 retained input and parent report delivery. Test failure-policy validation in
 TypeScript and Rust and exercise actual retry/fallback budgets without provider
 calls. Renderer tests cover drafts, stale acknowledgments, failure states,
-latest-chain targeting and skipped/running mixed topologies. Real accounts and
+latest-chain targeting and not-started/running task-list groups. The shared task
+detail keeps direct user rows distinct from assistant output. Real accounts and
 the daily Desktop profile are not acceptance fixtures.

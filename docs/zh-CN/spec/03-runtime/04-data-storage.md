@@ -1,8 +1,57 @@
-# 04. 数据存储（架构 v27）
+# 04. 数据存储（架构 v29）
 
 > **翻译说明：** 本页是与 [英文源规格](/spec/03-runtime/04-data-storage) 一一对应的机器辅助翻译。代码、协议字段和标识符保持原文；如翻译与英文源事实有歧义，以英文版本为准。
 
 
+
+### Project path aliases (#2148)
+
+The v27-to-v28 upgrade creates a verified database backup and atomically merges
+case/separator spellings that native filesystem resolution identifies as the
+same local directory. Prefer a row with sessions, then the latest last-opened
+time and lowest id. Rebind every session and schedule before deleting duplicate
+rows; retain pinned state, the earliest creation and latest opening timestamps,
+and update the current project id. Transcript files are never rewritten or
+deleted by this repair. Original path-keyed memory records remain intact; a
+missing canonical memory record inherits the preferred row's value.
+
+Upsert, listing and removal repeat this reconciliation for directories that
+become available after startup. Missing directories retain their normalized
+spelling until resolution proves an alias. Do not lowercase all Windows/macOS
+paths: case-sensitive directories/volumes remain distinct, remote project ids
+are opaque, and a retargeted symlink must not redirect stored ownership.
+After reconciliation, removal prefers an exact stored path before filesystem
+canonicalization. Existing busy checks and permanent-deletion confirmation apply
+to the resulting unified project and all of its sessions.
+
+### Global delegation history (schema 29)
+
+Migration 28 → 29 backs up schema 28 and adds the partial
+`idx_messages_task_history` index on `(created_at DESC, mid DESC)` for
+`tool_name = 'Task'`. It changes no transcript content or execution status.
+The index is rebuildable from existing message metadata. The same transaction
+repeats the idempotent project-path reconciliation before writing version 29:
+earlier integration candidates used version 28 for either project repair or
+the history index. Both shapes retain their data and acquire both changes.
+Version 27 first completes the project repair to version 28, then this step;
+fresh databases contain the index immediately. Each step retains its verified
+backup, and a failed step leaves its source version and ownership unchanged.
+An older app cannot open schema 29; downgrade requires a compatible backup.
+
+Run history reads indexed candidates and bounded canonical JSONL windows;
+it does not create a second execution ledger. Source sessions marked deleted
+are excluded. The candidate cursor remains resumable after status/project
+filtering, including empty result pages.
+
+Terminal approval receipts use the existing Host-owned kv namespace
+`delegationApprovalHistory`, key `v1`, envelope `{ version: 1, entries }`.
+The latest 200 terminal prompts are retained by `(sessionId, requestId)` with
+revision guards, `settledAt` and optional `readAt`. Missing history is empty;
+unsupported versions fail closed. Writes explicitly allowlist prompt/model
+metadata and do not copy provider credentials. Mark-read preserves rows;
+clear removes receipts only. No history row can restore consent, change
+scheduling or replay work. Older builds ignore this additive kv namespace.
+See [ADR global delegation history](../../../adr/global-delegation-history.md).
 
 ### Lossless tool-image storage (#1868)
 

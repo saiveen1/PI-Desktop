@@ -380,6 +380,7 @@ export const ptBR = {
     sessionMissing: "Essa sessão não existe mais"
   },
   chat: {
+    taskGroups: { active: "Em andamento", attention: "Requer atenção", completed: "Concluídas", back: "Todas as tarefas", brief: "Descrição da tarefa" },
     delegationDiagnostics,
     promptRetractionFailed: "Não foi possível restaurar o rascunho com segurança. A conversa foi preservada.",
     tableActions: "Ações da tabela",
@@ -1695,10 +1696,10 @@ export const ptBR = {
     thinkingDisplayCompact: "Compacto",
     showThinking: "Mostrar raciocínio",
     showThinkingDesc: "Mostra o raciocínio do modelo. Quando desativado, o indicador de raciocínio ao vivo continua visível e as linhas e trechos de raciocínio concluídos ficam ocultos.",
-    autoCollapseThinking: "Recolher raciocínio concluído",
-    autoCollapseThinkingDesc: "Apenas o raciocínio em geração fica aberto. Desative para manter todas as linhas de raciocínio abertas.",
-    autoCollapseSettledGroups: "Recolher grupos concluídos",
-    autoCollapseSettledGroupsDesc: "Ao terminar o turno, os grupos de atividade ficam recolhidos e o cabeçalho indica o que o grupo fez. Desative para manter cada grupo concluído aberto.",
+    autoCollapseThinking: "Recolher raciocínio por padrão",
+    autoCollapseThinkingDesc: "Mantém o raciocínio recolhido, mesmo durante a geração. Abra uma linha para ler; desative para expandir por padrão.",
+    autoCollapseSettledGroups: "Recolher atividades por padrão",
+    autoCollapseSettledGroupsDesc: "Mostra um breve resumo durante e após o turno. Abra um grupo para ver os registros; desative para expandir por padrão.",
     transcriptDisplayMode: "Exibição do processo",
     transcriptDisplayModeDesc: "Escolha como o processo do assistente é agrupado na transcrição.",
     radialMenu: "Menu de contexto radial",

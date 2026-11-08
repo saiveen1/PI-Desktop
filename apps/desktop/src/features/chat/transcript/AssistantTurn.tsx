@@ -429,9 +429,8 @@ export const AssistantTurn = memo(function AssistantTurn({
             produced, not part of what it did. */}
         <AssistantTurnParts parts={responses} {...partContext} />
         {generatedImages}
-        {/* Mounted with the reply slots, so a streaming turn never grows it;
-            plugin entry extras stay beneath it. */}
-        {slotReply ? <TurnChangesCard tools={tools} /> : null}
+        {/* Recorded work remains reachable during streaming and after interruption. */}
+        <TurnChangesCard tools={tools} />
         {!isActive && metaMessage ? (
           <MessageMeta
             modelId={modelId}

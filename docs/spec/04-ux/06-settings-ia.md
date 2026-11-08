@@ -374,8 +374,8 @@ requires confirmation with the label name and association count, and never
 deletes conversations. Filtering lives in the sidebar; no label creates a task.
 
 - **Display** card, in rendered order: the **Show thinking** toggle with its
-  **Auto-fold finished thinking** sub-row, the **Transcript display** segmented
-  control with its **Auto-fold finished groups** sub-row, **Context usage
+  **Collapse thinking by default** sub-row, the **Transcript display** segmented
+  control with its **Collapse activity by default** sub-row, **Context usage
   display** (remaining or used), **Smooth streaming**, and **Inline
   visualizations**. Context usage display controls whether the composer toolbar
   context ring and its popover lead with the remaining or the used capacity
@@ -402,24 +402,23 @@ deletes conversations. Filtering lives in the sidebar; no label creates a task.
   reasoning is actively streaming, leaves only the whole-run TextShimmer
   `Thinking` indicator; a collapsed row shows that indicator without an excerpt.
   Stored reasoning is retained and reappears when the toggle is turned back on.
-  With it on, a Thinking row starts folded once it is no longer streaming; the row
-  the live turn is still generating stays open, and the **Auto-fold finished
-  thinking** sub-row below can keep every row open instead. It affects
-  presentation only, not model reasoning configuration, and it does not control
-  turn-process or activity-group folding: active processes start open and
-  untouched completed processes fold by default regardless of the toggle. The
-  legacy `thinkingDisplayMode` field (`detailed` / `compact`) is retained only
+  With it on, Thinking rows start closed, including while streaming, unless
+  **Collapse thinking by default** is explicitly off or the reader opens one.
+  This affects presentation only, not model reasoning configuration, and does
+  not control turn-process or activity-group folding: active outer processes
+  start open and untouched completed processes close regardless of this toggle.
+  The legacy `thinkingDisplayMode` field (`detailed` / `compact`) is retained only
   for persisted-settings compatibility and is no longer exposed; an absent or
   unknown value shows reasoning and an explicit `compact` hides it. Settings
   search indexes the row.
-- **Auto-fold finished thinking** is an indented sub-row directly under **Show
+- **Collapse thinking by default** is an indented sub-row directly under **Show
   thinking** and appears only while that toggle is on, because with it off no
-  completed reasoning row renders. It persists the optional
-  `autoCollapseThinking` boolean, absent and `true` both meaning fold: only
-  reasoning the live turn is still streaming stays open. Turning it off keeps
-  every rendered Thinking row open. Hiding the sub-row by turning **Show
-  thinking** off never writes a value, so the stored choice survives and comes
-  back with the parent. Settings search indexes both the row and its description.
+  completed reasoning row renders. It retains the optional
+  `autoCollapseThinking` boolean: absent and `true` start every rendered Thinking
+  row closed, even while reasoning streams; explicit `false` starts them open.
+  Manual choices and reading protection take precedence over this default.
+  Hiding the sub-row by turning **Show thinking** off never writes a value, so
+  the stored choice survives. Settings search indexes the row and description.
 - **Transcript display** is a segmented control in Display immediately after the
   **Show thinking** pair. It persists the optional `transcriptDisplayMode` field as
   `flat`, `command-first`, or `fully-folded`, with the labels **Flat**,
@@ -437,16 +436,18 @@ deletes conversations. Filtering lives in the sidebar; no label creates a task.
   standard 240px field-column cap. Labels stay on one line; when space is
   insufficient, the control moves below the title and whole options wrap
   within the available pane width without horizontal overflow.
-- **Auto-fold finished groups** is an indented sub-row directly under
+- **Collapse activity by default** is an indented sub-row directly under
   **Transcript display**, and appears only for **Commands first** and **Fully
-  folded**; **Flat** renders no activity groups, so the row is hidden there and
-  has no effect. It persists the optional `autoCollapseSettledGroups` boolean,
-  absent and `true` both meaning fold: a group whose turn has settled starts
-  closed whatever its size, while a running turn, or a group that still owns a
-  running tool or delegation, stays open. Turning it off leaves every settled
-  group open - there is no size tier. Hiding the sub-row by switching to **Flat**
-  never writes a value, so the stored choice survives and returns with the mode.
-  Settings search indexes both the row and its description.
+  folded**; **Flat** renders no ordinary activity groups, so the row is hidden
+  there and has no effect. It retains the optional `autoCollapseSettledGroups`
+  boolean: absent and `true` start ordinary groups closed, including while their
+  turn or tools are streaming, regardless of group size. Explicit `false` starts
+  them open. There is no small-group tier or live-open exception. Task lists have
+  no extra enclosing group disclosure. Hiding this sub-row never writes a value.
+  Manual disclosure choices, transient focus/selection protection, and existing
+  search/navigation reveals remain authoritative. Settings search indexes the row
+  and its description. This replaces the personal-edition default presentation;
+  it adds no theme, style switch, or fourth transcript display mode.
 
 ### Agent behavior (`behavior` tab)
 

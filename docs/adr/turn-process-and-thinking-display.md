@@ -6,6 +6,17 @@
 - Issues: #510, #461, #1806, #2094
 - Amends: D071, [ADR 0242](0242-delta-only-streaming-updates.md)
 
+> **Presentation superseded on 2026-11-08:**
+> [Task-first transcript presentation](task-first-transcript-presentation.md)
+> replaces the live-open/settled-only defaults, small-group tier, expanded
+> thinking default, and Task topology described below. Ordinary groups and
+> thinking now start closed even while streaming unless their existing setting
+> is explicitly false; closed ordinary groups expose failure/denial counts.
+> The outer active-open/completed-closed process, independent manual choices,
+> reading/search protection, and stored/runtime contracts remain. The decision
+> and validation entries below retain their dated history, not current
+> task-first acceptance results. Current settings live in Conversation → Display.
+
 ## Context
 
 A model can alternate reasoning, tool calls and progress text many times before

@@ -8,7 +8,7 @@
 /* File links read as inline documents, not download buttons or attachment cards. */
 .prose-chat a.chat-file-link {
   color: var(--ds-file-link);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   text-decoration-line: none;
   overflow-wrap: anywhere;
 }
@@ -44,8 +44,8 @@
 }
 .chat-code-link:hover code,
 .chat-code-link:focus-visible code {
-  color: var(--ds-accent);
-  text-decoration-color: var(--ds-accent);
+  color: var(--ds-file-link);
+  text-decoration-color: var(--ds-file-link);
 }
 
 /* Sent-message file node: same .composer-chip surface, button reset + hover. */
@@ -85,7 +85,7 @@
 }
 .chat-text-link:hover,
 .chat-text-link:focus-visible {
-  color: var(--ds-accent);
+  color: var(--ds-file-link);
 }
 
 /* Tool-row summaries that resolve to a previewable file/URL. */
@@ -93,9 +93,18 @@
   cursor: pointer;
 }
 .tool-row-summary.linked:hover {
-  color: var(--ds-accent);
+  color: var(--ds-file-link);
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+.chat-code-link:focus-visible,
+.chat-text-link:focus-visible,
+.chat-file-chip:focus-visible,
+.tool-row-summary.linked:focus-visible {
+  outline: 2px solid var(--ds-focus);
+  outline-offset: 2px;
+  border-radius: var(--radius-3xs);
 }
 
 /* Local image references render inline via a bounded data URL; the chip is

@@ -909,6 +909,40 @@ UTF-8 写入活动会话的临时 `pasted/` 目录，并在粘贴位置显示一
   Agent/Plan/Goal/`--text-sm`/`--leading-compact` 保持完全可见。长模型 ID 仍然通过水平截断
   省略号而不破坏行框（D150）。
 
+## Task-first transcript presentation
+
+The personal edition directly replaces its default task-reading presentation;
+this is not another theme or style mode. The existing `flat`, `command-first`,
+and `fully-folded` layouts remain supported. See
+[the task-first ADR](../../../adr/task-first-transcript-presentation.md).
+
+- Body text and assistant progress use foreground ink; tool rows use quieter
+  muted ink. Light and dark surfaces stay neutral. No coordinator canvas,
+  connector lines, graph-card fill, or decorative task-entry animation remains.
+- Subagent task rows use four stable identity accents, never outcome colors.
+  Their leading icon and the selected detail's identity cue share the token:
+
+  | Token | Dark | Light |
+  |---|---|---|
+  | `--ds-task-lavender` | `#c4aeff` | `#7655b8` |
+  | `--ds-task-teal` | `#83cfc7` | `#287d78` |
+  | `--ds-task-blue` | `#91bfff` | `#3d70b0` |
+  | `--ds-task-amber` | `#e9c07e` | `#96631d` |
+
+- Identity derives from stable task identity, not row order, status, model, or
+  list grouping. Main-chat task activity is single-line and chronological; only
+  the side-panel index groups **Active**, **Needs attention**, and **Completed**
+  with counts. Outcomes remain explicit text with independent failure/diff ink.
+- The task description is the primary label, with role/name fallback. Rows have
+  no model/step metadata or enclosing task-group disclosure; details are reached
+  through the source session's normal work-panel tabs.
+- Changed files start as a compact, content-sized count/diff/caret control.
+  Expansion sets `data-expanded="true"` and grows an inline list to
+  `min(100%, 520px)`, never a floating popover. The file rows retain semantic
+  diff counts, keyboard focus and existing Review routing.
+- Primary accent buttons retain white fill in dark theme and black fill in light
+  theme, with contrasting text; task identity does not apply a blue app skin.
+
 ## 8. 3 思维披露
 
 - 辅助思维在最终答案之前呈现为轻量级内联

@@ -1,5 +1,6 @@
 import type { UiMessage } from "@pi-desktop/shared";
 import type { AssistantActivityItem, AssistantTurnPart } from "./assistant-turns";
+import { activityItemHasIssue } from "./activity-summary";
 import {
   ACTIVITY_BUCKET_ORDER,
   type ActivityBucket,
@@ -9,6 +10,26 @@ import { getToolAction } from "./tool-display";
 import { messageContentFacts } from "./transcript-summary";
 
 const actionCache = new WeakMap<UiMessage, ActivityBucketId>();
+const issueCache = new WeakMap<UiMessage, boolean>();
+
+/** Immutable tool snapshots cache result classification alongside their action. */
+export function cachedActivityIssues(items: readonly AssistantActivityItem[]): number {
+  let count = 0;
+  for (const item of items) {
+    if (item.kind === "thinking") continue;
+    if (item.kind === "hostedSearch") {
+      if (item.round.status === "failed") count += 1;
+      continue;
+    }
+    let issue = issueCache.get(item.message);
+    if (issue === undefined) {
+      issue = activityItemHasIssue(item);
+      issueCache.set(item.message, issue);
+    }
+    if (issue) count += 1;
+  }
+  return count;
+}
 
 /** Which label bucket a tool row belongs to, cached per message. */
 function cachedAction(message: UiMessage): ActivityBucketId {

@@ -11,22 +11,25 @@ const active = { ...skipped, id: "active", toolCallId: "active-call", isError: f
 
 test("preempted Task history says not started without a runtime or false coordination", async (t) => {
   const h = await slotSsr(t);
-  const { SubagentTopology } = await h.load("/src/features/chat/transcript/SubagentDetail.tsx");
-  const render = (messages) => h.render(createElement(SubagentTopology, {
-    items: messages.map(message => ({ kind: "tool", message })),
+  const { SubagentTaskList } = await h.load("/src/features/chat/transcript/SubagentTaskList.tsx");
+  const render = (messages) => h.render(createElement(SubagentTaskList, {
+    items: messages.map(message => ({ kind: "tool", message })), grouped: true,
   }));
   const html = render([skipped]);
   assert.match(html, /Not started · New input received/);
   assert.doesNotMatch(html, /Coordinating|0s/);
   const mixed = render([skipped, active]);
   assert.match(mixed, /Not started · New input received/);
-  assert.match(mixed, /Coordinating 1 delegated task/);
+  assert.match(mixed, /aria-label="Active"/);
+  assert.match(mixed, /Active<span aria-hidden="true"> · 1<\/span>/);
+  assert.match(mixed, /Needs attention<span aria-hidden="true"> · 1<\/span>/);
+  assert.match(mixed, /data-outcome="not_started"/);
   const settled = render([{ ...active, toolResult: { details: { delegationId: "active-delegate", status: "failed" } } }, skipped]);
   assert.doesNotMatch(settled, /Coordinating|0s/);
-  assert.match(render([skipped, active]), /Coordinating 1 delegated task/);
+  assert.doesNotMatch(html, /aria-label="(?:Stop|Retry)/);
   const { ActivityGroup } = await h.load("/src/features/chat/transcript/ActivityGroup.tsx");
   const group = h.render(createElement(ActivityGroup, { items: [{ kind: "tool", message: skipped }], isActive: false, turnActive: false }));
-  assert.match(group, /Tasks not started · New input received/);
+  assert.match(group, /Not started · New input received/);
   assert.doesNotMatch(group, /0s|subagent-activity-metrics/);
   const { ToolRow, SubagentRunRows } = await h.load("/src/features/chat/transcript/ToolRow.tsx");
   const ordinary = h.render(createElement(ToolRow, { message: { ...skipped, toolName: "Read" } }));

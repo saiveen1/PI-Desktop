@@ -1,27 +1,34 @@
-/* Per-turn changed-files summary under a completed reply (D297 tile scheme:
-   one soft tile, no border or rules; spacing separates head, rows, and foot).
-   Up to four files use relaxed 25px rows; more switch to dense 21px rows. */
+/* Compact inline disclosure: the expanded file list stays in normal flow. */
 .turn-changes-card {
   box-sizing: border-box;
-  width: min(100%, var(--chat-prose-max-width, 720px));
+  width: fit-content;
+  max-width: 100%;
   min-width: 0;
   margin: 8px 0 2px;
-  padding: 8px 6px 6px;
-  border-radius: var(--radius-lg);
-  background: var(--ds-tile);
 }
 
-.turn-changes-head {
+.turn-changes-card[data-expanded="true"] {
+  width: min(100%, 520px);
+}
+
+.turn-changes-head.btn {
   display: flex;
   width: 100%;
   min-width: 0;
   min-height: 28px;
   align-items: center;
   justify-content: flex-start;
+  flex-wrap: wrap;
   gap: 8px;
-  padding: 2px 6px 4px;
+  padding: 4px 8px;
   border-radius: var(--radius-sm);
+  background: var(--ds-tile);
   text-align: left;
+  white-space: normal;
+}
+
+.turn-changes-head.btn:hover:not(:disabled) {
+  background: var(--ds-tile-hover);
 }
 
 .turn-changes-chevron {
@@ -33,14 +40,15 @@
 .turn-changes-title {
   color: var(--ds-text-primary);
   font-size: var(--text-sm);
-  font-weight: var(--font-weight-semibold);
-  white-space: nowrap;
+  font-weight: var(--font-weight-medium);
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .turn-changes-meta {
   min-width: 0;
   overflow: hidden;
-  color: var(--ds-text-faint);
+  color: var(--ds-text-muted);
   font-family: var(--font-mono);
   font-size: var(--text-2xs);
   text-overflow: ellipsis;
@@ -54,7 +62,7 @@
 }
 
 .turn-changes-body {
-  margin: 0;
+  margin: 4px 0 0;
   padding: 0;
   list-style: none;
 }
@@ -82,7 +90,7 @@
 
 .turn-changes-head:focus-visible,
 .turn-changes-row:focus-visible {
-  outline: 1.5px solid color-mix(in oklab, var(--ds-focus) 78%, transparent);
+  outline: 2px solid var(--ds-focus);
   outline-offset: -2px;
 }
 
@@ -143,6 +151,11 @@
 
 .turn-changes-view-all:hover {
   color: var(--ds-text-primary);
+}
+
+.turn-changes-view-all:focus-visible {
+  outline: 2px solid var(--ds-focus);
+  outline-offset: 2px;
 }
 
 @media (prefers-reduced-motion: reduce) {

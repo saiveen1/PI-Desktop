@@ -52,25 +52,25 @@ test("a settled group folds by default and follows the switch", () => {
   assert.equal(ACTIVITY_LABEL_MAX_BUCKETS, 3);
 });
 
-test("live work never folds", () => {
+test("live activity defaults to a summary without forcing payloads open", () => {
   for (const collapseSettled of [true, false]) {
-    assert.equal(
-      activityGroupStartsOpen({ turnActive: true, groupActive: false, collapseSettled }),
-      true,
-      "a running turn keeps every group visible",
-    );
-    assert.equal(
-      activityGroupStartsOpen({ turnActive: false, groupActive: true, collapseSettled }),
-      true,
-      "a group that still owns live work keeps its rows visible",
-    );
+    for (const turnActive of [true, false]) {
+      for (const groupActive of [true, false]) {
+        assert.equal(
+          activityGroupStartsOpen({ turnActive, groupActive, collapseSettled }),
+          !collapseSettled,
+          "liveness does not override the reader's presentation preference",
+        );
+      }
+    }
   }
 });
 
-test("reasoning stays open only while the live turn is generating it", () => {
-  assert.equal(thinkingRowStartsOpen({ streaming: true, collapseSettled: true }), true);
-  assert.equal(thinkingRowStartsOpen({ streaming: false, collapseSettled: true }), false);
-  assert.equal(thinkingRowStartsOpen({ streaming: false, collapseSettled: false }), true);
+test("reasoning defaults closed during streaming as well as after completion", () => {
+  for (const streaming of [true, false]) {
+    assert.equal(thinkingRowStartsOpen({ streaming, collapseSettled: true }), false);
+    assert.equal(thinkingRowStartsOpen({ streaming, collapseSettled: false }), true);
+  }
 });
 
 test("the group label names what the group did", () => {
@@ -149,7 +149,7 @@ test("every locale carries the label fragments the header composes", async () =>
   }
 });
 
-test("the group header states composition and count and drops the issue badge", async () => {
+test("the group header states composition and count without hiding failed calls", async () => {
   const [group, items, activityGroup, styles] = await Promise.all([
     readTranscriptModule("ProcessActivityGroup.tsx"),
     readTranscriptModule("ActivityItems.tsx"),
@@ -159,9 +159,9 @@ test("the group header states composition and count and drops the issue badge", 
   assert.match(group, /activityBucketPhrase\(/);
   assert.match(group, /activityOpsText\(/);
   assert.match(group, /className="tool-activity-count tool-activity-ops"/);
-  // Failures stay on the tool row that failed; the group header repeats none.
-  assert.doesNotMatch(group, /activity-issue-count/);
-  assert.doesNotMatch(group, /activityFailures/);
+  assert.match(group, /issues > 0/);
+  assert.match(group, /cachedActivityIssues/);
+  assert.match(group, /className="tool-row-status error"/);
   assert.doesNotMatch(group, /activityIncludesThinking/);
   // The count token is the part that never truncates.
   assert.match(styles, /\.tool-activity-count\.tool-activity-ops\s*\{[^}]*flex:\s*none;/);
@@ -169,7 +169,7 @@ test("the group header states composition and count and drops the issue badge", 
   // Both nested levels read their own switch; neither inherits the other.
   assert.match(
     activityGroup,
-    /activityGroupStartsOpen\(\{\s*turnActive,\s*groupActive: live,\s*collapseSettled: collapseSettledGroups,\s*\}\)/,
+    /activityGroupStartsOpen\(\{\s*turnActive,\s*groupActive: live,\s*collapseSettled: collapseSettledGroups,?\s*\}\)/,
   );
   assert.match(items, /autoOpen=\{thinkingRowStartsOpen\(\{ streaming, collapseSettled: collapseThinking \}\)\}/);
 });

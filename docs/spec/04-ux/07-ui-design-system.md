@@ -27,7 +27,7 @@ The desktop shell targets a 1:1 visual match with the local Codex desktop client
 | **Clarity over decoration** | No ornamental borders, gradients, or hero images. Every visual element carries information. |
 | **Developer density** | Compact spacing, small-but-readable type, minimal marketing whitespace. Information-rich, not sparse. |
 | **Dark-base defaults** | Dark theme is the primary theme for a coding agent. Light must be fully supported but is secondary. |
-| **Restraint** | One accent color family. No rainbow status colors — use semantic token names (success, warning, error). |
+| **Restraint** | Neutral app accent; four small task-identity accents are the bounded exception. Outcomes use semantic success, warning, and error tokens plus text, never identity color alone. |
 | **Motion as feedback** | Animations convey state change (streaming, loading, expand/collapse). Never decorative. |
 | **Keyboard-first** | Focus rings, tab order, and shortcut labels are primary UX, not afterthoughts. |
 | **Continuous shell chrome** | Titlebars stay borderless and continuous with their surfaces; reserve faint separators for boundaries that clarify ownership, such as the window-control side seam. |
@@ -1048,6 +1048,40 @@ query still ranks relevance first and uses recency only as a tiebreaker.
   `g`/`y`/`p` stay fully visible. Long model IDs still truncate horizontally via
   ellipsis without crushing the line box (D150).
 
+## Task-first transcript presentation
+
+The personal edition directly replaces its default task-reading presentation;
+this is not another theme or style mode. The existing `flat`, `command-first`,
+and `fully-folded` layouts remain supported. See
+[the task-first ADR](../../adr/task-first-transcript-presentation.md).
+
+- Body text and assistant progress use foreground ink; tool rows use quieter
+  muted ink. Light and dark surfaces stay neutral. No coordinator canvas,
+  connector lines, graph-card fill, or decorative task-entry animation remains.
+- Subagent task rows use four stable identity accents, never outcome colors.
+  Their leading icon and the selected detail's identity cue share the token:
+
+  | Token | Dark | Light |
+  |---|---|---|
+  | `--ds-task-lavender` | `#c4aeff` | `#7655b8` |
+  | `--ds-task-teal` | `#83cfc7` | `#287d78` |
+  | `--ds-task-blue` | `#91bfff` | `#3d70b0` |
+  | `--ds-task-amber` | `#e9c07e` | `#96631d` |
+
+- Identity derives from stable task identity, not row order, status, model, or
+  list grouping. Main-chat task activity is single-line and chronological; only
+  the side-panel index groups **Active**, **Needs attention**, and **Completed**
+  with counts. Outcomes remain explicit text with independent failure/diff ink.
+- The task description is the primary label, with role/name fallback. Rows have
+  no model/step metadata or enclosing task-group disclosure; details are reached
+  through the source session's normal work-panel tabs.
+- Changed files start as a compact, content-sized count/diff/caret control.
+  Expansion sets `data-expanded="true"` and grows an inline list to
+  `min(100%, 520px)`, never a floating popover. The file rows retain semantic
+  diff counts, keyboard focus and existing Review routing.
+- Primary accent buttons retain white fill in dark theme and black fill in light
+  theme, with contrasting text; task identity does not apply a blue app skin.
+
 ## 8.3 Thinking disclosure
 
 - Assistant thinking renders before the final answer as a lightweight inline
@@ -1055,10 +1089,11 @@ query still ranks relevance first and uses recency only as a tiebreaker.
   Sparkles cue, rotating chevron, secondary text, and a subtle left rule only
   around expanded reasoning. It uses semantic theme and focus-ring tokens in
   light and dark modes; it must not introduce a separate inset card.
-- The latest thinking disclosure opens while a thinking-only response is
-  streaming and closes when the turn settles if it was not touched. A manual
-  toggle owns the disclosure and remains effective through later deltas and
-  completion.
+- Thinking starts closed even during a thinking-only stream when
+  `autoCollapseThinking` is absent or `true`; explicit `false` starts it open.
+  Manual choices remain effective through later deltas and completion, with
+  existing focus/selection protection and search reveal preserved. The outer
+  process still starts open while active and closes untouched on completion.
 - The trigger is a button with `aria-expanded`, `aria-controls`, and localized
   Show/Hide labels. Collapsed reasoning is hidden from focus and accessibility
   traversal; reduced-motion mode disables the running marker pulse and

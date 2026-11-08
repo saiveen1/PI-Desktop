@@ -21,6 +21,7 @@ Each ADR includes:
 
 | ID | Title | Status |
 |---|---|---|
+| subagent-controls-and-direct-input | [Subagent failure policy and direct user input](subagent-controls-and-direct-input.md) | Accepted |
 
 | project-conversation-groups | [Project conversation groups and display-only labels](project-conversation-groups.md) | Accepted, implementation candidate |
 
@@ -382,7 +383,8 @@ Each ADR includes:
 | 0313 | [Default Live Work to the Current Composer Session](0313-live-voice-default-session-target.md) | Accepted |
 | 0315 | [A spoken answer selects among an open asktool question's own options](0315-live-voice-spoken-asktool-answers.md) | Accepted for implementation (amends the Live Voice Work Session decision path for AskTool only) |
 | 0316 | [The Live Voice call bar is a docked desktop widget window](0316-live-voice-docked-widget.md) | Accepted |
-| turn-process-and-thinking-display | [Turn process and thinking presentation](turn-process-and-thinking-display.md) | Accepted |
+| turn-process-and-thinking-display | [Turn process and thinking presentation](turn-process-and-thinking-display.md) | Accepted; presentation defaults amended by task-first-transcript-presentation |
+| task-first-transcript-presentation | [Task-first transcript presentation](task-first-transcript-presentation.md) | Accepted; isolated component acceptance verified; integrated Desktop not run |
 | provider-display-order | [Provider display order](provider-display-order.md) | Accepted |
 | registry-header-variable-spelling | [Remote header variables accept the registry's `{name}` spelling](registry-header-variable-spelling.md) | Proposed |
 | provider-system-certificates | [Desktop sidecar uses OS-trusted certificates](provider-system-certificates.md) | Accepted |

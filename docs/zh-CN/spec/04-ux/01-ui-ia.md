@@ -306,7 +306,8 @@ MCP、技能和子代理不再是扩展页的选项卡或区块。
 | 命令面板 | Cmd/Ctrl+K（也根据 D014 的 Cmd/Ctrl+Shift+P） | 内置+插件命令 |
 | 模型菜单 | Composer 右侧模型 × 推理芯片 | 配置的 provider/model 选择 + 设置条目 (D091) |
 | 个人资料菜单 | 侧边栏页脚 | 设置/日志/主题循环 (D041) |
-| 通知收件箱 | 侧边栏页脚响铃 | All/Unread 视图、仅任务 failure 行（顺利完成的不显示，D295）、标记为全部读取和清除操作 (D130/D117) |
+| Notification inbox | sidebar footer bell | All/Unread/Needs action; retained successful and failed tasks plus read-only approval receipts; bulk read and confirmed history-only clear |
+| Global delegations | persistent conversation/home toolbar entry | all-project paginated execution history, source-aware details without navigation, explicit Open source and handoff to existing approval controls; not a session work-panel tab |
 | Toast | 事件（插件 toast、后端恢复、复制） | 实时主内容安全区顶部居中；无锚点时回退到整个视口；默认 4 秒，错误 8 秒 |
 | 项目切换菜单 | 空首页带下划线的项目名 | 侧边栏已打开项目 + 搜索 + 克隆 Git 项目 + 打开项目 |
 

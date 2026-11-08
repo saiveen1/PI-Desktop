@@ -126,13 +126,13 @@ and any installation are subsequent user-authorized actions.
 
 ## Principal implementation surfaces
 
-- [Notification center](../../apps/desktop/src/components/NotificationCenter.tsx),
-  [receipt hook](../../apps/desktop/src/hooks/use-delegation-receipts.ts),
-  [notification presentation](../../apps/desktop/src/lib/notification-presentation.ts).
-- [Global history dialog](../../apps/desktop/src/features/delegations/DelegationHistoryDialog.tsx),
-  [sidebar grouping](../../apps/desktop/src/lib/session-organization.ts),
-  [project summary](../../apps/desktop/src/lib/sidebar-project-runs.ts).
-- [Receipt service](../../apps/desktop/electron/main/services/delegation-approval-history.ts),
-  [Host run projection](../../crates/host-core/src/delegation_history.rs),
-  [Host receipts](../../crates/host-core/src/delegation_approval_history.rs),
-  [shared contracts](../../packages/shared/src/delegation-history.ts).
+- `apps/desktop/src/components/NotificationCenter.tsx`,
+  `apps/desktop/src/hooks/use-delegation-receipts.ts`,
+  `apps/desktop/src/lib/notification-presentation.ts`.
+- `apps/desktop/src/features/delegations/DelegationHistoryDialog.tsx`,
+  `apps/desktop/src/lib/session-organization.ts`,
+  `apps/desktop/src/lib/sidebar-project-runs.ts`.
+- `apps/desktop/electron/main/services/delegation-approval-history.ts`,
+  `crates/host-core/src/delegation_history.rs`,
+  `crates/host-core/src/delegation_approval_history.rs`,
+  `packages/shared/src/delegation-history.ts`.

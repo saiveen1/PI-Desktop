@@ -4376,9 +4376,9 @@ identify the platform validation still needed.
   progress text, multiple search/tool/thinking items, and a failed or denied tool.
 - **Steps**: 1) Stream progress paragraph A, a multi-item search segment,
   progress paragraph B, and a multi-item command segment with adjacent Bash rows.
-  2) Inspect the open active group; manually close it while more output arrives.
-  3) Complete the turn and confirm exactly one process disclosure owns every
-  pre-answer row; close it and confirm the groups and run rows close with it, then
+  2) Inspect the default-closed active group, open it, then manually close it
+  while more output arrives. 3) Complete the turn and confirm exactly one process
+  disclosure owns every pre-answer row; close it and hide all groups/run rows, then
   reopen and confirm the group choice returns. 4) Open one completed group and one
   item, copy its output, close and reopen the group, then open a sibling group
   independently. 5) Switch `Transcript display` across Flat, Commands first, and
@@ -4391,20 +4391,19 @@ identify the platform validation still needed.
 - **Expected**: A turn renders exactly one process disclosure containing every
   pre-answer row, the `Bash`/run rows included; the trailing answer, assistant
   errors and stopped trailing text stay outside it, as do pending actions. The
-  active group stays open while the turn runs. After completion, ordinary groups
-  with at most four visible items and Task topology groups remain open; larger
-  ordinary groups start closed. Closing the turn's disclosure hides groups and
-  run rows under it, and reopening restores their defaults and explicit user
-  choices. In
-  Fully folded (the default), run rows stay inside their groups and only ordinary
+  outer process starts open while active. Ordinary groups and reasoning start
+  closed even while streaming when their respective folding setting is absent
+  or true; explicit false starts that level open, with no small-group tier.
+  Closing the turn hides descendants; reopening restores independent choices.
+  In Fully folded (the default), run rows stay inside groups and only ordinary
   assistant progress text splits a group. In Commands first, run rows render as
   their own rows beside the groups, adjacent calls stay separate, a row's detail
   stays closed until opened, and a normal assistant progress message or a command
   ends a group. In Flat, no nested group renders and the rows keep transcript
   order inside the outer disclosure. Every mode keeps the disclosure count at one.
-  A singleton has no group wrapper. No item payload opens itself except the
-  display mode's Thinking default: a tool/search row stays a header until the user
-  opens it, while a final thinking item never selects an earlier tool. The header
+  A singleton has no group wrapper. Tool/search payloads never auto-open;
+  reasoning starts closed unless its own folding opt-out is explicitly false.
+  A final thinking item never opens an earlier tool. The header
   reports `Running`, `Finished`, `Stopped`, or `Failed` with failure and stop
   outranking a normal finish, reads `Thinking` while the live step is reasoning,
   never repeats the current command, and omits the duration when none was
@@ -4421,9 +4420,9 @@ identify the platform validation still needed.
   `04-ux/09-interaction-patterns.md`
 - **Acceptance**: C (chat stream), E (tools), F (persistence)
 - **Milestone**: M3
-- **Status**: Draft. Unit and style checks cover the display modes, Thinking
-  defaults and header rules; this scenario remains the intended manual
-  transcript-reload behavior.
+- **Status**: Draft; existing mode, folding, thinking and header tests are
+  relevant entry points. Current task-first candidate verification is pending;
+  E2E-CHAT-task-first-reading records the isolated acceptance plan.
 
 #### E2E-041: Conversation minimap navigates long transcripts
 
@@ -5605,10 +5604,10 @@ window; opening a normal panel afterward must still work.
 - **Steps**: 1) Start a turn in both light and dark themes. 2) Observe a
   thinking-only phase. 3) Let the answer complete. 4) Toggle the disclosure,
   test keyboard focus, enable reduced motion, and use Copy answer.
-- **Expected**: The transcript opens during thinking-only streaming; the latest
-  Thinking disclosure opens and updates without an empty answer bubble or
-  duplicate Working indicator. If the user collapses or expands it, that choice
-  remains authoritative through later thinking deltas and completion. The
+- **Expected**: The transcript and active outer process appear during thinking-
+  only streaming; Thinking stays closed by default without an empty answer bubble
+  or duplicate Working indicator. Explicit false folding opt-out opens it by
+  default. Manual choices survive later deltas and completion. The
   disclosure uses the transcript surface, theme tokens, a Sparkles/chevron
   trigger, and a left rule instead of an inset card; collapsed content leaves
   focus traversal and reduced motion disables the running marker pulse and
@@ -5828,41 +5827,41 @@ window; opening a normal panel afterward must still work.
 - **Milestone**: M5
 - **Status**: Unit-covered (`chat-review-entry.test.mjs`); full UI scenario Draft
 
-#### E2E-CHAT-turn-changed-files-summary: A finished turn lists the files it changed
+#### E2E-CHAT-turn-changed-files-summary: Recorded changes remain visible during partial work
 
-- **Preconditions**: A project-bound Agent session with a writable workspace.
-- **Steps**: 1) Ask the agent to create one file and edit another; watch the
-  turn while it streams. 2) After the reply finishes, inspect the area below
-  the answer: only the summary header is visible. Click it to expand, click
-  again to collapse, then focus it and repeat with Enter and Space. Confirm
-  hidden rows and the Review link cannot receive keyboard focus and the title
-  keeps its viewport anchor. 3) Ask for a change touching more than twelve files
-  across several directories; confirm its card starts collapsed independently.
-  Expand it. 4) Click a row, then the `View all N files in Review` link.
-  5) Roll back one file's change in Review and return to the turn.
-  6) Ask a question that writes no files. 7) Switch sessions and come back.
-- **Expected**: No summary appears while a turn streams or after a failed
-  turn. A finished turn that wrote workspace files shows one borderless
-  `Changes this turn` card below its answer and above plugin `entryExtra`
-  blocks. It starts collapsed with only its chevron, title, file count, and
-  summed `+`/`−` visible; directory counts remain visible for dense summaries.
-  The full-width header toggles with click, Enter, or Space, exposes its state
-  through ARIA, and leaves Review closed. Collapsed details occupy no space
-  and cannot receive focus. Each turn's explicit choice is independent and
-  survives ordinary rerenders. When expanded, each path appears once with
-  its merged status letter and counts; up to four files use relaxed rows,
-  more use dense rows with a directory count, and rows past 12 fold into
-  `+N more`. A row click opens the session's Review tab scrolled to that file
-  with its changes expanded; the link opens Review without expanding. The
-  rolled-back file stays listed, struck through. Every earlier finished turn
-  keeps its own card, a turn without writes has none, and a session switch
-  fetches nothing extra. The per-call review rows are unchanged.
-- **Specs linked**: `04-ux/08-component-spec.md` §4.4, D674
+- **Preconditions**: Synthetic message-owned workspace review records in the
+  isolated production-component fixture; include live, failed, stopped and
+  no-final-text turns plus scratch/unrecorded edits that must be excluded.
+- **Steps**: 1) Record file creation and edits while streaming; inspect the
+  summary before final text. 2) Fail or stop the turn and confirm it remains.
+  3) Click the count/diff header; collapse and repeat with Enter/Space. Check
+  hidden focus, title anchoring and no Review navigation from the disclosure.
+  4) Expand more than twelve files across directories; click a file and View all
+  in Review. 5) Roll back a recorded change in Review and return. 6) Repeat in
+  a child task detail, a turn with no recorded writes and another session.
+- **Expected**: Every turn with recorded workspace changes mounts its own
+  TurnChangesCard after its answer area and before entryExtra, even if live,
+  failed, stopped or lacking final text. The collapsed content-sized header shows
+  file count, summed recorded additions/deletions and caret, not a full-width
+  generic title band. Directory count appears only when expanded. Click/Enter/
+  Space changes only disclosure state, with ARIA, hidden details out of focus,
+  independent pane-owned choices and the existing reading anchor. Expansion uses
+  `data-expanded="true"` and an inline file list at most `min(100%, 520px)`, not
+  a popover. Up to four files use relaxed rows; more use dense rows; at most
+  twelve paths appear then +N more and View all. Counts sum recorded edits, not
+  net Git diff; merged path/status rules stay unchanged. A file opens the source
+  session's Review focused on its first recorded change with that file expanded;
+  View all opens Review without expanding everything. Rolled-back files stay
+  listed and struck through. Existing per-call review/file actions and rollback
+  guards are unchanged. Scratch/unrecorded edits and no-write turns add nothing;
+  child turn changes remain available only through their own detail turns.
+- **Specs linked**: `04-ux/08-component-spec.md` §4.4,
+  [task-first ADR](../../adr/task-first-transcript-presentation.md).
 - **Acceptance**: D (workspace), Quality
 - **Milestone**: M5
-- **Status**: Unit/SSR-covered (`turn-changes-card.test.mjs`); isolated Chromium
-  pointer, Enter/Space, independent disclosure, hidden-focus, and Review paths
-  covered by `turn-changes-disclosure-user-path.test.mjs`; full UI scenario Draft
+- **Status**: Updated candidate contract; existing `turn-changes-card.test.mjs`
+  and `turn-changes-disclosure-user-path.test.mjs` plus the task-reading fixtures
+  are acceptance entry points. Task-candidate verification is pending.
 
 #### E2E-CHAT-completed-turn-scrolls-to-prompt: A finished reply reads from its prompt
 
@@ -6149,8 +6148,8 @@ window; opening a normal panel afterward must still work.
   near 560px, derived from each theme's primary text ink rather than an accent
   tint, with a subtle border; assistant answers remain transparent full-width
   prose in the 720px content band, including while they stream — no left rail
-  and no whole-turn `--ds-tile` (D323). The tile belongs only to a
-  subagent/delegation card (D319). Row spacing is denser (~10px). Copy chips are
+  and no whole-turn tile. Task lists also stay transparent without a graph card
+  background. Row spacing remains compact (~10px). Copy chips are
   hidden at rest, appear on hover/focus-within, and stay right-aligned under
   user turns. Both themes keep readable contrast on the user plate.
 - **Specs linked**: `04-ux/07-ui-design-system.md`,
@@ -9468,40 +9467,39 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
   `apps/desktop/test/rpc-lifecycle-contract.test.mjs` (client precheck),
   `packages/shared/src/rpc-limits.test.ts`. Desktop journey remains Draft.
 
-#### E2E-248: Subagent details open as closable work-panel tabs with a read-only composer
+#### E2E-248: Subagent details keep source-session tabs and task-index navigation
 
-- **Preconditions**: A project-bound Agent session whose assistant emits at
-  least two `Task` calls — one named `explorer` and one resumed `explorer`
-  follow-up — plus one `Task` that ends in failure; the work panel closed.
+- **Preconditions**: Two distinct Task delegations, including a resumed chain,
+  and a failed Task in one source session; another session and other work-panel
+  resources exist. The panel starts closed. Use isolated synthetic data for UI
+  acceptance, not a live profile/provider.
 - **Steps**:
-  1. Run the turn. Without clicking anything, verify the panel stays closed
-     while the delegates run (no tab is opened automatically).
-  2. Click the `explorer` topology node. Verify a `subagent` tab opens in the
-     work panel's normal tab strip (labeled `explorer`, bot icon) and the
-     tab strip keeps its other tabs.
-  3. Click the second (resumed) `explorer` node. Verify a second tab opens
-     labeled `explorer#2`, both tabs coexist, and each can be activated,
-     drag-reordered, and closed via ×, middle-click, or Delete.
-  4. In the resumed tab, verify the conversation reads `user: first prompt`,
-     delegate rows, `user: follow-up prompt`, delegate rows — the same
-     message-list language as the main transcript (user bubbles, tool rows,
-     thinking rows, markdown answers).
-  5. Verify the composer at the foot is a disabled two-row textarea whose
-     placeholder reads the read-only hint, in every supported locale.
-  6. Wait for the failed delegate to settle, open its tab, and verify the
-     ended tab persists until manually closed.
-  7. Switch to another session and back. Verify the tabs are restored per
-     session and closed tabs stay closed.
-- **Expected**: No auto-open on delegate start; N subagents = N coexisting
-  closable tabs with deduplicated `name#n` labels; the tab body is the
-  delegation's user/assistant message stream with follow-up prompts as user
-  turns; the composer is disabled with the in-field hint and has no send
-  path; ended delegates' tabs persist until closed; tabs are session-scoped.
-- **Specs linked**: `04-ux/08-component-spec.md` (delegation tab),
-  `04-ux/09-interaction-patterns.md` (work panel tabs)
-- **Acceptance**: Quality
+  1. Start delegates; confirm the panel stays closed without user navigation.
+  2. Activate one description-first task row. Confirm its subagent tab opens in
+     the normal strip while other resource tabs remain. Reopen to activate it.
+  3. Open a different task; verify both tabs coexist and standard tab
+     activation/reorder/close behavior remains. Use All tasks to return to the
+     same-session index and choose a task there.
+  4. Inspect the resumed task: all original briefs/turns remain, current status
+     and controls use latest Task metadata, and no transcript is mutated.
+  5. Verify closed brief/diagnostic details, shared process/activity/reasoning/
+     changes/images, passive effective model/thinking text, visible failure
+     reason, a usable local child composer without a model picker, and no parent
+     message mutation controls. Send to the latest resumed handle and verify the
+     user row's role/order. Read history and use search reveal/jump-to-latest.
+  6. Settle the task, switch sessions and return, and close tabs explicitly.
+- **Expected**: No automatic tab opening or second-click close toggle. Distinct
+  tasks coexist in normal source-session tabs. All tasks is local index navigation,
+  not a new routing architecture. Full original resume history and truthful
+  outcomes remain. Ended task tabs persist until closed; closed tabs stay closed.
+  Session boundaries, one visible scroll surface and authorized control gates
+  remain intact at narrow localized light/dark sizes.
+- **Specs linked**: `04-ux/08-component-spec.md` §§5.7/9.9,
+  `04-ux/09-interaction-patterns.md` §9.1
+- **Acceptance**: C (conversation), Quality
 - **Milestone**: M6
-- **Status**: Draft
+- **Status**: Updated candidate journey; verification pending via the isolated
+  fixtures in E2E-CHAT-task-first-reading.
 
 #### E2E-119: Parallel subagents report back without entering the parent's context
 
@@ -9513,11 +9511,9 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
   permission mode `ask` so a delegate's `Edit` is gated; read access to
   `<data_dir>/sessions/<id>.jsonl` and the `messages` index.
 - **Steps**:
-  1. Prompt a turn in which the assistant emits two `Task` calls — `scout` and
-     `pinned` — in one message. Observe the delegation card while both run and
-     after each one settles; collapse it, then expand each node.
-  2. Prompt a turn whose assistant message emits a single `Task` call — `scout`
-     — and compare its presentation with step 1's.
+  1. Prompt two Task starts, scout and pinned, in one assistant message. Inspect
+     their task-list sections as each runs/settles, then open their details.
+  2. Prompt a single scout Task and compare its list language with step 1.
   3. Prompt a turn in which two `fixer` delegates each edit a different file, and
      answer only the first permission card.
   4. Answer the second card, then prompt a third turn where two `fixer`
@@ -9527,38 +9523,26 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
   6. Prompt a `Task` call naming `broken`, then one naming an agent that does not
      exist, then one whose definition pins an unconfigured provider.
   7. Switch the session to Plan, then to Goal, and inspect the tool catalog.
-  8. Reload the session and re-expand the delegation card and every `Task`
-     node.
-  9. Open a node with a long description and long tool paths. Resize the work
-     panel to its minimum, default, and a wider width and inspect the topology
-     card and the delegation tab at each width. Long content wraps inside the
-     committed width without dragging the divider to read a complete line.
+  8. Reload and reopen the outer process, then open each task's detail.
+  9. Open a task with a long description/tool paths. Inspect list and detail at
+     minimum/default/wider panel widths, without requiring divider movement just
+     to identify the task. Exercise All tasks back navigation.
 - **Expected**:
   - Both delegates in step 1 run concurrently, and `pinned` streams on its own
     provider/model while the parent keeps the session's.
-  - The two `Task` calls in step 1 form one full-width delegation card. While
-    active it opens once and its header updates the subagent and settled counts;
-    after settlement it keeps the user's expansion choice and reports aggregate
-    success, warning, or issue state plus elapsed time.
-  - The lone `Task` in step 2 draws the same card with a single delegate node —
-    same root, connector, outcome, runtime and step count — and never the
-    compact one-line tool row (D265). Its aggregate line is worded for one
-    subagent, so no locale reads "1 个 Subagents" or "Subagents working".
-  - The expanded card shows one main-agent root connected to `scout` and
-    `pinned` in parent-row order, with no invented edge between delegates. Each
-    node shows its agent, short description, explicit outcome, duration and step
-    count. Expanding a node shows the brief, report exactly once, and
-    `status`/`turns`/`toolCalls`. Delegate rows appear only inside that node,
-    never in the turn stream or the minimap.
-  - At narrow, default, and wide panel widths, topology titles, descriptions,
-    and step summaries reflow within the card instead of using a fixed
-    one-line ellipsis. Long tool paths, commands, and answer fragments in the
-    delegation tab wrap inside the committed width, produce no horizontal
-    overflow, and retain the tab as the only scroll owner.
-  - If the parent keeps working after those `Task` calls — thinking, `Read`,
-    `Grep`, or a lifecycle row — that work is a separate processing group, not
-    rows inside the delegation card (D319). The card's tile, “Subagent working”
-    header, and topology canvas contain only the `Task` nodes.
+  - One or parallel Task starts use the same grouped list, with Active / Needs
+    attention / Completed counts, description-first labels and textual outcomes.
+    Four identity colors stay stable as tasks settle. No coordinator root,
+    connector, graph card, model/step row metadata or extra task-group fold exists.
+  - Opening a task activates its source-session work-panel tab. Original briefs,
+    reports, counters and child rows remain available in the detail; the report
+    prints once, never in the parent turn stream or minimap. Briefs/diagnostics
+    start closed and a failure reason remains visible outside them.
+  - Narrow/default/wide lists and details contain long labels, paths, commands,
+    answers and controls without horizontal page overflow and use one visible
+    scroll surface. List rows need no divider resize to identify the task.
+  - Parent thinking, workspace tools and lifecycle rows remain ordinary process
+    activity, not task entries. Only Task starts contribute to task counts.
   - The parent's next request contains the reports and **no** delegate message or
     tool row; the rows are nonetheless present in the transcript file and the
     index with `meta.parentToolCallId` and `meta.agentName`.
@@ -9567,17 +9551,17 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
     answer resolves the other request.
   - `scout` cannot call `Edit` or `Write` at all; `fixer` can. Same-file edits in
     step 4 apply in a defined order and neither loses the other's write.
-  - Stop denies both the shown and the queued request, and both delegates end
-    `aborted` in text and icon inside their own `Task` nodes — the parent turn
-    ends once and the aggregate card settles with a warning.
+  - Stop denies both shown and queued requests; delegates read aborted in Needs
+    attention with explicit text. The parent turn ends once; child cancellation
+    does not become a fabricated successful outcome.
   - `broken` is absent from the catalog with a launch diagnostic and the session
     keeps its other three delegates; an unknown agent and an unresolvable model
     pin each fail as a `Task` tool error naming the cause, with no fallback to
     the session provider and no turn failure.
   - `Task` is absent from the catalog in Plan and Goal.
-  - After reload the card is collapsed by default; re-expanding preserves node
-    order, attribution, outcome and nested content exactly as they appeared
-    live.
+  - After reload the outer process is closed untouched; reopening shows the task
+    list with the same attribution/outcomes. Each original child transcript and
+    recorded diagnostic remains accessible through its source-session tab.
 - **Specs linked**: `03-runtime/02-agent-runtime.md` §5f/§7.2b/§8,
   `03-runtime/03-tools-and-permissions.md` §10.2,
   `03-runtime/04-data-storage.md` §4.7a, `04-ux/03-permission-ux.md` §6a,
@@ -9585,21 +9569,15 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
 - **Acceptance**: C (conversation), E (tools & permissions), F (persistence),
   Security, Quality
 - **Milestone**: M6
-- **Status**: Covered by unit tests (2026-08-06): `packages/shared`
-  `subagent-definition.test.ts` and `packages/agent-runtime`
-  `subagent-definitions.test.ts` (frontmatter, tool filtering, malformed
-  documents, global-user-shadows-builtin, legacy-`maxTurns` ignored);
-  `subagent.test.ts` (report bounding, abort, event attribution, prompt
-  framing) and `path-lock.test.ts`
-  (same-path ordering, concurrency cap); desktop `permission-inline.test.mjs`
-  (queue order, id-matched removal, tool-call removal, abort denying the queue,
-  card copy), `subagent-wiring.test.mjs` (main-process discovery and model pins)
-  and `subagent-transcript.test.mjs` + `assistant-turns.test.mjs` (nesting,
-  single report print, memoization, the card gate that admits a lone delegation
-  and the count-aware aggregate copy in both locales), plus
-  `subagent-topology.test.mjs` (delegate detection, structured outcomes and
-  aggregate counts). Full multi-provider fan-out and rendered topology
-  interaction remain manual.
+- **Status**: Historical runtime/permission unit entry points remain
+  `subagent-definition.test.ts`, `subagent-definitions.test.ts`, `subagent.test.ts`,
+  `path-lock.test.ts`, `permission-inline.test.mjs`, `subagent-wiring.test.mjs`,
+  `subagent-transcript.test.mjs` and `assistant-turns.test.mjs`.
+  `subagent-topology.test.mjs` retains its helper-test name for delegate detection,
+  structured outcomes and counts, not graph rendering. The task-first renderer
+  fixtures and pending acceptance are recorded in E2E-CHAT-task-first-reading.
+  Full multi-provider execution is outside the isolated renderer fixture; no new
+  runtime, provider or Desktop verification is claimed by this presentation update.
 
 #### E2E-SUBAGENT-legacy-turn-limit-frontmatter-is-ignored
 
@@ -11717,6 +11695,7 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
 | Quality (project ordering) | E2E-253 |
 | Quality (work-panel tab close visibility) | E2E-WORK-PANEL-active-tab-close-visibility |
 | Quality (turn changed-files disclosure) | E2E-CHAT-turn-changed-files-summary |
+| C / D / E / Quality — Task-first reading, disclosure, child navigation and partial changes | E2E-CHAT-task-first-reading, E2E-CHAT-turn-process-and-thinking-display, E2E-248, E2E-198 |
 | C / E / G / Quality — Pi kernel upgrade | E2E-PI-130-kernel-upgrade |
 | C / E / G / Quality — Pi kernel upgrade | E2E-PI-140-kernel-upgrade |
 | C — Conversation & stream (IME slash alias) | E2E-255 |
@@ -12348,16 +12327,14 @@ This test plan spec is accepted when:
 ### US-UI-56 Codex transcript tool activity
 - In light and dark themes, tool calls use transparent compact activity rows,
   not elevated cards or colored success rails.
-- Historical consecutive calls appear inside a default-collapsed processing
-  group. During a live turn, the latest group opens automatically so its
-  process list is visible, but tool-call details stay collapsed. The latest
-  thinking step opens automatically; when the turn settles, only that automatic
-  thinking disclosure closes. A group or row touched by the user keeps its
-  chosen state.
-- Its active header shows `Processing · {elapsed}` and a localized current
-  action/phase capsule such as `Editing`, `Thinking`, or `Waiting for model`;
-  its completed header shows `Processed for {elapsed}`, plus a localized step
-  count.
+- Ordinary groups and rendered thinking start closed, including while streaming,
+  when their existing folding setting is absent or true. Explicit false opts
+  out per level; manual disclosure choices and reading protection remain. The
+  outer process still starts open while active and closes untouched on completion.
+- Ordinary group headers reuse semantic action categories and an operation count;
+  a closed group also exposes the actual failure/denial count. This does not make
+  a recovered tool failure a terminal turn failure. No small-group tier or
+  automatic live-thinking expansion remains.
 - The row shows a semantic 15–16px icon, progressive/past-tense action,
   ellipsized monospace argument hint, quiet disclosure chevron, and localized
   running/error/denied state.
@@ -13616,9 +13593,9 @@ This test plan spec is accepted when:
      on one direction and a second `explorer` on another — in one assistant
      message, then, without ending the turn, continues its own tool calls and
      converges with `TaskWait`.
-  2. Confirm the parent's visible text keeps streaming between `Task` and
-     `TaskWait` (no dead turn), that the two `Task` rows form one delegation
-     card that opens once, and that `TaskWait`'s row shows both reports.
+  2. Confirm parent text streams between Task and TaskWait, the two Task starts
+     use the grouped task list without another enclosing disclosure, and the
+     TaskWait row retains both reports.
   3. With the session in `ask`, prompt a turn that delegates to `fixer` with a
      multi-file spec. Confirm its `Write`/`Edit`, `Bash`, and external-path
      calls each render a card naming `fixer`. Switch the session to
@@ -13630,30 +13607,28 @@ This test plan spec is accepted when:
      `mode: "any"`, `minCompleted: 1`; confirm it returns as soon as the first
      settles and that the still-running delegates keep running.
   5. Prompt a turn that starts a delegate and then ends the turn without
-     `TaskWait`/`TaskStop`; confirm the delegate is stopped at run end and its
-     node reads `aborted`, and that the next turn's model context contains no
+     TaskWait/TaskStop; confirm the delegate is stopped at run end and its task
+     reads aborted in Needs attention. The next turn's model context contains no
      delegate rows.
   6. Prompt ten `Task` calls in one turn and one more; confirm the eleventh
      fails as a tool error naming the 10-delegate cap, and that `TaskStop`
      frees a slot so an eleventh delegation can start.
-  7. Reload the session; confirm the delegation card, its nodes, and the
-     `TaskWait` rows persist and re-render collapsed, and that `TaskWait`
-     re-reads a settled delegation's report by id without re-running it.
+  7. Reload; confirm task entries retain identity/outcome and lifecycle payloads
+     stay closed by default. TaskWait re-reads a settled report by id without
+     re-running the task.
   8. Prompt a turn where the agent starts two Task calls and then emits visible
      text before calling TaskWait (so Task and TaskWait land in different
-     activity parts); confirm the topology card shows "completed" status on
-     both nodes once TaskWait returns, not stuck at "running", and that each
-     node shows a non-zero runtime duration derived from the delegation
-     lifecycle timestamps rather than the immediate `Task` start call.
+     activity parts); confirm both tasks read Completed once TaskWait returns,
+     not stuck in Active. Where diagnostics display runtime, it comes from
+     recorded delegation lifecycle timestamps, not the immediate Task call.
   9. Edit `~/.agents/subagents/readonly.md` to declare `permission: auto` and reload the
      catalog; confirm the definition still loads but carries a warning, and
      that its delegate still resolves under the session's effective mode (a
      `Write` inside the workspace still raises a permission card).
-  10. Prompt a turn that starts a delegate, lets `TaskWait` time out so the
-      node still says running, then calls `TaskStop`; confirm the topology
-      node and the `TaskStop` row both read `stopped` (not `running`). End the
-      turn and reload the session; confirm the card is not labelled working
-      and does not keep ticking elapsed.
+  10. Prompt a turn that starts a delegate, lets TaskWait time out while it stays
+      running, then calls TaskStop; confirm the task and TaskStop row both read
+      stopped, not running. End the turn and reload; the task must not remain in
+      Active or acquire a fabricated running duration.
   11. Inject synchronous `SubagentRun` initialization failure; confirm the
       `Task` result is an error and `TaskList` has no permanently running row.
   12. In a runtime fixture, make settled-row publication throw and confirm the
@@ -13667,13 +13642,12 @@ This test plan spec is accepted when:
   leaves no `running` delegation. User Stop/Dispose abort the parent wait as
   well as delegates, and cancelled sessions do not remain `AGENT_BUSY` solely
   because a child is still settling. `TaskList`/`TaskStop` drive the lifecycle;
-  a `TaskStop` result and a finished turn never leave a live “Subagent working”
-  card; builtin `fixer` inherits the selected session permission mode, so
-  `auto` also covers explicit external paths without a duplicate authorization
-  prompt while `ask` and `accept-edits` retain their approval boundaries; a
-  global definition's declared scope is dropped; the per-session running cap
-  of 10 is enforced; no delegate outlives its turn; reloaded transcripts keep
-  their delegation topology.
+  a TaskStop result or finished turn never leaves a task marked live. Builtin
+  fixer inherits the selected session permission mode, so auto also covers
+  explicit external paths without duplicate authorization while ask and
+  accept-edits retain approval boundaries. A global definition's declared scope
+  is dropped; the per-session running cap of 10 remains; no delegate outlives its
+  turn; reloaded transcripts retain task identity, attribution and outcomes.
 - **Specs linked**: `03-runtime/02-agent-runtime.md` §5f/§5f.1/§7.1,
   `03-runtime/03-tools-and-permissions.md` §10.2,
   `08-meta/decisions-log.md` (D242 amends D231), ADR 0089 and ADR 0100
@@ -13822,54 +13796,41 @@ This test plan spec is accepted when:
   `packages/shared/src/subagent-presets.test.ts`); full UI journey Draft
   (run only in a capable environment when this surface changes)
 
-#### E2E-198: A subagent task opens with a live conversation process
+#### E2E-198: A subagent task opens with shared live turn content
 
-- **Preconditions**: A project-bound Agent session with a mocked provider stream
-  where one `explorer` delegate has a Task description and emits thinking,
-  tool, and answer rows over time. The work panel is initially closed.
-- **Steps**: 1) Expand the activity group if needed and click the `explorer`
-  topology node. 2) Click the selected `explorer` node again and confirm the
-  right-side dock closes, then click it once more to reopen it. 3) Observe the
-  right-side dock while the delegate streams. 4) Scroll the task/process
-  conversation upward and then return to the latest output. 5) Switch sessions
-  and return to the original session. 6) Let a delegate start and then fail,
-  open its node, and read the foot of the dock; repeat with a delegate that
-  completes and one that is still running.
-- **Expected**: The right dock shows a sticky identity header (avatar, name,
-  and model caption on the left; status capsule and elapsed time trailing on
-  the same row without wrapping), the Task call's description
-  as a full-width inset grouped card under a Task section label, capped at four
-  lines with an inline Show more / Show less control for longer tasks, and
-  the delegate's live thinking/tool/answer process under an Activity section
-  on one subtle vertical timeline using the same row components as the main
-  conversation.
-  The selected topology node is a full-row toggle without an extra disclosure
-  chevron: its first click opens the dock and its second click closes it.
-  New rows appear without a reload and follow the bottom while pinned. The
-  panel has one body scrollbar; the process does not create a nested scrollbar
-  or a second elevated card. At the minimum supported panel width, long
-  commands, paths, and tool summaries remain contained within the dock without
-  horizontal page overflow. A real upward gesture pauses follow and exposes
-  jump-to-latest. The transcript remains the same height and keeps its own
-  scroll state. Session switching hides the selection and returning never
-  shows another session's task.
-  In step 6, a delegate that starts and then fails closes the dock with an
-  error card rather than a bare `Failed` capsule: the localized summary (the
-  registered `errors.<code>` sentence when the runtime reported a known code,
-  the localized `chat.subagentStatus.*` outcome otherwise), the stable code,
-  the raw provider message behind a Show details / Hide details disclosure, and
-  a copy control. The disclosure control stays reachable while the details are
-  collapsed, and the delegate that completed or is still running shows no card
-  at all.
+- **Preconditions**: A project-bound session with a synthetic explorer Task,
+  original thinking/tool/answer/image/review rows, and a failed Task; work panel
+  initially closed. Use the isolated fixture for renderer acceptance.
+- **Steps**: 1) Open the outer process if necessary and activate the task row.
+  2) Activate it again and confirm its existing tab is focused, not closed.
+  3) Use All tasks and choose another task, then return to the first. 4) Observe
+  streamed content, scroll up, and jump to latest. 5) Open brief and recorded
+  diagnostics disclosures. 6) Read a failure reason without opening them.
+  7) Reveal an original child message via search; switch sessions and return.
+- **Expected**: The source session's normal work-panel tabs remain. The header
+  has the task title, stable identity icon, passive recorded effective model and
+  thinking text, and existing authorized stop/retry controls, not an editable
+  model control or a disabled composer. All tasks returns to the same-session
+  index. Brief and recorded diagnostics start closed. Full original child turns
+  and resume-chain briefs remain available; latest Task metadata owns current
+  resumed status. Shared TurnProcess, AssistantTurnParts, TurnChangesCard and
+  images render the detail without parent mutation controls. Recorded partial
+  changes survive failure or stop. Failure summary/code and existing original
+  error details/copy stay reachable outside brief/diagnostic disclosures; running
+  and completed tasks have no terminal failure card. There is one visible body
+  scroll surface, pinned follow/manual history and shared search reveal, no
+  nested workflow scrollbar or composer tail, and no horizontal page overflow.
+  Task selection preserves parent transcript scroll and panel width. Session
+  switching never exposes another session's rows.
 - **Specs linked**: `04-ux/08-component-spec.md` §5.7,
-  `04-ux/09-interaction-patterns.md` §9.1
-- **Acceptance**: C (conversation), Quality
+  `04-ux/09-interaction-patterns.md` §9.1,
+  [task-first ADR](../../adr/task-first-transcript-presentation.md).
+- **Acceptance**: C (conversation), D (workspace), Quality
 - **Milestone**: M6+
-- **Status**: Documented; desktop journey pending. The failure card's data
-  source is unit-tested in `subagent-topology.test.mjs`: a settled delegation's
-  `error: { code, message }` read from `TaskWait` `delegations[]` and `TaskStop`
-  `stopped[]`, lifecycle row ordering, entries without an error, and the
-  terminal Task snapshot that carries a failure before parent polling.
+- **Status**: Updated task-first journey; verification pending. The existing
+  `subagent-topology.test.mjs` name still covers status/failure projection, not a
+  current graph UI. Renderer acceptance entry points are listed in
+  E2E-CHAT-task-first-reading; no passing result is claimed here.
 
 #### E2E-SUBAGENT-settlement-updates-before-parent-poll
 
@@ -13880,14 +13841,14 @@ This test plan spec is accepted when:
   delegate while the parent turn remains live. 4) Switch sessions and return,
   then reload history after the turn finishes. 5) Repeat with failed and stopped
   delegates, and with a delegate finishing before its Task result arrives.
-- **Expected**: The settled node stops spinning immediately, its status is
-  completed (green) or the actual failure/stop outcome, and its elapsed time
-  stops increasing. The sibling remains running; the aggregate reads one of
-  two settled. The open dock updates with the same status and failure details.
-  A stale running TaskList snapshot cannot undo settlement. Reload preserves
-  the actual terminal outcome and original Task identity, arguments, and usage.
+- **Expected**: The settled task immediately leaves Active for Completed or
+  Needs attention with its actual outcome written in text. Identity color stays
+  stable rather than turning green. The sibling stays Active and section counts
+  update. The open detail uses the same status and failure evidence. A stale
+  running TaskList snapshot cannot undo settlement. Reload preserves terminal
+  outcome and original Task identity, arguments and usage.
 - **Specs linked**: `03-runtime/02-agent-runtime.md` §Subagents,
-  `04-ux/08-component-spec.md` delegation topology
+  `04-ux/08-component-spec.md` §9.9 (task lists)
 - **Acceptance criterion**: C, Quality
 - **Milestone**: M6+
 - **Status**: Runtime event-order and renderer projection regressions automated;
@@ -14140,21 +14101,21 @@ This test plan spec is accepted when:
   inspect the `TaskWait` row's summary, badge and expanded body. 3) Start a
   third delegate reusing the `explorer` definition, call `TaskList`, and read
   the summary. 4) Stop a running delegate and inspect the `TaskStop` row.
-  5) Confirm the delegation card's own subagent count is unchanged by all three
-  lifecycle rows. 6) Repeat in Chinese.
+  5) Confirm task-list counts are unchanged by all three lifecycle rows.
+  6) Repeat in Chinese.
 - **Expected**: Every lifecycle row summarizes by agent name — never by its
   `delegationIds` argument, and no bare UUID appears in a collapsed row. Its
   badge uses the shared subagent status vocabulary: running while any member
   runs, `Failed` / “失败” once a member failed even though a sibling completed,
   and `Stopped by request` / “已按请求停止” for the stopped delegate — including
-  when the persisted `TaskStop` snapshot still says `running`. The topology
-  card's node matches that stopped outcome and is not labelled working after
-  the turn ends. A repeated
+  when the persisted `TaskStop` snapshot still says `running`. The task-list
+  entry matches that stopped outcome and is not labelled working after the
+  turn ends. A repeated
   definition is counted (`explorer ×2`) rather than listed twice. The expanded
   body shows the joined reports as a notice followed by one named row per
   subagent with status, runtime and turns, and contains no pretty-printed
-  `delegations[]` JSON. The delegation card still reports the number of `Task`
-  calls only, so lifecycle rows never inflate the topology counts.
+  `delegations[]` JSON. Task-list counts include only Task starts, so lifecycle
+  rows never inflate the task counts.
 - **Specs linked**: `04-ux/08-component-spec.md` §9.9,
   `03-runtime/02-agent-runtime.md` §5f, ADR 0062, ADR 0089, decisions-log D269
 - **Acceptance**: C (conversation), Quality
@@ -18962,135 +18923,135 @@ command, a delegate, and an explicit Stop. Accepted input is delivered once.
 - **Milestone**: M6+
 - **Status**: Draft
 
+### E2E-CHAT-task-first-reading
+
+- **Preconditions:** Production renderer components with synthetic recorded/live
+  messages, a stub Host boundary, and isolated Electron BrowserWindow state; no
+  live profile, running daily Desktop, or real provider. Include streaming
+  thinking/tools, successful and denied/failed results, partial recorded changes,
+  active/failed/completed Tasks, lifecycle rows, a resume chain and a second
+  session. Test light/dark, English/zh-CN, and 380px/300px side panels.
+- **Steps:**
+  1. With folding settings absent, stream thinking and multiple ordinary tool
+     rows. Confirm the outer process opens but the ordinary group and reasoning
+     stay closed. Repeat with explicit true and false for each existing setting.
+  2. Use pointer, Enter and Space to open/close each level. Stream more deltas,
+     settle, remount within the retained pane, and close/reopen an ancestor.
+     Check manual persistence and transient focus/selection protection. Reveal
+     an original tool/child message through shared search and then manually close
+     it; replaying the same request must not undo that close.
+  3. Inspect the closed activity summary with recorded failed/denied tools plus
+     skipped/interrupted/context-request results; verify only actual issues count
+     and a recovered tool failure does not fail the whole turn.
+  4. Record workspace edits while streaming, then fail or stop without final
+     text. Inspect the compact file count/diff header; expand inline, test hidden
+     focus and independent disclosure choices, and route a path to Review.
+     Repeat inside a child task turn and with more than twelve files.
+  5. Inspect chronological single-line task activity in the conversation and
+     Active / Needs attention / Completed counts in the side-panel index.
+     Check description-first labels, stable identity colors and explicit outcomes.
+     Lifecycle rows must not create tasks; starting a Task must not open a tab.
+  6. Open a task, use All tasks, choose another, and return to a resumed task.
+     Verify source-session tabs coexist, the latest Task handle owns current
+     status/controls, and the original full resume chain remains readable. Open
+     the initially closed briefs/diagnostics; confirm failure reason is visible
+     without opening them and model/thinking text is passive. Use the real local
+     composer to target the latest handle; check draft isolation, errors, and
+     correct user-message role/order. The task index has no composer; detail has
+     no model picker or parent edit/delete/regenerate actions.
+  7. Invoke authorized Stop, Stop all, and failed Retry from list/detail; assert
+     the source session and intended delegation reach the stub, duplicate requests
+     stay disabled, and prohibited source/capability combinations expose no new
+     control. Read history while output streams, then jump to latest.
+  8. Repeat narrow localized light/dark layouts. Check one visible scroll surface,
+     no horizontal page overflow, reachable controls, explicit failure text,
+     neutral surfaces, no graph card or task-entry animation, and retained
+     black/white primary accent controls rather than a blue app skin.
+- **Expected:** The task-first default replaces the personal-edition reading
+  presentation without adding a mode or changing messages, data, protocol,
+  runtime or permissions. All steps preserve original source-session attribution,
+  terminal precedence, manual/search protections and recorded-change semantics.
+- **Acceptance fixtures:** `apps/desktop/test/task-reading-presentation.test.mjs`
+  (pure helpers and production SSR),
+  `apps/desktop/test/task-reading-user-path.test.mjs` with
+  `apps/desktop/test/fixtures/task-reading.jsx` (isolated Electron BrowserWindow,
+  synthetic data and stub Host), and existing
+  `apps/desktop/test/turn-changes-disclosure-user-path.test.mjs`.
+- **Specs linked:** `04-ux/06-settings-ia.md`, `04-ux/07-ui-design-system.md`,
+  `04-ux/08-component-spec.md` §§4/5.7/9.9,
+  `04-ux/09-interaction-patterns.md` §§4/9,
+  [task-first ADR](../../adr/task-first-transcript-presentation.md).
+- **Acceptance:** C (conversation), D (workspace), E (tools), Quality
+- **Milestone:** Personal-edition maintenance
+- **Status:** Isolated production-component acceptance passed on Windows with
+  Electron 43.6.0: five interaction stages and four light/dark, 380px/300px,
+  English/zh-CN layouts, plus the existing changed-files keyboard/disclosure
+  fixture. Pure/SSR coverage includes resume-handle selection and partial work.
+  Base revision: `0f7552494`; candidate includes uncommitted task-reading changes.
+  This is not a full Desktop, live-provider, installation or upgrade verification;
+  the wider history/remount/authorization matrix remains covered only by the
+  applicable existing regression suites or pending integrated acceptance.
+
 ### E2E-CHAT-turn-process-and-thinking-display
 
-- **Preconditions:** A turn with progress paragraph A, multiple searches plus
-  thinking, progress paragraph B, multiple commands plus thinking, and a final
-  answer; the `Show thinking` preference on and off; the `Transcript display`
-  preference at Flat, Commands first, and Fully folded; a restart with saved
-  settings; legacy message-level transcript search targets.
-- **Steps:** Confirm a live active group starts open, let that same turn finish
-  without interacting, and confirm the process closes so only the final answer
-  (and any error or pending-action surface) remains. Reopen it and confirm a
-  every settled group folded and every finished reasoning row folded, and that
-  each group header names the actions it contains plus the call count
-  (`搜索并读取文件 · 12 次操作`). Confirm tool and search payloads stay closed.
-  Turn `Auto-fold finished groups` off and confirm every settled group opens
-  whatever its size, then turn it back on; turn `Auto-fold finished thinking`
-  off and confirm every reasoning row opens, then turn it back on. On a second
-  turn, explicitly
-  open a completed group and confirm the choice survives subsequent updates; then
-  close the turn's disclosure and confirm the group closes with it, and reopen to
-  confirm the group choice is restored. In Fully folded, confirm run rows stay
-  inside their activity groups and that only ordinary assistant progress text
-  splits a group. In Commands first, confirm `Bash`/run rows render as standalone
-  rows beside the groups, that a normal assistant progress message or a command
-  ends the current group, adjacent calls stay separate, and only the reasoning
-  row the turn is still streaming is expanded. In Flat, confirm no nested
-  activity group renders, that `Auto-fold finished groups` is absent from AI
-  settings, and the outer
-  disclosure lists tools, commands, thinking and progress in transcript order,
-  and tool details stay collapsed. In every mode confirm the turn renders exactly
-  one outer disclosure and that closing it hides, then reopening restores, the
-  rows under it. Turn `Show thinking` off and confirm no completed reasoning row
-  remains and only a live whole-run TextShimmer `Thinking` indicator appears
-  while reasoning streams, with no spinner, pulsing dot or per-character
-  animation and a static presentation under reduced motion; turn it back on and
-  confirm the completed rows return. Select each `Transcript display` value,
-  restart, and confirm it persists; remove the saved value and confirm it
-  defaults to Fully folded. Confirm the header reads running, finished, stopped,
-  or failed for each case, names compaction and recovery while those stages are
-  live, omits the duration when none was recorded, and never repeats the current
-  command. Confirm the top-level header shows exactly status, recorded duration
-  and direct tool/search count; its caret sits immediately after the tool count;
-  a hairline underlines the row; hovering changes only the text colour with no
-  background fill; and a failed turn does not add an issue count. Review the
-  nested path, including independent group/item toggles, a
-  singleton segment, literal-final-item leaf selection, failure/denial/recovery,
-  retained-pane remounts, run rows keeping their details closed until opened, and
-  a legacy search reveal.
-  In AI settings, check the display selector in English and Simplified Chinese
-  at 800px, 1000px, and 1440px window widths with 100% and 150% font scales.
-  Select all three values and verify each remains visibly selected and saved.
-- **Expected:** A turn renders exactly one process disclosure containing every
-  pre-answer row, leaving the final answer, assistant errors, stopped trailing
-  text and pending actions outside it; when no final answer text exists, the
-  process header and those error or pending-action surfaces remain. An untouched
-  process closes at completion. In Flat there are no nested activity groups, and
-  active tools, commands, thinking and progress rows follow transcript order with
-  tool details collapsed. In Commands first, `Bash`/run rows are standalone
-  beside the groups, adjacent calls stay separate, and a normal assistant
-  progress message or a command ends a group, so the middle progress paragraph
-  and each command start a new group. In Fully folded (the default), run rows
-  stay inside their groups and only ordinary assistant progress text splits a
-  group, so the middle progress paragraph ends the preceding group and the
-  following activity starts a new one. A group appears only with at least two
-  visible items; a singleton has no group. Every group stays open while its turn
-  runs; after completion both nested levels fold, so every settled group and
-  every reasoning row that is no longer streaming starts closed, whatever the
-  group's size. Only the reasoning a live turn is still streaming starts
-  expanded when `Show thinking` is on, and a group does not inherit open state
-  from the reasoning inside it, so folding a group hides expanded reasoning.
-  Turning off `Auto-fold finished groups` opens every settled group; turning off
-  `Auto-fold finished thinking` opens every rendered reasoning row. A settled
-  group's header names the actions it contains, capped at three with "and more",
-  and appends the operation count as its own non-truncating token; reasoning is
-  named but not counted, and the header carries no issue counter.
-  Explicit user choices persist and are restored when the enclosing disclosure is
-  reopened, and never pin an ancestor; an automatic close is deferred only while
-  focus or a selection remains inside. Group defaults do not depend on
-  `Show thinking` or on the reasoning a group contains. The header
-  reports running, finished, stopped, or failed with failure and stop outranking
-  a normal finish, reads `Thinking` while the live step is reasoning, names
-  compaction and recovery while those stages are live, omits a duration the
-  transcript did not record, and never repeats the current command. It carries
-  only status, duration and direct tool/search count, with the caret immediately
-  after the tool count, a hairline under the row, text-colour-only hover, and no
-  issue count. Nested group headers and run rows share the turn header's left
-  edge. When `Show thinking` is off, no completed reasoning row renders, and only
-  the live whole-run TextShimmer `Thinking` indicator remains while reasoning
-  streams; turning it back on restores the rows. No item payload opens itself
-  except the display mode's Thinking default: a tool/search row stays closed until
-  the user opens it.
-  Parent/child/sibling states remain independent, pane-owned user choices survive
-  updates, preference changes and remounts, and renderer restart reapplies
-  defaults. Search reveals the turn process and, where one exists, the activity
-  group that own the named message once per request; item-level targeting is not
-  part of this change, and reasoning hidden by the preference stays hidden until
-  the user turns `Show thinking` on. A saved `transcriptDisplayMode` survives
-  restart and an absent or unknown value resolves to Fully folded; saved
-  `showThinking` survives restart, and an absent value falls back to the legacy
-  `thinkingDisplayMode` (`compact` hides, `detailed`/unknown/absent shows).
-  The Settings selector grows to its labels beyond the standard 240px field
-  cap. Option labels remain single-line and unclipped; the control and whole
-  options wrap only as needed, preserving the title/help space and preventing
-  horizontal row overflow. Wide windows keep the title and control inline.
-- **Validation scope for the 2026-09-20 change:** Nested disclosure and activity
-  group presentation only; precise item-level transcript search targeting is out
-  of scope and keeps the existing message-level search behavior.
-- **Automation:** `pnpm test:e2e:transcript` covers the command-first and
-  fully-folded layouts, active-to-completed process disclosure behavior, the
-  automatic folding and reading-hold transitions, and the activity issue
-  counter's inline layout at 320/800px and 100%/150% zoom in English and
-  Simplified Chinese; `pnpm test:e2e:transcript-disclosure` verifies manual-open
-  retention and viewport anchoring; `apps/desktop/test/turn-process.test.mjs`
-  covers mode segmentation, `apps/desktop/test/activity-group-folding.test.mjs`
-  covers the settled group defaults and the issue-counter contract,
-  `apps/desktop/test/transcript-display-modes-ui.test.mjs` covers
-  the renderer's mode wiring, Thinking defaults and TextShimmer,
-  `apps/desktop/test/turn-process-header.test.mjs` covers the top-level header's
-  status/duration/tool-count composition and the absence of issue counts,
-  `apps/desktop/test/turn-process-header-style.test.mjs` covers its hairline and
-  text-only hover,
-  `apps/desktop/test/transcript-display-mode-settings.test.mjs` covers the
-  Settings row and search indexing, and
-  `apps/desktop/test/settings-roundtrip.test.mjs` covers normalization, write
-  validation and the fully-folded default.
-  `node scripts/e2e-settings-scroll.mjs` additionally exercises the mounted
-  Settings page's selector layout and settings-save path across both locales,
-  three window widths, and both font scales with isolated Electron state.
-- **Specs:** 04-ux/06-settings-ia, 04-ux/08-component-spec,
-  04-ux/09-interaction-patterns; ADR turn-process-and-thinking-display.
+- **Preconditions:** Progress text, searches, thinking, commands and a trailing
+  answer; live/completed/failed/stopped/no-final-text turns; the three existing
+  Transcript display values; Show thinking on/off; absent/true/false folding
+  settings; saved/legacy settings; message-level search targets.
+- **Steps:** Inspect the active outer process with untouched ordinary groups and
+  reasoning closed even while streaming. Exercise explicit false opt-outs and
+  manual toggles, including Enter/Space, then complete and reopen the turn.
+  Switch Flat / Commands first / Fully folded and inspect boundaries, standalone
+  command rows, singleton segments and exactly one outer process. Hide/show
+  thinking; verify stored reasoning returns without an excerpt when closed.
+  Check failed/denied/recovered tools and issue counts, reading protection,
+  retained-pane remounts, independent descendant choices and a search reveal.
+  Restart with each saved mode and with absent/unknown mode plus legacy thinking
+  fields. Inspect Conversation → Display in English/zh-CN at 800/1000/1440px
+  windows and 100%/150% font scales; select all modes and inspect sub-row gating.
+- **Expected:** The outer process remains active-open/untouched-completed-closed;
+  all pre-answer rows live inside it, with trailing answers, assistant errors,
+  stopped partial text and pending actions outside. A no-final-text turn still
+  has its process header and actionable surfaces. Flat has no ordinary groups;
+  Commands first lifts separate Bash/run rows and a command or progress text ends
+  a group; Fully folded keeps commands inside groups split by ordinary progress
+  text. Groups need two visible items; singletons use their own disclosure.
+  Task starts use the task list without an enclosing task-group fold.
+  `autoCollapseSettledGroups` and `autoCollapseThinking` absent/true start their
+  own levels closed even while streaming; explicit false starts them open.
+  There is no size tier or reasoning-keeps-group-open rule. Tool/search/run/plan
+  payloads stay closed until requested. Closing ancestors preserves child choices
+  and opening them is never expand-all. Choices are pane-owned, survive ordinary
+  updates/remounts/preference changes, and do not pin ancestors; focus/selection
+  transiently defers automatic closure. A search reveal applies once per request
+  at the existing message precision; hidden reasoning stays hidden.
+  The ordinary header names at most three action categories plus "and more" and
+  its separate non-truncating operation count. Reasoning is named, not counted as
+  an operation; reasoning-only groups count steps. Closed ordinary groups expose
+  actual failure/denial counts, excluding skips/interruption/context requests,
+  without promoting a tool error to parent-turn failure. The top-level header
+  alone reports Running/Finished/Stopped/Failed with existing precedence, named
+  compaction/recovery/thinking phases, recorded duration only and direct tool
+  count; its inline caret/hairline/text-only hover stay unchanged, without an
+  issue count. Show thinking off retains only the live whole-run TextShimmer
+  indicator; completed reasoning is hidden, not discarded. Reduced motion stays
+  static. Saved mode/visibility compatibility is unchanged: absent/unknown mode
+  resolves Fully folded and absent visibility follows legacy compact versus
+  detailed/unknown/absent. **Collapse thinking by default** and **Collapse activity
+  by default** retain their existing setting keys and parent gating; hiding a
+  sub-row never rewrites it. Selector options remain readable and wrap as whole
+  options without horizontal overflow. No fourth layout is introduced.
+- **Automation entry points:** Existing transcript/disclosure, folding/settings,
+  header, mode and settings-roundtrip suites remain relevant. The task-first
+  pure/SSR and isolated Electron entry points are listed in
+  E2E-CHAT-task-first-reading; existing suite names are not evidence of a current
+  passing run.
+- **Specs linked:** `04-ux/06-settings-ia.md`, `04-ux/08-component-spec.md`,
+  `04-ux/09-interaction-patterns.md`,
+  [task-first ADR](../../adr/task-first-transcript-presentation.md).
+- **Acceptance:** C (conversation), E (tools), Quality
+- **Milestone:** Personal-edition maintenance
+- **Status:** Updated contract; task-candidate verification pending.
 
 ### E2E-RPC-unicode-separators
 

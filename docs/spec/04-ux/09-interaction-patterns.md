@@ -1146,17 +1146,19 @@ may be retained while exactly one workspace supplies the visible shell context.
   `command-first` or `fully-folded`. In `fully-folded`, ordinary assistant
   progress text ends the segment; in `command-first`, a normal assistant progress
   message or a command ends it. A singleton uses its item disclosure directly,
-  hidden thinking does not create a redundant group, and existing Task topology
-  remains separate. No mode adds a second top-level disclosure or leaves a run
-  row outside the process.
-- Every ordinary group of a turn stays open while that turn runs, whether or not
-  it still owns the live segment. After the turn settles, ordinary groups with at
-  most four visible items, Task topology groups and groups that still render a
-  Thinking row remain open; larger ordinary groups of plain tool rows start
-  closed. Apart from visible reasoning these defaults do not depend on the
-  thinking preference. Closing the turn's disclosure hides every group and run
-  row under it without erasing their choices; reopening restores their defaults
-  and any explicit user choices.
+  hidden thinking does not create a redundant group, and Task starts use their
+  own task list with no extra enclosing disclosure. No mode adds a second
+  top-level process or leaves a run row outside it.
+- Ordinary activity groups start closed, even during a running turn or live tool,
+  when `autoCollapseSettledGroups` is absent or `true`; explicit `false` starts
+  them open. There is no small-group tier or visible-thinking exception. These
+  defaults are independent of **Show thinking**. Only the outer process retains
+  its active-open/completed-closed default. Its trailing answer, errors and
+  pending approvals remain outside. Closing an ancestor hides descendants
+  without erasing their choices; reopening is never expand-all. A closed group
+  retains the semantic action summary and actual failure/denial count; skipped,
+  interrupted and context-request rows do not count as issues, and an individual
+  tool error never alone makes the whole turn failed.
 - The turn header reports `Failed`, `Stopped`, `Running`, or `Finished` in that
   precedence, names compaction and recovery while those stages are live, reads
   `Thinking` while the live step is reasoning, omits the duration when the
@@ -1164,17 +1166,14 @@ may be retained while exactly one workspace supplies the visible shell context.
   nested group header shares its left edge; the group body then indents child
   rows by 12px with the hover/focus collapse rail in that gutter, while a run
   row lifted out of a group keeps the turn's left edge.
-- No item payload opens itself except reasoning: a tool, hosted-search or plan
-  call stays a header row until the user opens it, including the literal final
-  item of the last activity group. With `Show thinking` on, only the reasoning a
-  live turn is still streaming starts expanded; completed rows start folded and
-  open on user action, or stay open when `Auto-fold finished thinking` is off. A
-  folded row shows only the Thinking indicator, with no excerpt.
-  With `Show thinking` off, no completed reasoning row renders; only a live
-  whole-run TextShimmer `Thinking` indicator remains while reasoning streams.
-  Stored reasoning is retained and reappears when the preference is turned back on.
-  A group and its reasoning answer to their own switches: neither inherits the
-  other's state, so folding a group hides the expanded reasoning inside it.
+- Tool, hosted-search, plan, and run payloads never auto-open. With **Show
+  thinking** on, reasoning also starts closed even while streaming when
+  `autoCollapseThinking` is absent or `true`; explicit `false` starts it open.
+  A folded row shows only the Thinking indicator, with no excerpt. With **Show
+  thinking** off, no completed reasoning row renders; only a live whole-run
+  TextShimmer `Thinking` indicator remains while reasoning streams. Stored
+  reasoning is retained. Group and reasoning levels follow independent switches:
+  folding a group hides its contents without erasing child choices.
 - Activating a group or item header toggles only that level. Closing a parent
   preserves child state, reopening restores it, and sibling groups remain
   independent. Opening a parent is never an expand-all action.
@@ -1762,16 +1761,14 @@ Project drag/drop follows these patterns:
   the composer instead of sliding behind it (D287).
 - A manual disclosure — turn process, activity group, tool/search/thinking item,
   delegate brief, or error detail — holds the reading position of the scroller
-  that owns it (issue #324). Only the initiating level claims the anchor; marking
-  the containing group user-owned does not claim its scroll position. The title is
-  handed
-  to the scroller before the state changes, follow mode is left, and the scroller
-  restores the title's viewport offset for every frame of the height change. A
-  nested scroller (the delegate run dock, D302) holds its own position and passes
-  the hold outward because growing it also grows the outer content.
-  Search reveal opens the required ancestors at message precision and uses the
-  Search reveal opens the required ancestors and uses the precise target as the
-  final anchor. Leaving follow for any disclosure is not a re-pin: the transcript
+  that owns it (issue #324). Only the initiating level claims the anchor; it does
+  not pin an ancestor. The title is handed to the scroller before state changes,
+  follow mode is left, and the scroller restores the title's viewport offset for
+  every frame of the height change. The child task detail holds its own panel-body
+  anchor; it does not introduce
+  a nested workflow scroller inside the parent transcript. Search reveal opens
+  the required ancestors and uses the precise target as the final anchor.
+  Leaving follow for any disclosure is not a re-pin: the transcript
   stays where the reader put it, with jump-to-latest visible, until real scroll
   input, that control, a new turn or navigation releases the hold (D430).
 - Scroll input is attributed to the scroller that can consume it. A press on a
@@ -1789,33 +1786,35 @@ Project drag/drop follows these patterns:
   native completion. Queued scroll events or a pending page cannot reopen historical
   reading or start another page read during that trip.
 - Button disappears when at bottom
-- A delegation tab uses the same single-body scroll owner as the work panel.
-  It renders the delegate's conversation — each `Task` call's prompt as a user
-  row followed by the delegate's live thinking, tool, and answer rows — in
-  normal content flow; it does not mount a nested `.subagent-run-rows`
-  workflow scrollbar. While the panel is pinned, new rows stay in view; a real
-  upward gesture pauses follow and shows the standard jump-to-latest control.
-  This keeps the conversation readable without a second scrollbar or an empty
-  tail.
-- Clicking a delegation topology node opens (or activates) a dedicated
-  `subagent` tab in the work panel instead of expanding the transcript or
-  replacing the tab strip. Multiple delegations coexist as independent tabs —
-  ten subagents yield ten tabs — with the standard tab affordances (activate,
-  drag-reorder, close via ×, middle-click, or Delete, and wheel overflow).
-  A tab shows the delegation as a message list: every `Task` call of the
-  resume chain renders its prompt as a user row, and the rows the delegate
-  produced under that call render with the main transcript's message-list
-  language, so a follow-up prompt reads as the next user turn. The tab is
-  display-only: a disabled two-row composer sits at the foot with an in-field
-  hint that subagents are driven by the main agent and cannot take input; no
-  send path exists. At the minimum panel width, long commands, paths, and
-  tool summaries wrap inside the committed width instead of expanding the
-  panel past the client area.
-  A tab is never opened automatically when a delegate starts; only a node
-  click opens one. Tabs persist after the delegate settles until the user
-  closes them, and they are scoped to their session like every other tab.
-  Switching sessions or routes hides the panel; `Cmd/Ctrl + J` toggles the
-  whole work panel.
+- A subagent detail or its same-session task index has only one visible panel-body
+  scroll surface. Original child turns and the full resume chain remain in normal
+  flow, using the shared process, activity, reasoning, changed-files and image
+  components without parent-message mutation controls. Pinned output follows;
+  an upward gesture pauses follow and exposes jump-to-latest. Briefs and recorded
+  diagnostics start in closed native details disclosures, while a terminal
+  failure reason remains visible outside them. Shared search reveal opens the
+  required path to the original child message; no copied transcript is searched.
+- Activating a task-list row opens or activates its source session's dedicated
+  `subagent` work-panel tab. Multiple tabs coexist with other resources and keep
+  standard activate, drag-reorder, close via × / middle-click / Delete, and wheel
+  overflow behavior. A second activation is not a close toggle. Tasks never open
+  tabs automatically; settled tasks' tabs remain until explicitly closed.
+- **All tasks** in the detail header goes back to that session's task index,
+  grouped as Active / Needs attention / Completed with counts. Choosing a task
+  returns to its detail through existing session-scoped tabs, not a new panel
+  routing model. The selected title favors task description over role/name.
+  Effective model/thinking text is passive; existing authorized Stop, Stop all,
+  and failed Retry controls retain source-session attribution and capability
+  gates. The detail has a real local child composer and admitted failure-policy
+  summary; the task index has no composer. Sending targets the latest resume
+  handle, keeps user messages in order with their original role, and preserves
+  drafts on failure or a stale acknowledgment. Remote/native sessions remain
+  unavailable for direct child input. Long text and controls remain contained
+  at narrow panel widths, with only the transcript body scrolling.
+- Session/route switches retain the existing session-scoped tab lifecycle and
+  never display another session's child rows. `Cmd/Ctrl + J` toggles the whole
+  work panel. Task navigation does not move the parent transcript or change
+  panel width.
 
 ### 9.1a Sidebar project path and open folder
 

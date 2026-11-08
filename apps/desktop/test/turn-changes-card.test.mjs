@@ -148,8 +148,8 @@ test("a finished turn with a few files gets relaxed rows below the reply, above 
     edit("src/a.ts", { status: "added", operation: "write", additions: 19, deletions: 0 }),
     edit("src/b.ts", { additions: 12, deletions: 4 }),
   ]));
-  assert.match(html, /<section class="turn-changes-card" aria-label="Files changed this turn">/);
-  assert.match(html, /Changes this turn/);
+  assert.match(html, /<section class="turn-changes-card" aria-label="Files changed this turn" data-expanded="false">/);
+  assert.doesNotMatch(html, /Changes this turn/);
   assert.match(html, /2 files/);
   const disclosure = html.match(/<button[^>]*class="[^"]*turn-changes-head"[^>]*aria-expanded="false"[^>]*aria-controls="([^"]+)"/);
   assert.ok(disclosure, "the summary header starts collapsed and controls its details");
@@ -170,7 +170,7 @@ test("many files switch to dense rows, cap at twelve, and offer the Review panel
     edit(`pkg/dir${index % 3}/file${index}.ts`, { additions: 2, deletions: 1 }));
   const html = ssr.turn(turnMessages(tools));
   assert.match(html, /class="turn-changes-body is-dense"/);
-  assert.match(html, /15 files · 3 dirs/);
+  assert.match(html, /15 files/);
   assert.equal(rows(html).length, 12);
   assert.match(html, /\+3 more/);
   assert.match(html, /View all 15 files in Review/);
@@ -185,19 +185,18 @@ test("rolled-back files are marked in the row and its accessible name", async (t
   assert.match(html, /class="turn-changes-row"[^>]*aria-label="[^"]*a\.ts[^"]*· Rolled back"/);
 });
 
-test("no card for a turn without file writes, a live turn, or a failed turn", async (t) => {
+test("recorded changes remain available during streaming, failure, and interruption", async (t) => {
   const ssr = await renderer(t);
   assert.doesNotMatch(ssr.turn(turnMessages([])), /turn-changes-card/);
   const tools = [edit("src/a.ts")];
-  assert.doesNotMatch(
-    ssr.turn(turnMessages(tools), { isActive: true }),
-    /turn-changes-card/,
-    "streaming keeps the reply-slot mount condition",
-  );
-  assert.doesNotMatch(
-    ssr.turn(turnMessages(tools, { error: { code: "X", message: "boom" } })),
-    /turn-changes-card/,
-  );
+  for (const [reply, props] of [
+    [{ status: "streaming" }, { isActive: true }],
+    [{ error: { code: "X", message: "boom" } }, {}],
+    [{ status: "aborted", content: "Partial work" }, {}],
+    [{ content: "" }, {}],
+  ]) {
+    assert.match(ssr.turn(turnMessages(tools, reply), props), /turn-changes-card/);
+  }
 });
 
 test("the card stays borderless and the Review tab honors focus requests", async () => {
