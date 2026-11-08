@@ -1,59 +1,13 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
 import { buildEnvironment, buildPersonal, prepareBuild, runCommand } from "../../../scripts/build-personal-release.mjs";
 import { cleanPersonalRelease as cleanStandalone } from "../../../scripts/clean-personal-release.mjs";
-const repo = fileURLToPath(new URL("../../../", import.meta.url));
-const read = (p) => readFileSync(join(repo, p), "utf8");
-const write = (file, content) => { mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, content); };
-const version = JSON.parse(read("apps/desktop/package.json")).version;
-
-function fixture(t) {
-  const root = mkdtempSync(join(tmpdir(), "pi-personal-build-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
-  const desktop = join(root, "apps/desktop");
-  write(join(root, "package.json"), JSON.stringify({ version }));
-  write(join(desktop, "package.json"), read("apps/desktop/package.json"));
-  write(join(desktop, "electron-builder.personal.cjs"), read("apps/desktop/electron-builder.personal.cjs"));
-  write(join(desktop, "electron/main/updater.ts"), read("apps/desktop/electron/main/updater.ts"));
-  // Reuse installed tooling, not a second dependency installation.
-  symlinkSync(join(repo, "node_modules"), join(root, "node_modules"), "junction");
-  symlinkSync(join(repo, "apps/desktop/node_modules"), join(desktop, "node_modules"), "junction");
-  const pnpm = join(root, "tools/pnpm.exe");
-  write(pnpm, "synthetic command boundary; never execute");
-  const env = { PATH: process.env.PATH || "", npm_execpath: pnpm, PI_DESKTOP_DATA_DIR: "do-not-touch-live-data", NODE_OPTIONS: "--require=do-not-load-hook" };
-  const context = prepareBuild({ root, platform: "win32", arch: "x64", env });
-  return { root, desktop, pnpm, env, context };
-}
-
-function buildInputs(context) {
-  for (const file of ["target/release/pi-desktop-host-core.exe", "packages/agent-runtime/dist-bundle/sidecar.js", "apps/desktop/out/main/index.js", "apps/desktop/out/renderer/index.html"]) write(join(context.root, file), "synthetic build output");
-  write(join(context.root, "packages/agent-runtime/dist-bundle/package.json"), '{"type":"module"}');
-}
-
-async function packageOutput(context, metadata = {}) {
-  const unpacked = join(context.staging, "win-unpacked");
-  const source = join(context.root, "synthetic-asar");
-  write(join(source, "package.json"), JSON.stringify({ version: context.version, piSelfManaged: true, piDistribution: "installed", ...metadata }));
-  mkdirSync(join(unpacked, "resources"), { recursive: true });
-  await context.asar.createPackage(source, join(unpacked, "resources/app.asar"));
-  write(join(unpacked, "PI-Desktop.exe"), "synthetic executable; never run");
-  for (const [from, to] of [
-    ["target/release/pi-desktop-host-core.exe", "bin/pi-desktop-host-core.exe"],
-    ["packages/agent-runtime/dist-bundle/sidecar.js", "agent-runtime/sidecar.js"],
-    ["packages/agent-runtime/dist-bundle/package.json", "agent-runtime/package.json"],
-  ]) {
-    const target = join(unpacked, "resources", to);
-    mkdirSync(dirname(target), { recursive: true });
-    copyFileSync(join(context.root, from), target);
-  }
-  write(join(context.staging, context.installerName), Buffer.alloc(1024 * 1024, 42));
-}
+import { fixture, buildInputs, packageOutput, version, repo, write } from "./helpers/personal-release-fixture.mjs";
 
 test("preflight selects the current checkout, exact argv, one NSIS target, and creates no output", (t) => {
   const { context, root } = fixture(t);
@@ -105,9 +59,12 @@ test("representative build journey publishes only verified installer and checksu
   assert.deepEqual(invoked, context.stages);
   assert.equal(result.installed, false);
   assert.equal(result.launched, false);
+  assert.equal(typeof result.buildId, "string", "every build needs a distinct identity without changing its release version");
+  assert.equal(result.version, version);
   assert.equal(result.sha256, createHash("sha256").update(readFileSync(result.artifact)).digest("hex"));
-  assert.equal(readFileSync(`${result.artifact}.sha256`, "utf8"), `${result.sha256}  ${context.installerName}\n`);
-  assert.deepEqual(readdirSync(context.output).sort(), [".build", context.installerName, `${context.installerName}.sha256`, "build-info.json"].sort());
+  const name = result.artifact.split(/[\\/]/).at(-1);
+  assert.equal(readFileSync(`${result.artifact}.sha256`, "utf8"), `${result.sha256}  ${name}\n`);
+  assert.deepEqual(readdirSync(context.output).sort(), [".build", name, `${name}.sha256`, `${name}.changes.md`, `${name}.build-info.json`, "build-info.json"].sort());
   assert.ok(!existsSync(join(context.logs, "build.lock")));
 });
 
@@ -228,4 +185,21 @@ test("cleanup refuses a staging path redirected behind a junction", (t) => {
   symlinkSync(victim, context.staging, "junction");
   assert.throws(() => cleanStandalone({ root: context.root }), /refusing to clean it/);
   assert.ok(readdirSync(victim).length === 0 && existsSync(victim), "junction target must survive");
+});
+
+test("ordinary rebuilds keep the release version and retain both installer artifacts", async (t) => {
+  const { context } = fixture(t);
+  const run = async (stage) => {
+    if (stage.name === "Desktop production build") buildInputs(context);
+    if (stage.name === "NSIS installer only") await packageOutput(context);
+  };
+  const first = await buildPersonal(context, { run });
+  const original = readFileSync(first.artifact);
+  const second = await buildPersonal(context, { run });
+  assert.equal(first.version, version);
+  assert.equal(second.version, version);
+  assert.notEqual(first.artifact, second.artifact, "repacking must not overwrite the previous installer");
+  assert.notEqual(first.buildId, second.buildId);
+  assert.deepEqual(readFileSync(first.artifact), original);
+  assert.ok(existsSync(second.artifact));
 });

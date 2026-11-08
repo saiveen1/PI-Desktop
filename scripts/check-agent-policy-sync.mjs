@@ -1,29 +1,33 @@
 #!/usr/bin/env node
 /**
- * Agent policy mirror check: AGENTS.md and CLAUDE.md must stay in sync.
+ * Agent policy gate: `AGENTS.md` is authoritative, `CLAUDE.md` only delegates.
  *
  * Usage:
  *   node scripts/check-agent-policy-sync.mjs
  *   pnpm check:agent-policy
  *
- * AGENTS.md is the authoritative AI-agent policy. CLAUDE.md is the Claude Code
- * / Cowork entry point and a condensed mirror of the non-negotiables. Changing
- * one without the other is documentation drift and fails this gate.
+ * `AGENTS.md` carries the repository policy for AI agents. `CLAUDE.md` is the
+ * Claude Code / Claude Cowork entry point: it must point to `AGENTS.md`, require
+ * reading it before non-trivial work, and must not become a second copy of the
+ * rules. Changing one without the other is documentation drift and fails here.
  *
  * Enforced:
  *   1. Both files exist at the repository root.
  *   2. Both declare the same `Policy-Sync: <token>` revision near the top.
- *   3. CLAUDE.md names AGENTS.md as authoritative; AGENTS.md names CLAUDE.md
- *      as the Claude Code mirror that must stay synchronized.
- *   4. Shared non-negotiable policy anchors appear in both files (normalized
- *      whitespace, case-insensitive).
+ *   3. `CLAUDE.md` explicitly delegates to `AGENTS.md` and states that
+ *      `AGENTS.md` is authoritative; `AGENTS.md` names `CLAUDE.md` and requires
+ *      the token to stay in sync.
+ *   4. Every safety anchor below is present in `AGENTS.md`. An anchor found only
+ *      in `CLAUDE.md` means the policy moved back into the entry point.
+ *   5. `CLAUDE.md` stays a pointer: it must not restate most of the anchors.
+ *   6. Every `.md` document referenced from either file — inline code or a
+ *      Markdown link — exists on disk.
  *
- * When policy text changes:
- *   - update the affected file(s) so the non-negotiables remain aligned;
- *   - bump the `Policy-Sync:` token in BOTH files to the same new value;
- *   - run `pnpm check:agent-policy`.
+ * When policy text changes: update `AGENTS.md`, keep `CLAUDE.md` delegating,
+ * bump `Policy-Sync:` in BOTH to the same new value, and run
+ * `pnpm check:agent-policy`.
  */
-import { readFileSync, existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
@@ -51,115 +55,161 @@ const claudeRaw = read("CLAUDE.md");
 const agents = agentsRaw ? normalize(agentsRaw) : "";
 const claude = claudeRaw ? normalize(claudeRaw) : "";
 
-// Shared non-negotiables. Each anchor is a distinctive phrase (or alternate
-// phrases) that must remain true in both the authoritative policy and the
-// Claude Code mirror. Prefer stable wording over section titles.
-/** @type {{ id: string, anyOf: string[] }[]} */
+// Safety anchors live in AGENTS.md only. Each is a distinctive phrase (or
+// alternate phrasings) that the authoritative policy must keep stating, so
+// rewriting the entry point can never drop a real safeguard.
+/** @type {{ id: string, anyOf: string[], why: string }[]} */
 const REQUIRED_ANCHORS = [
   {
     id: "fixed-personal-packaging-entry",
     anyOf: ["Personal packaging must use `pnpm dist:personal` in the current checkout."],
+    why: "one fixed packaging entry keeps builds reproducible",
   },
   {
     id: "packaging-is-not-installation",
     anyOf: ["A packaging request never authorizes installation or application startup."],
+    why: "building an installer must not install or launch it",
   },
   {
-    id: "local-checkout-development",
-    anyOf: ["Develop in the current checkout by default, including on local `main`."],
-  },
-  {
-    id: "optional-worktree-isolation",
-    anyOf: ["Branches and worktrees are optional, not prerequisites for development."],
+    id: "packaging-does-not-bump-version",
+    anyOf: [
+      "An ordinary `pnpm dist:personal` build never changes the app version",
+      "an ordinary `pnpm dist:personal` build never changes the app version",
+    ],
+    why: "only an explicit candidate release selects a version",
   },
   {
     id: "development-data-safety",
     anyOf: ["Dev launches must isolate inherited data by default."],
+    why: "development must not write a live release profile",
+  },
+  {
+    id: "local-checkout-development",
+    anyOf: ["Develop in the current checkout by default, including on local `main`."],
+    why: "local development is the default workflow",
+  },
+  {
+    id: "optional-worktree-isolation",
+    anyOf: ["Branches and worktrees are optional, not prerequisites for development."],
+    why: "worktrees remain optional, never a gate",
   },
   {
     id: "process-model",
-    anyOf: [
-      "renderer preload ipc electron main rust host core / node agent runtime",
-    ],
+    anyOf: ["Renderer → Preload IPC → Electron Main → Rust Host Core / Node Agent Runtime"],
+    why: "the frozen process model must stay stated",
   },
   {
     id: "sqlite-host-core-only",
     anyOf: [
+      "SQLite is owned exclusively by Rust `host-core`.",
       "sqlite remains owned exclusively by rust host-core",
-      "sqlite is owned exclusively by rust host-core",
-      "sqlite remains owned exclusively by rust `host-core`",
-      "sqlite is owned exclusively by rust `host-core`",
     ],
+    why: "storage ownership stays with the Rust host",
   },
   {
     id: "main-thin-orchestrator",
-    anyOf: ["electron main must remain a thin orchestrator", "electron main stays a thin orchestrator"],
-  },
-  {
-    id: "no-local-main-before-e2e",
-    anyOf: ["merge task → local main"],
-  },
-  {
-    id: "pr-contains-latest-main",
-    anyOf: ["do not open or update a PR that is behind `origin/main`"],
-  },
-  {
-    id: "task-candidate-e2e",
-    anyOf: ["task-candidate e2e"],
-  },
-  {
-    id: "host-e2e-environment",
     anyOf: [
-      "do not run `pnpm install`, `npm install`, or create a second dependency or runtime environment solely to execute e2e",
-      "never run `pnpm install` or `npm install`, or create a second dependency or runtime environment, solely for e2e",
+      "Electron Main must remain a thin orchestrator.",
+      "electron main stays a thin orchestrator",
     ],
+    why: "Electron Main must not absorb business logic",
+  },
+  {
+    id: "no-implicit-delivery-actions",
+    anyOf: [
+      "Do not commit, stage, push, tag, open a PR, install a build, or launch Desktop",
+    ],
+    why: "git, packaging, and launch actions require an explicit request",
+  },
+  {
+    id: "dependency-reinstall-not-for-e2e",
+    anyOf: [
+      "Do not run `pnpm install`, `npm install`, or create a second dependency or",
+    ],
+    why: "E2E reuses the checkout environment",
   },
   {
     id: "architecture-ratchet-hotspots",
-    anyOf: [
-      "apps/desktop/src/stores/app-store.ts",
-      "crates/host-core/src/db.rs",
-    ],
+    anyOf: ["apps/desktop/src/stores/app-store.ts"],
+    why: "hotspot files stay shrink-or-stay-stable",
   },
   {
     id: "preserve-behavior-default",
-    anyOf: [
-      "unless the task explicitly requires",
-      "unless the task explicitly requires behavior to change",
-    ],
+    anyOf: ["Unless the task explicitly requires behavior to change"],
+    why: "behavior changes are opt-in per task",
   },
   {
     id: "never-weaken-security",
-    anyOf: [
-      "never fix functionality by weakening",
-      "never “fix” a feature by weakening",
-      'never "fix" a feature by weakening',
-      "never fix a feature by weakening",
-    ],
+    anyOf: ["Never fix functionality by weakening"],
+    why: "security is never traded for convenience",
   },
   {
     id: "adr-for-frozen-boundaries",
     anyOf: [
-      "changing a frozen architecture, public interface, data ownership model, or security boundary requires an adr",
-      "requires an adr under `docs/adr/`",
+      "Changing a frozen architecture, public interface, data ownership model, or",
     ],
+    why: "frozen boundaries require an ADR",
   },
   {
     id: "specs-stay-synchronized",
-    anyOf: ["observable behavior changes must update the relevant spec"],
+    anyOf: ["Observable behavior changes must update the relevant spec."],
+    why: "specs track observable behavior",
   },
   {
-    id: "pr-root-cause-minimal",
+    id: "user-path-test-coverage",
+    anyOf: ["including the representative user path through the affected feature"],
+    why: "features need the real user path under test",
+  },
+  {
+    id: "uncommitted-work-preserved",
     anyOf: [
-      "must fix the reported root cause with the smallest coherent change",
+      "Do not overwrite, revert, move, or delete anything that is not from this task.",
     ],
+    why: "concurrent work must survive",
+  },
+  {
+    id: "i18n-user-visible-strings",
+    anyOf: ["All user-visible strings in `apps/desktop` go through i18n"],
+    why: "the renderer ships translated strings",
+  },
+  {
+    id: "lifecycle-cleanup",
+    anyOf: ["Every long-lived resource needs an owner and a cleanup path"],
+    why: "long-lived resources must be disposed",
+  },
+  {
+    id: "product-specs-authoritative",
+    anyOf: ["authoritative for behavior"],
+    why: "product specs stay authoritative for behavior",
+  },
+  {
+    id: "no-outside-pr-type-restriction",
+    anyOf: ["do not apply here", "does not apply here"],
+    why: "the inherited upstream PR-type restriction is not local policy",
   },
 ];
 
-function requireContains(label, haystack, needle, message) {
-  if (!haystack.includes(needle)) {
-    failures.push(`${label}: ${message}`);
-  }
+const requireContains = (label, haystack, needle, message) => {
+  if (!haystack.includes(needle)) failures.push(`${label}: ${message}`);
+};
+
+/**
+ * `.md` documents referenced inline (`docs/x.md`) or as a Markdown link
+ * (`[text](docs/x.md#anchor)`). Fragments and trailing punctuation are stripped;
+ * remote URLs are not local paths.
+ */
+function collectDocReferences(raw) {
+  const inline = [...raw.matchAll(/`([^`\n]+?\.md)(?:#[^`\n]*)?`/gi)].map((match) => match[1]);
+  const links = [...raw.matchAll(/\]\(\s*(<[^>\n]+>|[^)\s]+?)\s*\)/g)].map(
+    (match) => match[1].replace(/^<|>$/g, ""),
+  );
+  return [...inline, ...links]
+    .map((ref) => ref.split("#")[0].trim())
+    .filter((ref) => /\.md$/i.test(ref))
+    .map((ref) => ref.replace(/\.md$/i, ".md"))
+    .filter((ref) => !/^[a-z][a-z0-9+.-]*:/i.test(ref))
+    .map((ref) => ref.replace(/^\.\//, ""))
+    .map((ref) => path.posix.normalize(ref.replace(/\\/g, "/")));
 }
 
 if (agentsRaw && claudeRaw) {
@@ -170,46 +220,26 @@ if (agentsRaw && claudeRaw) {
 
   if (!agentsToken) {
     failures.push(
-      'AGENTS.md: missing `Policy-Sync: <token>` (for example `Policy-Sync: 2026-02-14.1`)',
+      "AGENTS.md: missing `Policy-Sync: <token>` (for example `Policy-Sync: 2026-02-14.1`)",
     );
   }
   if (!claudeToken) {
     failures.push(
-      'CLAUDE.md: missing `Policy-Sync: <token>` (for example `Policy-Sync: 2026-02-14.1`)',
+      "CLAUDE.md: missing `Policy-Sync: <token>` (for example `Policy-Sync: 2026-02-14.1`)",
     );
   }
   if (agentsToken && claudeToken && agentsToken !== claudeToken) {
     failures.push(
-      `Policy-Sync token mismatch: AGENTS.md has \`${agentsToken}\`, CLAUDE.md has \`${claudeToken}\`. Update both mirrors and set the same new token.`,
+      `Policy-Sync token mismatch: AGENTS.md has \`${agentsToken}\`, CLAUDE.md has \`${claudeToken}\`. Update both files and set the same new token.`,
     );
   }
 
-  // Every repository path referenced as `<x>.md` must exist on disk. A policy
-  // file that routes agents to a missing document silently costs every agent
-  // the time to rediscover where the rules actually live.
-  const exists = (relPath) => existsSync(path.join(root, relPath));
-  const policyFiles = [
-    ["AGENTS.md", agentsRaw],
-    ["CLAUDE.md", claudeRaw],
-  ];
-  for (const [label, raw] of policyFiles) {
-    const refs = raw.match(/`([^`\n]+\.md)`/g) ?? [];
-    const missing = [...new Set(refs.map((ref) => ref.slice(1, -1)))].filter(
-      (refPath) => !exists(refPath),
-    );
-    if (missing.length > 0) {
-      failures.push(
-        `${label}: referenced document(s) do not exist: ${missing.join(", ")}. ` +
-          "Update the path, or create the scoped rules file before referencing it.",
-      );
-    }
-  }
-
+  // Delegation, not duplication: CLAUDE.md must send the reader to AGENTS.md.
   requireContains(
     "CLAUDE.md",
     claude,
     "agents.md",
-    "must name AGENTS.md as the authoritative policy",
+    "must name AGENTS.md as the authoritative policy it delegates to",
   );
   requireContains(
     "CLAUDE.md",
@@ -218,10 +248,22 @@ if (agentsRaw && claudeRaw) {
     "must state that AGENTS.md is authoritative",
   );
   requireContains(
+    "CLAUDE.md",
+    claude,
+    "read `agents.md`",
+    "must explicitly require reading AGENTS.md before non-trivial work",
+  );
+  requireContains(
+    "CLAUDE.md",
+    claude,
+    "delegat",
+    "must describe itself as delegating to AGENTS.md instead of restating policy",
+  );
+  requireContains(
     "AGENTS.md",
     agents,
     "claude.md",
-    "must name CLAUDE.md as the Claude Code mirror and require it to stay synchronized",
+    "must name CLAUDE.md as the Claude Code entry point that delegates here",
   );
 
   for (const anchor of REQUIRED_ANCHORS) {
@@ -229,34 +271,57 @@ if (agentsRaw && claudeRaw) {
     const inClaude = anchor.anyOf.some((phrase) => claude.includes(normalize(phrase)));
     if (!inAgents && !inClaude) {
       failures.push(
-        `policy anchor \`${anchor.id}\`: missing from both AGENTS.md and CLAUDE.md (looked for: ${anchor.anyOf
-          .map((p) => `"${p}"`)
-          .join(" | ")})`,
+        `policy anchor \`${anchor.id}\`: missing from AGENTS.md (looked for: ${anchor.anyOf
+          .map((phrase) => `"${phrase}"`)
+          .join(" | ")}) — ${anchor.why}`,
       );
     } else if (!inAgents) {
       failures.push(
-        `policy anchor \`${anchor.id}\`: present in CLAUDE.md but missing from AGENTS.md`,
+        `policy anchor \`${anchor.id}\`: present in CLAUDE.md but missing from AGENTS.md — move the rule into the authoritative policy`,
       );
-    } else if (!inClaude) {
+    }
+  }
+
+  // A pointer file must not grow back into a second policy document.
+  const restatedInClaude = REQUIRED_ANCHORS.filter((anchor) =>
+    anchor.anyOf.some((phrase) => claude.includes(normalize(phrase))),
+  );
+  if (restatedInClaude.length > 2) {
+    failures.push(
+      `CLAUDE.md: restates ${restatedInClaude.length} safety anchors (${restatedInClaude
+        .map((anchor) => anchor.id)
+        .join(", ")}). Keep it a short delegation to AGENTS.md and let AGENTS.md own the rules.`,
+    );
+  }
+
+  // Every referenced document must exist for both files.
+  for (const [label, raw] of [
+    ["AGENTS.md", agentsRaw],
+    ["CLAUDE.md", claudeRaw],
+  ]) {
+    const missing = [...new Set(collectDocReferences(raw))].filter(
+      (relPath) => !existsSync(path.join(root, relPath)),
+    );
+    if (missing.length > 0) {
       failures.push(
-        `policy anchor \`${anchor.id}\`: present in AGENTS.md but missing from CLAUDE.md — update the Claude Code mirror and bump Policy-Sync in both files`,
+        `${label}: referenced document(s) do not exist: ${missing.join(", ")}. ` +
+          "Update the path, or create the scoped rules file before referencing it.",
       );
     }
   }
 }
 
 if (failures.length > 0) {
-  console.error("Agent policy sync check failed:\n");
-  for (const failure of failures) {
-    console.error(`  - ${failure}`);
-  }
+  console.error("Agent policy check failed:\n");
+  for (const failure of failures) console.error(`  - ${failure}`);
   console.error(
-    "\nAGENTS.md is authoritative. Update the other mirror, keep non-negotiables aligned,",
+    "\nAGENTS.md is authoritative; CLAUDE.md must delegate to it. Keep the safety anchors in",
   );
   console.error(
-    "and set the same `Policy-Sync:` token in both files. Then re-run: pnpm check:agent-policy",
+    "AGENTS.md, keep referenced documents real, and set the same `Policy-Sync:` token in",
   );
+  console.error("both files. Then re-run: pnpm check:agent-policy");
   process.exit(1);
 }
 
-console.log("Agent policy sync check passed (AGENTS.md ↔ CLAUDE.md).");
+console.log("Agent policy check passed (AGENTS.md authoritative, CLAUDE.md delegating).");

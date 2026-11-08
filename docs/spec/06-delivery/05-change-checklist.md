@@ -81,6 +81,11 @@ Before editing any file for a new request:
   in the current checkout, without tag switches, worktrees or temporary hooks.
 - [ ] Delivered NSIS x64 installer EXE only, checked offline metadata/resources,
   and recorded SHA-256 plus the actual validation limits.
+- [ ] Reported the build's unique identifier, exact Git source and dirty state,
+  and Git-derived Added/Fixed/Improved/Maintenance notes.
+- [ ] Did not change the app version for an ordinary build. A version change
+  happened only as an explicitly requested candidate release, backed by
+  accepted scope, compatibility, and passing tests.
 - [ ] Did not run an installer/Desktop, terminate processes, alter registration
   or shortcuts, or access live profiles as packaging verification.
 - [ ] Installation remains the user's action; any scratch-installation pollution
@@ -107,9 +112,10 @@ Reference the [spec update matrix](03-ai-development-workflow.md#3-spec-update-m
 After implementation (or alongside it):
 
 - [ ] Every affected spec file is updated with the new behavior.
-- [ ] If `AGENTS.md` changed: `CLAUDE.md` still mirrors the non-negotiables,
-  both files share the same `Policy-Sync:` token, and `pnpm check:agent-policy`
-  passes. The reverse applies when only `CLAUDE.md` changed.
+- [ ] If `AGENTS.md` changed: it stays the single authoritative policy,
+  `CLAUDE.md` still only delegates to it (no duplicated rules), both files share
+  the same `Policy-Sync:` token, and `pnpm check:agent-policy` passes. The
+  reverse applies when only `CLAUDE.md` changed.
 - [ ] If architectural boundary changed: ADR is written or updated in `docs/adr/`.
 - [ ] If an implementation default changed: `decisions-log.md` entry updated.
 - [ ] If baseline frozen decisions are affected: baseline bump + explicit ADR (not MVP-normal).
@@ -139,11 +145,8 @@ After implementation (or alongside it):
   rerun when the landed executable content changed. Any required suite not run
   is recorded with its reason, alternative validation, and remaining risk;
   delivery remains incomplete until that gate passes.
-- [ ] Hosting-platform E2E jobs that start before the remote merge were observed
-  and reported but do not replace the local `main` gate; a post-merge rerun
-  happened when the landed executable content differs from the commit the gate
-  ran on. Dispatch or rerun follows the hosting platform's or repository
-  workflow's requirements.
+- [ ] CI or hosting-platform results were cited only for the revision they ran
+  on; a different executable state needs a rerun before it can be claimed.
 
 ---
 
@@ -163,8 +166,10 @@ After implementation (or alongside it):
 Apply this section only when remote delivery or a PR/MR was requested.
 Local development does not require a remote merge or a dedicated branch/worktree.
 
-- [ ] The intended target base is incorporated without discarding local work;
-  `pnpm check:pr-base` passes when targeting `origin/main`.
+- [ ] The target remote was verified for this request (never assume
+  `origin/main` is upstream), the target's latest applicable base is
+  incorporated without discarding local work, and the target's own base check
+  passes for that base.
 - [ ] Relevant validation ran against the actual integration candidate, or
   unavailable gates are recorded as `NOT RUN` with reason and remaining risk.
 - [ ] Only authorized publishing/merge actions occurred; no direct upstream
@@ -190,10 +195,26 @@ Apply only when cleanup of an optional worktree or branch is requested:
 
 ---
 
-## 7. App version release checklist (stable tag)
+## 7. App version release checklist (explicit candidate release)
 
-Required for every stable app version bump / tag (D164). Skip only for
-documentation-only work or non-release chores.
+For a personal beta candidate, follow
+[the personal release runbook](07-personal-release-runbook.md):
+
+- [ ] Accepted scope, compatibility considerations and relevant test results
+  justify the explicitly selected newer `X.Y.Z-beta.N` version.
+- [ ] Source is clean; read-only preflight identifies the exact commit, proposed
+  version edits and categorized Git change notes without writing anything.
+- [ ] Successful offline packaging alone updates `docs/releases/history.json`
+  and the generated `CHANGELOG.md`; failure records no release and preserves
+  existing deliverables and concurrent work.
+- [ ] Review the uncommitted version/history changes. Commit, tag and remote
+  publication only when separately authorized. A build is not an install test.
+
+### Optional stable multi-platform release
+
+The remaining checks apply only to a separately requested stable app release,
+not ordinary packaging or a personal beta candidate. They retain the upstream
+application's stable, multilingual in-app changelog contract.
 
 - [ ] `packages/shared/src/changelog.ts` has a newest-first entry for the
       release version under `en` and every shipped product locale (no leading

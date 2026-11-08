@@ -1,5 +1,31 @@
 # 04. E2E Test Plan
 
+## E2E-PERSONAL-build-identity-and-explicit-beta
+
+- **Environment:** Isolated temporary Git repositories, existing ASAR tooling,
+  synthetic package bytes and stubbed build commands. No real installer,
+  Desktop launch, profile, remote request, commit or tag in the user's checkout.
+- **Steps:** Preview an ordinary package and an explicit newer beta; compare all
+  source files and output directories. Build one version twice. Build a clean
+  candidate; inject compile, partial metadata-write, child-output logging,
+  concurrent-source and rollback failures. Preserve dirty README release lines.
+  Try dirty sources, existing tags, downgraded/non-beta labels, malformed history
+  and forged package identities. Check shared version updates through the legacy
+  release CLI without requesting its commit/tag mode.
+- **Expected:** Preflight writes nothing. Rebuilds retain the product version and
+  both uniquely named installers with source/build identity and Git-derived
+  Added/Fixed/Improved/Maintenance notes. Only a successful explicit candidate
+  changes version surfaces and tracked release records. Failures preserve prior
+  outputs and concurrent work, restore owned version edits when unchanged, and
+  report incomplete rollback. No implicit Git or installation effects occur.
+- **Automated entry points:** `apps/desktop/test/personal-release.test.mjs`,
+  `personal-release-history.test.mjs`, `workspace-version.test.mjs`,
+  `auto-update.test.mjs`, `updater-controller.test.mjs`, `agent-policy-sync.test.mjs`.
+- **Specs:** `06-delivery/07-personal-release-runbook.md`, root agent policy.
+- **Acceptance:** Delivery / data safety / compatibility. **Milestone:** maintenance.
+- **Status:** Offline fixture coverage; real packaging, installation, signing and
+  existing-profile upgrade validation are separate, explicitly authorized work.
+
 ## E2E-HARNESS-recovery-boundaries
 
 - **Environment:** Synthetic Host/provider boundaries and isolated fixtures;

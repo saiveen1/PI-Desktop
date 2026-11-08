@@ -1,19 +1,22 @@
 #!/usr/bin/env node
 // Build artifacts only. Never install, launch Desktop, or manage user processes.
 import { spawn } from "node:child_process";
-import { createHash } from "node:crypto";
-import { createReadStream, appendFileSync, closeSync, copyFileSync, existsSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { createHash, randomUUID } from "node:crypto";
+import { constants, createReadStream, appendFileSync, closeSync, copyFileSync, existsSync, mkdirSync, openSync, readFileSync, realpathSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { cleanPersonalRelease } from "./clean-personal-release.mjs";
 import { basename, dirname, extname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { applyFileEdits, assertRepositoryFile, planWorkspaceVersion, restoreFileEdits } from "./workspace-version.mjs";
+import { assertNewBeta, captureGitSource } from "./personal-build-source.mjs";
+import { collectReleaseChanges, loadReleaseHistory, planReleaseRecord, renderBuildNotes } from "./personal-release-notes.mjs";
 
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
 const json = (path) => JSON.parse(readFileSync(path, "utf8"));
 
 export function buildEnvironment(parent, pnpmEntry) {
   const env = Object.fromEntries(Object.entries(parent).filter(([key]) =>
-    !/^PI_DESKTOP_|^PI_V022_BUILD_ROOT$|^NODE_OPTIONS$|^ELECTRON_RUN_AS_NODE$|^CARGO_TARGET_DIR$|^CARGO_BUILD_TARGET$/i.test(key),
+    !/^PI_DESKTOP_|^PI_PERSONAL_(?:BUILD_|SOURCE_)|^PI_V022_BUILD_ROOT$|^NODE_OPTIONS$|^ELECTRON_RUN_AS_NODE$|^CARGO_TARGET_DIR$|^CARGO_BUILD_TARGET$/i.test(key),
   ));
   const pathKey = Object.keys(env).find((key) => key.toLowerCase() === "path");
   const original = pathKey ? env[pathKey] : "";
@@ -23,7 +26,7 @@ export function buildEnvironment(parent, pnpmEntry) {
   return env;
 }
 
-export function prepareBuild({ root = ROOT, platform = process.platform, arch = process.arch, env = process.env } = {}) {
+export function prepareBuild({ root = ROOT, platform = process.platform, arch = process.arch, env = process.env, releaseVersion } = {}) {
   if (platform !== "win32" || arch !== "x64") throw new Error("Personal release requires Windows x64; no alternate targets are built.");
   root = realpathSync(root);
   const desktop = join(root, "apps/desktop");
@@ -80,18 +83,39 @@ export function prepareBuild({ root = ROOT, platform = process.platform, arch = 
     { name: "Personal updater regression", cwd: root, ...node("--test", ["apps/desktop/test/updater-controller.test.mjs"]) },
     { name: "NSIS installer only", cwd: desktop, ...node(builder, ["--win", "nsis", "--x64", "--publish", "never", "--config", configPath]) },
   ];
-  return { root, desktop, output, staging, logs, version: pkg.version, installerName: `PI-Desktop-Personal-Setup-${pkg.version}.exe`, env: buildEnvironment(env, pnpmEntry), stages, asar };
+  const source = captureGitSource(root);
+  const history = loadReleaseHistory(root);
+  if (releaseVersion !== undefined) {
+    assertNewBeta(root, pkg.version, releaseVersion, history);
+    if (source.dirty) throw new Error("An explicit beta release requires a clean source checkout; ordinary builds may include recorded dirty changes.");
+  }
+  const version = releaseVersion ?? pkg.version;
+  const plannedVersions = planWorkspaceVersion(root, version);
+  const versionEdits = releaseVersion !== undefined ? plannedVersions : [];
+  assertRepositoryFile(root, join(output, "build-info.json"));
+  const changes = collectReleaseChanges(root, history);
+  return { root, desktop, output, staging, logs, currentVersion: pkg.version, version, release: releaseVersion !== undefined,
+    installerName: `PI-Desktop-Personal-Setup-${version}.exe`, source, history, versionEdits, ...changes,
+    env: buildEnvironment(env, pnpmEntry), stages, asar };
 }
 
 export function runCommand(stage, { env, log }) {
   return new Promise((accept, reject) => {
     const child = spawn(stage.command, stage.args, { cwd: stage.cwd, env, shell: false, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
-    const output = (chunk) => { appendFileSync(log, chunk); process.stdout.write(chunk); };
+    let outputError;
+    const output = (chunk) => {
+      // Keep draining owned pipes after an I/O failure; settle on close so
+      // version rollback cannot detach a still-running build command.
+      if (outputError) return;
+      try { appendFileSync(log, chunk); process.stdout.write(chunk); }
+      catch (error) { outputError = error; }
+    };
     child.stdout.on("data", output);
     child.stderr.on("data", output);
     child.once("error", reject);
     child.once("close", (code, signal) => {
-      if (code === 0) accept();
+      if (outputError) reject(new Error(`${stage.name} output logging failed after child exit (${signal || code}); no retry was attempted.`, { cause: outputError }));
+      else if (code === 0) accept();
       else reject(new Error(`${stage.name} failed (${signal || code}); see ${log}. No retry or installation was attempted.`));
     });
   });
@@ -106,6 +130,7 @@ export function verifyPackage(context) {
   for (const path of ["PI-Desktop.exe", "resources/app.asar", "resources/bin/pi-desktop-host-core.exe", "resources/agent-runtime/sidecar.js", "resources/agent-runtime/package.json"]) nonempty(join(unpacked, path));
   const pkg = JSON.parse(context.asar.extractFile(join(unpacked, "resources/app.asar"), "package.json").toString("utf8"));
   if (pkg.version !== context.version || pkg.piSelfManaged !== true || pkg.piDistribution !== "installed") throw new Error("Packaged version or self-managed installed metadata is incorrect.");
+  if (pkg.piBuildId !== context.buildId || pkg.piSourceCommit !== context.source.commit) throw new Error("Packaged source/build identity is incorrect.");
   const runtime = json(join(unpacked, "resources/agent-runtime/package.json"));
   if (runtime.type !== "module") throw new Error("Packaged runtime must retain its ESM package manifest.");
   const installer = join(context.staging, context.installerName);
@@ -120,20 +145,29 @@ async function sha256(file) {
   return hash.digest("hex");
 }
 
-export async function buildPersonal(context, { run = runCommand } = {}) {
+export async function buildPersonal(context, { run = runCommand, now = () => new Date(), writeMetadataFile = writeFileSync } = {}) {
   mkdirSync(context.logs, { recursive: true });
   const lock = join(context.logs, "build.lock");
-  const handle = openSync(lock, "wx"); // Existing/stale lock needs operator inspection, never process killing.
+  const handle = openSync(lock, "wx");
   closeSync(handle);
   const log = join(context.logs, "build.log");
+  const published = [];
+  let versionApplied = false;
+  let metadataEdits;
+  let metadataApplied = false;
+  const started = now().toISOString();
+  context.buildId = started.replace(/[-:.]/g, "") + "-g" + context.source.commit.slice(0, 12) + "-" + randomUUID().slice(0, 8);
+  const lockContents = JSON.stringify({ pid: process.pid, startedAt: started, buildId: context.buildId });
   try {
-    writeFileSync(lock, JSON.stringify({ pid: process.pid, started: new Date().toISOString(), root: context.root }));
-    writeFileSync(log, `Building current checkout ${context.root}; version ${context.version}. Build only, never install.\n`);
-    // Clean regenerable intermediates before the first stage so a stale
-    // .build tree or log can never be mistaken for this build's output.
-    for (const entry of cleanPersonalRelease({ root: context.root }).cleaned) {
-      appendFileSync(log, `clean ${entry.removed ? "removed" : "absent"} ${entry.label}\n`);
-    }
+    writeFileSync(lock, lockContents);
+    if (captureGitSource(context.root).fingerprint !== context.source.fingerprint) throw new Error("Source changed since preflight; rerun the read-only check before building.");
+    applyFileEdits(context.versionEdits, writeMetadataFile);
+    versionApplied = true;
+    const buildSource = captureGitSource(context.root);
+    const env = { ...context.env, PI_PERSONAL_BUILD_ID: context.buildId, PI_PERSONAL_SOURCE_COMMIT: context.source.commit };
+    const cleaned = cleanPersonalRelease({ root: context.root }).cleaned;
+    writeFileSync(log, `Building version ${context.version}; build ${context.buildId}; source ${context.source.commit}; dirty=${buildSource.dirty}. Build only, never install.\n`);
+    for (const entry of cleaned) appendFileSync(log, `clean ${entry.removed ? "removed" : "absent"} ${entry.label}\n`);
     mkdirSync(context.staging, { recursive: true });
     for (const [index, stage] of context.stages.entries()) {
       if (stage.name === "NSIS installer only") {
@@ -142,35 +176,71 @@ export async function buildPersonal(context, { run = runCommand } = {}) {
       const heading = `[${index + 1}/${context.stages.length}] ${stage.name}\n`;
       console.log(heading.trim());
       appendFileSync(log, heading);
-      await run(stage, { env: context.env, log });
+      await run(stage, { env, log });
     }
     const built = verifyPackage(context);
     const digest = await sha256(built);
-    const artifact = join(context.output, context.installerName);
-    const temporary = `${artifact}.tmp`;
-    copyFileSync(built, temporary);
-    renameSync(temporary, artifact);
-    writeFileSync(`${artifact}.sha256`, `${digest}  ${basename(artifact)}\n`);
-    const result = { version: context.version, artifact, sha256: digest, bytes: statSync(artifact).size, builtAt: new Date().toISOString(), sourceRoot: context.root, installed: false, launched: false, validation: "Offline package checks only; no profile compatibility or Authenticode claim." };
-    writeFileSync(join(context.output, "build-info.json"), `${JSON.stringify(result, null, 2)}\n`);
+    if (captureGitSource(context.root).fingerprint !== buildSource.fingerprint) throw new Error("Source changed during packaging; refusing to publish misleading provenance.");
+    const artifact = join(context.output, `PI-Desktop-Personal-Setup-${context.version}-${context.buildId}.exe`);
+    const notes = `${artifact}.changes.md`;
+    const result = { version: context.version, buildId: context.buildId, release: context.release,
+      source: buildSource, versionOverride: context.release ? { from: context.currentVersion, to: context.version } : null,
+      baseCommit: context.baseCommit, baselineKind: context.baselineKind, changes: context.changes,
+      artifact, notes, sha256: digest, bytes: statSync(built).size, builtAt: now().toISOString(),
+      installed: false, launched: false, validation: "Offline package checks only; no profile compatibility or Authenticode claim." };
+    metadataEdits = context.release ? planReleaseRecord(context.root, context.history, result, context.changes) : [];
+    const latest = join(context.output, "build-info.json");
+    assertRepositoryFile(context.root, latest);
+    metadataEdits.push({ path: latest, before: existsSync(latest) ? readFileSync(latest, "utf8") : null, after: JSON.stringify(result, null, 2) + "\n" });
+    copyFileSync(built, artifact, constants.COPYFILE_EXCL);
+    published.push(artifact);
+    for (const [path, content] of [
+      [`${artifact}.sha256`, `${digest}  ${basename(artifact)}\n`],
+      [notes, renderBuildNotes(result)],
+      [`${artifact}.build-info.json`, JSON.stringify(result, null, 2) + "\n"],
+    ]) {
+      writeFileSync(path, content, { flag: "wx" });
+      published.push(path);
+    }
+    applyFileEdits(metadataEdits, writeMetadataFile);
+    metadataApplied = true;
     appendFileSync(log, `SUCCESS ${artifact}\nSHA256 ${digest}\n`);
     return result;
+  } catch (error) {
+    const failures = [error];
+    if (metadataApplied) { try { restoreFileEdits(metadataEdits); } catch (rollback) { failures.push(rollback); } }
+    if (versionApplied) { try { restoreFileEdits(context.versionEdits); } catch (rollback) { failures.push(rollback); } }
+    for (const path of published.reverse()) { try { unlinkSync(path); } catch (cleanup) { failures.push(cleanup); } }
+    if (failures.length > 1) throw new AggregateError(failures, "Build failed; rollback needs inspection (concurrent edits were preserved)");
+    throw error;
   } finally {
-    unlinkSync(lock);
+    if (readFileSync(lock, "utf8") === lockContents) unlinkSync(lock);
+    else console.error("Build lock changed ownership; preserved it for inspection.");
   }
 }
 
+export function parsePersonalBuildArgs(args) {
+  const options = { check: false };
+  for (let index = 0; index < args.length; index++) {
+    if (args[index] === "--check" && !options.check) options.check = true;
+    else if (args[index] === "--release" && options.releaseVersion === undefined && args[index + 1] && !args[index + 1].startsWith("--")) options.releaseVersion = args[++index];
+    else throw new Error("Usage: pnpm dist:personal [--check] [--release X.Y.Z-beta.N]. No install, launch, target, or checkout overrides.");
+  }
+  return options;
+}
+
 async function main() {
-  const args = process.argv.slice(2);
-  if (args.length > 1 || (args.length === 1 && args[0] !== "--check")) throw new Error("Usage: pnpm dist:personal [--check]. No install, launch, target, or checkout overrides.");
-  const context = prepareBuild();
-  if (args[0] === "--check") {
-    console.log(JSON.stringify({ root: context.root, version: context.version, output: context.output, stages: context.stages }, null, 2));
+  const { check, ...options } = parsePersonalBuildArgs(process.argv.slice(2));
+  const context = prepareBuild(options);
+  if (check) {
+    console.log(JSON.stringify({ root: context.root, currentVersion: context.currentVersion, version: context.version, release: context.release,
+      source: context.source, baseCommit: context.baseCommit, baselineKind: context.baselineKind, changes: context.changes,
+      versionFiles: context.versionEdits.map((entry) => entry.path), output: context.output, stages: context.stages }, null, 2));
     return;
   }
   console.log(JSON.stringify(await buildPersonal(context), null, 2));
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  main().catch((error) => { console.error(error.message); process.exitCode = 1; });
+  main().catch((error) => { console.error(error); process.exitCode = 1; });
 }

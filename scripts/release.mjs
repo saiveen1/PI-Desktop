@@ -30,10 +30,10 @@
  *
  *   git push origin <branch> v<version>
  */
-import { readdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { applyFileEdits, planWorkspaceVersion } from "./workspace-version.mjs";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const version = process.argv[2];
@@ -48,40 +48,9 @@ if (!version || !/^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/.test(version)) {
   process.exit(1);
 }
 
-const changed = [];
-function bumpPackageJson(relPath) {
-  const file = path.join(root, relPath);
-  if (!existsSync(file)) return;
-  const pkg = JSON.parse(readFileSync(file, "utf8"));
-  if (pkg.version === version) return;
-  pkg.version = version;
-  writeFileSync(file, JSON.stringify(pkg, null, 2) + "\n");
-  changed.push(relPath);
-}
-
-bumpPackageJson("package.json");
-// `docs` is a third workspace root (pnpm-workspace.yaml), not under apps/packages.
-bumpPackageJson("docs/package.json");
-for (const group of ["apps", "packages"]) {
-  for (const dir of readdirSync(path.join(root, group), { withFileTypes: true })) {
-    if (dir.isDirectory()) bumpPackageJson(path.join(group, dir.name, "package.json"));
-  }
-}
-
-// Cargo workspace version ([workspace.package] in root Cargo.toml), lockfile
-// entry, and the APP_VERSION constant surfaced in the About panel.
-for (const [relPath, pattern] of [
-  ["Cargo.toml", /(\[workspace\.package\][\s\S]*?\bversion = ")[^"]+(")/],
-  ["Cargo.lock", /(name = "host-core"\nversion = ")[^"]+(")/],
-  ["packages/shared/src/protocol.ts", /(export const APP_VERSION = ")[^"]+(")/],
-]) {
-  const file = path.join(root, relPath);
-  const source = readFileSync(file, "utf8");
-  const updated = source.replace(pattern, `$1${version}$2`);
-  if (updated === source) continue;
-  writeFileSync(file, updated);
-  changed.push(relPath);
-}
+const versionEdits = planWorkspaceVersion(root, version);
+applyFileEdits(versionEdits);
+const changed = versionEdits.map((edit) => path.relative(root, edit.path));
 
 if (changed.length === 0) {
   console.log(`Everything is already at ${version}; nothing to do.`);

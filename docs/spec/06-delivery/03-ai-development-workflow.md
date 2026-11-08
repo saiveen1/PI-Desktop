@@ -8,7 +8,12 @@
 
 ## 1. Core Immutable Rules
 
-These rules follow `AGENTS.md`. This locally maintained checkout defaults to in-place development; upstream contribution procedures apply only when remote delivery is requested.
+These rules implement `AGENTS.md`, which is the authoritative repository policy.
+`CLAUDE.md` is only a short entry point that delegates to `AGENTS.md`; it is not
+a second policy version. Product behavior, protocols, persistence, and security
+contracts stay authoritative in `docs/spec/`. This independently maintained
+personal edition develops in place; upstream contribution procedures apply only
+when remote delivery is requested against a verified target remote.
 
 ### R1 — Spec-first / Spec-sync
 
@@ -56,11 +61,12 @@ Branches and worktrees are optional, not prerequisites for development.
   `pnpm dev --inherit-data-dir` opt-in is for authorized data-dependent debugging,
   preferably an offline profile copy. Real-data use requires stopping all owners
   and a complete backup; it is read/write and not safe concurrent sharing.
-- For an explicitly requested upstream PR, incorporate the latest applicable
-  target base and run `pnpm check:pr-base` when targeting `origin/main`.
-  Validate the actual integration candidate without discarding local work or
-  force-pushing shared history. Do not open or update a PR that is behind
-  `origin/main`.
+- Upstream sync and contribution happen only when explicitly requested, against a
+  target remote verified for that request; never assume `origin/main` is
+  upstream. For a requested pull request, incorporate the intended target's
+  latest applicable base, use the target repository's own base check, and
+  validate the actual integration candidate without discarding local work or
+  force-pushing shared history.
 - Retire optional worktrees only when authorized and after verifying their
   changes are committed or safely migrated. Delete no unique work.
 
@@ -73,6 +79,15 @@ Do not switch tags, create worktrees, inject hooks, or improvise build pipelines
 A packaging request never authorizes installing, launching, stopping/restarting
 Desktop, editing installation registration/shortcuts, or copying live profiles.
 An NSIS scratch installation is not isolated: it shares the application's identity.
+
+An ordinary `pnpm dist:personal` build never changes the app version: beta stays
+the release state, and packaging never guesses or bumps a version. Every
+successful build records a unique build identifier, the exact Git source and
+dirty state, and Added/Fixed/Improved/Maintenance notes derived from Git, so a
+delivered installer is traceable. Only an explicitly requested candidate release
+selects a new version, once accepted scope, compatibility, and tests justify it.
+Do not claim stability, installed-upgrade success, or test coverage that was not
+verified, and do not create tags, commits, or pushes on your own initiative.
 
 ### R5 — Verify linked GitHub issues before work, then reply and close
 
@@ -92,9 +107,9 @@ unambiguous issue number for this repository.
   misunderstanding): comment with the verification evidence and close the issue
   when that conclusion is clear. If verification is inconclusive, comment with
   what was tried and leave the issue open.
-- If the problem exists: follow R4, implement the smallest coherent change,
-  and after the request is merged into local `main`, comment with the
-  resolution and close the issue.
+- If the problem exists: follow R4, implement the smallest coherent change, and
+  after the fix is accepted (merged, or landed in the authorized delivery
+  target), comment with the resolution and close the issue.
 - Write the GitHub comment in the language of the original issue title and
   body. Code, commits, specs, and other repository documentation stay English.
 - An issue link authorizes commenting on and closing **that** issue only. It
@@ -164,29 +179,12 @@ an unambiguous pull request number for this repository.
 - When both an issue and a pull request are linked, R6 applies to the pull
   request and R5 still applies to the issue after the merged outcome.
 
-#### R6.1 — Temporary pull-request type restriction
+#### R6.1 — No local outside-contribution policy
 
-> **While this subsection is in force, outside contributions are limited to
-> `perf` and `fix` pull requests; maintainer-planned work keeps every type.**
-
-- Effective 2026-09-26 until a maintainer removes this subsection.
-- The restriction governs outside contributions. Maintainers — accounts with
-  write access to this repository, plus the branches and automated agent work
-  they direct — keep every change type, including `feat`.
-- An outside pull request of any other change type — `feat`, `refactor`,
-  `docs`, `test`, `chore`, `build`, or `ci` — is not a landing candidate.
-  Comment with this policy in the pull request's language, then close it
-  without merging, and do not reimplement it as a replacement while the
-  restriction is in force. The type is read from the pull request's title and
-  commits; relabelling other work as `fix` or `perf` does not qualify it.
-- Feature intent goes to a feature request issue, not to a pull request.
-- `fix` and `perf` pull requests still carry the full R6 bar: the real root
-  cause, the smallest coherent change, and no harm blockers.
-- Closing a pull request whose type is out of scope does not violate R6's "do
-  not discard contributor work" clause; that clause protects an in-scope
-  root-cause fix.
-- Removing this subsection lifts the restriction. It is not a permanent
-  narrowing of the contribution scope.
+This personal edition has no outside-contribution policy of its own. The
+temporary upstream pull-request type restriction therefore does not apply here;
+it only describes how upstream handles its own intake. R6 still governs any
+linked pull request that this repository explicitly acts on.
 
 ### R7 — Validate the actual candidate
 
@@ -411,7 +409,18 @@ explicit branch-only or draft-only delivery scope:
 13. Any requested launch uses the validated source/build and authorized profile;
     the daily Release is not restarted without explicit permission.
 
+This edition stays on its beta release line between candidate releases. An
+ordinary personal packaging build does not change the version; it only records
+build identity plus Git-derived change notes (R4.1). A version change requires
+an explicitly requested candidate release; tags and remote publication require
+separate authorization. Personal beta history follows the personal runbook below.
+
 ### Release / version-tag gate
+
+The following requirements apply only to an explicitly requested stable
+multi-platform release, not an ordinary build or personal beta candidate.
+Personal candidates use `docs/releases/history.json` and `CHANGELOG.md` as
+specified in [the personal release runbook](07-personal-release-runbook.md).
 
 When the change is a **stable app version release** (version bump + tag),
 Definition of Done also requires, **before** the tag, that every
@@ -466,9 +475,8 @@ This workflow spec itself is accepted when:
 - [ ] Git commit rules match existing repo commit style (`docs:`, `chore:`).
 - [ ] Local development defaults to the current checkout, including local `main`.
 - [ ] Branches/worktrees are optional and unrelated changes are preserved.
-- [ ] Opening or updating a PR/MR requires `origin/main` to be an ancestor of
-      the request head (`pnpm check:pr-base`); a PR behind `origin/main` is
-      rejected.
+- [ ] A requested upstream PR contains its intended target's latest applicable
+      base and passes that repository's own base check before review.
 - [ ] Remote publishing requires authorization and uses PR/MR gates before
       remote `main` integration and local synchronization.
 - [ ] Remote-base refresh and PR integration checks apply only to requested
@@ -485,7 +493,10 @@ This workflow spec itself is accepted when:
       on in the issue language and closed when conclusive.
 - [ ] Linked GitHub pull requests land only when they fix the reported root
       cause with a minimal diff; contributor work is not discarded for nits.
-- [ ] Outside contributions are limited to `perf` and `fix` pull requests while
-      the temporary type restriction in R6.1 is in force.
+- [ ] `AGENTS.md` is the single authoritative policy and `CLAUDE.md` only
+      delegates to it (`pnpm check:agent-policy`).
+- [ ] An ordinary `pnpm dist:personal` build reports a unique build identifier,
+      exact Git source and dirty state, and Git-derived change notes without
+      changing the app version.
 
 - [ ] All indexes updated (NAV, delivery README, spec README, docs README, BOARD).

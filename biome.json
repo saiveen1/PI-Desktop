@@ -14,7 +14,20 @@
 			"apps/desktop/electron/main/ipc/workspace-ipc.ts",
 			"packages/shared/src/types/**/*.ts",
 			"scripts/check-architecture.mjs",
-			"scripts/e2e/*.mjs"
+			"scripts/e2e/*.mjs",
+			"scripts/build-personal-release.mjs",
+			"scripts/workspace-version.mjs",
+			"scripts/personal-build-source.mjs",
+			"scripts/personal-release-notes.mjs",
+			"scripts/release.mjs",
+			"scripts/check-agent-policy-sync.mjs",
+			"apps/desktop/electron-builder.personal.cjs",
+			"apps/desktop/test/personal-release.test.mjs",
+			"apps/desktop/test/personal-release-history.test.mjs",
+			"apps/desktop/test/workspace-version.test.mjs",
+			"apps/desktop/test/agent-policy-sync.test.mjs",
+			"apps/desktop/test/helpers/personal-release-fixture.mjs",
+			"!!worktrees/**"
 		]
 	},
 	"formatter": {

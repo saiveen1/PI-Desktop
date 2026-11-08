@@ -14,7 +14,7 @@ disagrees, so a green `check:release-docs` is a precondition, not a substitute.
 |---|---|---|
 | `release.mjs` | `node scripts/release.mjs <version> [--tag]` | Bump every workspace version surface, commit, and optionally create the `vX.Y.Z` tag the Release workflow builds from |
 | `check-release-docs.mjs` | `pnpm check:release-docs` | Verify the models.dev catalog, changelog and test list, `APP_VERSION`, workspace versions, Cargo versions, and both README release lines agree |
-| `check-agent-policy-sync.mjs` | `pnpm check:agent-policy` | Verify `AGENTS.md` and `CLAUDE.md` share the same `Policy-Sync` token, cross-references, and non-negotiable policy anchors |
+| `check-agent-policy-sync.mjs` | `pnpm check:agent-policy` | Verify policy tokens, explicit CLAUDE-to-AGENTS delegation, authoritative safety anchors and local document references |
 | `check-marketplace-catalog.mjs` | `pnpm check:marketplace -- --url <url> --plugin <id>` | Marketplace catalog preflight; rejects a version record missing a checksum, package URL, size, or permissions, and a catalog `author` that is not a string |
 | `check-style-tokens.mjs` | run by the desktop `lint` script | Fail renderer styles that hardcode values instead of design-system tokens |
 
@@ -31,7 +31,10 @@ disagrees, so a green `check:release-docs` is a precondition, not a substitute.
 | `macos-codesign-shim.sh` | used by `macos-signing-watchdog.mjs` | PATH shim that timestamps every `codesign` invocation and then executes the real `codesign`; inert unless `PI_CODESIGN_LOG` is set |
 | `export-linux-asar.mjs` | `node scripts/export-linux-asar.mjs` | Copy the Linux `linux-unpacked/resources/app.asar` into the versioned release asset used for system-Electron repackaging |
 | `build-desktop-release.mjs` | called by the desktop `dist` / `dist:win` scripts | Upstream multi-platform release lane; Windows builds NSIS, ZIP and portable. Not the personal build entry |
-| `build-personal-release.mjs` | `pnpm dist:personal` (`--check` for read-only preflight) | Current-checkout Windows x64 NSIS EXE only, offline verification, SHA-256 and fixed log paths. Never installs or launches. Follow [personal runbook](../docs/spec/06-delivery/07-personal-release-runbook.md) |
+| `build-personal-release.mjs` | `pnpm dist:personal [--check] [--release X.Y.Z-beta.N]` | Ordinary build retains version and adds a unique build ID, Git source fingerprint and categorized notes; an explicit clean-source beta release alone updates versions/history after verification. Never installs, launches, commits, tags or publishes. See [personal runbook](../docs/spec/06-delivery/07-personal-release-runbook.md) |
+| `workspace-version.mjs` | shared helper, not a CLI | One guarded version plan for workspace packages, Cargo, APP_VERSION and README release lines; rollback preserves concurrent edits |
+| `personal-build-source.mjs` | shared helper, not a CLI | Local-only Git snapshots, commit-category evidence and explicit newer-beta validation |
+| `personal-release-notes.mjs` | shared helper, not a CLI | Validate `docs/releases/history.json`, render per-build notes and generate the personal changelog without fictitious past releases |
 | `check-linux-host-glibc.mjs` | `node scripts/check-linux-host-glibc.mjs [bin]` | Fail a Linux host-core binary whose needed glibc is above 2.35 |
 | `make-icon.py` | `python3 scripts/make-icon.py` | Derive the package PNG, the macOS tray template, and the iconset/ICNS from the canonical PNG |
 | `publish-screenshots.py` | `python3 scripts/publish-screenshots.py` | Publish documentation screenshots |
