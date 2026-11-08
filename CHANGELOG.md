@@ -2,14 +2,21 @@
 
 This is the personal edition's release record, generated from `docs/releases/history.json`. Ordinary builds do not create releases or change the beta version. Commit-subject categories are traceability aids, not stability or test claims.
 
-## Unreleased personal development baseline
+## 0.22.0-beta.8 — 2026-11-08
 
-No personal beta candidate has been recorded by the new release workflow. The following is historical development, not a fabricated release.
+Source: `5f1d0229a82a997156968d38c77248e6d8e663c4`; build: `20261108T145322250Z-g5f1d0229a82a-ab8c9bf8`; SHA-256: `aaafcfa043670b64a1de0d7d34fa6940c7d35df10f68ce9370e237067c3d0816`.
 
-Snapshot: `75a1923872f60a1326ec27c965140cde11140f96`.
+Verified by offline package checks only; no installation or profile-upgrade claim.
 
 ### Added
 
+- feat(images): retain tool result images in chat context (`5f1d0229a82a`)
+- feat(transcript): preserve task-first reading and shared detail views (`717b22ae490c`)
+- feat(subagents): preserve failure policies and direct child input (`dd6d43b666ea`)
+- feat(notifications): preserve delegation history and outcome controls (`3ab65cd3ea5d`)
+- feat(sessions): separate project groups from display labels (`75ac982460d3`)
+- feat(release): establish traceable personal beta delivery (`0f7552494aa2`)
+- feat(chat): show turn and session cost in usage surfaces (`969b7f47abaf`)
 - feat(sessions): organize conversations and scope delegation models (`b3c40e482960`)
 - feat(desktop): unify notifications and normalize Windows references (`a746f4b69395`)
 - feat(delegation): add recoverable approval center and live policy (`7262a96f7947`)
@@ -23,6 +30,32 @@ Snapshot: `75a1923872f60a1326ec27c965140cde11140f96`.
 
 ### Fixed
 
+- fix(runtime): accept redundant delegation job selectors (`275748889e78`)
+- fix: 压缩后按上下文所属模型计算窗口容量 (`028bece76e27`)
+- fix: 末尾分页保留最后消息后的压缩检查点 (`4d4a17d7eaa7`)
+- fix: 显示生图标记对聊天模型选择的影响 (`4cd88649ca1b`)
+- fix: 清理关闭浏览器标签后的工具连接 (`93bee3bb26cc`)
+- fix(sidebar): retain project layout outside Chromium storage (`b7d03c6576ae`)
+- fix(scheduled): recover editor options after Host invalidation (`7d5abca832a6`)
+- fix(review): isolate the session-focus correction (`a15dda3d32bf`)
+- fix(chat): outline only user messages in the conversation minimap (`5caa0c227b27`)
+- fix(scheduled): render task lists independently and retain route snapshots (`dda598c6f7e4`)
+- fix(review): synchronize disclosure, session focus, and syntax (`1fc3736a20c6`)
+- fix(test): preserve remote transcript retention coverage (`c0d36c925bc4`)
+- fix(test): align transcript checks with current rendering (`b3acaae97b25`)
+- fix(chat): retain stateful Markdown while recycling prose (`dc3c29dee8ab`)
+- fix(agent-runtime): classify DashScope status envelopes before retrying (`11a0da858875`)
+- fix(plugins): align workspace discovery with invoking sessions (`89c2921083b3`)
+- fix(agent-runtime): bound thinking text in a retained compaction tail (`969c3c04b97e`)
+- fix(agent-runtime): keep pixel-rejected images off the history byte budget (`bfc69c73ac27`)
+- fix(agent-runtime): clamp max\_tokens to a stated output ceiling (`76ed6ca5e48c`)
+- fix(e2e): answer file batch negotiation in the offline fixture host (`6c6d0ff7fdab`)
+- fix(composer): isolate task dock tab content (`28d5d07de18f`)
+- fix(agent-runtime): surface unexecuted text tool calls (`18eb37ba43b9`)
+- fix(projects): reconcile native path aliases before removal (`b55628bf4415`)
+- fix(chat): preserve reading anchors before painted layout changes (`11fa50d372ad`)
+- fix(chat): stabilize transcript navigation and adaptive history loading (`1283c8bd5c17`)
+- fix(chat): stabilize transcript navigation and adaptive history loading (`9eb23cb2b7e3`)
 - fix(harness): separate admission pressure from tool recovery (`75a1923872f6`)
 - fix(desktop): resolve chat filenames under explicit directories (`cf99680b24eb`)
 - fix(agent-runtime): honor explicit bash job targets (`43db88d7d113`)
@@ -49,6 +82,12 @@ Snapshot: `75a1923872f60a1326ec27c965140cde11140f96`.
 
 ### Maintenance
 
+- docs(testing): record worktree integration and preservation evidence (`e995188b8afa`)
+- test(sidebar): await bootstrap snapshot after recovery (`398f6d6388d9`)
+- docs(project): record Pi 1.5 candidate validation (`a72d4da1f690`)
+- chore(models.dev): refresh catalog for GPT-6.1 Terra (`4dc1c10e9cde`)
+- chore(deps): upgrade Pi runtime to 1.5.0 and adopt its features (`a28baea56615`)
+- test(projects): require versioned backups in the native alias probe (`e89807ba0e0d`)
 - docs(agents): point the routing table at documents that exist (`2d19b08aa4e4`)
 - docs(agents): add package rules for agent-runtime test fixtures (`9bae7cdc99de`)
 - test(agent-runtime): give two child-process suites a realistic budget (`e8c41aa9b9bf`)
