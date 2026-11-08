@@ -54,6 +54,14 @@ impl Roots {
         true
     }
 
+    fn sidebar_scope(&self, text: &str) -> String {
+        text.strip_prefix("project:")
+            .and_then(|path| self.remap(path))
+            .and_then(|path| crate::db::normalize_project_path(&path))
+            .map(|path| format!("project:{path}"))
+            .unwrap_or_else(|| text.to_string())
+    }
+
     fn structured(&self, value: &mut Value) -> bool {
         match value {
             Value::Array(items) => items
@@ -330,6 +338,41 @@ pub fn relocate(source: &Path, destination: &Path) -> Result<()> {
             roots.stored_queue(value)
         })?;
     }
+    rewrite_json(
+        &roots.destination.join("sidebar-preferences.json"),
+        |value| {
+            let mut changed = roots.structured(value);
+            if let Some(meta) = value.get_mut("projectMeta").and_then(Value::as_object_mut) {
+                for (key, item) in std::mem::take(meta) {
+                    let next = roots.remap(&key).unwrap_or_else(|| key.clone());
+                    changed |= next != key;
+                    meta.insert(next, item);
+                }
+            }
+            if let Some(scopes) = value
+                .pointer_mut("/sessionOrganization/scopes")
+                .and_then(Value::as_object_mut)
+            {
+                for (key, item) in std::mem::take(scopes) {
+                    let next = roots.sidebar_scope(&key);
+                    changed |= next != key;
+                    scopes.insert(next, item);
+                }
+            }
+            if let Some(meta) = value.get_mut("sessionMeta").and_then(Value::as_object_mut) {
+                for item in meta.values_mut() {
+                    if let Some(scope) = item.get_mut("organizationScope") {
+                        if let Some(text) = scope.as_str() {
+                            let next = roots.sidebar_scope(text);
+                            changed |= next != text;
+                            *scope = Value::String(next);
+                        }
+                    }
+                }
+            }
+            changed
+        },
+    )?;
     let capabilities = roots.destination.join("agent-capabilities");
     if regular_directory(&capabilities)? {
         for name in ["mcp", "skills", "subagents", "subagent-builtins"] {

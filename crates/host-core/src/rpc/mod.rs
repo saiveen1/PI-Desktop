@@ -2272,9 +2272,12 @@ async fn handle_request(
                 .get("path")
                 .and_then(|v| v.as_str())
                 .ok_or_else(|| rpc_err(1002, "path required", "INVALID_PARAMS"))?;
-            let path = crate::db::canonical_project_path(path)
-                .ok_or_else(|| rpc_err(1002, "path required", "INVALID_PARAMS"))?;
             let st = state.lock().await;
+            let path = st
+                .db
+                .stored_project_path(path)
+                .map_err(|e| rpc_err(1000, e.to_string(), "INTERNAL"))?
+                .ok_or_else(|| rpc_err(1002, "path required", "INVALID_PARAMS"))?;
             if crate::scheduled::project::has_running_tasks(&st.db, &path)
                 .map_err(|e| rpc_err(1000, e.to_string(), "INTERNAL"))?
             {
@@ -3777,6 +3780,17 @@ async fn handle_request(
             let hits = sessions::search_messages(&st.db, query, limit)
                 .map_err(|e| rpc_err(1000, e.to_string(), "INTERNAL"))?;
             Ok(json!({ "hits": hits }))
+        }
+
+        "session.usageCost" => {
+            let session_id = params
+                .get("sessionId")
+                .and_then(|v| v.as_str())
+                .filter(|id| !id.is_empty())
+                .ok_or_else(|| rpc_err(1002, "sessionId required", "INVALID_PARAMS"))?;
+            let st = state.lock().await;
+            sessions::session_usage_cost(&st.db, session_id)
+                .map_err(|e| rpc_err(1000, e.to_string(), "INTERNAL"))
         }
 
         "stats.getTokenUsageHistory" => {
@@ -7598,6 +7612,44 @@ mod tests {
         .unwrap();
         assert_eq!(truncated["keptCount"], 0);
         assert_eq!(truncated["discardedCount"], 1);
+    }
+
+    #[tokio::test]
+    async fn session_usage_cost_rpc_requires_a_session_and_sums_its_ledger() {
+        let data_dir = tempfile::tempdir().unwrap();
+        let mut app_state = AppState::open(data_dir.path()).unwrap();
+        app_state.handshook = true;
+        let state = Arc::new(Mutex::new(app_state));
+        let (tx, _rx) = mpsc::unbounded_channel();
+        let session_id = {
+            let st = state.lock().await;
+            let session = sessions::create_session(&st.db, None, None, None, None, None).unwrap();
+            let turn = sessions::begin_turn(&st.db, &session.id, None, None).unwrap();
+            let usage = json!({"operationId": "op", "usageOrigin": "pi", "providerId": "p",
+                "inputTokens": 3, "outputTokens": 1, "totalTokens": 4, "costStatus": "estimated",
+                "cost": {"input": 0.01, "output": 0.02, "cacheRead": 0, "cacheWrite": 0, "total": 0.03}});
+            sessions::record_usage(&st.db, &session.id, &turn, &usage).unwrap();
+            session.id
+        };
+        for params in [json!({}), json!({ "sessionId": "" })] {
+            let error = handle_request(state.clone(), "session.usageCost", params, tx.clone())
+                .await
+                .unwrap_err();
+            assert_eq!(error.code, 1002);
+            assert_eq!(error.data.unwrap()["errorCode"], "INVALID_PARAMS");
+        }
+        let summary = handle_request(
+            state.clone(),
+            "session.usageCost",
+            json!({ "sessionId": session_id }),
+            tx.clone(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(summary["requestCount"], 1);
+        assert_eq!(summary["providers"][0]["providerId"], "p");
+        assert_eq!(summary["providers"][0]["total"], 0.03);
+        assert_eq!(summary["providers"][0]["reportedRequests"], 0);
     }
 
     #[tokio::test]

@@ -149,61 +149,67 @@ async function openTrash() {
   await waitFor(() => dialog()?.getAttribute("aria-busy") === "false", "recycle bin loaded");
 }
 window.sidebarLabelGroupingProbe = async () => {
-  await waitFor(() => row("project-00"), "label grouping sidebar rendered");
+  await waitFor(() => row("project-00"), "project grouping sidebar rendered");
   const original = useAppStore.getState();
   const opened = [];
+  const scope = "project:D:/fixture";
+  const groups = [{ id: "investigation", name: "排查一个很长但不该挤成细条的会话分组", color: "blue" },
+    { id: "fix", name: "Fix", color: "amber" }];
   flushSync(() => useAppStore.setState({
+    sessionOrganization: { version: 1, scopes: { ...original.sessionOrganization.scopes,
+      [scope]: { groups, labels: original.sessionLabels },
+      temporary: { groups, labels: original.sessionLabels },
+    } },
     sessionMeta: { ...original.sessionMeta,
-      "project-00": { ...original.sessionMeta["project-00"], labelIds: ["investigation", "fix"] },
-      "project-01": { ...original.sessionMeta["project-01"], labelIds: ["investigation"] },
-      beta: { ...original.sessionMeta.beta, labelIds: ["investigation"] },
+      "project-00": { ...original.sessionMeta["project-00"], groupId: "investigation", organizationScope: scope, labelIds: ["investigation", "fix"] },
+      "project-01": { ...original.sessionMeta["project-01"], groupId: "investigation", organizationScope: scope, labelIds: ["investigation"] },
+      beta: { ...original.sessionMeta.beta, groupId: "investigation", organizationScope: "temporary", labelIds: ["investigation"] },
     },
-    sessionLabels: original.sessionLabels.map(label => label.id === "investigation"
-      ? { ...label, defaultName: undefined, name: "排查一个很长但不该挤成细条的分组标签" } : label),
     selectSession: async id => { opened.push(id); useAppStore.setState({ activeSessionId: id }); },
   }));
   const project = row("project-00").closest("[data-sidebar-project-group]");
-  const group = id => project.querySelector('[data-sidebar-label-group="' + id + '"]');
+  const group = id => project.querySelector('[data-sidebar-session-group="' + id + '"]');
   const rows = () => [...project.querySelectorAll('[data-sidebar-session-row="project-00"]')];
-  check(rows().length === 2, "multi-label conversation needs two shortcuts");
+  check(rows().length === 1, "multiple labels duplicated a conversation row");
+  check(rows()[0].querySelectorAll(".session-label-chip").length === 2, "descriptive labels disappeared");
+  check(!document.querySelector("[data-sidebar-label-group]"), "labels still create sidebar groups");
   click(rows()[0].querySelector(".thread-item-main"));
-  click(rows()[1].querySelector(".thread-item-main"));
-  check(opened.join() === "project-00,project-00", "shortcuts opened different conversations");
+  check(opened.join() === "project-00", "grouped row opened another conversation");
   check(useAppStore.getState().sessions.length === original.sessions.length, "grouping duplicated stored conversations");
-  check(!document.querySelector(".session-label-chip"), "inline label chips survived grouping");
   click(document.querySelector('[data-action="select-sessions"]'));
   click(checkbox("Select visible", toolbar()));
-  check(document.querySelector(".session-selection-count").textContent.includes("14"), "visible selection counted shortcuts twice");
-  click(group("investigation").querySelector(".sidebar-label-group-title"));
-  await waitFor(() => !chosen().includes("project-01"), "folding removes exclusive hidden members from selection");
-  check(rows().length === 1 && chosen().includes("project-00"), "folding removed shared conversation's other shortcut");
-  check(document.querySelector('.sidebar-label-group[data-label-scope="temporary"][data-sidebar-label-group="investigation"] .thread-item'), "folding leaked into another scope");
+  check(document.querySelector(".session-selection-count").textContent.includes("14"), "visible selection duplicated conversations");
+  click(group("investigation").querySelector(".sidebar-conversation-group-title"));
+  await waitFor(() => !chosen().includes("project-01") && !chosen().includes("project-00"), "folding removes hidden group members from selection");
+  check(rows().length === 0 && chosen().length === 12, "folded conversations stayed visible or selected");
+  check(document.querySelector('.sidebar-conversation-group[data-group-scope="temporary"][data-sidebar-session-group="investigation"] .thread-item'), "folding leaked into another scope");
   await done();
-  click(group("investigation").querySelector(".sidebar-label-group-title"));
-  check(rows().length === 2 && row("project-01"), "expanding did not restore shortcuts");
+  click(group("investigation").querySelector(".sidebar-conversation-group-title"));
+  check(rows().length === 1 && row("project-01"), "expanding did not restore unique conversation rows");
   for (const theme of ["light", "dark"]) {
     document.documentElement.dataset.theme = theme;
     for (const width of [220, 275, 360]) {
       document.getElementById("root").style.width = width + "px";
       flushSync(() => root.render(<Sidebar onToggleSidebar={() => {}} sidebarToggleShortcut="" sidebarWidth={width}
         onWidthChange={() => {}} onWidthCommit={() => {}} onResizeCollapse={() => {}} />));
-      const name = group("investigation").querySelector(".sidebar-label-group-name");
+      const name = group("investigation").querySelector(".sidebar-conversation-group-name");
       const header = name.closest("button");
       const bounds = header.getBoundingClientRect();
-      check(name.clientWidth >= 100, "label heading collapsed into a sliver");
-      check(bounds.width >= group("investigation").getBoundingClientRect().width - 1, "label heading does not occupy its own row");
-      check(!header.querySelector("time"), "timestamp still competes with label heading");
+      check(name.clientWidth >= 100, "group heading collapsed into a sliver");
+      check(bounds.width >= group("investigation").getBoundingClientRect().width - 1, "group heading does not occupy its own row");
+      check(!header.querySelector("time"), "timestamp competes with group heading");
       header.focus();
-      check(document.activeElement === header, "label heading is not keyboard focusable");
+      check(document.activeElement === header, "group heading is not keyboard focusable");
     }
   }
   flushSync(() => useAppStore.setState({
     sessionMeta: original.sessionMeta, sessionLabels: original.sessionLabels,
+    sessionOrganization: original.sessionOrganization,
     selectSession: original.selectSession, activeSessionId: original.activeSessionId,
   }));
   document.documentElement.dataset.theme = "light";
   document.getElementById("root").style.width = "300px";
-  return { passed: true, duplicateShortcuts: 2, uniqueSelected: 14, layouts: 6 };
+  return { passed: true, uniqueRows: 1, uniqueSelected: 14, layouts: 6 };
 };
 
 window.organizationProbe = async () => {
@@ -217,14 +223,9 @@ window.organizationProbe = async () => {
   click(await waitFor(() => document.querySelector('[data-action="session-color-blue"]'), "independent color mark"));
   flushSync(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
   flushSync(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
-  click(button("Filter conversations"));
-  await waitFor(() => document.querySelector(".session-filter-menu.is-open"), "filter opened");
-  click(checkbox("Fix", document.querySelector(".session-filter-menu")));
-  check(row("beta") && !row("alpha"), "label filter did not restrict rows");
-  click(button("Blue", document.querySelector(".session-filter-menu")));
-  check(row("beta"), "label and independent color did not intersect");
-  click(button("Clear filters", document.querySelector(".session-filter-menu")));
-  flushSync(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+  check(!button("Filter conversations"), "display-only labels still expose the retired filter");
+  check(row("beta") && row("alpha"), "descriptive labels filtered unrelated conversations");
+  check(row("beta").querySelectorAll(".session-label-chip").length === 2, "multiple descriptive labels were lost");
   click(row("project-01").querySelector('[data-action="session-menu"]'));
   click(await waitFor(() => document.querySelector('[data-action="session-move-up"]'), "move action"));
   const orderBefore = useAppStore.getState().sessionMeta["project-01"].order;

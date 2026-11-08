@@ -25,6 +25,7 @@ export const enEntries: ChangelogEntry[] = [
     highlights: [
       "Configure a shared subagent model pool with equal priorities, usage descriptions, mandatory approval, and authorized alternatives for unattended tasks.",
       "Continue an Agent once when it ends with unfinished current-task checklist items; control the default-on safeguard in Settings → AI.",
+      "See what each turn and the whole conversation cost in the context inspector and turn usage capsule, with subscription usage kept apart from pay-as-you-go spend.",
       "Use your own video as the startup animation by dropping one into the startup folder; the interface fades in after it plays.",
       "Let plugins list saved projects and their folders without switching the active session.",
       "Use the Pi 1.3.0 agent engine with safer tool-call validation and replay.",

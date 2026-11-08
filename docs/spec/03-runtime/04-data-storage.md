@@ -1,4 +1,24 @@
-# 04. Data Storage (Schema v27)
+# 04. Data Storage (Schema v28)
+
+### Project path aliases (#2148)
+
+The v27-to-v28 upgrade creates a verified database backup and atomically merges
+case/separator spellings that native filesystem resolution identifies as the
+same local directory. Prefer a row with sessions, then the latest last-opened
+time and lowest id. Rebind every session and schedule before deleting duplicate
+rows; retain pinned state, the earliest creation and latest opening timestamps,
+and update the current project id. Transcript files are never rewritten or
+deleted by this repair. Original path-keyed memory records remain intact; a
+missing canonical memory record inherits the preferred row's value.
+
+Upsert, listing and removal repeat this reconciliation for directories that
+become available after startup. Missing directories retain their normalized
+spelling until resolution proves an alias. Do not lowercase all Windows/macOS
+paths: case-sensitive directories/volumes remain distinct, remote project ids
+are opaque, and a retargeted symlink must not redirect stored ownership.
+After reconciliation, removal prefers an exact stored path before filesystem
+canonicalization. Existing busy checks and permanent-deletion confirmation apply
+to the resulting unified project and all of its sessions.
 
 
 ### Lossless tool-image storage (#1868)
@@ -535,9 +555,10 @@ key does not change database schemas, transcript evidence or saved context hunks
 
 #### Renderer sidebar preferences (D093)
 
-Sidebar organization is non-authoritative presentation state stored
-best-effort under renderer localStorage key
-`pi.desktop.sidebarPreferences`:
+Sidebar organization is non-authoritative presentation state. Main keeps an
+atomic `sidebar-preferences.json` backup in the selected app data root;
+renderer localStorage key `pi.desktop.sidebarPreferences` supplies first paint.
+See [sidebar layout recovery](../../adr/sidebar-layout-recovery.md).
 
 ```ts
 type SidebarPreferences = {
@@ -587,6 +608,18 @@ type SidebarPreferences = {
 - Missing, malformed, or unwritable preferences fall back to empty metadata,
   `recent`, archived hidden, and the host-selected project. Preference failure
   never blocks a host operation.
+- Restore the application backup before bootstrap persists the selected Project.
+  Without a backup, migrate a valid legacy cache, including an explicitly empty
+  tab list. Only if neither copy is valid, recover registered Projects from
+  `projects.list`. Existing valid layouts never reopen intentionally closed tabs.
+- An unreadable backup must not be replaced with empty startup state; a failed
+  catalog read must not persist an empty recovery result. Writes are limited to
+  2 MiB, flushed and atomically renamed through dedicated trusted-Main-frame IPC.
+  Project/Session/Workspace authority remains with Rust. Offline storage
+  relocation remaps internal retained paths, Project metadata keys, path-scoped
+  `sessionOrganization.scopes` keys and matching session `organizationScope`
+  values. Stable group IDs, remote/temporary scopes, external Projects, catalog
+  contents and display labels remain unchanged.
 - The record never contains transcript content, tool arguments, provider
   configuration, or secrets. Clearing it changes presentation only.
 - The additive version-1 `sessionOrganization` record owns project-scoped ordered
@@ -1655,6 +1688,11 @@ offset of every message and compaction line, plus the file identity and complete
 prefix length those offsets describe. Serving a window seeks to its first
 selected line instead of parsing the history in front of it, so the common
 cached read is proportional to the requested page. Consequences:
+
+- A bounded tail page includes checkpoints appended after its last message,
+  so reopening a just-compacted session returns the newest checkpoint and its
+  context estimate. Middle pages retain the active checkpoint and only those
+  within their message offsets; they do not load the complete chain (#2163).
 
 - The layout is derived data, cached in memory and, when reliable file identity
   is available, in the sibling `<sessionId>.jsonl.layout` file. Unix uses the

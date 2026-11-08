@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdtempSync, readFileSync, rmSync, existsSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Type, getCurrentTools, createAssistantMessageEventStream, type AssistantMessage, type Models, type TextContent, type ToolCall } from "@earendil-works/pi-ai";
+import { getCurrentTools, createAssistantMessageEventStream, type AssistantMessage, type Models, type TextContent, type ToolCall } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { SubagentRun, type SubagentRunOptions } from "./subagent.js";
 

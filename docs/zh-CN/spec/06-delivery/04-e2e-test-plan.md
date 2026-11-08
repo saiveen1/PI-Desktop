@@ -1,5 +1,46 @@
 # 04. E2E 测试 Plan
 
+## E2E-SCHEDULED-independent-loading-and-route-return
+
+- **Preconditions:** Synthetic tasks; controllable task, latest-run, history and
+  project API responses. No provider execution is required.
+- **Steps:** Hold latest-run and project reads while resolving task definitions;
+  select a task and run, leave and re-enter with refresh held; open Create/Edit;
+  fail and retry a history read; switch tasks while a previous history is held;
+  invalidate the Host lifecycle before an old read resolves.
+- **Expected:** Definitions appear independently. Route return immediately shows
+  the last successful in-memory task/outcome/history snapshot and selection.
+  Project options are requested only for editing; the form waits for successful
+  options and failures expose retry. Pending/failed run reads never say the task
+  has not run. Failed refresh retains known history, and late responses cannot
+  replace another task's data or repopulate an invalidated snapshot. Run now and
+  Delete require known run status and retain authoritative Host admission.
+- **Coverage:** `apps/desktop/test/scheduled-workspace-loading.test.mjs` exercises
+  the production hook with controlled API promises and poll ticks;
+  `scheduled-workspace.test.mjs` checks rendered loading/error states.
+  These are renderer regression checks, not a native Electron E2E run.
+
+Also invalidate the Host while Create/Edit options are pending, with the old
+request resolving, rejecting or remaining pending. The next normal poll must
+replace that read and recover the same editor without Cancel/reopen. A failed
+replacement exposes Retry; retry success mounts the editor. Old responses must
+not overwrite recovered options. Successful options remain lazy rather than
+being fetched on every subsequent poll.
+
+## E2E-SIDEBAR-upgrade-layout-recovery
+
+- In an isolated profile, retain two synthetic Projects and organize metadata.
+  Close one Project and restart with the same app data root but fresh Chromium
+  storage. Restore the retained Project and metadata; keep the closed tab closed.
+- Migrate a valid legacy cache, including an empty list. If neither copy is valid,
+  recover the Host catalog once; preserve subsequent explicit closes.
+- Reject secondary-renderer/subframe IPC and oversized/invalid writes. Preserve
+  unreadable backups, newer user edits, and the last good file on failure.
+- Relocate internal retained paths and metadata keys without changing external
+  paths, display names or the source profile.
+- Automated path: `node scripts/e2e-sidebar-recovery.mjs`, plus the sidebar backup,
+  recovery, bootstrap and offline relocation regression tests.
+
 > **翻译说明：** 本页是与 [英文源规格](/spec/06-delivery/04-e2e-test-plan) 一一对应的机器辅助翻译。代码、协议字段和标识符保持原文；如翻译与英文源事实有歧义，以英文版本为准。
 
 
@@ -8,6 +49,20 @@
 > 交叉引用：[验收标准](/zh-CN/spec/06-delivery/02-acceptance-criteria) · [里程碑](/zh-CN/spec/06-delivery/01-mvp-milestones) · [ai-开发工作流程](/zh-CN/spec/06-delivery/03-ai-development-workflow) · [变更清单](/zh-CN/spec/06-delivery/05-change-checklist)
 
 ---
+
+### E2E-RUNTIME-text-tool-call-diagnostic
+
+- **Preconditions:** Isolated runtime with a fixture provider and synthetic data.
+- **Steps:** Return a complete text-form Qwen `TodoWrite` call, alone and after
+  normal prose. Repeat alongside a valid structured Bash call. Then return a
+  normal answer. Repeat with fenced/inline/quoted/indented XML examples,
+  incomplete blocks and an unknown tool name.
+- **Expected:** The literal known-tool call retains its text and displays
+  `TOOL_CALL_NOT_EXECUTED` with error message status. It never executes or
+  activates the text-form tool, and never retries automatically. Structured
+  sibling calls execute once and normal continuation succeeds. Examples,
+  unknown names and incomplete blocks remain ordinary text.
+- **Coverage:** `text-tool-call.test.ts`, `malformed-tool-recovery.test.ts`.
 
 ### E2E-PI-130-kernel-upgrade
 
@@ -36,6 +91,23 @@
   `pi-1.4-adapter-features.test.ts`、`runtime.test.ts`、`subagent.test.ts`，以及现有
   `test:e2e:hosted-search` 和 `test:e2e:trusted-extensions` 命令。具体范围与候选验证记录见英文源及
   `docs/project/pi-140-adoption.md`。
+
+### E2E-PI-150-kernel-upgrade
+
+- **前提：** 在专属 worktree 中精确固定 Pi 1.5.0 release group（含新增的 `pi-schema`）并
+  重建包补丁，使用隔离 fixture 状态，不提供真实 Provider 凭据。
+- **步骤：** 在已安装的 1.5.0 包上运行现有 runtime、原生 Pi 会话和身份测试；经 1.5.0
+  增量解析的 Anthropic 适配器流式传输 hosted-search 块；构建拆分的 sidecar bundle；运行现有
+  hosted-search 和可信扩展离线套件。
+- **预期：** Desktop 用 TypeBox 构建的工具 schema 在 pi-schema 上校验不变。Hosted-search
+  捕获、实时查询更新、引用、重放与本地请求错误保持不变。Release group 只解析一个 `undici`
+  8.x，sidecar 入口保持在体积阈值内。身份请求头报告 1.5.0。不使用 Provider 凭据或线上服务。
+- **覆盖：** `pi-upstream-1.5-identity.test.ts`、`pi-upstream-1.5-contract.test.ts`、
+  `pi-1.5-adapter-features.test.ts`、`official-native-search.test.ts`、
+  `native-pi-session.test.ts`、`agent-runtime-bundle-package.test.mjs`、
+  `anthropic-oauth-retry.test.mjs`，以及现有 `test:e2e:hosted-search` 和
+  `test:e2e:trusted-extensions` 命令。具体范围与候选验证记录见英文源及
+  `docs/project/pi-150-adoption.md`。
 
 ### E2E-LEGACY-DICTATION-idle-model-release
 
@@ -10349,3 +10421,19 @@ Electron 一侧——工具自动签发、指示器、"停止"中止轮次、绘
 - runtime 测试补充新输入和父回合取消、延迟 RPC 错误、旧 Host/远程能力缺失、混合选择器拒绝、原委派控制及无子代理配置的工具注册。
 - Host 测试覆盖先完成后等待、重复读取、Unicode 截断、归属查找、幂等停止与停止请求待确认。Windows 子孙进程清理测试仍须执行，原生失败单独报告。
 - 在子进程已退出、监管任务尚未排空管道时请求停止，检查原退出结果、最终输出和重复读取的耗时。延迟能力探测或第一次 Host 观察，检查等待总时限。Electron 会话记录用例渲染尚待确认的 Bash 停止请求和混合作业列表。
+
+#### E2E-ISSUE-1789
+
+生图标记说明聊天和默认菜单移除效果，并区分图片生成与输入；折叠行保留生图标记。通过真实组件验证标记、帮助、折叠、取消及恢复聊天资格。
+
+#### E2E-ISSUE-2162
+
+关闭已连接浏览器标签时清除连接；会话级工具使用同一会话选中的替代页，显式已关闭目标仍失败，导航不复活不可见旧标签。验证关闭、重开、snapshot、fill、click、navigate 和最终关闭。
+
+#### E2E-ISSUE-2163
+
+末尾分页包含最后一条消息之后追加的检查点，中间页仍只读取生效及页内记录。验证消息、压缩追加后读取及 Host 重启，最新检查点与上下文估算保留，历史用量不变。
+
+#### E2E-ISSUE-2164
+
+压缩估算作为占用时使用检查点模型容量，旧检查点使用当前会话完整绑定；历史请求用量不变，未知容量标记估算。验证 20,619 / 1,000,000 为 2%、未知路由、旧记录及新请求恢复。

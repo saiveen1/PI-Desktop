@@ -1,4 +1,4 @@
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import { DELEGATION_CONTEXT_WINDOW_MAX, describeDelegationRunPolicy, resolveDelegationRunPolicy, subagentToolsLabel, type DelegationSettings, type SubagentDefinition } from "@pi-desktop/shared";
 
 /** Stable tool metadata is supplied on every request, including after compaction. */

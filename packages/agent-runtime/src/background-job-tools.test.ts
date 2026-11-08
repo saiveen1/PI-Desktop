@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import { buildJobTools } from "./background-job-tools.js";
 import type { RuntimeHost } from "./host-client.js";
 
@@ -50,7 +50,7 @@ describe("session job controls", () => {
     await stop.execute("stop", {});
     expect(dispatch).not.toHaveBeenCalled();
     await wait.execute("one", { job: { kind: "delegation", id: "delegate" }, timeoutSeconds: 12 });
-    expect(delegates.wait.execute).toHaveBeenLastCalledWith("one", { job: undefined, delegationIds: ["delegate"], timeoutSeconds: 12 }, undefined, undefined);
+    expect(delegates.wait.execute).toHaveBeenLastCalledWith("one", { delegationIds: ["delegate"], timeoutSeconds: 12 }, undefined, undefined);
     await stop.execute("one", { job: { kind: "delegation", id: "delegate" } });
     expect(delegates.stop.execute).toHaveBeenLastCalledWith("one", { delegationIds: ["delegate"] }, undefined, undefined);
   });
@@ -83,7 +83,7 @@ describe("session job controls", () => {
     expect(stop.description).toContain("same single delegation");
   });
 
-  it.each([{ ids: [] }, { ids: ["other"] }, { ids: ["delegate", "other"] }, { ids: "delegate" }, { ids: null }])("rejects conflicting delegation selectors before dispatch ($ids)", async ({ ids: delegationIds }) => {
+  it.each([{ ids: [] }, { ids: ["other"] }, { ids: ["delegate", "delegate"] }, { ids: ["delegate", "other"] }, { ids: "delegate" }, { ids: null }])("rejects conflicting delegation selectors before dispatch ($ids)", async ({ ids: delegationIds }) => {
     const { wait, stop, delegates, dispatch } = fixture();
     const args = { job: { kind: "delegation", id: "delegate" }, delegationIds };
     for (const tool of [wait, stop]) {

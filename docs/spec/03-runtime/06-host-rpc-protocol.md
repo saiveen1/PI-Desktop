@@ -253,6 +253,12 @@ type ToolBudgetHealth = {
   `rolledBack`, `alreadyRolledBack`, `conflict`, or `unavailable`.
 
 ### Projects
+- Before upsert, list or removal, reconcile local case/separator aliases proven
+  by filesystem resolution, preserving all session/schedule ownership. Removal
+  prefers the stored selected path; it must not delete another stored project
+  merely because a symlink now resolves there. Missing paths, distinct
+  case-sensitive directories and opaque remote ids are preserved. See storage
+  schema v28 and `E2E-PROJECT-case-alias-upgrade-and-delete`.
 - `projects.list` — returns durable project records ordered pinned-first, then
   by last-opened time; includes records materialized by session imports
 - `projects.create({ path })` — upserts a durable project record without
@@ -392,6 +398,11 @@ to later refresh and inference; the vendor picker does not collect them.
   compatible.
 - `session.getScratchPath` — the session's scratch directory (D114), created
   on demand
+- `session.usageCost({ sessionId })` — read-only cost rollup of the session's
+  `turns.usage_json` ledgers, grouped by `providerId`: `{ sessionId, turnCount,
+  requestCount, providers: [{ providerId?, total, pricedRequests,
+  reportedRequests, unpricedRequests }] }`. No schema change; a missing
+  `sessionId` is `INVALID_PARAMS`.
 - `visualizations.readFragment({ sessionId, fileName })` — private Main-to-Host
   reader for `pi-genui:` documents (D671). No renderer IPC or Plugin SDK method
   is added. Parameters contain only a validated session ID and direct `.html`

@@ -289,7 +289,9 @@ export const AssistantTurn = memo(function AssistantTurn({
   const canEditMessages = sessionAllows(session ?? (paneSessionId.startsWith("remote:") ? { id: paneSessionId } : undefined), "canEditMessages");
   const summary = getAssistantTurnSummary(entry);
   const { actionMessage, metaMessage, latestUsageMessage, usage, responseDurationMs, responseOutputTokens } = summary;
-  const modelId = metaMessage?.modelId ?? latestUsageMessage?.modelId;
+  const modelSource = metaMessage?.modelId ? metaMessage : latestUsageMessage;
+  const modelId = modelSource?.modelId;
+  const responseModelId = modelSource?.responseModelId;
   const complete = !isActive && !summary.hasError && summary.hasContent && Boolean(actionMessage);
   // A live reply is joined only on menu/copy demand. Finished reply plugins
   // still receive exactly the text that the completed turn's Copy action uses.
@@ -433,6 +435,7 @@ export const AssistantTurn = memo(function AssistantTurn({
         {!isActive && metaMessage ? (
           <MessageMeta
             modelId={modelId}
+            responseModelId={responseModelId}
             usage={usage}
             responseDurationMs={responseDurationMs}
             responseOutputTokens={responseOutputTokens}

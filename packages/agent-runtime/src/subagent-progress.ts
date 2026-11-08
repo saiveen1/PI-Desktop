@@ -1,5 +1,6 @@
 import type { AgentContext, AgentTool } from "@earendil-works/pi-agent-core";
-import { getCurrentTools, getToolStateChanges, Type } from "@earendil-works/pi-ai";
+import { getCurrentTools, getToolStateChanges } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import { isRecord } from "./agent-messages.js";
 import { persistSubagentCheckpoint, type SubagentCheckpoint, type PersistSubagentCheckpointResult } from "./subagent-checkpoint.js";
 import type { SubagentTerminalDiagnostics } from "./subagent-terminal.js";

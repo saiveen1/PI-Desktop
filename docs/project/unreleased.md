@@ -2,7 +2,7 @@
 
 > Historical mixed upstream/personal development notes, retained without
 > reconstructing releases. New personal release records live in
-> [CHANGELOG.md](../../CHANGELOG.md), generated from
+> the repository-root `CHANGELOG.md`, generated from
 > [release history](../releases/history.json). Do not append new release entries here.
 
 - Harden tool recovery: normalize background-job selectors before schema checks,

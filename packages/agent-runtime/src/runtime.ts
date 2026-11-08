@@ -13,6 +13,7 @@ import {
 import { MutationRecoveryGuard, type MutationTermination } from "./mutation-recovery-guard.js";
 import { DESKTOP_AGENT_IDENTITY } from "./agent-identity.js";
 import { resolveMcpToolSelection } from "./mcp-tool-selection.js";
+import { concreteResponseModel } from "./response-model.js";
 import { BatchPlanner, withBatchTurn } from "./batch-planner.js";
 import { TOOL_EXECUTION_SPECS, resolveBatchExecutionMode, toolExecutionMode, withDynamicTaskExecutionMode } from "./tool-execution-policy.js";
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -25,6 +26,7 @@ import { restoreHostedSearchReplay } from "./hosted-search-replay.js";
 import { requestExtensionUi } from "./extensions/ui-request.js";
 import { readLocalRequestErrorDetails } from "./local-request-errors.js";
 import { isValidToolCall, recoverMalformedToolCalls } from "./tool-call-recovery.js";
+import { textToolCallDiagnostic } from "./text-tool-call.js";
 import { computerUseDescription, computerUseParameters } from "./computer-use/tool.js";
 import { imageGenerationDescription, imageGenerationParameters } from "./image-generation/tool.js";
 import { todoWriteDescription, todoWriteParameters } from "./todo-tool.js";
@@ -58,7 +60,6 @@ import {
   getCurrentTools,
   getToolStateChanges,
   toToolDeclaration,
-  Type,
   type Api,
   type AssistantMessage,
   type AssistantMessageEvent,
@@ -70,6 +71,7 @@ import {
   type Usage,
   type UserMessage,
 } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import {
   DEFAULT_COMMAND_TIMEOUT_MS,
   OAUTH_AUTH_KIND,
@@ -8977,6 +8979,10 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           // inspect only the response that just ended, or a silent retry after
           // progress text would look non-silent forever.
           const responseText = content.hasText ? content.text : "";
+          // Annotate literal calls without aborting valid structured siblings.
+          const textCallDiagnostic = !failed && !aborted
+            ? textToolCallDiagnostic(responseText, this.toolCatalog)
+            : undefined;
           if (looksLikePseudoToolCall(nextText)) {
             // The visible text is a lost tool batch, not an answer. Logging it
             // separates "the model went quiet" from "the model tried to act and
@@ -9200,6 +9206,8 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
                   thinking: nextThinking,
                 })
               : undefined;
+          // This message annotation does not become a terminal run error.
+          classifiedError ??= textCallDiagnostic;
           this.currentAssistant = {
             ...this.currentAssistant,
             content: nextText,
@@ -9208,13 +9216,14 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
               : content.hasThinking
                 ? { thinking: undefined }
                 : {}),
-            status: failed || emptyResponse
+            status: failed || emptyResponse || textCallDiagnostic
               ? "error"
               : aborted
                 ? "aborted"
                 : "complete",
             modelId: this.provider.modelId,
             providerId: this.provider.id,
+            responseModelId: concreteResponseModel(event.message, this.provider.modelId),
             ...(usage ? { usage } : {}),
             ...(responseDurationMs !== undefined ? { responseDurationMs } : {}),
             ...(streamMs !== undefined ? { modelStreamDurationMs } : {}),
@@ -9237,6 +9246,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
                 ),
           };
           if (!this.currentAssistant.providerReplay) delete this.currentAssistant.providerReplay;
+          if (!this.currentAssistant.responseModelId) delete this.currentAssistant.responseModelId;
           this.emit({ type: "message_end", message: this.currentAssistant });
           this.activeProviderRetryAttempt = 0;
           this.streamStartedAt = undefined;

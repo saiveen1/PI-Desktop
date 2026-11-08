@@ -106,7 +106,7 @@ app.whenReady().then(async () => {
     if (labelsOnly) {
       const grouping = output.split(/\r?\n/).find(line => line.startsWith("LABEL_GROUPING_PROBE "));
       assert.ok(grouping, output.slice(-8000));
-      assert.deepEqual(JSON.parse(grouping.slice("LABEL_GROUPING_PROBE ".length)), { passed: true, duplicateShortcuts: 2, uniqueSelected: 14, layouts: 6 });
+      assert.deepEqual(JSON.parse(grouping.slice("LABEL_GROUPING_PROBE ".length)), { passed: true, uniqueRows: 1, uniqueSelected: 14, layouts: 6 });
     } else {
       const line = output.split(/\r?\n/).find(item => item.startsWith("ORGANIZATION_PROBE "));
       assert.ok(line, output.slice(-8000));
@@ -130,4 +130,4 @@ const options = {
   skip: process.platform === "linux" && !process.env.DISPLAY ? "Isolated Electron fixture requires a display" : false,
 };
 test("session organization user path: multiselect archive, trash, restore and confirmed permanent deletion", options, () => runSessionFixture(false));
-test("sidebar label grouping user path: shared shortcuts, scoped folding, unique selection and narrow layouts", options, () => runSessionFixture(true));
+test("sidebar project grouping user path: descriptive labels, scoped folding, unique selection and narrow layouts", options, () => runSessionFixture(true));

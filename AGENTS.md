@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Policy-Sync: 2026-11-08.personal-edition.3
+Policy-Sync: 2026-11-08.personal-edition.4
 
 Mandatory rules for AI coding agents and maintainers working in PI-Desktop.
 
@@ -255,6 +255,16 @@ the intended target base is incorporated, validate the actual integration
 candidate, and do not open or update a PR whose head lacks that base. Do not
 force-push shared history, and do not require a `merge task → local main` step
 just to run E2E.
+
+Before merging upstream, inspect local and upstream history, implementation,
+specifications, and regression tests for overlapping behavior, including
+conflict-free auto-merges. Determine whether a local difference is an intentional
+optimization or bug fix that upstream still lacks; a newer upstream commit does
+not make its behavior authoritative or more correct. Preserve local fixes unless
+evidence proves they are superseded without regression, or the user explicitly
+approves the behavior change after the differences are explained. Never replace
+local regression assertions merely to match upstream. Record material decisions
+and validate both the retained local behavior and adopted upstream changes.
 
 Retire an optional worktree only after its changes are committed or safely
 migrated, and remove only the user-authorized worktree and branch.

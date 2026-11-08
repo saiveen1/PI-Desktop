@@ -67,6 +67,13 @@ Branches and worktrees are optional, not prerequisites for development.
   latest applicable base, use the target repository's own base check, and
   validate the actual integration candidate without discarding local work or
   force-pushing shared history.
+- Before an upstream merge, compare both histories, implementation, specs and
+  regression tests, including conflict-free overlaps. A newer upstream commit
+  may still lack an intentional local optimization or fix. Preserve that local
+  behavior unless evidence proves it superseded without regression, or the user
+  explicitly approves the explained change. Never change local assertions just
+  to match upstream; record material decisions and test both retained fixes and
+  adopted updates.
 - Retire optional worktrees only when authorized and after verifying their
   changes are committed or safely migrated. Delete no unique work.
 

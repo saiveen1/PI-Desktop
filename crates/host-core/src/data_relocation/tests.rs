@@ -20,6 +20,96 @@ fn read_json(path: &Path) -> Value {
 }
 
 #[test]
+fn sidebar_backup_relocates_internal_project_paths_without_rewriting_labels_or_external_projects() {
+    let temporary = tempfile::tempdir().unwrap();
+    let source = temporary.path().join("old");
+    let destination = temporary.path().join("new");
+    fs::create_dir_all(&source).unwrap();
+    let internal = source
+        .join("projects/default")
+        .to_string_lossy()
+        .into_owned();
+    let external = temporary
+        .path()
+        .join("external")
+        .to_string_lossy()
+        .into_owned();
+    let scope = format!("project:{}", internal.replace('\\', "/"));
+    let external_scope = format!("project:{}", external.replace('\\', "/"));
+    let catalog = json!({"groups": [{"id": "work", "name": internal, "color": "#123456"}],
+        "labels": [{"id": "urgent", "name": "Urgent", "color": "#654321"}]});
+    let original = json!({
+        "openProjectPaths": [internal, external],
+        "projectMeta": {internal.clone(): {"name": internal, "collapsed": true}, external.clone(): {"pinned": true}},
+        "sessionMeta": {
+            "session": {"pinned": true, "organizationScope": scope, "groupId": "work", "labelIds": ["urgent"], "order": 2},
+            "external": {"organizationScope": external_scope},
+            "stable": {"organizationScope": "group:stable"},
+            "remote": {"organizationScope": "remote:synthetic"},
+            "temporary": {"organizationScope": "temporary"}
+        },
+        "sessionOrganization": {"version": 1, "scopes": {
+            scope.clone(): catalog,
+            external_scope.clone(): {"groups": [], "labels": []},
+            "group:stable": {"groups": [], "labels": []},
+            "remote:synthetic": {"groups": [], "labels": []},
+            "temporary": {"groups": [], "labels": []}
+        }}
+    });
+    fs::write(
+        source.join("sidebar-preferences.json"),
+        original.to_string(),
+    )
+    .unwrap();
+    copy_directory(&source, &destination);
+    relocate(&source, &destination).unwrap();
+    let moved = destination
+        .join("projects/default")
+        .to_string_lossy()
+        .into_owned();
+    let restored = read_json(&destination.join("sidebar-preferences.json"));
+    assert_eq!(restored["openProjectPaths"], json!([moved, external]));
+    assert_eq!(restored["projectMeta"][&moved]["name"], internal);
+    assert_eq!(restored["projectMeta"][&external]["pinned"], true);
+    let moved_scope = format!("project:{}", moved.replace('\\', "/"));
+    assert_eq!(
+        restored["sessionOrganization"]["scopes"][&moved_scope],
+        catalog
+    );
+    assert!(restored["sessionOrganization"]["scopes"]
+        .get(&scope)
+        .is_none());
+    assert_eq!(
+        restored["sessionMeta"]["session"]["organizationScope"],
+        moved_scope
+    );
+    assert_eq!(restored["sessionMeta"]["session"]["groupId"], "work");
+    assert_eq!(
+        restored["sessionMeta"]["session"]["labelIds"],
+        json!(["urgent"])
+    );
+    assert_eq!(restored["sessionMeta"]["session"]["order"], 2);
+    for key in [
+        external_scope.as_str(),
+        "group:stable",
+        "remote:synthetic",
+        "temporary",
+    ] {
+        assert_eq!(
+            restored["sessionOrganization"]["scopes"][key],
+            original["sessionOrganization"]["scopes"][key]
+        );
+    }
+    for key in ["external", "stable", "remote", "temporary"] {
+        assert_eq!(restored["sessionMeta"][key], original["sessionMeta"][key]);
+    }
+    assert_eq!(
+        read_json(&source.join("sidebar-preferences.json")),
+        original
+    );
+}
+
+#[test]
 fn relocated_project_memory_remains_readable_through_the_repository() {
     // Keep the synthetic profile for inspection; no user data is involved.
     let temporary = tempfile::tempdir().unwrap().keep();

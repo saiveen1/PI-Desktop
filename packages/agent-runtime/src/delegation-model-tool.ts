@@ -1,4 +1,4 @@
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { describeDelegationModels } from "@pi-desktop/shared";
 import type { CurrentDelegationPolicy } from "./delegation-policy-state.js";
