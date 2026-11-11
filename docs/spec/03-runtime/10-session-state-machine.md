@@ -123,6 +123,16 @@ turn that has ended.
    calls are no-ops. Renderer terminal lifecycle events update the transcript
    and turn result card; the sidebar terminal mark is derived only from the
    corresponding unread notification, never from `agent_end` alone.
+   A root runtime `status` snapshot also synchronizes both the session's sidebar
+   run flag and the active composer's run flag; a Host-owned queued/running plan
+   execution retains its existing busy gate. Otherwise an idle snapshot removes stale
+   permission/question cards and answer drafts for that session without
+   synthesizing a completed or failed outcome. Child status snapshots never
+   replace the parent run state or activity, and status events from an ended or
+   superseded turn cannot reopen or stop the current turn. Backend loss uses the
+   same live-state cleanup for local/Desktop and native sessions, even when no
+   terminal event arrives; remote-owned sessions keep their independent state.
+   A subsequent explicit turn or manual-compaction start restores live ownership.
 10. Whole-session fork is idle-only. A Desktop message-scoped fork may copy
    a completed assistant prefix during a later turn, provided no indexed row in
    the prefix belongs to a running turn. The source continues; the child begins

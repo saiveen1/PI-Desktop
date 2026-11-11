@@ -774,8 +774,8 @@ export function useAppShellRuntime() {
           message: status.message,
           schema: status.schema,
         });
-        // A dead sidecar cannot finish the turn; unstick the composer.
-        useAppStore.setState({ isRunning: false });
+        // The composer, sidebar and decision cards share the same live owner.
+        useAppStore.getState().handleRuntimeUnavailable();
       }
     });
     const offRemoteInteractions = subscribeRemoteInteractions();

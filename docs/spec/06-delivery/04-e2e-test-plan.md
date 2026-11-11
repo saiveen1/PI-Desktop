@@ -12665,6 +12665,20 @@ This test plan spec is accepted when:
   Refresh notifications and restart the app; the acknowledged mark must not
   return. A terminal notification marked read from the inbox likewise produces
   no sidebar terminal mark.
+- Deliver an idle root runtime status after suppressing that session's terminal
+  lifecycle event. Expect both its sidebar running dot and active composer busy
+  state to clear, along with stale permission/question cards and answer drafts.
+  Do not invent a completion/failure badge or task notification from the status.
+  Keep a different session active and confirm its run and decision cards do not
+  change. A child status must not overwrite the parent run/activity; a delayed
+  status for an ended or older turn must not relight it or stop a newer turn.
+- Interrupt the local backend without a terminal event, with local, native, and
+  remote sessions present. Expect local/native running markers and decision cards
+  to clear together, but the independent remote session's marker and composer
+  remain live. After recovery, a new explicit turn or manual compaction must show
+  activity normally. Automated synthetic-store coverage:
+  `apps/desktop/test/session-running-state.test.mjs`; live interruption remains
+  **NOT RUN** unless separately authorized.
 - Repeat for a running related-session marker in the hover card. After 3.2
   seconds, neither running marker has an active animation; recording an otherwise
   idle native macOS window must show no continuous frames from these markers.

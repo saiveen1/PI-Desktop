@@ -377,6 +377,7 @@ export type AppState = import("./slices/session-management-slice").SessionManage
   restorePendingInteractive: (sessionId: string) => Promise<void>;
   refreshPlanCheckpoints: () => Promise<void>;
   handleAgentEvent: (envelope: AgentEventEnvelope) => void;
+  handleRuntimeUnavailable: () => void;
   handlePlansChanged: (event: PlanningStateEvent) => void;
   setPage: (page: AppState["page"], opts?: { record?: boolean }) => void;
   setSettingsTab: (tab: AppState["settingsTab"]) => void;

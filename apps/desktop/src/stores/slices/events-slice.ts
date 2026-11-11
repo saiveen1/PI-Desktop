@@ -24,14 +24,11 @@ import {
 } from "@pi-desktop/shared";
 import { createFrameBatcher } from "../../lib/frame-batcher";
 import {
-  clearSessionAsks,
-  dropSessionAskDrafts,
   dropToolCallAskDrafts,
   enqueueAsk,
   removeAskForToolCall,
 } from "../../lib/pending-asks";
 import {
-  clearSessionPermissions,
   enqueuePermission,
   removePermissionForToolCall,
 } from "../../lib/pending-permissions";
@@ -41,8 +38,10 @@ import {
   mergePlanCheckpoint,
 } from "../../lib/plan-mode-state";
 import { formatToolValue } from "../../lib/tool-display";
+import { isRemoteSession } from "../../lib/remote-session-safety";
 import type { AppState } from "../app-state";
 import type { SessionRuntime } from "../runtime/session-runtime";
+import { idleSessionRun } from "../runtime/session-run-state";
 import type { StoreAccess } from "./types";
 
 export type EventsSliceDependencies = StoreAccess & {
@@ -104,7 +103,7 @@ export function createEventsSlice({
   withCompactionMark,
 }: EventsSliceDependencies): Pick<
   AppState,
-  "handlePlansChanged" | "handleAgentEvent" | "applyTodosChanged"
+  "handlePlansChanged" | "handleAgentEvent" | "applyTodosChanged" | "handleRuntimeUnavailable"
 > {
   let flushingStreamUpdates = false;
   const streamUpdates = createFrameBatcher<AgentEventEnvelope>((envelopes) => {
@@ -117,6 +116,8 @@ export function createEventsSlice({
       flushingStreamUpdates = false;
     }
   });
+  // A status is a live snapshot, not permission to reopen an ended/older turn.
+  const runEventOwners = new Map<string, { turnId?: string; ended: boolean }>();
 
   // Only full host proposals certify approval. The live approval bar's
   // legacy state-only fallbacks must not become authoritative history.
@@ -144,6 +145,29 @@ export function createEventsSlice({
   };
 
   return {
+    handleRuntimeUnavailable: () => {
+      set((state) => {
+        const remoteIds = new Set(state.sessions.filter(isRemoteSession).map((session) => session.id));
+        const sessionIds = new Set([
+          ...Object.keys(state.runningSessions),
+          ...Object.keys(state.agentStatuses),
+          ...Object.keys(state.pendingPermissions),
+          ...Object.keys(state.pendingAsks),
+          ...(state.activeSessionId ? [state.activeSessionId] : []),
+        ]);
+        let next = state;
+        for (const sessionId of sessionIds) {
+          if (remoteIds.has(sessionId) || isRemoteSession({ id: sessionId })) continue;
+          runEventOwners.set(sessionId, {
+            turnId: runEventOwners.get(sessionId)?.turnId ?? state.agentStatuses[sessionId]?.currentTurnId,
+            ended: true,
+          });
+          runtime.submittedComposerDrafts.delete(sessionId);
+          next = { ...next, ...idleSessionRun(next, sessionId) };
+        }
+        return next;
+      });
+    },
     applyTodosChanged: (snapshot: SessionTodoSnapshot) => {
       if (!isSessionTodoSnapshot(snapshot)) return;
       set((state) => {
@@ -228,6 +252,14 @@ export function createEventsSlice({
         }
       }
       const event = envelope.event;
+      if (!envelope.parentToolCallId) {
+        if (event.type === "agent_start" || event.type === "turn_start" ||
+          (event.type === "compaction_start" && event.reason === "manual")) {
+          runEventOwners.set(envelope.sessionId, { turnId: envelope.turnId, ended: false });
+        } else if (event.type === "agent_end" || event.type === "error") {
+          runEventOwners.set(envelope.sessionId, { turnId: envelope.turnId, ended: true });
+        }
+      }
       if (event.type === "agent_end" || event.type === "error") {
         runtime.submittedComposerDrafts.delete(envelope.sessionId);
       }
@@ -304,12 +336,23 @@ export function createEventsSlice({
         runtime.liveSessionTranscripts.add(envelope.sessionId);
       }
       if (event.type === "status") {
-        set((state) => ({
-          agentStatuses: {
-            ...state.agentStatuses,
-            [envelope.sessionId]: event.status,
-          },
-        }));
+        const owner = runEventOwners.get(envelope.sessionId);
+        const turnId = envelope.turnId ?? event.status.currentTurnId;
+        if (
+          envelope.parentToolCallId || event.status.sessionId !== envelope.sessionId ||
+          owner?.ended || (owner?.turnId && turnId && owner.turnId !== turnId)
+        ) return;
+        runEventOwners.set(envelope.sessionId, { turnId, ended: false });
+        set((state) => {
+          const running = event.status.isRunning || isActivePlanExecution(state.planCheckpoints[envelope.sessionId]);
+          const idle = running ? undefined : idleSessionRun(state, envelope.sessionId);
+          return {
+            ...idle,
+            runningSessions: { ...state.runningSessions, [envelope.sessionId]: running },
+            isRunning: state.activeSessionId === envelope.sessionId ? running : state.isRunning,
+            agentStatuses: { ...state.agentStatuses, [envelope.sessionId]: event.status },
+          };
+        });
       }
       if (
         event.type === "agent_start" ||
@@ -341,27 +384,7 @@ export function createEventsSlice({
         void get().refreshQueuedPrompts(envelope.sessionId);
       } else if (event.type === "agent_end" || event.type === "error") {
         set((state) => ({
-          runningSessions: {
-            ...state.runningSessions,
-            [envelope.sessionId]: false,
-          },
-          agentStatuses: withoutRecordKey(
-            state.agentStatuses,
-            envelope.sessionId,
-          ),
-          pendingPermissions: clearSessionPermissions(
-            state.pendingPermissions,
-            envelope.sessionId,
-          ),
-          pendingAsks: clearSessionAsks(
-            state.pendingAsks,
-            envelope.sessionId,
-          ),
-          askDrafts: dropSessionAskDrafts(
-            state.askDrafts,
-            state.pendingAsks,
-            envelope.sessionId,
-          ),
+          ...idleSessionRun(state, envelope.sessionId),
           latestTurnResults:
             event.type === "error" && event.error.code === "TURN_ABORTED"
               ? withoutRecordKey(state.latestTurnResults, envelope.sessionId)

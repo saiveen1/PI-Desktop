@@ -105,11 +105,13 @@ test("restoring the focused chat acknowledges its session outcome", () => {
 });
 
 test("sidebar terminal outcomes are notification-backed, not lifecycle-backed", () => {
-  const terminalStart = eventsSource.indexOf('} else if (event.type === "agent_end" || event.type === "error")');
+  const terminalStart = eventsSource.search(/\} else if \(event\.type === "agent_end" \|\| event\.type === "error"\) \{\s+set\(\(state\) => \(\{/);
   const terminalEnd = eventsSource.indexOf('      if (event.type === "planning_state")', terminalStart);
+  assert.ok(terminalStart >= 0 && terminalEnd > terminalStart, "locate the terminal state update, not the ownership cursor");
   const terminalBlock = eventsSource.slice(terminalStart, terminalEnd);
   assert.match(terminalBlock, /latestTurnResults/);
   assert.doesNotMatch(terminalBlock, /sessionOutcomes:/);
+  assert.doesNotMatch(readStoreModuleSync("runtime/session-run-state.ts"), /sessionOutcomes|latestTurnResults/);
   assert.match(storeSource, /receiveNotification:[\s\S]*sessionOutcomes:/);
   assert.match(storeSource, /viewingSessionId: viewingSessionIdForPrompt\(get\(\), sessionId\)/);
   assert.match(mainSource, /req\.viewingSessionId/);
