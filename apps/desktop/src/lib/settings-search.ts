@@ -205,6 +205,8 @@ export const SETTINGS_NAV: SettingsNavEntry[] = [
       "settings.commandShell",
       "settings.infiniteProviderRetry",
       "settings.infiniteProviderRetryDesc",
+      "settings.providerStreamIdleTimeout",
+      "settings.providerStreamIdleTimeoutDesc",
       "settings.autoContinueUnfinishedTodos",
       "settings.autoContinueUnfinishedTodosDesc",
       "settings.scheduledTasks",

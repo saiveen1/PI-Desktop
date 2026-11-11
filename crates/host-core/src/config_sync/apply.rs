@@ -121,6 +121,11 @@ fn apply_entity(
                 );
             }
         }
+        if let Some(timeout) = entity.payload.get("providerStreamIdleTimeoutMinutes") {
+            if !crate::provider_retry::is_provider_stream_idle_timeout_minutes(timeout) {
+                bail!("CONFIG_SYNC_INVALID: providerStreamIdleTimeoutMinutes must be an integer from 0 to 60");
+            }
+        }
         let mut current = st.db.get_setting("app")?.unwrap_or_else(|| json!({}));
         if let (Some(current), Some(incoming)) =
             (current.as_object_mut(), entity.payload.as_object())

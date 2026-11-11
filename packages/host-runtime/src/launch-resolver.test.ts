@@ -137,6 +137,15 @@ describe("createHeadlessLaunchResolver", () => {
     expect(launch.sidecarParams.unknownUpstreamRetryLimit).toBe(0);
   });
 
+  it.each([[undefined, 10], [null, 10], [-1, 10], [1.5, 10], [61, 10], [0, 0], [17, 17], [60, 60]])(
+    "resolves stream idle timeout %s to %s", async (value, expected) => {
+      const { host } = hostWith([provider], { p1: "sk-test" });
+      const resolver = createHeadlessLaunchResolver({ getHost: () => host, dataDir: "/data", log: () => undefined });
+      const launch = await resolver.resolve("s1", { providerId: "p1", modelId: "gpt-a" }, { providerStreamIdleTimeoutMinutes: value });
+      expect(launch.sidecarParams.providerStreamIdleTimeoutMinutes).toBe(expected);
+    },
+  );
+
   it("falls back to the default provider and refuses a provider without a secret", async () => {
     const { host } = hostWith([provider, { ...provider, id: "p2", name: "Other", hasSecret: false }], { p1: "sk" });
     const resolver = createHeadlessLaunchResolver({ getHost: () => host, dataDir: "/data", log: () => undefined });

@@ -1,4 +1,8 @@
 export const delegationReliabilitySettings = {
+  providerStreamIdleTimeout: "模型连接空闲超时",
+  providerStreamIdleTimeoutDesc: "仅在选定时间内没有收到响应数据时取消。长时间思考本身不会重启请求。从下一轮生效；关闭时若请求卡住需手动停止。",
+  providerStreamIdleTimeoutDisabled: "关闭",
+  providerStreamIdleTimeoutMinutes: "{{count}} 分钟",
   "delegationRunReportRecovery": "补全缺失的最终报告",
   "delegationRunReportRecoveryDesc": "子任务结束却没有交付报告时，追加一次无工具报告请求，受报告时限约束，可能增加 API 用量。",
   "delegationRunReportRecoveryOnce": "一次",

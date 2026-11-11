@@ -1,4 +1,8 @@
 export const delegationReliabilitySettings = {
+  providerStreamIdleTimeout: "Délai d'inactivité de connexion au modèle",
+  providerStreamIdleTimeoutDesc: "Annule uniquement si aucune donnée ne parvient pendant la durée choisie. Une réflexion longue ne relance pas la requête. Applicable au prochain tour ; si désactivé, arrêtez manuellement une requête bloquée.",
+  providerStreamIdleTimeoutDisabled: "Désactivé",
+  providerStreamIdleTimeoutMinutes: "{{count}} minutes",
   "delegationRunReportRecovery": "Récupérer le rapport final manquant",
   "delegationRunReportRecoveryDesc": "Si une sous-tâche se termine sans rapport, demander une fois un rapport sans outils. Le délai configuré s'applique et des frais API peuvent s'ajouter.",
   "delegationRunReportRecoveryOnce": "Une fois",

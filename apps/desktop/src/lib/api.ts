@@ -1,3 +1,4 @@
+import { isProviderStreamIdleTimeoutMinutes, resolveProviderStreamIdleTimeoutMinutes } from "@pi-desktop/shared";
 import type { CoreNotificationRequest, NotificationDeliveryResult, NotificationTarget } from "@pi-desktop/shared";
 import type { DelegationApprovalSnapshot, DelegationApprovalActionRequest, DelegationApprovalActionResult, DelegationApprovalExtendRequest, DelegationApprovalChangedEvent } from "@pi-desktop/shared";
 import type { DelegationRunHistoryQuery, DelegationRunHistoryPage, DelegationApprovalHistory, DelegationApprovalHistoryMarkRead } from "@pi-desktop/shared";
@@ -471,6 +472,7 @@ export function normalizeSettings(settings: AppSettings): AppSettings {
       (settings as { infiniteProviderRetry?: unknown }).infiniteProviderRetry === true,
     unknownUpstreamRetryLimit: isUnknownUpstreamRetryLimit(settings.unknownUpstreamRetryLimit)
       ? settings.unknownUpstreamRetryLimit : UNKNOWN_UPSTREAM_RETRY_LIMIT_DEFAULT,
+    providerStreamIdleTimeoutMinutes: resolveProviderStreamIdleTimeoutMinutes(settings.providerStreamIdleTimeoutMinutes),
     autoContinueUnfinishedTodos:
       (settings as { autoContinueUnfinishedTodos?: unknown })
         .autoContinueUnfinishedTodos !== false,
@@ -610,6 +612,10 @@ export function validateSettingsWrite(settings: AppSettings): AppSettings {
     throw Object.assign(new Error("unknownUpstreamRetryLimit is invalid"), {
       errorCode: "INVALID_PARAMS",
     });
+  }
+  if (Object.prototype.hasOwnProperty.call(value, "providerStreamIdleTimeoutMinutes") &&
+      !isProviderStreamIdleTimeoutMinutes(value.providerStreamIdleTimeoutMinutes)) {
+    throw Object.assign(new Error("providerStreamIdleTimeoutMinutes is invalid"), { errorCode: "INVALID_PARAMS" });
   }
   if (
     Object.prototype.hasOwnProperty.call(settings, "scheduledTasksEnabled") &&

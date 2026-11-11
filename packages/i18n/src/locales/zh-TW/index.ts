@@ -3320,6 +3320,8 @@ sklm: {
     phase: { idle: "關閉", preparing: "準備中", "acquiring-mic": "等待麥克風", negotiating: "協商中", connecting: "連線中…", connected: "已連線", reconnecting: "重新連線中", closing: "正在結束…", ended: "已結束", failed: "已停止" },
   },
   errors: {
+    PROVIDER_STREAM_IDLE_TIMEOUT: "模型連線因長時間未收到資料而停止，不會自動重試。可在設定 → 行為調整逾時。",
+    PROVIDER_STREAM_SLOW: "180 秒沒有新的模型內容，仍在等待；你可以停止請求。",
     COMPOSER_MCP_UNAVAILABLE: "所選 MCP 伺服器已中斷連線或在目前專案中無法使用。請重新連線並選取。",
     COMPOSER_MCP_REQUEST_REQUIRED: "選取 MCP 伺服器或工具後，請輸入任務內容或新增附件。",
     HOST_UNAVAILABLE: "本地服務不可用",

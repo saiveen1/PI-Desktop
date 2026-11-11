@@ -92,6 +92,8 @@ export type AppSettings = {
   infiniteProviderRetry?: boolean;
   /** Independent 0-3 retries for unknown upstream 400/422 wrappers; absent is off. */
   unknownUpstreamRetryLimit?: number;
+  /** Transport silence timeout in minutes; 0 disables cancellation, absent defaults to 10. */
+  providerStreamIdleTimeoutMinutes?: number;
   /**
    * Keep the current task going once per user turn when the model finishes its
    * reply while the TodoWrite checklist for that turn still has unfinished

@@ -7,6 +7,7 @@ import {
   isActiveInProject,
   isCommandShellCatalog,
   isUnknownUpstreamRetryLimit,
+  resolveProviderStreamIdleTimeoutMinutes,
   normalizeMode,
   resolveBindingLimits,
   trustedExtensionAgentKeyFromProviderId,
@@ -380,6 +381,7 @@ export function createHeadlessLaunchResolver(options: HeadlessLaunchResolverOpti
         infiniteProviderRetry: settings.infiniteProviderRetry === true,
         unknownUpstreamRetryLimit: isUnknownUpstreamRetryLimit(settings.unknownUpstreamRetryLimit)
           ? settings.unknownUpstreamRetryLimit : UNKNOWN_UPSTREAM_RETRY_LIMIT_DEFAULT,
+        providerStreamIdleTimeoutMinutes: resolveProviderStreamIdleTimeoutMinutes(settings.providerStreamIdleTimeoutMinutes),
         commandShell,
         scratchDir: join(dataDir, "scratch", sessionId),
         attachmentsDir: join(dataDir, "attachments"),

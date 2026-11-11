@@ -3268,6 +3268,8 @@ export const ptBR = {
     phase: { idle: "Desativada", preparing: "Preparando", "acquiring-mic": "Aguardando microfone", negotiating: "Negociando", connecting: "Conectando…", connected: "Conectado", reconnecting: "Reconectando", closing: "Encerrando…", ended: "Encerrada", failed: "Interrompida" },
   },
   errors: {
+    PROVIDER_STREAM_IDLE_TIMEOUT: "A conexão do modelo parou por falta de dados e não será retomada automaticamente. Ajuste o tempo em Configurações → Comportamento.",
+    PROVIDER_STREAM_SLOW: "Nenhum conteúdo novo do modelo há 180 segundos. Ainda aguardando; você pode parar a solicitação.",
     COMPOSER_MCP_UNAVAILABLE: "O servidor MCP selecionado está desconectado ou indisponível neste projeto. Reconecte-o e selecione-o novamente.",
     COMPOSER_MCP_REQUEST_REQUIRED: "Depois de escolher um servidor ou ferramenta MCP, informe uma tarefa ou adicione um anexo.",
     HOST_UNAVAILABLE: "O serviço local está indisponível",

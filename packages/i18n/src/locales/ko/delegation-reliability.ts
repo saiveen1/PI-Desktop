@@ -1,4 +1,8 @@
 export const delegationReliabilitySettings = {
+  providerStreamIdleTimeout: "모델 연결 유휴 시간 제한",
+  providerStreamIdleTimeoutDesc: "선택한 시간 동안 응답 데이터가 없을 때만 취소합니다. 오래 생각하는 것만으로 요청을 다시 시작하지 않습니다. 다음 턴부터 적용되며, 끄면 멈춘 요청을 직접 중지해야 합니다.",
+  providerStreamIdleTimeoutDisabled: "사용 안 함",
+  providerStreamIdleTimeoutMinutes: "{{count}}분",
   "delegationRunReportRecovery": "누락된 최종 보고서 복구",
   "delegationRunReportRecoveryDesc": "하위 작업이 보고서 없이 끝나면 도구 없이 보고서를 한 번 요청합니다. 설정된 보고 기한이 적용되며 API 사용량이 추가될 수 있습니다.",
   "delegationRunReportRecoveryOnce": "한 번",

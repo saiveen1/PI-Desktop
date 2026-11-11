@@ -79,7 +79,7 @@ export function runActivityLabel(
     case "starting":
       return t("chat.startingTurn");
     case "waiting-model":
-      return t("chat.waitingForModel");
+      return t(activity.slow ? "errors.PROVIDER_STREAM_SLOW" : "chat.waitingForModel");
     case "preparing":
       return t("chat.preparingNextRequest");
     case "waiting-tool-stop":

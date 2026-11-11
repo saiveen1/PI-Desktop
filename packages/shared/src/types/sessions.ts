@@ -218,7 +218,7 @@ export type AgentActivityAgent = {
 /** The runtime phase that explains a quiet interval in an active turn. */
 export type AgentActivity =
   | { phase: "starting"; since: number }
-  | { phase: "waiting-model"; since: number }
+  | { phase: "waiting-model"; since: number; slow?: boolean }
   | { phase: "preparing"; since: number }
   | { phase: "waiting-tool-stop"; since: number }
   | {

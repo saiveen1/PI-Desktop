@@ -129,6 +129,8 @@ test("turning the safeguard off then on persists each choice across the boundari
 test("the row is indexed in Settings → Behavior beside the provider retry switch", () => {
   const behavior = SETTINGS_NAV.find((entry) => entry.id === "behavior");
   assert.ok(behavior, "Behavior settings entry is registered");
+  assert.ok(behavior.keywordKeys.includes("settings.providerStreamIdleTimeout"));
+  assert.ok(behavior.keywordKeys.includes("settings.providerStreamIdleTimeoutDesc"));
   const at = behavior.keywordKeys.indexOf("settings.autoContinueUnfinishedTodos");
   assert.ok(at >= 0, "the row title is searchable in Behavior");
   assert.equal(

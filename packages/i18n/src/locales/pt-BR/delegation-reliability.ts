@@ -1,4 +1,8 @@
 export const delegationReliabilitySettings = {
+  providerStreamIdleTimeout: "Tempo limite de inatividade da conexão do modelo",
+  providerStreamIdleTimeoutDesc: "Cancela apenas se nenhum dado de resposta chegar no período escolhido. Pensar por muito tempo não reinicia a solicitação. Vale a partir do próximo turno; se desativado, pare manualmente solicitações travadas.",
+  providerStreamIdleTimeoutDisabled: "Desativado",
+  providerStreamIdleTimeoutMinutes: "{{count}} minutos",
   "delegationRunReportRecovery": "Recuperar relatório final ausente",
   "delegationRunReportRecoveryDesc": "Se uma subtarefa terminar sem relatório, solicitar uma vez um relatório sem ferramentas. O prazo configurado se aplica e pode haver uso adicional da API.",
   "delegationRunReportRecoveryOnce": "Uma vez",

@@ -333,9 +333,8 @@ import {
   isUnknownUpstreamBadRequest,
   providerRateLimitDelayMs,
   providerSetupRetryDelayMs,
-  streamIdleTimeoutMs,
-  withStreamIdleTimeout,
 } from "./provider-retry.js";
+import { streamIdleTimeoutMs, withProviderStreamIdleTimeout } from "./provider-stream-idle.js";
 
 import {
   ContextEstimateCalibration,
@@ -1059,6 +1058,7 @@ export type AgentRuntimeOptions = {
   infiniteProviderRetry?: boolean;
   /** Separate bounded recovery for generic upstream 400/422 wrappers. */
   unknownUpstreamRetryLimit?: number;
+  providerStreamIdleTimeoutMinutes?: number;
   /** Continue once when this task's committed checklist remains unfinished. On unless false. */
   autoContinueUnfinishedTodos?: boolean;
   /**
@@ -2006,6 +2006,7 @@ export class DesktopAgentRuntime {
   private providerTransientRetryAttempt = 0;
   private providerUnknownRetryAttempt = 0;
   private unknownUpstreamRetryLimit = 0;
+  private providerStreamIdleTimeoutMinutes?: number;
   /** Shared OpenCode-style 429 retry count across setup and stream phases. */
   private providerRateLimitRetryAttempt = 0;
   /** Opt-in mode removes only the retry-count ceiling; abort and backoff stay intact. */
@@ -2124,6 +2125,7 @@ export class DesktopAgentRuntime {
     this.thinkingLevel = clampThinkingLevel(opts.provider, opts.thinkingLevel);
     this.infiniteProviderRetry = opts.infiniteProviderRetry === true;
     this.unknownUpstreamRetryLimit = resolveUnknownUpstreamRetryLimit(opts.unknownUpstreamRetryLimit);
+    this.providerStreamIdleTimeoutMinutes = opts.providerStreamIdleTimeoutMinutes;
     this.fastMode = opts.fastMode === true;
     this.jevApiKey = opts.jevApiKey;
     this.computerUseEnabled = opts.computerUseEnabled === true;
@@ -2347,17 +2349,8 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           attemptOptions,
           (retryOptions) => {
             const attempt = diagnosticAttempt;
-            // Each network attempt owns its idle clock and abort signal.
-            // Deliberate backoff must not look like a stalled provider stream.
-            const stallAbort = new AbortController();
-            const timedOptions = {
-              ...retryOptions,
-              signal: AbortSignal.any([
-                ...(retryOptions.signal ? [retryOptions.signal] : []),
-                stallAbort.signal,
-              ]),
-            };
-            const stream = accountModelStream(m, () =>
+            return withProviderStreamIdleTimeout(m, retryOptions,
+              streamIdleTimeoutMs(this.providerStreamIdleTimeoutMinutes), timedOptions => accountModelStream(m, () =>
               this.thinkingLevel === "omit"
                 ? this.models.stream(omitThinkingModel(m), requestContext, timedOptions)
                 : this.models.streamSimple(m, requestContext, timedOptions), {
@@ -2367,14 +2360,12 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
                 onEvent: (event) => {
                   if (!diagnostics || diagnostics !== this.runDiagnostics || attempt === undefined || event.type === "error") return;
                   diagnostics.observeProviderEvent(attempt, runDiagnosticsProviderEvent(event), Date.now());
+                  if (this.agentActivity?.phase === "waiting-model" && this.agentActivity.slow) this.clearAgentActivity();
                 },
+              }), since => {
+                if (!this.disposed && !this.runCancelled && diagnostics === this.runDiagnostics)
+                  this.setAgentActivity({ phase: "waiting-model", since, slow: true });
               });
-            return withStreamIdleTimeout(
-              stream,
-              m,
-              streamIdleTimeoutMs(),
-              () => stallAbort.abort(),
-            );
           },
           {
             claim: (error, phase) => this.claimProviderRetry(error, phase),
@@ -2502,6 +2493,11 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
   setUnknownUpstreamRetryLimit(limit?: number): void {
     if (this.disposed) throw new Error("runtime disposed");
     this.unknownUpstreamRetryLimit = resolveUnknownUpstreamRetryLimit(limit);
+  }
+
+  setProviderStreamIdleTimeoutMinutes(minutes?: number): void {
+    if (this.disposed) throw new Error("runtime disposed");
+    this.providerStreamIdleTimeoutMinutes = minutes;
   }
 
   setAutoContinueUnfinishedTodos(enabled: boolean): void {

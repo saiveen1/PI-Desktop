@@ -1,4 +1,8 @@
 export const delegationReliabilitySettings = {
+  providerStreamIdleTimeout: "Leerlaufzeit der Modellverbindung",
+  providerStreamIdleTimeoutDesc: "Bricht nur ab, wenn innerhalb der gewählten Zeit keine Antwortdaten eintreffen. Langes Nachdenken startet die Anfrage nicht neu. Gilt ab der nächsten Runde; deaktivierte festgefahrene Anfragen müssen manuell gestoppt werden.",
+  providerStreamIdleTimeoutDisabled: "Deaktiviert",
+  providerStreamIdleTimeoutMinutes: "{{count}} Minuten",
   "delegationRunReportRecovery": "Fehlenden Abschlussbericht anfordern",
   "delegationRunReportRecoveryDesc": "Endet ein Unterauftrag ohne Bericht, wird einmal ein Bericht ohne Werkzeuge angefordert. Es gilt die Berichtsfrist; API-Verbrauch kann entstehen.",
   "delegationRunReportRecoveryOnce": "Einmal",

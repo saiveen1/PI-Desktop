@@ -4,6 +4,8 @@ import {
   defaultCommandShellForPlatform,
   isCommandShellId,
   isUnknownUpstreamRetryLimit,
+  isProviderStreamIdleTimeoutMinutes,
+  resolveProviderStreamIdleTimeoutMinutes,
   normalizeRadialMenuPreferences,
   radialMenuWriteError,
   validateNetworkProxy,
@@ -177,6 +179,7 @@ export function createProviderCatalogRuntime({
         .infiniteProviderRetry === true,
       unknownUpstreamRetryLimit: isUnknownUpstreamRetryLimit(value.unknownUpstreamRetryLimit)
         ? value.unknownUpstreamRetryLimit : UNKNOWN_UPSTREAM_RETRY_LIMIT_DEFAULT,
+      providerStreamIdleTimeoutMinutes: resolveProviderStreamIdleTimeoutMinutes((value as { providerStreamIdleTimeoutMinutes?: unknown }).providerStreamIdleTimeoutMinutes),
       keepAwakeWhileRunning: (value as T & { keepAwakeWhileRunning?: unknown })
         .keepAwakeWhileRunning === true,
       autoContinueUnfinishedTodos:
@@ -210,6 +213,7 @@ export function createProviderCatalogRuntime({
       defaultCommandShell?: unknown;
       infiniteProviderRetry?: unknown;
       unknownUpstreamRetryLimit?: unknown;
+      providerStreamIdleTimeoutMinutes?: unknown;
       keepAwakeWhileRunning?: unknown;
       scheduledTasksEnabled?: unknown;
       jevEnabled?: unknown;
@@ -247,6 +251,10 @@ export function createProviderCatalogRuntime({
       throw Object.assign(new Error("unknownUpstreamRetryLimit is invalid"), {
         errorCode: ErrorCodes.INVALID_PARAMS,
       });
+    }
+    if (Object.prototype.hasOwnProperty.call(value, "providerStreamIdleTimeoutMinutes") &&
+        !isProviderStreamIdleTimeoutMinutes(value.providerStreamIdleTimeoutMinutes)) {
+      throw Object.assign(new Error("providerStreamIdleTimeoutMinutes is invalid"), { errorCode: ErrorCodes.INVALID_PARAMS });
     }
     if (
       Object.prototype.hasOwnProperty.call(value, "autoContinueUnfinishedTodos") &&

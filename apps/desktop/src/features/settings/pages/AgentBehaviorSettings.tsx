@@ -8,6 +8,7 @@
  * destination.
  */
 import { UNKNOWN_UPSTREAM_RETRY_LIMIT_MAX, type AppSettings, type GlobalPermissionMode } from "@pi-desktop/shared";
+import { resolveProviderStreamIdleTimeoutMinutes } from "@pi-desktop/shared";
 import { useTranslation } from "react-i18next";
 import { SegmentedControl, SettingsToggle } from "../../../components/ui";
 import { SettingsMenuSelect } from "../../../components/settings/SettingsMenuSelect";
@@ -24,6 +25,10 @@ export function AgentBehaviorSettings({
   saveSettings: (patch: Partial<AppSettings>) => Promise<void>;
 }) {
   const { t } = useTranslation();
+  const idleTimeout = resolveProviderStreamIdleTimeoutMinutes(settings.providerStreamIdleTimeoutMinutes);
+  const idleOptions = [0, 3, 5, 10, 15, 30, 60];
+  if (!idleOptions.includes(idleTimeout)) idleOptions.push(idleTimeout);
+  idleOptions.sort((a, b) => a - b);
   return (
     <div className="settings-stack">
       <SettingsCard
@@ -89,6 +94,13 @@ export function AgentBehaviorSettings({
             options={Array.from({ length: UNKNOWN_UPSTREAM_RETRY_LIMIT_MAX + 1 }, (_, value) => ({
               id: String(value), label: value === 0 ? t("settings.delegationRunReportRecoveryOff") : String(value),
             }))} />
+        </SettingsRow>
+        <SettingsRow title={t("settings.providerStreamIdleTimeout")} description={t("settings.providerStreamIdleTimeoutDesc")}>
+          <SettingsMenuSelect label={t("settings.providerStreamIdleTimeout")} value={String(idleTimeout)}
+            onChange={value => void saveSettings({ providerStreamIdleTimeoutMinutes: Number(value) })}
+            options={idleOptions.map(value => ({ id: String(value), label: value === 0
+              ? t("settings.providerStreamIdleTimeoutDisabled")
+              : t("settings.providerStreamIdleTimeoutMinutes", { count: value }) }))} />
         </SettingsRow>
         <AutoContinueUnfinishedTodosRow settings={settings} saveSettings={saveSettings} />
         <SettingsRow

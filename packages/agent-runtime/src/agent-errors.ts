@@ -1,3 +1,4 @@
+import { readProviderIdleTimeout } from "./provider-stream-idle-error.js";
 /**
  * Provider/model error classification for the agent path.
  *
@@ -547,6 +548,15 @@ export function classifyAgentError(err: unknown, responseStatus?: number): Class
     (err instanceof Error && err.name === "AbortError") ||
     envelope?.stopReason === "aborted" ||
     local?.causeName === "AbortError";
+  const idle = readProviderIdleTimeout(err);
+  if (idle && !explicitlyAborted) {
+    return {
+      code: "PROVIDER_STREAM_IDLE_TIMEOUT",
+      message: "Provider connection remained idle. Automatic replay stopped; review the partial reply or change the idle timeout in Settings > Behavior.",
+      retriable: false,
+      details: { origin: "local", phase: "stream", ...idle },
+    };
+  }
   if (local && !explicitlyAborted) {
     // Local preparation cannot be repaired by provider retries. Keep the
     // original chain in-process, but never copy its payload/message/stack to UI.

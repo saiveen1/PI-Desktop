@@ -42,6 +42,7 @@ fn unknown_upstream_recovery_sync_roundtrips_and_rejects_invalid_imports() -> Re
         state.db.set_setting(
             "app",
             &json!({"theme": "dark", "infiniteProviderRetry": true,
+                "providerStreamIdleTimeoutMinutes": limit * 20,
                 "unknownUpstreamRetryLimit": limit, "notifications": {"version": 1, "enabled": false}}),
         )?;
         let snapshot = domains::capture(
@@ -59,14 +60,36 @@ fn unknown_upstream_recovery_sync_roundtrips_and_rejects_invalid_imports() -> Re
             .find(|entity| entity.domain == domains::DOMAIN_APPLICATION)
             .unwrap();
         assert_eq!(captured.payload["unknownUpstreamRetryLimit"], limit);
+        assert_eq!(
+            captured.payload["providerStreamIdleTimeoutMinutes"],
+            limit * 20
+        );
         assert!(captured.payload.get("notifications").is_none());
         state.db.set_setting("app", &json!({"theme": "light"}))?;
         apply_entity(&mut state, &mut config, &bundle, captured)?;
         let restored = state.db.get_setting("app")?.unwrap();
         assert_eq!(restored["unknownUpstreamRetryLimit"], limit);
+        assert_eq!(restored["providerStreamIdleTimeoutMinutes"], limit * 20);
         assert_eq!(restored["infiniteProviderRetry"], true);
     }
     let before = state.db.get_setting("app")?.unwrap();
+    for invalid in [
+        json!(null),
+        json!(-1),
+        json!(61),
+        json!(1.5),
+        json!("10"),
+        json!(true),
+    ] {
+        assert!(apply_entity(
+            &mut state,
+            &mut config,
+            &bundle,
+            &application(json!({"providerStreamIdleTimeoutMinutes": invalid}))
+        )
+        .is_err());
+        assert_eq!(state.db.get_setting("app")?.unwrap(), before);
+    }
     for invalid in [
         json!(null),
         json!(-1),

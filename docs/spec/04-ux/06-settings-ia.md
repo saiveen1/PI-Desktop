@@ -483,6 +483,15 @@ Card order is **Session defaults → Execution → Computer use**.
   quota and context failures retain their existing handling. The infinite
   transient-retry switch never removes this independent limit. Invalid numeric
   input cannot replace the saved setting; enabling retries may add API usage.
+  **Model connection idle timeout** stores optional
+  `providerStreamIdleTimeoutMinutes` (integer 0-60, default 10). The shared menu
+  offers 3, 5, 10, 15, 30, 60 minutes and Disabled (0); other valid saved integers
+  remain representable. It applies from the next main-session turn, not to an
+  already active request. Long thinking alone does not restart a request;
+  expiration without response activity ends once without automatic replay.
+  Disabling the cutoff may require the user to stop a stuck request manually.
+  A three-minute no-new-content hint remains nonterminal and does not imply
+  that provider generation is making progress.
   The scheduled-tasks switch persists as optional
   `AppSettings.scheduledTasksEnabled`, on when absent or true. Off hides the
   footer clock and global-search page entry, leaves the route if already open,

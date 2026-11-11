@@ -8435,3 +8435,15 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
   settings change. See
   [runtime-owned context compaction](../../adr/runtime-owned-context-compaction.md)
   and E2E-084.
+
+## 2026-11-12 — Main-session transport idle waiting
+
+- Replace the fixed 180-second normalized-event cancellation with the optional
+  `providerStreamIdleTimeoutMinutes` preference (0-60; default 10). Zero disables
+  automatic cutoff while preserving Stop. Three minutes without new model
+  content becomes a nonterminal waiting hint.
+- Observe response-byte activity separately from model progress. Local idle
+  expiry preserves partial content and never triggers automatic replay, even
+  under infinite retry. Ordinary network/provider recovery remains unchanged.
+- The additive settings/status contract and compatibility boundaries are recorded
+  in [the decision](../../adr/provider-stream-idle-policy.md).

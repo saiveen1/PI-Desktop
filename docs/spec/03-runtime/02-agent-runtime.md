@@ -278,12 +278,33 @@ server or calculated value is capped at 30 seconds. The runtime captures the
 failed response status and headers from fetch because pi-ai's ordinary response
 callback only covers an established response.
 
-The main turn's idle watchdog measures each active provider attempt separately;
-retry backoff is outside that clock. Its default is 180 seconds with no provider
-events. `PI_DESKTOP_STREAM_IDLE_TIMEOUT_MS` keeps the 30-second positive minimum,
-and `0` disables the watchdog. A genuine stall aborts that attempt before recovery
-starts another one. It does not abort the retry loop's user-owned signal or spend
-an additional retry merely because a requested backoff elapsed.
+The main turn's idle watchdog ([decision](../../adr/provider-stream-idle-policy.md))
+measures each active provider attempt separately;
+retry backoff is outside that clock. `providerStreamIdleTimeoutMinutes` is an
+optional application preference (integer 0-60, default 10); zero disables the
+automatic idle cutoff, not user cancellation. It is refreshed at the next turn,
+including reused runtimes. A valid explicit preference takes precedence over
+the legacy `PI_DESKTOP_STREAM_IDLE_TIMEOUT_MS` override; older callers without
+the preference retain that override and its 30-second positive minimum.
+
+For fetch-capable adapters, response headers and nonempty response-body chunks
+reset the transport clock, including SSE comments/heartbeats. The observer is
+an inline backpressured transform, never a tee or retained response buffer.
+Adapters that reject custom fetch keep their original transport and use raw
+provider events, falling back to normalized model events when no raw event is
+observable. A successful long stream has no total-duration cap. Three minutes
+without a normalized model event shows `waiting-model` with `slow: true`; this
+is only a waiting hint, never a failure, retry, or proof of model progress.
+New model activity clears the hint. Heartbeats cannot clear it.
+
+A transport idle expiry aborts only that attempt and returns the terminal local
+`PROVIDER_STREAM_IDLE_TIMEOUT`, even when infinite provider retry is enabled.
+Text/thinking already received remains visible as an incomplete error response;
+unfinished tool calls are never executed. The user chooses whether to retry.
+Safe diagnostics retain the idle limit, last transport/model event timestamps,
+response byte count, and whether transport activity was observed, not content.
+Completion, failure and user cancellation clear both timers and the listener.
+Tool timeouts, compaction and subagent lifetime policies are unchanged.
 
 Non-429 transient failures share their own bounded response-recovery budget of ten
 retries after the initial attempt, for eleven provider attempts total. The budget

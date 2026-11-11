@@ -121,6 +121,7 @@ type RuntimeParams = {
   thinkingLevel?: SessionThinkingLevel;
   infiniteProviderRetry?: boolean;
   unknownUpstreamRetryLimit?: number;
+  providerStreamIdleTimeoutMinutes?: number;
   autoContinueUnfinishedTodos?: boolean;
   /** Session `/fast` switch AND the model's opt-in, resolved by main (ADR 0334). */
   fastMode?: boolean;
@@ -287,6 +288,7 @@ async function runtimeFor(
     reusable.setCompactionSettings(params.compactionSettings);
     reusable.setInfiniteProviderRetry(params.infiniteProviderRetry === true);
     reusable.setUnknownUpstreamRetryLimit(unknownUpstreamRetryLimit);
+    reusable.setProviderStreamIdleTimeoutMinutes(params.providerStreamIdleTimeoutMinutes);
     reusable.setAutoContinueUnfinishedTodos(params.autoContinueUnfinishedTodos !== false);
     reusable.setFastMode(params.fastMode === true);
     reusable.setMode(mode, modeDefinition);
@@ -341,6 +343,7 @@ async function runtimeFor(
     thinkingLevel,
     infiniteProviderRetry: params.infiniteProviderRetry === true,
     unknownUpstreamRetryLimit,
+    providerStreamIdleTimeoutMinutes: params.providerStreamIdleTimeoutMinutes,
     autoContinueUnfinishedTodos: params.autoContinueUnfinishedTodos !== false,
     fastMode: params.fastMode === true,
     jevApiKey: params.jevApiKey,

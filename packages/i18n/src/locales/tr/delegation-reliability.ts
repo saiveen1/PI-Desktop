@@ -1,4 +1,8 @@
 export const delegationReliabilitySettings = {
+  providerStreamIdleTimeout: "Model bağlantısı boşta kalma zaman aşımı",
+  providerStreamIdleTimeoutDesc: "Yalnızca seçilen süre boyunca yanıt verisi gelmezse iptal eder. Uzun düşünme tek başına isteği yeniden başlatmaz. Sonraki turda uygulanır; kapalıyken takılan isteği elle durdurun.",
+  providerStreamIdleTimeoutDisabled: "Devre dışı",
+  providerStreamIdleTimeoutMinutes: "{{count}} dakika",
   "delegationRunReportRecovery": "Eksik son raporu tamamla",
   "delegationRunReportRecoveryDesc": "Alt görev raporsuz biterse araç kullanmadan bir kez rapor iste. Yapılandırılmış rapor süresi uygulanır ve API kullanımı artabilir.",
   "delegationRunReportRecoveryOnce": "Bir kez",

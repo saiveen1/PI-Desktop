@@ -3298,6 +3298,8 @@ sklm: {
     phase: { idle: "Désactivée", preparing: "Préparation", "acquiring-mic": "En attente du microphone", negotiating: "Négociation", connecting: "Connexion…", connected: "Connectée", reconnecting: "Reconnexion", closing: "Arrêt…", ended: "Terminée", failed: "Arrêtée" },
   },
   "errors": {
+    PROVIDER_STREAM_IDLE_TIMEOUT: "La connexion au modèle a été arrêtée faute de données, sans nouvelle tentative automatique. Réglez le délai dans Paramètres → Comportement.",
+    PROVIDER_STREAM_SLOW: "Aucun nouveau contenu du modèle depuis 180 secondes. L'attente continue ; vous pouvez arrêter la requête.",
     COMPOSER_MCP_UNAVAILABLE: "Le serveur MCP sélectionné est déconnecté ou indisponible dans ce projet. Reconnectez-le et sélectionnez-le à nouveau.",
     COMPOSER_MCP_REQUEST_REQUIRED: "Après avoir sélectionné un serveur ou un outil MCP, saisissez une tâche ou ajoutez une pièce jointe.",
     "HOST_UNAVAILABLE": "Le service local n'est pas disponible",

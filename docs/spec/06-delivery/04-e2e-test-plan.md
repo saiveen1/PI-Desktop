@@ -780,16 +780,39 @@ being fetched on every subsequent poll.
   `node scripts/e2e-provider-retry-idle.mjs` (about one minute).
 - **Sequence:** Use the supported 30-second idle setting. Return one HTTP 429
   with a 30-second retry delay, then succeed. Separately hold an HTTP request
-  silent until its idle deadline, then let the retry succeed. Stop another
-  turn during its rate-limit backoff.
+  silent until its idle deadline and verify terminal local failure without a
+  replacement. Stop another turn during its rate-limit backoff.
 - **Expected:** The planned wait consumes exactly one retry; the successful
-  follow-up is sent. A real stalled request closes before its replacement
-  begins, and Stop prevents a later retry request.
+  follow-up is sent. A truly idle request is cancelled once without automatic
+  replay, and Stop prevents a later retry request.
 - **Coverage:** Real production sidecar, provider adapter and localhost HTTP
   server with fixture Host responses. Real-clock process checks are supplemented
   by real Agent-loop tests under a controlled clock, including all ten allowed
-  rate-limit retries and exhaustion after eleven genuinely stalled attempts.
+  rate-limit retries and terminal local silence without spending that budget.
 - **Specs:** `03-runtime/02-agent-runtime.md` provider retry behavior.
+
+### E2E-PROVIDER-long-context-idle-setting
+
+- **Preconditions:** Isolated settings Host and synthetic provider streams; no
+  live profile or paid requests. Main session runtime and shipped UI components.
+- **Steps:** Save 15 minutes, reread/relaunch, then choose Disabled and launch a
+  second turn in the reused runtime. Reject out-of-range/fractional settings and
+  config-sync imports. On controlled clocks, send SSE heartbeats for longer than
+  three minutes without model output, then send text and complete. Separately
+  stop all transport data until the selected deadline, with partial text/tool
+  arguments already received; repeat with infinite provider retry enabled.
+- **Expected:** Legacy settings default to ten minutes without rewriting data.
+  The selector reaches the next turn; active request budgets remain unchanged.
+  Heartbeats keep the connection alive but a three-minute no-content hint stays
+  visible. Real content clears it. Timeout retains partial text, executes no
+  incomplete tool call, emits one local error and opens no replacement request.
+  Disabled mode still obeys Stop; completion/Stop leaves no late timer activity.
+- **Coverage:** `provider-stream-idle.test.ts`, `provider-recovery-flow.test.ts`,
+  settings roundtrip/launch/UI tests and Host settings/config-sync tests.
+- **Specs:** `03-runtime/02-agent-runtime.md`, `04-ux/06-settings-ia.md`.
+- **Acceptance:** Long-context waits remain usable without unbounded replay.
+- **Milestone / status:** Personal beta maintenance; controlled-clock and
+  component checks, real provider/installed UI verification remains opt-in.
 
 ### E2E-TRANSCRIPT-scroll-interruption
 

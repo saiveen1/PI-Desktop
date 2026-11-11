@@ -77,6 +77,30 @@ test("unknown upstream recovery stays disabled on old reads and rejects invalid 
   }
 });
 
+test("stream idle timeout defaults safely, preserves valid choices and rejects invalid writes", () => {
+  const previousWindow = globalThis.window;
+  globalThis.window = { piDesktop: { platform: "win32" } };
+  try {
+    const base = { defaultMode: "agent", theme: "light", enterToSend: true };
+    for (const normalize of [renderer.normalizeSettings, main.normalizeSettings]) {
+      assert.equal(normalize(base).providerStreamIdleTimeoutMinutes, 10);
+      for (const value of [0, 1, 3, 10, 17, 60]) {
+        const settings = normalize({ ...base, providerStreamIdleTimeoutMinutes: value });
+        assert.equal(main.validateSettingsWrite(renderer.validateSettingsWrite(settings)).providerStreamIdleTimeoutMinutes, value);
+      }
+      for (const value of [undefined, null, "10", -1, 1.5, 61, {}, NaN, Infinity]) {
+        assert.equal(normalize({ ...base, providerStreamIdleTimeoutMinutes: value }).providerStreamIdleTimeoutMinutes, 10);
+        for (const validate of [renderer.validateSettingsWrite, main.validateSettingsWrite]) {
+          assert.throws(() => validate({ ...base, providerStreamIdleTimeoutMinutes: value }), /providerStreamIdleTimeoutMinutes is invalid/);
+        }
+      }
+    }
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
+});
+
 test("command folding defaults on and rejects non-boolean writes before IPC", () => {
   const previousWindow = globalThis.window;
   let invoked = 0;

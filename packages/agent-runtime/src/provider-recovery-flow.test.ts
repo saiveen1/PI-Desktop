@@ -17,18 +17,20 @@ const provider: RuntimeProviderConfig = {
 };
 
 type Failure = "network" | "rate-limit" | "stream" | "unknown-upstream" | "bad-request";
-type Step = Failure | "tool" | "success" | "stall";
+type Step = Failure | "tool" | "success" | "stall" | "hold-stream";
 
 /** Real provider adapter and agent loop; replace only fetch and the host edge. */
 function fixture(steps: Step[], retryAfterMs = 1, recovery: {
   unknownUpstreamRetryLimit?: number;
   infiniteProviderRetry?: boolean;
+  providerStreamIdleTimeoutMinutes?: number;
 } = {}, childSignal?: AbortSignal) {
   let requests = 0;
   let reads = 0;
   let abortedRequests = 0;
   const startedAborted: boolean[] = [];
   const events: AgentEventEnvelope[] = [];
+  let heldStream: ReadableStreamDefaultController<Uint8Array> | undefined;
   const fetch = vi.fn(async (_input: unknown, init?: RequestInit): Promise<Response> => {
     startedAborted.push(init?.signal?.aborted === true);
     const step = steps[requests++];
@@ -74,6 +76,12 @@ function fixture(steps: Step[], retryAfterMs = 1, recovery: {
         : { role: "assistant", content: step === "stream" ? "partial" : "Recovered" };
     const chunk = (value: unknown, finish: string | null) =>
       `data: ${JSON.stringify({ id: "completion", object: "chat.completion.chunk", created: 1, model: "fixture-model", choices: [{ index: 0, delta: value, finish_reason: finish }] })}\n\n`;
+    if (step === "hold-stream") {
+      return new Response(new ReadableStream<Uint8Array>({
+        start(controller) { heldStream = controller; },
+        cancel() { abortedRequests++; },
+      }), { headers: { "content-type": "text/event-stream" } });
+    }
     if (step === "stream") {
       let sent = false;
       return new Response(
@@ -154,7 +162,7 @@ function fixture(steps: Step[], retryAfterMs = 1, recovery: {
     onEvent: (event) => events.push(event),
   });
   return { runtime, subagent, events, requests: () => requests, reads: () => reads,
-    abortedRequests: () => abortedRequests, startedAborted };
+    abortedRequests: () => abortedRequests, startedAborted, heldStream: () => heldStream };
 }
 
 async function settle<T>(promise: Promise<T>, seconds = 180): Promise<T> {
@@ -269,41 +277,23 @@ describe("provider recovery through real agent loops (#699)", () => {
     });
   }
 
-  it("aborts a silent attempt and retries with a fresh request signal", async () => {
+  it.each([false, true])("does not replay a local idle timeout (infinite retry=%s)", async (infiniteProviderRetry) => {
     vi.useFakeTimers();
-    vi.stubEnv("PI_DESKTOP_STREAM_IDLE_TIMEOUT_MS", "30000");
-    const f = fixture(["stall", "success"]);
+    const f = fixture(["stall"], 1, { providerStreamIdleTimeoutMinutes: 1, infiniteProviderRetry });
     try {
-      await settle(f.runtime.prompt("Recover from a silent provider."));
-      expect(f.requests()).toBe(2);
+      await settle(f.runtime.prompt("Wait for the provider."));
+      expect(f.requests()).toBe(1);
       expect(f.abortedRequests()).toBe(1);
-      expect(f.startedAborted).toEqual([false, false]);
-      expect(f.events.filter(({ event }) => event.type === "error")).toHaveLength(0);
-      expect(f.events.some(({ event }) => event.type === "message_end" &&
-        event.message.content === "Recovered" && event.message.status === "complete")).toBe(true);
-    } finally {
-      await f.runtime.dispose();
-    }
-  });
-
-  it("keeps repeated idle timeouts inside the shared retry budget", async () => {
-    vi.useFakeTimers();
-    vi.stubEnv("PI_DESKTOP_STREAM_IDLE_TIMEOUT_MS", "30000");
-    const f = fixture(Array<Step>(11).fill("stall"));
-    try {
-      await settle(f.runtime.prompt("Report."), 450);
-      expect(f.requests()).toBe(11);
-      expect(f.abortedRequests()).toBe(11);
       const errors = f.events.filter(({ event }) => event.type === "error");
       expect(errors).toHaveLength(1);
       expect(errors[0]?.event).toMatchObject({
-        type: "error", error: { code: "STREAM_FAILED", details: { retryAttempt: 10 } },
+        type: "error", error: { code: "PROVIDER_STREAM_IDLE_TIMEOUT", retriable: false,
+          details: { origin: "local", idleTimeoutMs: 60_000, responseBytes: 0 } },
       });
-      await vi.advanceTimersByTimeAsync(60_000);
-      expect(f.requests()).toBe(11);
-    } finally {
-      await f.runtime.dispose();
-    }
+      expect(f.events.filter(({ event }) => event.type === "agent_end")).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(600_000);
+      expect(f.requests()).toBe(1);
+    } finally { await f.runtime.dispose(); }
   });
 
   for (const owner of ["session", "subagent"] as const) {
@@ -498,10 +488,79 @@ it("a local idle watchdog does not fabricate a recent model event", async () => 
     const prompt = f.runtime.prompt("Wait.").catch(error => error);
     await vi.waitFor(() => expect(f.requests()).toBe(1));
     await vi.advanceTimersByTimeAsync(30_000);
-    expect(f.runtime.getStatus().activity?.phase).toBe("retrying");
+    expect(f.runtime.getStatus().activity?.phase).not.toBe("retrying");
+    expect(f.events.some(({ event }) => event.type === "error" && event.error.code === "PROVIDER_STREAM_IDLE_TIMEOUT")).toBe(true);
     expect(f.runtime.getStatus().runDiagnostics?.lastEventAt).toBeUndefined();
     expect(f.runtime.getStatus().runDiagnostics?.lastTextAt).toBeUndefined();
     await f.runtime.abort();
     await settle(prompt);
+  } finally { await f.runtime.dispose(); }
+});
+
+function heldChunk(delta: unknown, finish: string | null = null): Uint8Array {
+  return new TextEncoder().encode(`data: ${JSON.stringify({ id: "held", object: "chat.completion.chunk", created: 1,
+    model: "fixture-model", choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`);
+}
+
+it("keeps raw heartbeats alive past three minutes, shows a waiting hint and clears it on real output", async () => {
+  vi.useFakeTimers();
+  const f = fixture(["hold-stream"], 1, { providerStreamIdleTimeoutMinutes: 3 });
+  try {
+    const prompt = f.runtime.prompt("Think for a long time.");
+    await vi.waitFor(() => expect(f.heldStream()).toBeDefined());
+    await vi.advanceTimersByTimeAsync(0);
+    for (let tick = 0; tick < 4; tick++) {
+      await vi.advanceTimersByTimeAsync(60_000);
+      f.heldStream()!.enqueue(new TextEncoder().encode(": keepalive\n\n"));
+      await vi.advanceTimersByTimeAsync(0);
+    }
+    expect(f.requests()).toBe(1);
+    expect(f.abortedRequests()).toBe(0);
+    expect(f.runtime.getStatus().activity).toMatchObject({ phase: "waiting-model", slow: true });
+    expect(f.events.filter(({ event }) => event.type === "error")).toHaveLength(0);
+    f.heldStream()!.enqueue(heldChunk({ role: "assistant", content: "Long answer" }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(f.runtime.getStatus().activity).not.toMatchObject({ slow: true });
+    f.heldStream()!.enqueue(heldChunk({}, "stop"));
+    f.heldStream()!.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
+    f.heldStream()!.close();
+    await settle(prompt);
+    expect(f.events.some(({ event }) => event.type === "message_end" && event.message.content === "Long answer" && event.message.status === "complete")).toBe(true);
+  } finally { await f.runtime.dispose(); }
+});
+
+it("preserves partial text in a terminal idle error without replay or incomplete tool execution", async () => {
+  vi.useFakeTimers();
+  const f = fixture(["hold-stream"], 1, { providerStreamIdleTimeoutMinutes: 1, infiniteProviderRetry: true });
+  try {
+    const prompt = f.runtime.prompt("Report.");
+    await vi.waitFor(() => expect(f.heldStream()).toBeDefined());
+    f.heldStream()!.enqueue(heldChunk({ role: "assistant", content: "Keep this partial answer" }));
+    f.heldStream()!.enqueue(heldChunk({ tool_calls: [{ index: 0, id: "partial-tool", type: "function",
+      function: { name: "Read", arguments: '{"path":' } }] }));
+    await settle(prompt);
+    expect(f.events.some(({ event }) => event.type === "message_end" && event.message.content === "Keep this partial answer" && event.message.status === "error")).toBe(true);
+    expect(f.events.filter(({ event }) => event.type === "error")).toHaveLength(1);
+    expect(f.requests()).toBe(1);
+    expect(f.reads()).toBe(0);
+    expect(f.abortedRequests()).toBe(1);
+  } finally { await f.runtime.dispose(); }
+});
+
+it("applies updated idle settings to a reused runtime's next request, not its active attempt", async () => {
+  vi.useFakeTimers();
+  const f = fixture(["stall", "stall"], 1, { providerStreamIdleTimeoutMinutes: 0 });
+  try {
+    const first = f.runtime.prompt("Wait until stopped.");
+    await vi.waitFor(() => expect(f.requests()).toBe(1));
+    f.runtime.setProviderStreamIdleTimeoutMinutes(1);
+    await vi.advanceTimersByTimeAsync(180_000);
+    expect(f.abortedRequests()).toBe(0);
+    await f.runtime.abort();
+    await settle(first);
+    const eventOffset = f.events.length;
+    await settle(f.runtime.prompt("Use the new timeout."));
+    expect(f.requests()).toBe(2);
+    expect(f.events.slice(eventOffset).some(({ event }) => event.type === "error" && event.error.code === "PROVIDER_STREAM_IDLE_TIMEOUT")).toBe(true);
   } finally { await f.runtime.dispose(); }
 });

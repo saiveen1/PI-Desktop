@@ -44,6 +44,7 @@ async function scenario(mode) {
   const child = spawn(process.execPath, [bundle], { cwd: dir, env, stdio: ["pipe", "pipe", "pipe"] });
   const sidecar = new OfflineSidecar(child, dir, host, 45_000);
   sidecar.allowProviderRetries = true;
+  sidecar.expectProviderIdleTimeout = mode === "stalled-request";
   const sessionId = `retry-${mode}`;
   const turnId = `${sessionId}-turn`;
   const retries = () => sidecar.events.flatMap(({ event }) =>
@@ -69,13 +70,14 @@ async function scenario(mode) {
         `idle watchdog charged another retry during backoff: ${JSON.stringify(attempts)}`);
       return sidecar.events.some((event) => event.turnId === turnId && event.event.type === "agent_end");
     }, "turn completion");
-    assert.deepEqual(retries().map((retry) => retry.attempt), [1]);
+    assert.deepEqual(retries().map((retry) => retry.attempt), mode === "stalled-request" ? [] : [1]);
     assert.equal((await sidecar.call("agent.getStatus", { sessionId })).status.isRunning, false);
-    assert.equal(requests, mode === "abort-backoff" ? 1 : 2);
-    if (mode !== "abort-backoff") {
+    assert.equal(requests, mode === "retry-after" ? 2 : 1);
+    if (mode === "retry-after") {
       assert.ok([...sidecar.messages.values()].some((message) => message.content === "Recovered"));
     }
     if (mode === "stalled-request") {
+      assert.ok(sidecar.events.some(({ event }) => event.type === "error" && event.error.code === "PROVIDER_STREAM_IDLE_TIMEOUT"));
       assert.equal(stalledSocketClosed, true, "timed-out attempt was not cancelled");
       assert.equal(overlapped, false, "retry overlapped the abandoned request");
     }

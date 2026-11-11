@@ -76,6 +76,7 @@ export * from "./radial-menu.js";
 export * from "./racp.js";
 export * from "./trusted-extensions.js";
 export * from "./provider-retry.js";
+export * from "./provider-stream-settings.js";
 export * from "./message-stream.js";
 export * from "./session-collaboration.js";
 export * from "./session-presentation.js";

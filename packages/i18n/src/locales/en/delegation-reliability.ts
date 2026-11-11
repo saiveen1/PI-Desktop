@@ -1,4 +1,8 @@
 export const delegationReliabilitySettings = {
+  providerStreamIdleTimeout: "Model connection idle timeout",
+  providerStreamIdleTimeoutDesc: "Cancels only if no response data arrives for the selected duration. Long thinking alone does not restart the request. Applies from the next turn; when disabled, stop a stuck request manually.",
+  providerStreamIdleTimeoutDisabled: "Disabled",
+  providerStreamIdleTimeoutMinutes: "{{count}} minutes",
   "delegationRunReportRecovery": "Recover a missing final report",
   "delegationRunReportRecoveryDesc": "Request one tool-free final report if a delegate ends without a deliverable. Uses the configured report deadline and may add API usage.",
   "delegationRunReportRecoveryOnce": "Once",

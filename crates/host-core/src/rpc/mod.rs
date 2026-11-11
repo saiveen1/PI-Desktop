@@ -1205,6 +1205,15 @@ fn validate_settings_value(value: &Value) -> Result<(), JsonRpcError> {
             ));
         }
     }
+    if let Some(timeout) = object.get("providerStreamIdleTimeoutMinutes") {
+        if !crate::provider_retry::is_provider_stream_idle_timeout_minutes(timeout) {
+            return Err(rpc_err(
+                1002,
+                "providerStreamIdleTimeoutMinutes must be an integer from 0 to 60",
+                "INVALID_PARAMS",
+            ));
+        }
+    }
     if let Some(keep_awake) = object.get("keepAwakeWhileRunning") {
         if !keep_awake.is_boolean() {
             return Err(rpc_err(
@@ -8309,6 +8318,58 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(restored["unknownUpstreamRetryLimit"], 3);
+    }
+
+    #[tokio::test]
+    async fn stream_idle_timeout_settings_validate_and_survive_reopen() {
+        let data_dir = tempfile::tempdir().unwrap();
+        let mut app_state = AppState::open(data_dir.path()).unwrap();
+        app_state.handshook = true;
+        let state = Arc::new(Mutex::new(app_state));
+        let (tx, _rx) = mpsc::unbounded_channel();
+        for value in [0, 17, 60] {
+            handle_request(
+                state.clone(),
+                "settings.set",
+                json!({"providerStreamIdleTimeoutMinutes": value}),
+                tx.clone(),
+            )
+            .await
+            .unwrap();
+        }
+        for value in [
+            json!(-1),
+            json!(61),
+            json!(1.5),
+            json!("10"),
+            json!(null),
+            json!(true),
+        ] {
+            assert!(handle_request(
+                state.clone(),
+                "settings.set",
+                json!({"providerStreamIdleTimeoutMinutes": value}),
+                tx.clone(),
+            )
+            .await
+            .is_err());
+            let retained = handle_request(state.clone(), "settings.get", json!({}), tx.clone())
+                .await
+                .unwrap();
+            assert_eq!(retained["providerStreamIdleTimeoutMinutes"], 60);
+        }
+        drop(state);
+        let mut reopened = AppState::open(data_dir.path()).unwrap();
+        reopened.handshook = true;
+        let restored = handle_request(
+            Arc::new(Mutex::new(reopened)),
+            "settings.get",
+            json!({}),
+            tx,
+        )
+        .await
+        .unwrap();
+        assert_eq!(restored["providerStreamIdleTimeoutMinutes"], 60);
     }
 
     #[tokio::test]

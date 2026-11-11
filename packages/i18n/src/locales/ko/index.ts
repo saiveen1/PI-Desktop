@@ -3337,6 +3337,8 @@ importConfirm: "가져온 확장은 에이전트 프로세스 안에서 에이�
     phase: { idle: "꺼짐", preparing: "준비 중", "acquiring-mic": "마이크 대기 중", negotiating: "협상 중", connecting: "연결 중…", connected: "연결됨", reconnecting: "재연결 중", closing: "종료 중…", ended: "종료됨", failed: "중지됨" },
   },
   errors: {
+    PROVIDER_STREAM_IDLE_TIMEOUT: "데이터가 없어 모델 연결이 중지되었으며 자동으로 재시도하지 않습니다. 설정 → 동작에서 시간 제한을 조정하세요.",
+    PROVIDER_STREAM_SLOW: "180초 동안 새 모델 콘텐츠가 없습니다. 계속 기다리는 중이며 요청을 중지할 수 있습니다.",
     COMPOSER_MCP_UNAVAILABLE: "선택한 MCP 서버의 연결이 끊겼거나 현재 프로젝트에서 사용할 수 없습니다. 다시 연결하고 선택하세요.",
     COMPOSER_MCP_REQUEST_REQUIRED: "MCP 서버 또는 도구를 선택한 뒤 작업 내용을 입력하거나 첨부 파일을 추가하세요.",
     HOST_UNAVAILABLE: "로컬 서비스를 사용할 수 없습니다",

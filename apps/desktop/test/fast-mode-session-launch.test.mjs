@@ -124,6 +124,13 @@ test("session launch sends Fast mode only for a model the user allowed it on (AD
     assert.equal(legacy.sidecarParams.delegationSettings, undefined);
     assert.deepEqual(legacy.sidecarParams.subagentModelKeys, ["OpenAI/legacy-only"]);
     assert.equal(legacy.sidecarParams.unknownUpstreamRetryLimit, 0);
+    assert.equal(legacy.sidecarParams.providerStreamIdleTimeoutMinutes, 10);
+    for (const [value, expected] of [[0, 0], [17, 17], [60, 60], [-1, 10], [null, 10], [1.5, 10]]) {
+      const resolved = await launchRuntime.resolveAgentRuntimeLaunch("session-fixture", {
+        providerId: provider.id, modelId: "allowed-model",
+      }, { providerStreamIdleTimeoutMinutes: value });
+      assert.equal(resolved.sidecarParams.providerStreamIdleTimeoutMinutes, expected);
+    }
     for (const limit of [0, 1, 2, 3]) {
       const recovery = await launchRuntime.resolveAgentRuntimeLaunch("session-fixture", {
         providerId: provider.id, modelId: "allowed-model",

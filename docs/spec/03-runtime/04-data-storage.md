@@ -559,6 +559,13 @@ CREATE TABLE kv (
 | `plugin:<id>` | per-plugin settings; uninstall = `DELETE WHERE ns = ?` |
 | `projectMemory` | durable user-authored context keyed by canonical project path; structured values contain `format: "entries-v1"`, visual `entries`, derived `content`, and `updatedAt` |
 
+The optional portable application preference `providerStreamIdleTimeoutMinutes`
+uses the existing settings JSON extension boundary (integer 0-60; default 10,
+zero disables the local automatic cutoff). Missing/invalid historical reads
+normalize without rewriting stored data; invalid settings writes or config-sync
+imports are rejected. Existing fields and transcript data are preserved. No new
+table, schema bump or destructive migration is needed.
+
 The app settings JSON optionally stores `showThinking` (boolean) for transcript
 reasoning visibility. It is a portable application preference and synchronizes
 across devices like the legacy field. Missing values fall back to the legacy

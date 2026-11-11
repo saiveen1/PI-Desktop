@@ -41,6 +41,7 @@ export class OfflineSidecar {
     this.stopping = false;
     this.expectContextValidationError = false;
     this.allowProviderRetries = false;
+    this.expectProviderIdleTimeout = false;
     child.on("error", (error) => this.fail(error));
     this.exit = new Promise((resolve) => child.once("close", (code, signal) => {
       this.closed = true;
@@ -115,9 +116,10 @@ export class OfflineSidecar {
     const envelope = frame.params;
     this.events.push(envelope);
     const event = envelope.event;
-    const expectedError = (error) => this.expectContextValidationError &&
-      error?.code === "INTERNAL" && error.retriable === false &&
-      error.details?.origin === "local" && error.details?.phase === "context-validation";
+    const expectedError = (error) => error?.retriable === false && error.details?.origin === "local" && (
+      (this.expectContextValidationError && error.code === "INTERNAL" && error.details.phase === "context-validation") ||
+      (this.expectProviderIdleTimeout && error.code === "PROVIDER_STREAM_IDLE_TIMEOUT" && error.details.phase === "stream")
+    );
     if (event.type === "message_end") {
       const message = event.message;
       this.messages.set(message.id, message);

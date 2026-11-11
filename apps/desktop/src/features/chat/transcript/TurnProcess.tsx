@@ -128,6 +128,7 @@ export function TurnProcess({
     if (phase.kind === "stopped") return t("chat.processStopped");
     if (phase.kind === "unsettled") return t("chat.processUnsettled");
     if (phase.kind === "completed") return t("chat.processCompleted");
+    if (activity?.phase === "waiting-model" && activity.slow) return t("errors.PROVIDER_STREAM_SLOW");
     // Live: only stages with their own settled wording get their own label. The
     // rest describe an instant at the start of a request, and naming them would
     // make the row flicker instead of telling the reader anything.
