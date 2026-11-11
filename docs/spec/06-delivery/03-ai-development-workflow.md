@@ -77,6 +77,36 @@ Branches and worktrees are optional, not prerequisites for development.
 - Retire optional worktrees only when authorized and after verifying their
   changes are committed or safely migrated. Delete no unique work.
 
+### Windows local source launcher
+
+`start-local.cmd` delegates to `scripts/start-local.ps1`. The local-only
+`start-local.data-dir.local` file contains one absolute existing data-directory
+path; `-DataDir` overrides it for an explicit invocation. Neither path is guessed
+from a Release installation. Missing `pi.sqlite`, workspace dependencies or
+Node/pnpm/Cargo fails before launch. `-CheckOnly` performs the same read-only
+preflight without opening a window, prompting, or running the build.
+
+The double-click entry uses WMI/CIM to open a visible PowerShell console. It
+conservatively refuses any running `PI-Desktop.exe` or `host-core.exe`, and
+checkout-local Electron (or Electron whose path cannot be inspected). A named
+session mutex prevents duplicate launcher builds; the process check is repeated
+after confirmation. It never terminates processes. These checks are not a lock
+against an independently started application: do not start Release during Dev.
+
+Before each run, the user must type `BACKED UP` to attest that every profile
+owner is stopped and a complete offline profile backup exists. The launcher
+neither creates nor verifies that backup. Cancellation starts nothing. It runs
+the existing `pnpm dev --inherit-data-dir` workflow in the checkout, retains live
+console output and reports the actual exit code. It clears inherited
+`ELECTRON_RUN_AS_NODE` and `NODE_OPTIONS` only for that invocation, disables CMD
+AutoRun with `/d` when invoking the pnpm shim, and restores the caller's
+environment and cwd afterward. Required compilation remains; no
+installer, registry, shortcuts, version bump or Chromium-profile reuse is added.
+
+Offline Windows verification: `powershell.exe -NoProfile -ExecutionPolicy Bypass
+-File scripts/start-local.test.ps1`. The fixture substitutes CIM and pnpm, keeps
+all mutable data under session scratch, and never starts real Desktop.
+
 ### R4.1 — Personal packaging is build-only
 
 Use `pnpm dist:personal` in the current checkout and follow

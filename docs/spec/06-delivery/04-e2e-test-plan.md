@@ -721,6 +721,13 @@ being fetched on every subsequent poll.
   `development-profile.test.mjs` retains Main's profile contract;
   `development-branding.test.mjs` retains the platform branding checks;
   `agent-policy-sync.test.mjs` covers the mirrored agent-safety requirement.
+- **Windows fixed-entry coverage:** `scripts/start-local.test.ps1` exercises
+  the local source launcher with scratch profiles and external CIM/pnpm doubles:
+  existing-data validation, missing tools/dependencies, active-owner refusal,
+  confirmation cancellation, a late owner appearing after confirmation, WMI
+  return errors, quoted paths, cwd/environment restoration and nonzero command
+  exits. Check-only must neither prompt nor launch. No real WMI child, Desktop,
+  backup or installed profile is used by this fixture.
 - **Specs:** [Process model](../03-runtime/07-process-model.md),
   [explicit debugging](06-release-runbook.md#explicit-data-dependent-debugging).
 - **Acceptance:** Offline launcher journey; no installed app, live profile,

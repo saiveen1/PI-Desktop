@@ -56,6 +56,14 @@ pnpm dev
 installed release profile. See `AGENTS.md` §5 before using
 `pnpm dev --inherit-data-dir`.
 
+On Windows, `start-local.cmd` opens a source-launch console without packaging or
+installation. Set `start-local.data-dir.local` (Git-ignored) to one absolute
+existing data-directory path. The launcher refuses detected running owners and
+asks you to confirm a complete offline backup before granting read/write access.
+It does not create the backup or stop processes. `start-local.cmd -CheckOnly`
+checks prerequisites without launching. See the
+[local launcher contract](docs/spec/06-delivery/03-ai-development-workflow.md#windows-local-source-launcher).
+
 Useful checks:
 
 ```bash
