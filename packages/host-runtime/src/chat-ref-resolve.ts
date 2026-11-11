@@ -92,7 +92,10 @@ function matchesSegment(candidate: string, wanted: string): boolean {
   return CASE_INSENSITIVE_FS && candidate.toLowerCase() === wanted.toLowerCase();
 }
 
-/** Strip the composer sigil, optional quotes, and a file line reference. */
+/**
+ * Strip the composer sigil, optional quotes, and a file line reference, then
+ * repair a Windows drive path that arrived rooted the POSIX way.
+ */
 function cleanRef(raw: string): string {
   let value = stripRefDecorations(String(raw ?? ""));
   if (value.includes("\0")) return "";
@@ -100,10 +103,10 @@ function cleanRef(raw: string): string {
   return normalizeChatRefPath(value);
 }
 
-/** Markdown links may spell a Windows drive path as `/D:/...`. */
+/** Repair POSIX-rooted Windows drives without changing POSIX paths or root guards. */
 export function normalizeChatRefPath(value: string): string {
   return process.platform === "win32" && /^\/[A-Za-z]:[\\/]/.test(value)
-    ? value.slice(1)
+    ? `${value.charAt(1).toUpperCase()}${value.slice(2)}`
     : value;
 }
 

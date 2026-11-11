@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AgentEventEnvelope, SessionTodo, SessionTodoSnapshot } from "@pi-desktop/shared";
 import { DesktopAgentRuntime } from "./runtime.js";
+import { builtinModeDefinition } from "./mode-definitions.js";
 
 type Step = { text: string; finish?: "stop" | "length" } | { tool: string; args: unknown };
 const pending: SessionTodo[] = [{ content: "Finish the implementation", status: "pending", priority: "high" }];
@@ -14,7 +15,7 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-function fixture(steps: Step[], options: { enabled?: boolean; mode?: "agent" | "plan"; failedWrite?: boolean } = {}) {
+function fixture(steps: Step[], options: { enabled?: boolean; mode?: "agent" | "plan" | "goal"; failedWrite?: boolean; onRequest?: (runtime: DesktopAgentRuntime, index: number) => void } = {}) {
   const requests: Array<{ messages: Array<{ role: string; content?: unknown }> }> = [];
   const events: AgentEventEnvelope[] = [];
   const snapshot: SessionTodoSnapshot = { sessionId: "continuation-fixture", todos: pending, revision: 0, updatedAt: 1 };
@@ -38,6 +39,7 @@ function fixture(steps: Step[], options: { enabled?: boolean; mode?: "agent" | "
   });
   vi.stubGlobal("fetch", vi.fn(async (_url: unknown, init: RequestInit) => {
     requests.push(JSON.parse(String(init.body)));
+    options.onRequest?.(runtime, requests.length - 1);
     const step = steps[requests.length - 1];
     if (!step) throw new Error("Unexpected extra provider request");
     const delta = "tool" in step ? { role: "assistant", tool_calls: [{ index: 0, id: `call-${requests.length}`, type: "function", function: { name: step.tool, arguments: JSON.stringify(step.args) } }] }
@@ -48,6 +50,7 @@ function fixture(steps: Step[], options: { enabled?: boolean; mode?: "agent" | "
   }));
   const runtime = new DesktopAgentRuntime({
     sessionId: snapshot.sessionId, mode: options.mode ?? "agent", thinkingLevel: "off",
+    ...(options.mode === "goal" ? { modeDefinition: builtinModeDefinition("goal") } : {}),
     autoContinueUnfinishedTodos: options.enabled,
     provider: { id: "fixture", name: "Fixture", modelId: "fixture-model", baseUrl: "http://provider.invalid/v1", apiKey: "fixture-only", apiStyle: "chat_completions", supportsReasoning: false, supportedThinkingLevels: ["off"] },
     commandShell: { id: "bash", label: "Bash", dialect: "posix", available: true, isDefault: true },
@@ -74,6 +77,27 @@ describe("unfinished checklist continuation user path", () => {
       expect(f.events.some((event) => event.event.type === "error")).toBe(false);
       expect(f.runtime.getStatus().isRunning).toBe(false);
       expect(JSON.stringify(f.requests[4])).not.toContain("unfinished_todo_recovery");
+    } finally { await f.runtime.dispose(); }
+  });
+
+  it("keeps checklist continuation after a staged run is removed into Agent mid-turn", async () => {
+    const f = fixture([discover, write(), { text: "Progress saved." }, { text: "Continued the existing checklist." }], {
+      mode: "goal",
+      onRequest: (runtime, index) => {
+        if (index === 2) expect(runtime.modeTurnNotice({ turnId: "turn-1", runId: "run-1", action: "release", mode: "agent" })).toEqual({ applied: true });
+      },
+    });
+    try {
+      await f.runtime.prompt({ text: "Finish this task.", modeTurn: {
+        runId: "run-1", stageId: "work", origin: "user", enteredStage: false,
+        input: "Finish this task.", artifactPaths: { goal: ".pi/goals/run-1.md" },
+      } }, "user-1", "turn-1");
+      expect(f.requests).toHaveLength(4);
+      expect(JSON.stringify(f.requests[3])).toContain("unfinished_todo_recovery");
+      expect(f.hostCall.mock.calls.filter(([method]) => method === "todos.get")).toHaveLength(1);
+      expect(f.runtime.getMode()).toBe("agent");
+      expect(f.events.filter((event) => event.event.type === "agent_end")).toHaveLength(1);
+      expect(f.events.some((event) => event.event.type === "error")).toBe(false);
     } finally { await f.runtime.dispose(); }
   });
 

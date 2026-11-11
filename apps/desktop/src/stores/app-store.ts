@@ -170,6 +170,7 @@ export const useAppStore = create<AppState>((set, get) => {
     rememberSessionCompactions,
     commitForkedSession,
     persistSessionAndSelect,
+    flushPendingSessionConfiguration,
   }),
 
   ...createQueueSlice({

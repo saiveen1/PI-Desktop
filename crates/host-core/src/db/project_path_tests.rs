@@ -87,7 +87,7 @@ fn assert_schema_combination_upgrade(version: i64, history_index: bool, repaired
         schema_combination_has_index(db.conn()),
         "schema {version} must gain the history index"
     );
-    assert_eq!(schema_combination_version(db.conn()), 29);
+    assert_eq!(schema_combination_version(db.conn()), 30);
     assert_eq!(
         schema_combination_owners(db.conn(), "sessions"),
         vec![101, 101]
@@ -127,15 +127,16 @@ fn assert_schema_combination_upgrade(version: i64, history_index: bool, repaired
             vec![101, 202]
         }
     );
-    let intermediate = Connection::open(migration_backup_path(&file, 28)).unwrap();
-    assert_eq!(schema_combination_version(&intermediate), 28);
-    assert_eq!(schema_combination_has_index(&intermediate), history_index);
-    drop(intermediate);
+    if version < 29 {
+        let intermediate = Connection::open(migration_backup_path(&file, 28)).unwrap();
+        assert_eq!(schema_combination_version(&intermediate), 28);
+        assert_eq!(schema_combination_has_index(&intermediate), history_index);
+    }
     drop(backup);
     drop(db);
     let bytes = std::fs::read(&backup_path).unwrap();
     let db = Database::open(&file).unwrap();
-    assert_eq!(schema_combination_version(db.conn()), 29);
+    assert_eq!(schema_combination_version(db.conn()), 30);
     assert_eq!(
         std::fs::read(backup_path).unwrap(),
         bytes,
@@ -148,7 +149,7 @@ fn schema_combination_fresh_has_history_index() {
     let dir = tempfile::tempdir().unwrap();
     let db = Database::open_in_dir(dir.path()).unwrap();
     assert!(schema_combination_has_index(db.conn()));
-    assert_eq!(schema_combination_version(db.conn()), 29);
+    assert_eq!(schema_combination_version(db.conn()), 30);
 }
 
 #[test]
@@ -167,8 +168,19 @@ fn schema_combination_notification_v28_reconciles_projects() {
 }
 
 #[test]
+fn schema_combination_both_v29_shapes_reconcile_projects() {
+    assert_schema_combination_upgrade(29, false, false);
+    assert_schema_combination_upgrade(29, true, true);
+}
+
+#[test]
 fn schema_combination_failure_rolls_back_ownership_and_retains_backup() {
-    let (_dir, file, canonical, alias) = schema_combination_fixture(28, false, false);
+    assert_schema_combination_failure(28);
+    assert_schema_combination_failure(29);
+}
+
+fn assert_schema_combination_failure(version: i64) {
+    let (_dir, file, canonical, alias) = schema_combination_fixture(version, false, false);
     let conn = Connection::open(&file).unwrap();
     conn.execute_batch("CREATE TRIGGER reject_combined_migration AFTER UPDATE OF path ON projects BEGIN SELECT RAISE(ABORT,'blocked combined migration'); END;").unwrap();
     drop(conn);
@@ -176,9 +188,9 @@ fn schema_combination_failure_rolls_back_ownership_and_retains_backup() {
         .err()
         .expect("failed repair must refuse open");
     assert!(format!("{error:#}").contains("blocked combined migration"));
-    for path in [&file, &migration_backup_path(&file, 28)] {
+    for path in [&file, &migration_backup_path(&file, version)] {
         let conn = Connection::open(path).unwrap();
-        assert_eq!(schema_combination_version(&conn), 28);
+        assert_eq!(schema_combination_version(&conn), version);
         assert!(!schema_combination_has_index(&conn));
         assert_eq!(schema_combination_owners(&conn, "sessions"), vec![101, 202]);
         assert_eq!(

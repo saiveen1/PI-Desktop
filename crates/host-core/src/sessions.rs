@@ -39,26 +39,44 @@ pub struct AutoTitleContext {
     pub model_key: Option<String>,
 }
 
-/// Compatibility normalization for v7 callers and imported records. The
-/// persisted operating profile is now always `plan`, `goal` or `agent`.
+/// Compatibility normalization for v7 callers and imported records. `chat`
+/// is the old name of `plan`; any valid mode id (builtin or user-defined,
+/// ADR mode-definitions) is kept, and anything else reads as `agent`.
 pub fn normalize_mode(mode: Option<&str>) -> String {
     match mode {
-        Some("plan") | Some("chat") => "plan".into(),
-        Some("goal") => "goal".into(),
-        Some("agent") => "agent".into(),
+        Some("chat") => "plan".into(),
+        Some(mode) if is_valid_mode(mode) => mode.into(),
         _ => "agent".into(),
     }
 }
 
+/// Builtin-only normalization for surfaces that never carry a custom mode
+/// (scheduled tasks): unknown ids read as `agent`.
+pub fn normalize_builtin_mode(mode: Option<&str>) -> String {
+    match mode {
+        Some("plan") | Some("chat") => "plan".into(),
+        Some("goal") => "goal".into(),
+        _ => "agent".into(),
+    }
+}
+
+/// Any id a session may persist: a builtin or a user-defined mode.
 pub fn is_valid_mode(mode: &str) -> bool {
+    crate::mode_runs::is_mode_id(mode)
+}
+
+pub fn is_builtin_mode(mode: &str) -> bool {
     MODES.contains(&mode)
 }
 
 /// Plan and Goal negotiate a contract before executing (D198), so they share one
-/// tool allowlist and one hard deny. Agent is the only executing mode.
+/// tool allowlist and one hard deny. Agent is the only executing mode. This
+/// names the builtin modes only; authorization uses `tool_policy`.
 pub fn is_contract_mode(mode: &str) -> bool {
     matches!(mode, "plan" | "goal")
 }
+
+pub use crate::mode_runs::{tool_policy, ToolPolicy};
 
 /// Values accepted by the persisted per-session thinking selector.  Keep this
 /// list in the host boundary so old clients cannot write arbitrary provider
@@ -1897,11 +1915,11 @@ pub fn fork_session_through(
             .prepare_cached(
                 "INSERT INTO sessions (
                     id, title, project_id, provider_id, model_id, mode, thinking_level,
-                    permission_mode, fast_mode, source, pinned, last_seq, created_at,
-                    updated_at
+                    permission_mode, fast_mode, mode_snapshot_hash, source, pinned, last_seq,
+                    created_at, updated_at
                  )
                  SELECT ?1, ?2, project_id, provider_id, model_id, mode, thinking_level,
-                        permission_mode, fast_mode, NULL, 0, ?3, ?4, ?4
+                        permission_mode, fast_mode, mode_snapshot_hash, NULL, 0, ?3, ?4, ?4
                  FROM sessions WHERE id = ?5",
             )?
             .execute(params![id, title, records.len() as i64, now, source_id])?;
@@ -1997,7 +2015,8 @@ pub fn configure_session_with_thinking(
 }
 
 /// Full configurator. Every `None` preserves the persisted value, including
-/// the `/fast` switch (ADR 0334).
+/// the `/fast` switch (ADR 0334). The mode snapshot is cleared: a builtin
+/// mode configured here never carries one.
 #[allow(clippy::too_many_arguments)]
 pub fn configure_session_with_fast_mode(
     db: &Database,
@@ -2023,11 +2042,9 @@ pub fn configure_session_with_fast_mode(
     )
 }
 
-/// Configure the session and optional delegation policy in one transaction after
-/// approval expiry. Omitted patches preserve saved policy; a null pool restores
-/// inheritance and clears all approvals, while a null approval map clears only
-/// approval overrides.
-#[allow(clippy::too_many_arguments)]
+/// Configure builtin mode settings and delegation policy without a snapshot.
+/// Omitted patches preserve policy; null pool clears the pool and approvals.
+#[allow(dead_code, clippy::too_many_arguments)]
 pub fn configure_session_with_delegation(
     db: &Database,
     id: &str,
@@ -2040,8 +2057,67 @@ pub fn configure_session_with_delegation(
     delegation_model_keys: Option<Option<&[String]>>,
     delegation_model_approvals: Option<Option<&crate::session_delegation::ModelApprovals>>,
 ) -> Result<Option<SessionSummary>> {
+    configure_session_with_delegation_and_mode_snapshot(
+        db,
+        id,
+        mode,
+        provider_id,
+        model_id,
+        thinking_level,
+        permission_mode,
+        fast_mode,
+        delegation_model_keys,
+        delegation_model_approvals,
+        None,
+    )
+}
+
+/// Compatibility entry point for callers that configure only a mode snapshot.
+#[allow(dead_code, clippy::too_many_arguments)]
+pub fn configure_session_with_mode_snapshot(
+    db: &Database,
+    id: &str,
+    mode: &str,
+    provider_id: Option<&str>,
+    model_id: Option<&str>,
+    thinking_level: Option<&str>,
+    permission_mode: Option<&str>,
+    fast_mode: Option<bool>,
+    mode_snapshot_hash: Option<&str>,
+) -> Result<Option<SessionSummary>> {
+    configure_session_with_delegation_and_mode_snapshot(
+        db,
+        id,
+        mode,
+        provider_id,
+        model_id,
+        thinking_level,
+        permission_mode,
+        fast_mode,
+        None,
+        None,
+        mode_snapshot_hash,
+    )
+}
+
+/// Persist session settings, mode snapshot and optional delegation policy in
+/// one transaction. Existing validation, approval expiry and idle guards apply.
+#[allow(clippy::too_many_arguments)]
+pub fn configure_session_with_delegation_and_mode_snapshot(
+    db: &Database,
+    id: &str,
+    mode: &str,
+    provider_id: Option<&str>,
+    model_id: Option<&str>,
+    thinking_level: Option<&str>,
+    permission_mode: Option<&str>,
+    fast_mode: Option<bool>,
+    delegation_model_keys: Option<Option<&[String]>>,
+    delegation_model_approvals: Option<Option<&crate::session_delegation::ModelApprovals>>,
+    mode_snapshot_hash: Option<&str>,
+) -> Result<Option<SessionSummary>> {
     if !(is_valid_mode(mode) || mode == "chat") {
-        return Err(anyhow!("mode must be plan or agent"));
+        return Err(anyhow!("mode must be a valid mode id"));
     }
     let mode = normalize_mode(Some(mode));
     if let Some(level) = thinking_level {
@@ -2066,13 +2142,21 @@ pub fn configure_session_with_delegation(
         Some((
             session_summary(db, id)?,
             crate::session_delegation::read(db, id)?,
+            db.conn()
+                .query_row(
+                    "SELECT mode_snapshot_hash FROM sessions WHERE id = ?1",
+                    params![id],
+                    |row| row.get::<_, Option<String>>(0),
+                )
+                .optional()?
+                .flatten(),
         ))
     } else {
         None
     };
     let delegation = previous
         .as_ref()
-        .map(|(_, current)| {
+        .map(|(_, current, _)| {
             let mut next = current.clone();
             match delegation_model_keys {
                 Some(Some(keys)) => {
@@ -2111,7 +2195,8 @@ pub fn configure_session_with_delegation(
                  model_id = COALESCE(?4, model_id),
                  thinking_level = COALESCE(?5, thinking_level),
                  permission_mode = COALESCE(?6, permission_mode),
-                 fast_mode = COALESCE(?8, fast_mode), updated_at = ?7
+                 fast_mode = COALESCE(?8, fast_mode), mode_snapshot_hash = ?9,
+                 updated_at = ?7
              WHERE id = ?1",
         )?
         .execute(params![
@@ -2122,7 +2207,8 @@ pub fn configure_session_with_delegation(
             thinking_level,
             permission_mode,
             now_ms(),
-            fast_mode
+            fast_mode,
+            mode_snapshot_hash
         ])?;
     if changed == 0 {
         return Ok(None);
@@ -2131,7 +2217,8 @@ pub fn configure_session_with_delegation(
         crate::session_delegation::write(db, id, delegation)?;
         if let Some(previous) = previous
             .as_ref()
-            .and_then(|(summary, _)| summary.as_ref())
+            .filter(|(_, _, hash)| hash.as_deref() == mode_snapshot_hash)
+            .and_then(|(summary, _, _)| summary.as_ref())
             .filter(|old| {
                 old.mode == mode
                     && provider_id.is_none_or(|value| old.provider_id.as_deref() == Some(value))
@@ -5086,7 +5173,7 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(preserved.thinking_level, "high");
-        assert!(configure_session(&db, &session.id, "invalid", None, None).is_err());
+        assert!(configure_session(&db, &session.id, "Not A Mode", None, None).is_err());
         assert!(configure_session_with_thinking(
             &db,
             &session.id,

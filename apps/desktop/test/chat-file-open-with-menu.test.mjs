@@ -78,6 +78,8 @@ const useAppStore = Object.assign(
   },
 );
 
+let revealFails = false;
+
 let nextMatch = null;
 let clipboardFails = false;
 const copied = [];
@@ -120,6 +122,10 @@ const previewTarget = loadModule("../src/hooks/use-preview-target.ts", {
       listPlugins: async () => ({ plugins: [] }),
       fsOpen: async (path, mimeType, sessionId) =>
         calls.defaultBrowsers.push([path, mimeType, sessionId]),
+      fsReveal: async (path, sessionId) => {
+        if (revealFails) throw new Error("reveal refused");
+        calls.reveals.push([path, sessionId]);
+      },
       fsResolveRef: async (ref) => {
         calls.resolved.push(ref);
         if (resolveGate) await resolveGate;
@@ -203,6 +209,7 @@ function reset(match) {
   actionFails = false;
   resolveGate = undefined;
   copied.length = 0;
+  revealFails = false;
 }
 
 /** The match the main process reports for a file of the project's main folder. */
@@ -315,6 +322,7 @@ test("an unresolved HTML reference is reported and opened nowhere", async () => 
     "chat.fileRefMissing:missing.html",
   ]);
 });
+
 
 /** Run one copy item of the reference menu on the reference it names. */
 async function copyRef(path, kind) {
@@ -449,6 +457,10 @@ test("HTTP URLs keep their own menu instead of the file open submenu", () => {
 test("the reference labels ship in the catalogs the menu reads", () => {
   const en = read("../../../packages/i18n/src/locales/en/index.ts");
   const zhCN = read("../../../packages/i18n/src/locales/zh-CN/index.ts");
+  assert.match(en, /fileMenuOpen: "Open file"/);
+  assert.match(en, /fileSaveAs: "Save as…"/);
+  assert.match(en, /copyFileContents: "Copy file contents"/);
+  assert.match(en, /showFileInFolder: "Show in folder"/);
   assert.match(en, /openWith: "Open with"/);
   assert.match(en, /openWithFileManager: "File Manager"/);
   assert.match(en, /openWithBuiltInBrowser: "Built-in browser"/);
@@ -456,6 +468,9 @@ test("the reference labels ship in the catalogs the menu reads", () => {
   assert.match(en, /defaultBrowserOpenFailed:/);
   assert.match(en, /copyFullPath: "Copy full path"/);
   assert.match(en, /copyRelativePath: "Copy relative path"/);
+  assert.match(zhCN, /fileSaveAs: "另存为…"/);
+  assert.match(zhCN, /copyFileContents: "复制文件内容"/);
+  assert.match(zhCN, /showFileInFolder: "在文件夹中显示"/);
   assert.match(zhCN, /openWith: "打开方式"/);
   assert.match(zhCN, /openWithFileManager: "文件管理器"/);
   assert.match(zhCN, /openWithBuiltInBrowser: "内置浏览器"/);
@@ -465,7 +480,7 @@ test("the reference labels ship in the catalogs the menu reads", () => {
   assert.match(zhCN, /copyRelativePath: "复制相对地址"/);
 });
 
-test("remote workspace references retain copy actions but never offer local open actions", () => {
+test("remote workspace references retain copy actions but never offer local open or reveal actions", () => {
   const before = state.sessions;
   state.sessions = [{ id: state.activeSessionId, remoteWorkspace: { hostKey: "ssh", path: "/work/app" } }];
   let items;

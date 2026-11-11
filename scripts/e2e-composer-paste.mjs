@@ -108,7 +108,11 @@ ipcMain.handle("pi-desktop/composer/readClipboardDirectories", async () => {
   // Keep fixture paths native without reading the host clipboard.
   const data = await readComposerClipboardDirectories(clipboard, () => {
     throw new Error("a folder-only paste must not create an import token");
-  }, () => nativeClipboardPaths(clipboard, process.platform, () => [path.join(__dirname, "copied folder")]));
+  }, () => nativeClipboardPaths(
+    clipboard,
+    process.platform,
+    () => [path.join(__dirname, "copied folder")],
+  ));
   return { ok: true, data };
 });
 ipcMain.handle("pi-desktop/composer/pasteFiles", async (_event, input) => {
@@ -204,7 +208,8 @@ app.whenReady().then(async () => {
         creates = 0;
         prompts = [];
         saved.length = 0;
-        const window = new BrowserWindow({ show: false, webPreferences: {
+        // A never-shown window throttles animation frames; the probe waits on them.
+        const window = new BrowserWindow({ show: true, webPreferences: {
           preload: ${JSON.stringify(join(root, "apps/desktop/out/preload/index.cjs"))},
           sandbox: true, contextIsolation: true, nodeIntegration: false, backgroundThrottling: false,
         } });
@@ -234,7 +239,7 @@ app.whenReady().then(async () => {
   }
   if (process.argv.includes("--history-check")) {
     try {
-      const window = new BrowserWindow({ show: false, webPreferences: {
+      const window = new BrowserWindow({ show: true, webPreferences: {
         preload: ${JSON.stringify(join(root, "apps/desktop/out/preload/index.cjs"))},
         sandbox: true, contextIsolation: true, nodeIntegration: false, backgroundThrottling: false,
       } });
@@ -262,7 +267,7 @@ app.whenReady().then(async () => {
   await fs.mkdir(path.join(__dirname, "copied folder"));
   await fs.writeFile(path.join(__dirname, "attachments", "a".repeat(64)), Buffer.alloc(512 * 1024 + 1));
   await fs.writeFile(path.join(__dirname, "attachments", "b".repeat(64)), Buffer.from([0, 1, 2, 0]));
-  const window = new BrowserWindow({ show: false, webPreferences: {
+  const window = new BrowserWindow({ show: true, webPreferences: {
     preload: ${JSON.stringify(join(root, "apps/desktop/out/preload/index.cjs"))},
     sandbox: true, contextIsolation: true, nodeIntegration: false, backgroundThrottling: false,
   } });
@@ -301,7 +306,10 @@ app.whenReady().then(async () => {
     });
     await window.webContents.executeJavaScript('globalThis.composerPreviewPointer = input => new Promise(resolve => { globalThis.composerPreviewPointerDone = resolve; console.log("PI_PREVIEW_POINTER:" + JSON.stringify(input)); }); void 0');
     const directoriesOnly = process.argv.includes("--directories-only");
-    const result = await window.webContents.executeJavaScript("globalThis.composerPasteProbe(" + directoriesOnly + ")");
+    const screenshotOnly = process.argv.includes("--screenshot-only");
+    const result = await window.webContents.executeJavaScript(
+      "globalThis.composerPasteProbe(" + JSON.stringify({ directoriesOnly, screenshotOnly }) + ")",
+    );
     assert.equal(result.ok, true, JSON.stringify(result));
     if (directoriesOnly) {
       assert.equal(result.scope, "directories-only");
@@ -309,6 +317,15 @@ app.whenReady().then(async () => {
       assert.equal(saved.length, 0, "directory paste must not write attachment bytes");
       assert.deepEqual(opened, [], "directory paste must not open attachments");
       console.log("COMPOSER_PASTE_PROBE " + JSON.stringify(result));
+      app.quit();
+      return;
+    }
+    if (screenshotOnly) {
+      assert.equal(saved.length, 2);
+      assert.deepEqual(saved[0].mimeTypes, ["image/png"]);
+      assert.deepEqual(saved[1].mimeTypes, ["image/png"]);
+      assert.equal(revealedFolders.length, 1);
+      console.log("COMPOSER_PASTE_PROBE " + JSON.stringify({ ...result, scratchBytesVerified: true }));
       app.quit();
       return;
     }
@@ -378,7 +395,11 @@ app.whenReady().then(async () => {
   assert.equal(draftCases.length, 4, draftRace.output.slice(-6000));
   console.log(draftCases.join("\n"));
 
-  const firstRun = await runElectron(directoriesOnly ? ["--directories-only"] : []);
+  const directoriesOnly = process.argv.includes("--directories-only");
+  const screenshotOnly = process.argv.includes("--screenshot-only");
+  const firstRun = await runElectron(
+    directoriesOnly ? ["--directories-only"] : screenshotOnly ? ["--screenshot-only"] : [],
+  );
   const pasteLine = firstRun.output
     .split(/\r?\n/)
     .find((line) => line.startsWith("COMPOSER_PASTE_PROBE "));
@@ -391,7 +412,10 @@ app.whenReady().then(async () => {
   assert.equal(firstRun.code, 0, firstRun.output.slice(-4000));
   assert.equal(pasteResult.ok, true);
 
-  if (!directoriesOnly) {
+  if (screenshotOnly) {
+    assert.equal(pasteResult.screenshotWithoutDirectoryScan, true);
+    assert.equal(pasteResult.nativeImagePreserved, true);
+  } else if (!directoriesOnly) {
     const restartRun = await runElectron(["--history-check"]);
     const restartLine = restartRun.output
       .split(/\r?\n/)

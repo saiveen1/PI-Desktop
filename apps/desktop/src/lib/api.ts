@@ -177,6 +177,7 @@ import {
   IPC,
   isCommandShellId,
   isUnknownUpstreamRetryLimit,
+  normalizeBuiltinMode,
   normalizeLargePasteThreshold,
   normalizeMode,
   normalizeNetworkProxy,
@@ -464,7 +465,8 @@ export function normalizeSettings(settings: AppSettings): AppSettings {
       : "fully-folded",
     autoCollapseSettledGroups: settings.autoCollapseSettledGroups !== false,
     autoCollapseThinking: settings.autoCollapseThinking !== false,
-    defaultMode: normalizeMode((settings as { defaultMode?: unknown }).defaultMode),
+    // The default mode stays a builtin; user modes are chosen per session.
+    defaultMode: normalizeBuiltinMode((settings as { defaultMode?: unknown }).defaultMode),
     infiniteProviderRetry:
       (settings as { infiniteProviderRetry?: unknown }).infiniteProviderRetry === true,
     unknownUpstreamRetryLimit: isUnknownUpstreamRetryLimit(settings.unknownUpstreamRetryLimit)

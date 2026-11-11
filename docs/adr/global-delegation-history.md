@@ -88,6 +88,11 @@ most one bounded transcript window per candidate, and projects the settled
   different migrations; this preserves both without guessing their origin.
   The index is rebuildable from existing rows. The v27-to-v28 project repair
   remains a separate versioned step and retains its own backup.
+- The subsequent upstream-mode integration uses schema v30 because upstream
+  independently assigned v29 to staged-mode storage. A backed-up transactional
+  v29-to-v30 reconciliation supplies missing mode objects and the history index
+  for either shape while preserving records and existing project-path repair.
+  Fresh databases contain both feature sets; repeated opens do not remigrate.
 
 ### 3. Renderer-facing contract
 
@@ -108,9 +113,9 @@ unchanged.
 - History queries cost one index range scan plus one bounded transcript window
   per returned candidate. `projectPath`/`status` filters may examine candidates
   that produce no entries; the cursor makes that bounded and resumable.
-- Downgrading to a schema-28 or earlier build requires a compatible backup,
-  because schema 29 stops that build from opening the database. Receipt records
-  themselves are additive kv data that older builds ignore.
+- Downgrading from the integrated schema v30 requires a compatible backup;
+  schema-29 and earlier applications refuse that database. Receipt records
+  themselves remain additive kv data that older builds ignore.
 - `interrupted` is a projection label, not a persisted status; the transcript
   keeps the runtime's original status.
 

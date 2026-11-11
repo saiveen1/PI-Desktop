@@ -64,9 +64,18 @@ test("session launch sends Fast mode only for a model the user allowed it on (AD
       modelsDevCatalog: { async ensureLoaded() {}, configureAccount() {}, findModel() { return undefined; } },
       getWorkspacePath: () => null,
       pluginActiveInProject: () => true,
-      bindingForModel: (_provider, modelId) =>
-        allowed.has(modelId) ? { id: modelId, fastModeAllowed: true } : { id: modelId },
-      effectiveSubagentModelConfig: () => ({ modelConfig: undefined, capabilities: { supportedThinkingLevels: ["off"] } }),
+      bindingForModel: (_provider, modelId) => ({
+        id: modelId,
+        contextWindow: 128_000,
+        maxTokens: 8_192,
+        thinkingLevels: [],
+        defaultThinkingLevel: null,
+        ...(allowed.has(modelId) ? { fastModeAllowed: true } : {}),
+      }),
+      effectiveSubagentModelConfig: () => ({
+        modelConfig: undefined,
+        capabilities: { supportedThinkingLevels: ["off"] },
+      }),
       normalizeThinkingLevel: () => "off",
     });
     const launch = async (modelId, fastMode) => {

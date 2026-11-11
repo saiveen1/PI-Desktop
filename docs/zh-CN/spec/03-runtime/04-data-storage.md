@@ -1,4 +1,4 @@
-# 04. 数据存储（架构 v29）
+# 04. 数据存储（架构 v30）
 
 > **翻译说明：** 本页是与 [英文源规格](/spec/03-runtime/04-data-storage) 一一对应的机器辅助翻译。代码、协议字段和标识符保持原文；如翻译与英文源事实有歧义，以英文版本为准。
 
@@ -36,7 +36,17 @@ the history index. Both shapes retain their data and acquire both changes.
 Version 27 first completes the project repair to version 28, then this step;
 fresh databases contain the index immediately. Each step retains its verified
 backup, and a failed step leaves its source version and ownership unchanged.
-An older app cannot open schema 29; downgrade requires a compatible backup.
+Version 29 had two independent shapes: this history index or staged mode runs.
+Migration 29 → 30 first retains a verified `pi.sqlite.v29.bak`, then adds any
+missing mode tables, `sessions.mode_snapshot_hash` and history index, and repeats
+project-path reconciliation in one transaction before stamping version 30.
+Existing mode snapshots, runs, gates, approvals, delegation policy/history,
+project/session groups and transcript bytes are preserved. A failed step rolls
+back its DDL, ownership and version; its backup remains. Reopening version 30
+does not repeat migration or replace backups. Older schemas follow the existing
+versioned chain, including the lossless tool-image marker at version 26.
+Fresh databases have both shapes at version 30; newer schemas fail closed.
+An older app cannot open schema 30; downgrade requires a compatible backup.
 
 Run history reads indexed candidates and bounded canonical JSONL windows;
 it does not create a second execution ledger. Source sessions marked deleted
@@ -1538,3 +1548,29 @@ Task remain separate optional transcript/event fields.
 
 有界末尾页包含最后一条消息之后追加的压缩记录，重新打开或重启后立即返回
 最新检查点和上下文估算。历史中间页只保留生效的检查点及页内记录，不读取全链。
+
+
+## User-defined mode runs (schema 30)
+
+ADR `mode-definitions` originally added mode storage as an independent v29.
+The v29-to-v30 reconciliation above retains that storage when present or adds
+`mode_snapshots`, `mode_runs`, `mode_gate_results` and
+`sessions.mode_snapshot_hash` when missing. Existing sessions and Plan approvals
+are retained.
+Mode ids remain in `sessions.mode`; `chat` still normalizes to `plan`.
+
+A run references an immutable definition snapshot, its current stage, revision,
+claim, permission origin, budgets, token usage and completed-round count.
+Gate results record the stage, action, outcome and bounded evidence. At most
+one open run exists per session. Restart clears in-flight claims and pauses
+those runs without replaying work. Deleting a session cascades its run records.
+
+Host-started turns evaluate Auto as Accept edits. A run's original snapshot
+remains authoritative even when its source file changes.
+
+Session configuration writes mode, snapshot hash, model/thinking/permission/fast
+settings and optional delegation model keys/approval overrides atomically.
+Omitted delegation patches preserve saved policy; null keys restore inheritance
+and clear approvals, while null approvals clear only overrides. Compatibility
+configurators retain their signatures; builtin configuration clears the snapshot.
+Delegation-only edits retain session ordering, but a changed snapshot updates it.

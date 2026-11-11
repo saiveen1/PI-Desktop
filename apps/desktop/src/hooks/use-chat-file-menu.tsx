@@ -89,6 +89,7 @@ export function useChatFileMenuItems() {
           id: "copy-full-path",
           label: t("chat.copyFullPath"),
           icon: <IconCopy size={14} />,
+          separatorBefore: nativeFilesAllowed,
           onSelect: () => copyFileRef(path, baseDir, "absolute"),
         },
         {
