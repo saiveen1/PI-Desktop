@@ -366,16 +366,33 @@ Tool token estimates are optional telemetry: an invalid call identity must not
 prevent the corresponding terminal tool event from being delivered.
 
 Complete Qwen-style `<tool_call><function=Name><parameter=...>...</parameter>
-</function></tool_call>` blocks emitted as assistant text for a known tool
-receive a visible `TOOL_CALL_NOT_EXECUTED` diagnostic on that response. This
-also applies when normal text precedes the block or structured sibling calls
-execute successfully. The original text is preserved; the affected message
-has error status, while valid structured calls and normal continuation remain
-unchanged. Text is never parsed into executable arguments, tools are never
-silently activated, and no provider retry is spent. Fenced, inline, quoted and
-indented examples, unknown tool names and incomplete blocks are not diagnosed.
-This is a conservative format diagnostic, not a general XML parser or proof
-that the model intended an action.
+</function></tool_call>` blocks emitted as assistant text for a known tool,
+and DSML call envelopes or orphaned tails with line-anchored `parameter`,
+`invoke`, and `calls` tags ending in the closing invoke/calls pair, receive a
+visible, retriable `TOOL_CALL_NOT_EXECUTED` diagnostic. The original text and
+completed tool results remain intact. Fenced, inline, quoted and indented
+examples, lone DSML tags, unknown Qwen tool names and incomplete Qwen blocks
+are not diagnosed. This is a conservative format diagnostic, not a general
+markup parser or a semantic task-completion judge.
+
+For a normal main-Agent `stop` with diagnosed text and no structured tool
+calls, `finishTurn` permits one correction in the same durable user turn.
+A replaceable system section explains that the text executed no action,
+asks for a valid structured call within the original scope and permissions,
+and forbids repeating successful actions or guessing missing arguments. It
+expires on the following request; summary compaction retains the active task while
+the correction is pending. No synthetic user message or new turn is created.
+
+The allowance is not replenished by successful tools, provider retries or
+steering. A second diagnosed text-only stop is terminal even if a checklist
+is unfinished, leaving the diagnostic available for manual retry. Cancellation,
+graceful stop, mode closeout, pending steering/delegation work, non-Agent modes,
+and provider errors/aborts/length stops do not trigger this correction. Approved
+Plan execution uses the Agent rule; its progress-only heuristic does not add
+another nudge for diagnosed markup. Valid structured sibling calls execute
+normally without a correction nudge. Text is never parsed into executable
+arguments, tools are never silently activated, and no transport retry budget
+is spent.
 
 Before surfacing a pre-stream `PROVIDER_ERROR` for HTTP 400/422 whose message
 ends in `(no body)`, the runtime makes at most one silent repair attempt with

@@ -83,7 +83,7 @@ describe("malformed tool-call recovery", () => {
         }),
       }));
       expect(host.call.mock.calls.filter(([method]) => method === "tools.execute")).toHaveLength(withSibling ? 1 : 0);
-      expect(requests).toHaveLength(withSibling ? 2 : 1);
+      expect(requests).toHaveLength(2);
       expect(events.filter((event) => event.type === "tool_start" && event.toolName === "TodoWrite")).toHaveLength(0);
     } finally {
       await runtime.dispose();

@@ -26,3 +26,37 @@ describe("text tool-call diagnostics", () => {
     expect(textToolCallDiagnostic(`~~~xml\n${xml}\n~~~\n${xml}`, tools)?.code).toBe("TOOL_CALL_NOT_EXECUTED");
   });
 });
+
+const dsml = [
+  '</｜DSML｜ parameter>',
+  '<｜DSML｜ parameter name="timeout" string="false">60</｜DSML｜ parameter>',
+  '</｜DSML｜ invoke>',
+  '</｜DSML｜ calls>',
+].join("\n");
+
+describe("DSML tool-call leakage diagnostics", () => {
+  it.each([
+    dsml,
+    `I will run the remaining check.\n\n${dsml}`,
+    `<｜DSML｜ calls>\n<｜DSML｜ invoke name="Bash">\n${dsml}`,
+  ])("recognizes a complete envelope or orphaned protocol tail", (text) => {
+    expect(textToolCallDiagnostic(text, tools)).toMatchObject({ code: "TOOL_CALL_NOT_EXECUTED", retriable: true });
+  });
+
+  it.each([
+    `\`\`\`xml\n${dsml}\n\`\`\``,
+    `~~~xml\n${dsml}\n~~~`,
+    `\`\`\`\`xml\n\`\`\`\n${dsml}\n\`\`\`\``,
+    dsml.split("\n").map((line) => `> ${line}`).join("\n"),
+    dsml.split("\n").map((line) => `    ${line}`).join("\n"),
+    dsml.split("\n").map((line) => `\t${line}`).join("\n"),
+    dsml.split("\n").map((line) => `\`${line}\``).join("\n"),
+    "The format uses </｜DSML｜ parameter>, </｜DSML｜ invoke> and </｜DSML｜ calls>.",
+    "</｜DSML｜ calls>",
+    `${dsml}\nThese tags close the protocol envelope.`,
+    dsml.replace("</｜DSML｜ invoke>", ""),
+    dsml.replace("</｜DSML｜ calls>", ""),
+  ])("leaves examples and ambiguous fragments alone", (text) => {
+    expect(textToolCallDiagnostic(text, tools)).toBeUndefined();
+  });
+});

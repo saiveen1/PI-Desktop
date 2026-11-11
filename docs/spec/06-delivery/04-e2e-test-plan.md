@@ -899,16 +899,25 @@ being fetched on every subsequent poll.
 ### E2E-RUNTIME-text-tool-call-diagnostic
 
 - **Preconditions:** Isolated runtime with a fixture provider and synthetic data.
-- **Steps:** Return a complete text-form Qwen `TodoWrite` call, alone and after
-  normal prose. Repeat alongside a valid structured Bash call. Then return a
-  normal answer. Repeat with fenced/inline/quoted/indented XML examples,
-  incomplete blocks and an unknown tool name.
-- **Expected:** The literal known-tool call retains its text and displays
-  `TOOL_CALL_NOT_EXECUTED` with error message status. It never executes or
-  activates the text-form tool, and never retries automatically. Structured
-  sibling calls execute once and normal continuation succeeds. Examples,
-  unknown names and incomplete blocks remain ordinary text.
-- **Coverage:** `text-tool-call.test.ts`, `malformed-tool-recovery.test.ts`.
+- **Steps:** Return a complete text-form Qwen `TodoWrite` call or a DSML orphaned
+  parameter/invoke/calls tail, alone and after normal prose. Return a corrected
+  structured call followed by a normal answer. Repeat with persistent leakage,
+  a successful tool between leaks, valid structured siblings, a pending checklist,
+  Stop/abort/steering at the response boundary, and a new user turn. Exercise
+  approved Plan execution and summary compaction before the correction. Return fenced,
+  inline, quoted and indented examples, lone DSML tags, incomplete Qwen blocks,
+  unknown Qwen names, and provider error/abort/length stops.
+- **Expected:** The literal call retains its text with retriable
+  `TOOL_CALL_NOT_EXECUTED`. Main-Agent gets at most one correction in the same
+  durable turn with a one-request system reminder, not a synthetic user message.
+  The raw text never executes, no tools are silently activated, and already
+  completed tools/sibling calls are not replayed. Repeated leakage ends with the
+  diagnostic; checklist/progress recovery cannot extend that failure. Stop,
+  abort, steering and mode boundaries take precedence. Compaction retains the
+  active task, and a later user turn starts with a fresh allowance and no stale
+  reminder. Examples and ambiguous fragments remain ordinary text.
+- **Coverage:** `text-tool-call.test.ts`, `text-tool-call-recovery.test.ts`,
+  `malformed-tool-recovery.test.ts`.
 
 ### E2E-PI-130-kernel-upgrade
 

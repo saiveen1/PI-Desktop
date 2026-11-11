@@ -31,6 +31,7 @@ import { requestExtensionUi } from "./extensions/ui-request.js";
 import { readLocalRequestErrorDetails } from "./local-request-errors.js";
 import { isValidToolCall, recoverMalformedToolCalls } from "./tool-call-recovery.js";
 import { textToolCallDiagnostic } from "./text-tool-call.js";
+import { TextToolCallRecovery } from "./text-tool-call-recovery.js";
 import { computerUseDescription, computerUseParameters } from "./computer-use/tool.js";
 import { imageGenerationDescription, imageGenerationParameters } from "./image-generation/tool.js";
 import { todoWriteDescription, todoWriteParameters } from "./todo-tool.js";
@@ -2012,6 +2013,7 @@ export class DesktopAgentRuntime {
   /** Opt-in mode removes only the retry-count ceiling; abort and backoff stay intact. */
   private infiniteProviderRetry = false;
   private readonly unfinishedTodoContinuation: UnfinishedTodoContinuation;
+  private readonly textToolCallRecovery = new TextToolCallRecovery();
   private fastMode = false;
   private jevApiKey?: string;
   private computerUseEnabled = false;
@@ -2419,7 +2421,8 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       prepareRequest: async ({ context }) => {
         const changed = await this.prepareDelegationCatalog();
         const prepared = this.prepareToolDeclarations(context, changed);
-        return { ...prepared, context: this.unfinishedTodoContinuation.prepareRequest(prepared.context ?? context) };
+        const todoContext = this.unfinishedTodoContinuation.prepareRequest(prepared.context ?? context);
+        return { ...prepared, context: this.textToolCallRecovery.prepareRequest(todoContext) };
       },
       // Extensions see every provider request, including the first one of a
       // run, which `prepareNextTurn` never reaches (spec 16 §6, issue #1838).
@@ -2452,11 +2455,14 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           this.gracefulStopRequested = false;
           return { action: "end" };
         }
-        return this.unfinishedTodoContinuation.finishTurn(turn, () =>
+        const canContinue = () =>
           this.mode === "agent" && !this.disposed && !this.runCancelled && !this.turnHadError &&
           !this.modeState.closeoutExhausted() &&
           !this.gracefulStopRequested && this.acceptingSteering && !this.pendingSteering.size &&
-          !this.pendingProgressTurnRerun && !this.pendingSilentTurnRerun && !this.keepTurnOpenForDelegates(), signal);
+          !this.pendingProgressTurnRerun && !this.pendingSilentTurnRerun && !this.keepTurnOpenForDelegates();
+        const correction = this.textToolCallRecovery.finishTurn(turn, this.toolCatalog, canContinue(), signal);
+        if (correction) return correction;
+        return this.unfinishedTodoContinuation.finishTurn(turn, canContinue, signal);
       },
     });
 
@@ -7233,6 +7239,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
    */
   private resetRunRecoveryState(): void {
     this.unfinishedTodoContinuation.reset();
+    this.textToolCallRecovery.reset();
     this.pendingOverflow = false;
     this.overflowRecoveryAttempted = false;
     this.overflowRecoveryInProgress = false;
@@ -7753,6 +7760,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
 
     const retentionMode: CompactionRetentionMode =
       this.unfinishedTodoContinuation.pending ||
+      this.textToolCallRecovery.pending ||
       (turn.toolResults?.length ?? 0) > 0 ||
       turn.message?.stopReason === "toolUse"
         ? "active_turn"
@@ -9175,6 +9183,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
             !aborted &&
             canRecoverTurn &&
             !silentTurn &&
+            !textCallDiagnostic &&
             this.autonomousExecution &&
             !this.silentTurnRerunAttempted &&
             !this.progressTurnRerunAttempted &&

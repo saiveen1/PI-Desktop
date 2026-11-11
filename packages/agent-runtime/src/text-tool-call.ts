@@ -20,6 +20,18 @@ export function textToolCallDiagnostic(
     }
   }
   const prose = visible.join("\n");
+  // Require several line-anchored protocol tags and the closed call-group
+  // suffix: a lone tag or prose describing the format is not enough evidence.
+  const dsmlTags = new Set([...prose.matchAll(/^ {0,3}<\/?｜DSML｜ (calls|invoke|parameter)(?: [^>\r\n]*)?>/gm)]
+    .map((match) => match[1]));
+  if (["calls", "invoke", "parameter"].every((tag) => dsmlTags.has(tag)) &&
+    /(?:^|\n) {0,3}<\/｜DSML｜ invoke>\r?\n {0,3}<\/｜DSML｜ calls>\s*$/.test(prose)) {
+    return {
+      code: ErrorCodes.TOOL_CALL_NOT_EXECUTED,
+      message: "The reply contains DSML tool-call markup instead of a structured tool call. No action was executed from this text. Retry to request a valid tool call.",
+      retriable: true,
+    };
+  }
   const starts = /(?:^|\n) {0,3}<tool_call>/g;
   let coveredUntil = 0;
   for (const start of prose.matchAll(starts)) {
@@ -34,7 +46,7 @@ export function textToolCallDiagnostic(
     return {
       code: ErrorCodes.TOOL_CALL_NOT_EXECUTED,
       message: `The reply contains a text-form ${call[1]} call. Text is not executed as a tool call; check the provider's tool-call format and activate on-demand tools with ToolSearch.`,
-      retriable: false,
+      retriable: true,
     };
   }
   return undefined;
