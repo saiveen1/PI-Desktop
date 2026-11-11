@@ -123,7 +123,7 @@ Each ADR includes:
 | 0061 | Imperceptible background context compaction | Accepted (amends 0030 / 0049; clauses 2/4/6/7/8 amended by 0064) |
 | 0062 | Bounded Subagents Behind a Task Tool | Accepted for implementation (`maxTurns` clause withdrawn by 0253) |
 | 0063 | A Managed Surface for Global Subagent Definitions | Accepted for implementation (`maxTurns` field withdrawn by 0253) |
-| 0064 | Codex-parity context compaction | Accepted (amended by D623 / issue #970: 90% inline trigger) |
+| 0064 | Codex-parity context compaction | Accepted (D623 / issue #970 amends the 90% inline trigger; [runtime-owned context compaction](runtime-owned-context-compaction.md) supersedes model-tool and reminder clauses) |
 | 0065 | Smooth shell layout and stream feedback | Accepted for implementation |
 | 0066 | Empty home direct bottom composer | Accepted for implementation (amends D111) |
 | 0067 | ChatGPT-inspired empty-home starter guidance | Superseded by D206 |
@@ -424,3 +424,4 @@ Each ADR includes:
 | 0344 | [Computer use grants the whole desktop automatically, and Stop is the boundary](0344-computer-use-whole-desktop-grant.md) | Accepted (D682; amends ADR 0342 §4 and §6) |
 | 0345 | [One settings destination owns one subject](0345-one-settings-destination-one-subject.md) | Accepted (D684; amends D143, D166, D678) |
 | 0346 | [`@agent` mentions route a turn to a named subagent](0346-composer-agent-mentions.md) | Accepted (issue #986; extends 0024 / 0062) |
+| runtime-owned-context-compaction | [Runtime-owned context compaction initiation](runtime-owned-context-compaction.md) | Accepted (amends ADR 0064 / D203) |

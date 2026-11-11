@@ -3837,7 +3837,6 @@ describe("DesktopAgentRuntime deferred tool catalog", () => {
       "TaskWait",
       "TaskList",
       "TaskStop",
-      "new_context",
       "ToolSearch",
     ]);
     expect((runtime as any).deferredToolNames.has("Glob")).toBe(false);
@@ -7785,6 +7784,115 @@ describe("DesktopAgentRuntime per-turn context protection", () => {
     newMessages: [assistant, toolResult],
   };
 
+  type ContextProtectionView = {
+    agent: Agent;
+    createExtensionBridge(): { compact(): void };
+    contextBudget(messages: AgentMessage[]): {
+      tokens: number;
+      hardLimit: number;
+      requestHeadroom: number;
+      keepRecentTokens: number;
+    };
+    runCompaction(reason: "threshold", manual: false, retention: "active_turn"): Promise<boolean>;
+    prepareNextTurn(turn: typeof nextTurn): Promise<unknown>;
+  };
+
+  it("continues a low-usage tool turn without requesting compaction", async () => {
+    const runtime = createRuntime();
+    try {
+      const view = runtime as unknown as ContextProtectionView;
+      vi.spyOn(view, "contextBudget").mockReturnValue({
+        tokens: 209_597,
+        hardLimit: 1_000_000,
+        requestHeadroom: 100_000,
+        keepRecentTokens: 64_000,
+      });
+      const runCompaction = vi.spyOn(view, "runCompaction");
+      await view.prepareNextTurn(nextTurn);
+      expect(runCompaction).not.toHaveBeenCalled();
+    } finally {
+      await runtime.dispose();
+    }
+  });
+
+  it.each(["agent", "plan", "goal"] as const)(
+    "does not expose model-requested compaction in %s mode",
+    async (mode) => {
+      for (const compactionStrategy of ["summary", "fresh_window"] as const) {
+        const runtime = createRuntime({ mode, compactionStrategy });
+        try {
+          const view = runtime as unknown as { agent: Agent };
+          expect(view.agent.state.tools.map((tool) => tool.name)).not.toContain("new_context");
+          expect(view.agent.state.systemPrompt).not.toContain("new_context");
+          expect(getCurrentTools(view.agent.state.messages).map((tool) => tool.name)).not.toContain("new_context");
+          if (mode === "agent") {
+            const search = await runtimeTool(runtime, "ToolSearch").execute(
+              "search-compaction",
+              { query: "new_context" },
+            );
+            expect(search.details).toMatchObject({ matches: [], activated: [] });
+          } else {
+            expect(view.agent.state.tools.map((tool) => tool.name)).not.toContain("ToolSearch");
+          }
+          expect(view.agent.state.tools.map((tool) => tool.name)).not.toContain("new_context");
+        } finally {
+          await runtime.dispose();
+        }
+      }
+    },
+  );
+
+  it("preserves historical compaction tool results without restoring the tool", async () => {
+    const historyBase = {
+      role: "tool" as const,
+      content: "",
+      createdAt: "2026-11-11T00:00:00Z",
+      status: "complete" as const,
+      toolStatus: "success" as const,
+      toolArgs: {},
+    };
+    const runtime = createRuntime({
+      history: [
+        {
+          ...historyBase,
+          id: "old-search-tool",
+          toolCallId: "old-search-call",
+          toolName: "ToolSearch",
+          toolResult: {
+            content: [{ type: "text", text: "Activated new_context." }],
+            details: { activated: ["new_context"] },
+          },
+        },
+        {
+          ...historyBase,
+          id: "old-compaction-tool",
+          toolName: "new_context",
+          toolCallId: "old-compaction-call",
+          toolResult: {
+            content: [{ type: "text", text: "A new context window will start with a summary of the conversation history." }],
+            details: { queued: true },
+          },
+        },
+      ],
+    });
+    try {
+      const view = runtime as unknown as { agent: Agent };
+      expect(view.agent.state.messages).toContainEqual(expect.objectContaining({
+        role: "toolResult",
+        toolName: "new_context",
+        toolCallId: "old-compaction-call",
+      }));
+      expect(view.agent.state.tools.map((tool) => tool.name)).not.toContain("new_context");
+      const search = await runtimeTool(runtime, "ToolSearch").execute(
+        "search-historical-compaction",
+        { query: "new_context" },
+      );
+      expect(search.details).toMatchObject({ matches: [], activated: [] });
+    } finally {
+      await runtime.dispose();
+    }
+  });
+
   it("derives the hard limit from provider-request headroom", async () => {
     const runtime = createRuntime();
 
@@ -7853,13 +7961,13 @@ describe("DesktopAgentRuntime per-turn context protection", () => {
     // 29k left is inside the first reminder tier but still below the 90%
     // compaction trigger, so the model can close out before host compaction.
     expect(below.context.systemPrompt).toContain("<context_budget>");
-    expect(below.context.systemPrompt).toContain("new_context");
+    expect(below.context.systemPrompt).not.toContain("new_context");
     expect(below.context.messages.at(-1)).toMatchObject({
       role: "system",
       content: "",
       sections: { context_budget: expect.stringContaining("<context_budget>") },
     });
-    expect(getCurrentSystemMessage(below.context.messages)?.sections?.context_budget).toContain("new_context");
+    expect(getCurrentSystemMessage(below.context.messages)?.sections?.context_budget).toContain("The runtime manages compaction automatically");
     expect(stillBelow.context.systemPrompt).not.toContain("<context_budget>");
     // The legacy prompt baseline stays unchanged; the returned transcript
     // carries the reminder section through the normal persistence path.
@@ -7976,63 +8084,45 @@ describe("DesktopAgentRuntime per-turn context protection", () => {
     await runtime.dispose();
   });
 
-  it("lets the model ask for a new window, and compacts at the next boundary", async () => {
+  it("preserves trusted extension compaction at the next boundary", async () => {
     const runtime = createRuntime();
-    const tool = (runtime as any).agent.state.tools.find(
-      (candidate: any) => candidate.name === "new_context",
-    );
-
-    // Codex's tool takes no arguments: the model cannot steer the checkpoint,
-    // it can only ask for one.
-    expect(tool).toBeDefined();
-    expect(Object.keys(tool.parameters.properties ?? {})).toEqual([]);
-    const result = await tool.execute("call-1", {});
-    expect(result.content[0].text).toContain("A new context window will start");
-    expect((runtime as any).pendingModelCompaction).toBe(true);
-
-    // Well under the hard limit, so only the model's request drives this.
-    vi.spyOn(runtime as any, "contextBudget").mockReturnValue({
-      tokens: 10_000,
-      hardLimit: 224_000,
-      requestHeadroom: 32_000,
-      keepRecentTokens: 44_800,
-    });
-    const runCompaction = vi
-      .spyOn(runtime as any, "runCompaction")
-      .mockResolvedValue(true);
-
-    await (runtime as any).prepareNextTurn(nextTurn);
-    expect(runCompaction).toHaveBeenCalledWith(
-      "threshold",
-      false,
-      "active_turn",
-    );
-    expect((runtime as any).pendingModelCompaction).toBe(false);
-
-    // The request is consumed, so the next boundary compacts nothing.
-    await (runtime as any).prepareNextTurn(nextTurn);
-    expect(runCompaction).toHaveBeenCalledOnce();
-
-    await runtime.dispose();
+    try {
+      const view = runtime as unknown as ContextProtectionView;
+      view.createExtensionBridge().compact();
+      // Only the trusted extension request drives this below-threshold checkpoint.
+      vi.spyOn(view, "contextBudget").mockReturnValue({
+        tokens: 10_000,
+        hardLimit: 224_000,
+        requestHeadroom: 32_000,
+        keepRecentTokens: 44_800,
+      });
+      const runCompaction = vi.spyOn(view, "runCompaction").mockResolvedValue(true);
+      await view.prepareNextTurn(nextTurn);
+      expect(runCompaction).toHaveBeenCalledWith("threshold", false, "active_turn");
+      // An explicit extension request is consumed once, not on every boundary.
+      await view.prepareNextTurn(nextTurn);
+      expect(runCompaction).toHaveBeenCalledOnce();
+    } finally {
+      await runtime.dispose();
+    }
   });
 
-  it("does not fail the turn when a model-requested compaction fails", async () => {
+  it("does not fail the turn when an extension-requested compaction fails", async () => {
     const runtime = createRuntime();
-    (runtime as any).pendingModelCompaction = true;
-    vi.spyOn(runtime as any, "contextBudget").mockReturnValue({
-      tokens: 10_000,
-      hardLimit: 224_000,
-      requestHeadroom: 32_000,
-      keepRecentTokens: 44_800,
-    });
-    vi.spyOn(runtime as any, "runCompaction").mockResolvedValue(false);
-
-    // Nothing is over the boundary, so a failed courtesy compaction is not a
-    // reason to refuse the request the way the hard-limit guard is.
-    await expect(
-      (runtime as any).prepareNextTurn(nextTurn),
-    ).resolves.toBeDefined();
-    await runtime.dispose();
+    try {
+      const view = runtime as unknown as ContextProtectionView;
+      view.createExtensionBridge().compact();
+      vi.spyOn(view, "contextBudget").mockReturnValue({
+        tokens: 10_000,
+        hardLimit: 224_000,
+        requestHeadroom: 32_000,
+        keepRecentTokens: 44_800,
+      });
+      vi.spyOn(view, "runCompaction").mockResolvedValue(false);
+      await expect(view.prepareNextTurn(nextTurn)).resolves.toBeDefined();
+    } finally {
+      await runtime.dispose();
+    }
   });
 
   it("automatically compacts at the early threshold before the final reminder", async () => {
@@ -8987,26 +9077,23 @@ describe("DesktopAgentRuntime per-turn context protection", () => {
     await runtime.dispose();
   });
 
-  it("withdraws the compaction tool when automatic protection is disabled", async () => {
+  it("keeps compaction tools unavailable when automatic protection changes", async () => {
     const runtime = createRuntime();
-    const before = (runtime as any).agent.state.tools.map(
-      (tool: any) => tool.name,
-    );
-    expect(before).toContain("new_context");
-
-    runtime.setCompactionSettings({
-      enabled: false,
-      reserveTokens: 16_384,
-      keepRecentTokens: 20_000,
-    });
-
-    const after = (runtime as any).agent.state.tools.map(
-      (tool: any) => tool.name,
-    );
-    // With protection off there is no checkpoint to ask for, so the tool would
-    // only ever return a promise the host does not keep.
-    expect(after).toEqual(before.filter((name: string) => name !== "new_context"));
-    await runtime.dispose();
+    try {
+      const view = runtime as unknown as ContextProtectionView;
+      const before = view.agent.state.tools.map((tool) => tool.name);
+      expect(before).not.toContain("new_context");
+      for (const enabled of [false, true]) {
+        runtime.setCompactionSettings({
+          enabled,
+          reserveTokens: 16_384,
+          keepRecentTokens: 20_000,
+        });
+        expect(view.agent.state.tools.map((tool) => tool.name)).toEqual(before);
+      }
+    } finally {
+      await runtime.dispose();
+    }
   });
 
   it("rejects an over-budget first prompt when automatic compaction is disabled", async () => {

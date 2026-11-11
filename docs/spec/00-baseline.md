@@ -59,11 +59,12 @@
 > budgets from the model window instead of settings and removes the compaction
 > settings. D203 / ADR 0064 then rebuilds the mechanism to match Codex:
 > compaction is inline only, a checkpoint carries the summary plus the latest
-> active user message only while a turn continues; completed turns
-> carry no naked historical user messages. The model-facing `new_context` tool
-> and two budget reminders are
-> back, each compaction adds a transcript row and one warning, and a
-> no-summary rollover family exists behind an internal switch.
+> active user message only while a turn continues; completed turns carry no
+> naked historical user messages. Each compaction adds a transcript row and one
+> warning, and a no-summary rollover family exists behind an internal switch.
+> The post-baseline runtime-owned context compaction amendment removes the
+> model-facing `new_context` tool and its invitation in budget reminders;
+> budget reminders, retention, storage, and lifecycle rules remain.
 > `0.4.12` standardizes home and thread-docked composer prompt rows without a
 > leading brand mark through D160 / ADR 0031 while preserving shell branding
 > elsewhere.
@@ -192,12 +193,13 @@
     while explicit absolute paths under registered group roots use host
     canonical containment**
 43. Context management: **pi-native checkpoint summaries in Codex's shape —
-     inline compaction at the deterministic pre-request hard guard, the summary
-     plus only the latest active user message while a turn continues (and no
-     naked historical user messages after a completed turn), durable host
-     checkpoints, and one overflow retry. The model can request a new window through
-     `new_context`; every compaction adds a transcript row and one warning.
-     No user-facing settings**
+     runtime-owned inline compaction at `floor(hardLimit * 0.9)` before the next
+     provider request, with `hardLimit` as the final guard; the summary plus
+     only the latest active user message while a turn continues (and no naked
+     historical user messages after a completed turn), durable host checkpoints,
+     one overflow retry, user `/compact`, and trusted-extension `ctx.compact()`.
+     Every compaction adds a transcript row and one warning. No user-facing
+     settings or model-facing compaction tool**
 44. Plan tools and policy: **Read / Glob / Grep / BrowserPreview / Bash plus
     `EnterPlanMode` and `SubmitPlan`; Write/Edit/plugin and
     unknown tools are denied. Bash follows `ask`, `accept-edits`, or `auto`, so
@@ -249,3 +251,6 @@ relevant decision record before changing the contract.
 > D623 / ADR 0064 amends the inline automatic compaction trigger to 90% of
 > the derived hard budget. The hard limit remains the final provider-request
 > guard; no background compaction or storage/protocol change is introduced.
+> The 2026-11-11 [runtime-owned context compaction amendment](../adr/runtime-owned-context-compaction.md)
+> removes the model tool and its invocation guidance while retaining budget
+> reminders, retention, storage, and the compaction lifecycle.

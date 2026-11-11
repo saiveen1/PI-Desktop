@@ -567,10 +567,11 @@ preserve the existing session/checkpoint behavior while keeping the Rust host
 as the only durable session owner; OpenCode DCP remains an AGPL-3.0 behavioral
 reference only, not a linked or copied dependency.
 
-Compaction follows Codex's mechanism (ADR 0064, amended by D623): it remains
-inline at turn boundaries, and the model can request it through `new_context`.
-Automatic compaction starts at 90% of the derived `hardLimit`; there is no
-background pre-computation.
+Compaction is runtime-owned (ADR 0064 as amended by
+[runtime-owned context compaction](../../adr/runtime-owned-context-compaction.md)):
+it remains inline at turn boundaries and begins automatically at
+`floor(hardLimit * 0.9)`. There is no background pre-computation or model-facing
+compaction tool.
 
 pi 0.84.4+ invokes `prepareNextTurn` only when the loop will start another
 assistant turn in the same run — including between a completed tool batch and
@@ -584,9 +585,9 @@ For every pi loop turn:
    results for that turn are complete
 2. PI-Desktop rebuilds the context from the full transcript plus the newest
    valid checkpoint and estimates the next request budget
-3. below 90% of `hardLimit`, and with no pending model request, the next turn
-   proceeds unchanged (a budget reminder may be added to that request)
-4. at or above the 90% trigger, or when the model called `new_context`,
+3. below `floor(hardLimit * 0.9)`, and with no pending trusted-extension
+   request, the next turn proceeds unchanged (a budget reminder may be added)
+4. at or above that trigger, or after trusted-extension `ctx.compact()`,
    compaction runs synchronously before the next provider request. In the
    summary family, generation is mandatory; the runtime preflights the summary
    input against the model window, reduces it once, and then splits a range that
@@ -677,14 +678,18 @@ The family is resolved from a construction option, then
 `AppSettings` and i18n, and exists so the no-summary mechanism is implemented
 and testable.
 
-**Model-facing surface.** `new_context` takes no parameters and starts a new
-context window at the next turn boundary; it never clears or resets environment
-state. Two budget reminders are appended to the current turn's system prompt,
-each at most once per checkpoint window and reset when a checkpoint is
-installed: one when the remaining budget falls to
-`clamp(hardLimit * 0.15, 8k, 32k)`, asking the model to start closing out, and
-one at 2,000 tokens remaining, telling it to write down whatever must survive.
-Neither reminder is persisted or shown in the transcript.
+**Initiators.** The runtime alone initiates automatic compaction. `new_context`
+is neither an active tool nor ToolSearch-discoverable, and system prompts contain
+no reminder asking the model to compact. The user may initiate the existing idle
+`/compact` command, and trusted extensions may use `ctx.compact()`; both follow
+the existing compaction lifecycle. Historical `new_context` and `CompactContext`
+calls remain readable transcript data only and cannot reactivate either name.
+
+The existing two-tier budget reminders remain, once each per checkpoint window:
+at `clamp(hardLimit * 0.15, 8k, 32k)` tokens remaining, then at 2,000 tokens.
+They ask the model to preserve durable work while continuing the current task;
+they do not offer or invite a model-controlled context switch. Automatic
+compaction still runs first when its threshold has already been reached.
 
 The hard boundary is the model context window minus request headroom. Automatic
 compaction starts at 90% of `hardLimit`; this deterministic margin is not
@@ -1613,9 +1618,8 @@ request.
 The delegate's working-context rewrite remains local. It rewrites no
 persisted transcript row, writes no host-core checkpoint, and adds no
 compaction row, warning toast, or context-inspector line; the delegate keeps
-its complete visible rows and the parent still sees only reports. Compaction
-is entirely automatic: `new_context` remains denied to delegates, because
-executing it would set the parent runtime's pending-compaction flag.
+its complete visible rows and the parent still sees only reports. Delegate
+compaction is entirely automatic; no model-facing compaction tool exists.
 
 **Events and context.** Every event a delegate emits carries
 `parentToolCallId` and `agentName` on its envelope, and Electron main copies both

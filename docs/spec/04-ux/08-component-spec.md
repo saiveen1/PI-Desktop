@@ -1818,9 +1818,9 @@ storage but compose into one assistant turn until the next user message.
 - Context compaction never removes, collapses, or replaces visible message
   rows. It adds one non-message divider row per compaction, anchored after the
   last message that checkpoint covers; the row ends whatever assistant turn it
-  falls inside, and a row whose anchor no longer exists is not drawn. The
-  `new_context` tool is a normal tool call and reaches the processing group like
-  any other.
+  falls inside, and a row whose anchor no longer exists is not drawn. Automatic
+  compaction has no model tool activity row; manual `/compact` retains its
+  existing explicit feedback.
 
 ### 7.5 Accessibility
 

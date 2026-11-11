@@ -1084,9 +1084,10 @@ may be retained while exactly one workspace supplies the visible shell context.
 
 - `turn_end` marks one completed model/tool turn and may be followed by another
   provider request. It never re-enables the composer or session configuration.
-- Automatic context protection evaluates after every `turn_end` and runs
-  inline: the user waits for it. The model can also ask for it early through
-  `new_context`, which lands at the same boundary.
+- Automatic context protection is runtime-owned, evaluates after every `turn_end`,
+  and runs inline: the user waits for it. It begins at
+  `floor(hardLimit * 0.9)` before the next provider request; no model tool or
+  model-facing reminder can request it.
 - `compaction_start` keeps the session running. Threshold and overflow
   `compaction_end` events remain inside the active run; only `agent_end` or
   `error` settles it. A manual-only checkpoint settles on `compaction_end`.

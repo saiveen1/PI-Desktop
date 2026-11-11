@@ -8261,7 +8261,7 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
   results without finishing the agent run. Automatic protection is always on
   and has no settings.
 - **Steps**:
-  1. Start one agent task whose tool loop grows past the hard budget.
+  1. Start one agent task whose tool loop grows past 90% of the hard budget.
   2. Let at least three `turn_end` events occur before `agent_end`; observe the
      composer/session controls, processing rows, transcript, and toasts.
   3. Continue until a checkpoint is installed, then allow the task to finish.
@@ -8273,8 +8273,11 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
      as naked historical user messages.
   7. Repeat with a provider fixture that returns Bedrock's
      `prompt is too long: N tokens > M maximum` once.
-  8. Run a turn where the model calls `new_context` well below the hard budget.
+  8. Verify `new_context` is absent from the active and ToolSearch-discoverable
+     tool catalogs, then replay a legacy transcript row that names it.
   9. Invoke `/compact` manually while idle.
+  10. Request compaction through trusted-extension `ctx.compact()` below the
+      automatic threshold, then continue across two tool-turn boundaries.
 - **Expected**:
   - The summary request of every checkpoint carries the session's own
     conversation identity: on the Responses-shaped providers
@@ -8302,9 +8305,14 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
     usage replaces the estimate, and reopening the session after a restart
     shows the same estimate (#2015; unit coverage in
     `apps/desktop/test/compaction-context-usage.test.mjs`).
-  - The `new_context` call appears as a normal tool activity row, returns
-    immediately, and the checkpoint is created at the following turn boundary
-    rather than mid-turn.
+  - `new_context` is absent from active and ToolSearch-discoverable catalogs;
+    a legacy transcript row naming it remains visible as history but cannot
+    reactivate the tool or create a checkpoint. Budget reminders remain but
+    never invite the model to invoke a compaction tool. At about 20% usage,
+    normal tool turns continue without creating a checkpoint.
+  - An explicit trusted-extension request still compacts at the next boundary
+    and is consumed once. Disabling and re-enabling automatic protection never
+    restores the removed model tool.
   - Opening the context usage inspector after a checkpoint shows one line with
     the compaction count and the newest summary's token estimate; before any
     checkpoint that line is absent.
@@ -8350,8 +8358,8 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
     prompt crosses the hard budget, the runtime rebuilds a smaller tail from
     the full transcript and carries the existing summary forward instead of
     reporting that there is no new context to compact.
-  - The budget reminders appear at most once each per checkpoint window, never
-    in the transcript, and never in a persisted system prompt.
+  - The two budget reminders retain their existing thresholds and occur at most
+    once each per checkpoint window; neither invites a model-controlled switch.
   - Idle `/compact` succeeds and shows its own informational toast on top of the
     compaction warning, because the user asked for it. Compaction failures
     surface once through `CONTEXT_COMPACTION_FAILED` without duplicate error

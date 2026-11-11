@@ -237,3 +237,14 @@ the preceding model/tool turn. A failed soft-trigger compaction may proceed only
 while the context remains below `hardLimit`; at or above the hard boundary the
 runtime still blocks the provider request. No settings, background work, host
 protocol, or storage semantics are added.
+
+## Amendment (2026-11-11, runtime-owned context compaction)
+
+The automatic inline lifecycle and the `floor(hardLimit * 0.9)` trigger remain.
+The model-facing `new_context` tool is removed from active and discoverable
+catalogs. Both budget reminders remain, without the invitation to call that tool.
+User `/compact` and trusted-extension `ctx.compact()` remain explicit initiators;
+the compaction families, retention, checkpoint storage, and transcript behavior
+are unchanged. The existing subagent deny-list entry remains, and historical
+tool results cannot restore a removed built-in. See
+[runtime-owned context compaction](runtime-owned-context-compaction.md).

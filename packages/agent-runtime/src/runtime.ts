@@ -968,28 +968,12 @@ const CONTEXT_ROLLOVER_SUMMARY = [
   "Ask before assuming anything about work that is not visible here.",
 ].join("\n\n");
 
-/**
- * Codex's model-facing compaction tool: no parameters, and the description is
- * its wording verbatim. The model cannot know how much room is left, so the
- * tool is only useful together with the budget reminders below.
- */
 /** An abort the error classifier recognizes structurally, not by message. */
 function turnAbortedError(message: string): Error {
   const error = new Error(message);
   error.name = "AbortError";
   return error;
 }
-
-const CONTEXT_COMPACTION_TOOL_NAME = "new_context";
-const CONTEXT_COMPACTION_TOOL_DESCRIPTION =
-  "Start a new context window. Does not clear, reset, or otherwise affect environment state.";
-/** Codex's `NEW_CONTEXT_WINDOW_MESSAGE`, one per family. */
-const CONTEXT_COMPACTION_TOOL_REPLY: Record<CompactionStrategy, string> = {
-  fresh_window:
-    "A new context window will start without summarizing conversation history.",
-  summary:
-    "A new context window will start with a summary of the conversation history.",
-};
 
 /**
  * Two-tier budget reminder, matching Codex's `TokenBudgetReminder` and
@@ -1008,7 +992,7 @@ function contextBudgetReminder(remaining: number): string {
     "<context_budget>",
     `About ${remaining.toLocaleString("en-US")} tokens of working context remain before this conversation is compacted.`,
     "Start closing out: write anything durable to files, and prefer targeted reads over broad exploration.",
-    `You may call ${CONTEXT_COMPACTION_TOOL_NAME} to start the new window yourself once the current step is at a clean stopping point.`,
+    "The runtime manages compaction automatically; continue the current task.",
     "</context_budget>",
   ].join("\n");
 }
@@ -2076,8 +2060,8 @@ export class DesktopAgentRuntime {
   private readonly delegationMessages = new DelegationMessages();
   /** The in-flight checkpoint was cut short by Stop/dispose, not by a failure. */
   private compactionAborted = false;
-  /** Set by the `new_context` tool, consumed at the next turn boundary. */
-  private pendingModelCompaction = false;
+  /** Set by trusted extension ctx.compact(), consumed at the next turn boundary. */
+  private pendingExtensionCompaction = false;
   /** One-shot request to finish the current turn at the next boundary. */
   private gracefulStopRequested = false;
   /** Codex's `claim_*` flags: one of each reminder per context window. */
@@ -3088,7 +3072,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
         };
       },
       compact: () => {
-        runtime.pendingModelCompaction = true;
+        runtime.pendingExtensionCompaction = true;
       },
       getSystemPrompt: () => runtime.agent.state.systemPrompt,
       getActiveTools: () => runtime.activeTools().map((tool) => tool.name),
@@ -4149,9 +4133,6 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       }),
     ];
     for (const tool of subagentTools) this.builtinTools.add(tool);
-    const contextTools = this.compactionEnabled
-      ? [this.buildContextCompactionTool()]
-      : [];
     // Trusted extension tools are non-core: the per-mode allowlist and
     // ToolSearch deferral treat them like plugin tools (spec 16 §7).
     const extensionTools = this.extensionRunner?.getAgentTools() ?? [];
@@ -4163,7 +4144,6 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       ...skillTools,
       ...modeTools,
       ...subagentTools,
-      ...contextTools,
       ...extensionTools,
     ];
   }
@@ -4277,14 +4257,12 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       "BrowserPreview",
       "Bash",
       ASK_TOOL_NAME,
-      CONTEXT_COMPACTION_TOOL_NAME,
       SUBMIT_TOOL_NAMES[kind],
     ]).has(name);
   }
 
   private isCoreTool(name: string): boolean {
     return (
-      name === CONTEXT_COMPACTION_TOOL_NAME ||
       retainModeToolDeclaration(name) ||
       MODE_TRANSITION_TOOL_NAMES.has(name) ||
       // The whole delegation lifecycle stays in the core set rather than the
@@ -6912,33 +6890,6 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     this.setAgentSystemPrompt(this.composeSystemPrompt());
   }
 
-  /**
-   * The model side of compaction, copied from Codex: a parameterless request
-   * for a new context window. It only records the request — compaction happens
-   * at the next turn boundary, where the host already owns it, so a model that
-   * calls this mid-batch does not lose the results it is still holding.
-   */
-  private buildContextCompactionTool(): AgentTool {
-    return {
-      name: CONTEXT_COMPACTION_TOOL_NAME,
-      label: "New Context",
-      description: CONTEXT_COMPACTION_TOOL_DESCRIPTION,
-      parameters: Type.Object({}),
-      execute: async () => {
-        this.pendingModelCompaction = true;
-        return {
-          content: [
-            {
-              type: "text",
-              text: CONTEXT_COMPACTION_TOOL_REPLY[this.compactionStrategy],
-            },
-          ],
-          details: { queued: true },
-        };
-      },
-    };
-  }
-
   private startRunDiagnostics(turnId: string, startedAt: number): void {
     this.runDiagnosticMessage = undefined;
     this.runDiagnostics = new RunDiagnosticsTracker({
@@ -7425,9 +7376,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
 
   setCompactionSettings(settings?: ContextCompactionSettings): void {
     this.compactionEnabled = compactionEnabled(settings);
-    this.pendingModelCompaction = false;
-    this.rebuildToolCatalog();
-    this.setAgentTools(this.activeTools());
+    this.pendingExtensionCompaction = false;
   }
 
   private contextBudget(messages: AgentMessage[]): ContextBudget {
@@ -7673,7 +7622,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     const budget = this.contextBudget(context.messages);
     const hardLimitReached = budget.tokens >= budget.hardLimit;
     if (!this.compactionEnabled) {
-      this.pendingModelCompaction = false;
+      this.pendingExtensionCompaction = false;
       if (hardLimitReached) {
         throw new Error(
           "CONTEXT_TOO_LARGE: context exceeds the safe model budget while automatic compaction is disabled",
@@ -7685,10 +7634,10 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     const automaticThresholdReached =
       budget.tokens >= automaticCompactionThresholdFor(budget);
     // Compact deterministically before the request approaches the hard limit.
-    // `new_context` remains an optional earlier model request.
-    const modelRequested = this.pendingModelCompaction;
-    this.pendingModelCompaction = false;
-    if (!automaticThresholdReached && !modelRequested) {
+    // Trusted extensions retain their explicit compaction API; models do not.
+    const extensionRequested = this.pendingExtensionCompaction;
+    this.pendingExtensionCompaction = false;
+    if (!automaticThresholdReached && !extensionRequested) {
       return { context: this.withContextBudgetReminder(context, budget) };
     }
 

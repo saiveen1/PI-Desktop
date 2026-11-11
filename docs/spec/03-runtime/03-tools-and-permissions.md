@@ -138,7 +138,6 @@ Let the agent get things done, but stay under control by default.
 | Tool | Risk | Description |
 |---|---|---|
 | `Read` | low | Read files within the workspace; returns line-numbered content and a `[path#TAG]` header |
-| `new_context` | low | Start a new context window at the next turn boundary; takes no parameters and changes no environment state |
 | `Glob` | low | List files by pattern |
 | `Grep` | low | Content search; coordinated calls use per-file native leases, uncoordinated calls may use system `rg`; mints a per-file `tag` |
 | `BrowserPreview` | low | Open a workspace-relative preview in the bundled Browser plugin (fails if `pi.browser` is disabled) |
@@ -186,6 +185,10 @@ mode's deferred catalog. The host permission,
 workspace/scratch containment, timeout, and audit rules do not change when a
 tool is loaded. `ToolSearch` itself never executes a workspace operation and
 never bypasses host-core policy.
+The built-in `new_context` tool is removed from active and deferred catalogs.
+It cannot be discovered through `ToolSearch`. Its existing subagent deny-list
+entry remains; historical tool results remain readable but cannot restore a
+removed built-in tool.
 
 `JevClassify` is offered only in Agent mode, only when explicitly enabled in
 Settings → Models, and only while its TypeSafe key is available. It is a
@@ -925,18 +928,19 @@ for the current key-log policy.
 
 ### 10.1 Plan and Goal control tools
 
-`new_context` is available in every mode and needs no confirmation: it only asks
-the runtime to compact at the next turn boundary, which the host would do on its
-own once the hard budget is reached (see
-[02-agent-runtime](02-agent-runtime.md) §5.1). A submit
-tool is available only in its own contract mode and must be the only tool call in its assistant batch. It preserves
-the exact Markdown bytes in a new unique artifact under the kind's directory
-(`.pi/plan/*.md` for `SubmitPlan`, `.pi/goal/*.md` for `SubmitGoal`)
-through host-core before creating one pending approval. `EnterPlanMode` and
-`EnterGoalMode` are available only in Agent, and each must be the only tool call
-in its batch. The host validates the durable mode, the proposal kind, and the
-active-turn/configuration boundary before any transition; the visible tool list
-is guidance, not the security boundary.
+Context compaction is runtime-owned, not a built-in model tool. `new_context`
+and historical `CompactContext` are not registered by the runtime in any mode;
+legacy calls cannot reactivate a removed built-in. The user's idle `/compact`
+command and trusted-extension `ctx.compact()` remain explicit initiators outside
+the model tool catalog. A
+submit tool is available only in its own contract mode and must be the only tool
+call in its assistant batch. It preserves the exact Markdown bytes in a new
+unique artifact under the kind's directory (`.pi/plan/*.md` for `SubmitPlan`,
+`.pi/goal/*.md` for `SubmitGoal`) through host-core before creating one pending
+approval. `EnterPlanMode` and `EnterGoalMode` are available only in Agent, and
+each must be the only tool call in its batch. The host validates the durable
+mode, the proposal kind, and the active-turn/configuration boundary before any
+transition; the visible tool list is guidance, not the security boundary.
 
 ### 10.2 Delegation and subagent tool scope (D201, ADR 0062)
 
