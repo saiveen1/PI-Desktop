@@ -208,6 +208,342 @@
   },
   "releases": [
     {
+      "version": "0.22.0-beta.9",
+      "sourceCommit": "bf47f63d43b38d84c960262d829f240d7381dfd0",
+      "sourceFingerprint": "380f399eae59c39ba7c2205f02c4e727887d072fd6a4ee30e0c8aa044a18ce82",
+      "versionOverride": {
+        "from": "0.22.0-beta.8",
+        "to": "0.22.0-beta.9"
+      },
+      "buildId": "20261111T184751186Z-gbf47f63d43b3-117c5691",
+      "builtAt": "2026-11-11T18:52:05.167Z",
+      "sha256": "ce4d8ef239fb54dce03e1920f8f10aa72d94624d437e205e7688d2753583c67d",
+      "artifact": "PI-Desktop-Personal-Setup-0.22.0-beta.9-20261111T184751186Z-gbf47f63d43b3-117c5691.exe",
+      "changes": [
+        {
+          "commit": "bf47f63d43b38d84c960262d829f240d7381dfd0",
+          "subject": "feat(runtime): add provider stream idle policy",
+          "category": "Added"
+        },
+        {
+          "commit": "aa5f26085046d1f9e8af305ce22f556b420ae829",
+          "subject": "fix(desktop): clear stale session running indicators",
+          "category": "Fixed"
+        },
+        {
+          "commit": "5d332f0d445238d4ea4e5c6f09e1efcc22316faa",
+          "subject": "fix(runtime): keep context compaction under runtime control",
+          "category": "Fixed"
+        },
+        {
+          "commit": "9d82ec2abea85144915870a1130319ca2fa711bd",
+          "subject": "test(mcp): compare the stdio cwd against the resolved temp root",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "392e0319914f5fd778d3f765bfd2cd468d91c44c",
+          "subject": "docs(spec): keep the match-null sentence intact around the drive-path note",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "a79b03fa6f68d62ed05205e00c798fb377e61c4f",
+          "subject": "docs(files): write the git deadline comment in English",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "5b4292dc3f2e7b0e47253c33997c0bf22e4667e6",
+          "subject": "test(agent-runtime): keep the structured-status case free of balance wording",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "c5c5db1460022e8f7a7623b0cd75ad22749b9d11",
+          "subject": "fix(mcp-control): expose agent/pendingInteractive in the reviewed catalog",
+          "category": "Fixed"
+        },
+        {
+          "commit": "9f0cd68502f6761e6f391256fa052d17fa24e10e",
+          "subject": "fix(agent-runtime): parse OpenAI \"Error code: NNN\" statuses",
+          "category": "Fixed"
+        },
+        {
+          "commit": "8dfd8db57aa7b7178e747d74873723eaffc5b6ad",
+          "subject": "fix(agent-runtime): leave unexecuted calls from failed turns out of compaction file ops",
+          "category": "Fixed"
+        },
+        {
+          "commit": "aad6054f6c26e443c13470445a84379fd95c7406",
+          "subject": "fix(agent-runtime): read DeepSeek, DashScope and Groq max_tokens ranges as output ceilings",
+          "category": "Fixed"
+        },
+        {
+          "commit": "8a601f0dc2730a301414fdbaba9f5fd9738f510b",
+          "subject": "fix(agent-runtime): skip failed and aborted turns when retaining reasoning",
+          "category": "Fixed"
+        },
+        {
+          "commit": "d785b89d8743e6f4111a68837ba3d6a86ceb729e",
+          "subject": "fix(storage): skip non-directory entries when scanning browser partitions",
+          "category": "Fixed"
+        },
+        {
+          "commit": "564854d33420be6b737e9812c20ca5ac161d09d2",
+          "subject": "fix(agent-runtime): send a Claude Code identity subscription models accept",
+          "category": "Fixed"
+        },
+        {
+          "commit": "211cae52a495c8608210e2320822e4fb04d31cfe",
+          "subject": "perf(desktop): read only session metadata where the transcript is unused",
+          "category": "Improved"
+        },
+        {
+          "commit": "61add8835b5bb630efc572d4b9364728091351f0",
+          "subject": "fix(mcp): retry project-scoped server connections",
+          "category": "Fixed"
+        },
+        {
+          "commit": "0b4ea82c9abed5da3548de68a7597fa80f5a307a",
+          "subject": "fix(agent-runtime): treat insufficient balance wording as terminal",
+          "category": "Fixed"
+        },
+        {
+          "commit": "b41191bf9e2ce03b2aa5066216d89a54ae3e6e1e",
+          "subject": "fix(agent-runtime): classify Incorrect/expired API-key wording as unauthorized",
+          "category": "Fixed"
+        },
+        {
+          "commit": "cbec768c91f2ef669fe1a9985f9454faa0fa40f6",
+          "subject": "fix: 防止旧队列读取恢复已送出的提示",
+          "category": "Fixed"
+        },
+        {
+          "commit": "81e5f136a3de359f5ca0a6b8e27c982dc0d5bd7b",
+          "subject": "fix: 保留有界读取期间更新的会话缓存",
+          "category": "Fixed"
+        },
+        {
+          "commit": "ca6cd58ecc547634a81964f87961301ec583461e",
+          "subject": "fix(composer): keep clipboard child stdout binary",
+          "category": "Fixed"
+        },
+        {
+          "commit": "12850d7b6f858fa7a0bb0225579aef53dd7dd822",
+          "subject": "test(e2e): show the composer window while probing",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "4746dbf46e561ccbc105d2ef8e5d3408fd959653",
+          "subject": "fix(composer): pipe Finder metadata to plutil",
+          "category": "Fixed"
+        },
+        {
+          "commit": "4e8bc09af7ca6576fd519e3b9134228f6c325fe3",
+          "subject": "test(composer): cover PowerShell clipboard adapter",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "31d4cb3c3a69a9806ef2b0963004a8957e273705",
+          "subject": "Preserve spacing between integrated E2E scenarios",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "c870341daf5d6f76c15f923dc0391445d314239d",
+          "subject": "fix(composer): replace execFileSync with async execFile to prevent main-process hang",
+          "category": "Fixed"
+        },
+        {
+          "commit": "3717ef36c19745ad75a721135d0c6a24c7b2aa04",
+          "subject": "fix: 停止请求失败时保留会话运行状态",
+          "category": "Fixed"
+        },
+        {
+          "commit": "20cdaef74fcf6674f723f3d815c750c9f446e9b8",
+          "subject": "fix: 防止旧全量历史读取覆盖新会话缓存",
+          "category": "Fixed"
+        },
+        {
+          "commit": "1a59b6a81361929f9bab8db86c9baa81e46c2085",
+          "subject": "fix: 让扩展思考强度调整进入实际请求状态",
+          "category": "Fixed"
+        },
+        {
+          "commit": "71d07c14f30dea4d1fa86fb85776109a214bfc34",
+          "subject": "fix: 按会话顺序写入空闲模型配置",
+          "category": "Fixed"
+        },
+        {
+          "commit": "f13c792dc043bd90761062f069d41919522b3644",
+          "subject": "fix: 文件索引在 Git 截止时间直接回退",
+          "category": "Fixed"
+        },
+        {
+          "commit": "8d153dc3bbbd9750e3d25973f9733e791a41b973",
+          "subject": "feat(chat): show a transcript file reference in its folder",
+          "category": "Added"
+        },
+        {
+          "commit": "157092d87d0aa93c245756c060f8a2c2c5453580",
+          "subject": "fix(launcher): show real macOS application icons",
+          "category": "Fixed"
+        },
+        {
+          "commit": "1db9f9b83c7b2d839daecab3393c79d500bf1ba1",
+          "subject": "fix(theme): refresh plugin appearance after system changes",
+          "category": "Fixed"
+        },
+        {
+          "commit": "39384a7cc4b0edd5a8bb2e7d6a76d2107cd864d5",
+          "subject": "fix(modes): settle a closed run's return mode against the catalog",
+          "category": "Fixed"
+        },
+        {
+          "commit": "226be74a8fbec7481b3858e9ae4f705d019842ac",
+          "subject": "fix(modes): keep catalog file operations on the mode's real file",
+          "category": "Fixed"
+        },
+        {
+          "commit": "16a2cd6bb6332342cf35d3682fec37a807e8336b",
+          "subject": "test: 排除 native 文件路由回归中的 Host 更换干扰",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "a209a2ca82205c84d7b36e544f0f0e020d4c99ac",
+          "subject": "feat(modes): complete Goal run controls from the original proposal",
+          "category": "Added"
+        },
+        {
+          "commit": "8a1f7e5889f5682d67b984a5bd95215ef217c197",
+          "subject": "fix(chat): resolve POSIX-rooted Windows drive file refs",
+          "category": "Fixed"
+        },
+        {
+          "commit": "5a5c63ee44d4840f8ac7c485770e107d7d81693e",
+          "subject": "docs(modes): render workflow placeholders literally in VitePress",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "14f17caf8961bccee6ff80bd32c8173e51da6369",
+          "subject": "fix(sidebar): show label colors before conversation titles",
+          "category": "Fixed"
+        },
+        {
+          "commit": "4ffdf771a3b05960e3155f7f7df051c6c4a29d54",
+          "subject": "fix(delegations): restore pointer input for global history",
+          "category": "Fixed"
+        },
+        {
+          "commit": "2bbab2524a3a2a0210187ef6f5ad7947daf49abd",
+          "subject": "fix(release): retry transient stapler validation failures",
+          "category": "Fixed"
+        },
+        {
+          "commit": "5a0d9ca9470cfbcc0d73d245fed2e71d1c0c44d3",
+          "subject": "fix(session-launch): apply the stored binding to the session's model config",
+          "category": "Fixed"
+        },
+        {
+          "commit": "b87d68049663c38a02bfb57f8dff640204b15818",
+          "subject": "test: 补充原生图片粘贴的兼容性验证",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "0271ec35d4438e91b5d8711bfc9cd6d8339b91c2",
+          "subject": "fix: 截图粘贴时跳过原生目录扫描等待",
+          "category": "Fixed"
+        },
+        {
+          "commit": "fb5ad1a9c7f321c17d200672459874c0399a9863",
+          "subject": "test: 对齐系统通知和真实重启的子代理状态断言",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "71cee3a78d0970c8c7c03103247c156b06430694",
+          "subject": "fix: 在 steering 后为恢复回复分配新消息身份",
+          "category": "Fixed"
+        },
+        {
+          "commit": "5d6e14e5ce77894d7e57bb171c103e6b5da90285",
+          "subject": "fix: 保留系统通知之前子代理的运行状态",
+          "category": "Fixed"
+        },
+        {
+          "commit": "7f058a9d9fc5a2e71f0e21ad9a6adc54c5cca123",
+          "subject": "fix: 让文件管理器 Git 截止时间直接结束等待",
+          "category": "Fixed"
+        },
+        {
+          "commit": "9ebe54860d786582516957e61ce1c6ee7d5ffc6e",
+          "subject": "docs: 修正文件访问回归验证命令格式",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "a5e3b3626cf11e947e87fd23ce056201b9046f7d",
+          "subject": "fix: 修复 native Pi 会话文件访问来源路由",
+          "category": "Fixed"
+        },
+        {
+          "commit": "06926bc7d100ba68ef1074e1445423040f35c18c",
+          "subject": "chore(release): record 0.22.0-beta.8 personal candidate",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "233022a499974d1857996c71f059dd460d7a29b1",
+          "subject": "test(modes): preserve Plan coverage and reject legacy Goal activation",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "990442fb8c3d7c6480cded1f56d9041decdf7d4d",
+          "subject": "fix(modes): validate integrated workflows and approval fixtures",
+          "category": "Fixed"
+        },
+        {
+          "commit": "d06c4436ebee6b3724da95f99e2e70ea5c8e45a3",
+          "subject": "fix: 将会话 scratch 路径移到系统提示末段",
+          "category": "Fixed"
+        },
+        {
+          "commit": "1bae9d69c5517fbafe8172830724dd6fb41d7ce9",
+          "subject": "docs(files): refresh bundled mutation repair provenance",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "4e7bbcbbf549ecd2c2c9c2077f4a64785bc7c5ba",
+          "subject": "fix: 激活分支时清除旧会话切换状态",
+          "category": "Fixed"
+        },
+        {
+          "commit": "eb5850d53b9972cdb4f669f738ded2b27cf7319d",
+          "subject": "fix: 明确提示 macOS 远程 Host 安装包尚未提供",
+          "category": "Fixed"
+        },
+        {
+          "commit": "aed1107f42b5f4abf19e720e25db6cc0dd97da17",
+          "subject": "fix: 修复文件管理器创建和重命名的名称校验",
+          "category": "Fixed"
+        },
+        {
+          "commit": "922058705921e79d45faa747c8586649834e067f",
+          "subject": "fix: 按 MCP 编辑器目标项目校验重复配置",
+          "category": "Fixed"
+        },
+        {
+          "commit": "1131ce96608401d52e376d2bc1cab4f60d0f7b30",
+          "subject": "feat(modes): introduce user-defined staged mode workflows",
+          "category": "Added"
+        },
+        {
+          "commit": "9ec4a942d24f59e728ea9e26debaff17020682ee",
+          "subject": "test: 补充 MCP 导入和编辑归属的交互验证",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "e9af6fa36d6d08d1946612f4397759b1d381b47c",
+          "subject": "fix: MCP 全部筛选下使用所选项目创建配置",
+          "category": "Fixed"
+        }
+      ],
+      "validation": "Offline package checks only; no profile compatibility or Authenticode claim."
+    },
+    {
       "version": "0.22.0-beta.8",
       "sourceCommit": "5f1d0229a82a997156968d38c77248e6d8e663c4",
       "sourceFingerprint": "850299a7d98fd29b259aa992c272b1f5825014b2c29a89d0c3db60e20948c970",
