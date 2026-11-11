@@ -672,7 +672,7 @@ export function listedReadFiles(
 export function formatResumableList(chains: readonly ResumableChain[]): string {
   if (chains.length === 0) return "";
   const lines = [
-    "Reusable subagent sessions (same conversation only). To continue one, pass its `resume` id on Task. Saying \"reuse\" in prose is not enough; omit `resume` to start a new session. Do not pass `model` when resuming.",
+    "Reusable subagent sessions (same conversation only). To continue one, pass its `resume` id on Task. Saying \"reuse\" in prose is not enough; omit `resume` to start a new session. Omit `model` when resuming; an exact repeat of the retained provider/model key is tolerated, never a model or account change.",
   ];
   for (const chain of chains) {
     const listed = listedReadFiles(chain.readFiles);

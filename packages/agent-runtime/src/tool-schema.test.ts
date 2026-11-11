@@ -63,3 +63,14 @@ it("declares an integer bounded context minimum and documents zero as no minimum
     description: expect.stringContaining("0"),
   });
 });
+
+it("keeps resume model repetition optional without advertising a model switch", () => {
+  const declaration = subagentTaskDeclaration({
+    definitions: [], hasOverrides: false, defaultGuidance: "", optInGuidance: "",
+  });
+  expect(declaration.parameters.required).toEqual(["agent", "task"]);
+  expect(declaration.description).toContain("Omit `model` when resuming");
+  expect(declaration.parameters.properties.model).toHaveProperty("description", expect.stringContaining("exact repeat of the retained provider/model key"));
+  expect(declaration.parameters.properties.model).toHaveProperty("description", expect.stringContaining("not a model or account change"));
+  expect(declaration.parameters.properties.resume).toHaveProperty("description", expect.stringContaining("omit model"));
+});

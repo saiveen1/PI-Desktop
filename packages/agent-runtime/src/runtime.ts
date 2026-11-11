@@ -4980,18 +4980,13 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           isRecord(params) && typeof params.resume === "string"
             ? params.resume.trim()
             : "";
-        // Model override: Task.model > definition.model pin > session model.
-        const modelOverride =
+        const requestedModel =
           isRecord(params) && typeof params.model === "string"
             ? params.model.trim()
             : "";
-        // Resume keeps the chain's model; a new delegation is the way to switch.
-        if (resume && modelOverride) {
-          return this.subagentToolError(
-            toolCallId,
-            `Resuming a subagent cannot change its model. Omit \`model\` to continue ${resume}, or start a new delegation to pick a different model.`,
-          );
-        }
+        // Resume resolves its own binding; a repeated model is validated below,
+        // never used to select or authorize a different provider.
+        const modelOverride = resume ? "" : requestedModel;
         if (!task) {
           return this.subagentToolError(
             toolCallId,
@@ -5079,6 +5074,12 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
         const resumedProvider = resumedChain
           ? await this.resumedChainProvider(resumedChain, definition)
           : undefined;
+        const resumeModelKey = resumedChain?.latestModelKey ?? (resumedProvider
+          ? `${resumedProvider.id}/${resumedProvider.modelId}` : undefined);
+        if (resume && requestedModel && requestedModel !== resumeModelKey) {
+          return this.subagentToolError(toolCallId,
+            `Resuming a subagent cannot change its model or provider. Omit \`model\` to continue ${resume}, or start a new delegation to pick a different model.`);
+        }
         const modelReason = isRecord(params) && typeof params.modelReason === "string" ? params.modelReason : undefined;
         if (this.delegationPolicy.value.selectionMode === "task-fit" && !resume &&
           this.delegationModelsReadKey !== safeJson(this.delegationPolicy.value)) {

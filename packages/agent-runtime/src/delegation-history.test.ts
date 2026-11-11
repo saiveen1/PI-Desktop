@@ -717,6 +717,9 @@ describe("formatResumableList", () => {
     const text = formatResumableList([chain()]);
     expect(text).toContain("explorer / d1: explore");
     expect(text).toContain("Files read: a.ts");
+    expect(text).toContain("Omit `model` when resuming");
+    expect(text).toContain("exact repeat of the retained provider/model key");
+    expect(text).toContain("never a model or account change");
   });
 
   it("says so when a chain read nothing", () => {

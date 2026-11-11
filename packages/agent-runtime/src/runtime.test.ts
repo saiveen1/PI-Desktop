@@ -11518,34 +11518,29 @@ describe("DesktopAgentRuntime subagents", () => {
       await runtime.dispose();
     });
 
-    it("rejects a model override on resume", async () => {
-      const history: UiMessage[] = [delegateRow("child-1", "task-1")];
-      const runtime = createRuntime({ subagents: [explorer], history });
-      (runtime as any).transcriptHistory.push({
-        id: "task-1",
-        role: "tool",
-        content: "",
-        createdAt: "2026-08-06T00:00:00.000Z",
-        toolCallId: "task-1",
-        toolName: "Task",
-        toolArgs: { agent: "explorer", task: "Explore." },
-        toolResult: { details: { delegationId: "del-1" } },
-        toolStatus: "success",
-      });
-
+    it.each([
+      { model: "local/local-model", accepted: true },
+      { model: "local/another-model", accepted: false },
+      { model: "other-account/local-model", accepted: false },
+    ])("validates a resumed model against the independently restored binding: $model", async ({ model, accepted }) => {
+      const runtime = createRuntime({ subagents: [explorer], history: [
+        restartedTaskRow("task-1", "del-1", { status: "stopped", modelId: provider.modelId }),
+        delegateRow("child-1", "task-1"),
+      ] });
       subagentRuns.calls.length = 0;
-      const result = await startTask(runtime, "task-2", {
-        agent: "explorer",
-        task: "More.",
-        resume: "del-1",
-        model: "local/local-model",
-      });
-
-      expect(String((result.details as any).error)).toContain(
-        "cannot change its model",
-      );
-      expect(subagentRuns.calls).toHaveLength(0);
-      await runtime.dispose();
+      subagentRuns.deferred = false;
+      try {
+        const result = await startTask(runtime, "task-2", {
+          agent: "explorer", task: "More.", resume: "del-1", model,
+        });
+        expect(subagentRuns.calls).toHaveLength(accepted ? 1 : 0);
+        if (accepted) {
+          expect(result.details).toMatchObject({ resumedFrom: "del-1" });
+          expect(subagentRuns.calls[0].provider).toBe(provider);
+        } else {
+          expect(result.details).toMatchObject({ error: expect.stringContaining("cannot change its model or provider") });
+        }
+      } finally { await runtime.dispose(); }
     });
 
     it("reports an unknown resume id without starting a delegate", async () => {
@@ -12070,7 +12065,7 @@ describe("DesktopAgentRuntime subagents", () => {
       } finally { await runtime.dispose(); }
     });
 
-    it("allows only one parallel resume while model authorization yields (#841)", async () => {
+    it.each([undefined, "local/local-model"])("allows only one parallel resume while model authorization yields (#841): model=%s", async model => {
       const runtime = createRuntime({
         subagents: [explorer],
         history: [restartedTaskRow("task-1", "del-1", { status: "completed", modelId: provider.modelId }), delegateRow("child-1", "task-1")],
@@ -12078,7 +12073,7 @@ describe("DesktopAgentRuntime subagents", () => {
       subagentRuns.calls.length = 0;
       subagentRuns.deferred = true;
       try {
-        const results = await Promise.all(["task-2", "task-3"].map((id) => startTask(runtime, id, { agent: "explorer", task: "Continue.", resume: "del-1" })));
+        const results = await Promise.all(["task-2", "task-3"].map((id) => startTask(runtime, id, { agent: "explorer", task: "Continue.", resume: "del-1", model })));
         expect(results.filter((result) => !result.details.error)).toHaveLength(1);
         expect(results.find((result) => result.details.error)?.details.error).toContain("still running");
         expect(subagentRuns.calls).toHaveLength(1);

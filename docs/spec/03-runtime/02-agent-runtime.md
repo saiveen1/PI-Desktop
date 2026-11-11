@@ -1523,10 +1523,17 @@ chain may sit above it until it settles.
 
 Resume is strictly same-session and never queues: resuming a running
 delegation is a tool error telling the parent to converge with `TaskWait`
-first, and a chain has at most one live record at a time. `model` and `resume`
-together are rejected, and a resumed run keeps the chain's recorded binding:
-the `providerId/modelId` key it resolved is preferred and reauthorized on demand
-when its turn grant has expired. A chain rebuilt from the transcript is matched
+first, and a chain has at most one live record at a time. Prefer omitting `model`
+on resume. A nonempty `model` is accepted only when it exactly repeats the
+chain's retained `providerId/modelId` key (after trimming outer whitespace), or,
+for a transcript-restored chain without that key, the binding independently
+resolved by the existing resume rules. That redundant field is not a model
+override and cannot influence provider resolution, selection, or authorization.
+A different model, another account with the same model id, a bare model id, or
+an unverifiable identity is a tool error directing the caller to omit `model`
+or start a new delegation. The chain's recorded binding remains preferred and
+reauthorized on demand when its turn grant has expired. A chain rebuilt from the
+transcript is matched
 by model id only among the current definition pin/fallbacks, the session binding,
 and currently authorized overrides. Other definitions' private pins are excluded.
 A known key never falls through to another account just because its model id

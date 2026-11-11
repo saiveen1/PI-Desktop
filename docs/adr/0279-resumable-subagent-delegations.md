@@ -99,7 +99,7 @@ model can act on:
 | `stopped` / `aborted` | explicit resume permitted after retirement; never automatic |
 | `interrupted` (the app closed mid-run) | explicit resume from retained transcript/checkpoint |
 | `Task.agent` differs from the chain's agent | name mismatch, lists available |
-| `Task.model` present on a resume | not allowed on a resumed run — start a new delegation to change models |
+| `Task.model` present on a resume | exact retained `providerId/modelId` repeats are treated as omitted; model/account changes and unverifiable identities are rejected |
 | large retained history | existing model-context seeding bounds call/result pairs; read volume alone does not reject resume |
 | the chain resolves but has neither rows nor a validated checkpoint | the chain is dropped and reported as having no recorded history; the same id is never listed as reusable |
 
@@ -118,6 +118,17 @@ run continues on the binding the definition resolves to now and records the
 previous model id in the delegation's lifecycle details as `modelChangedFrom`:
 refusing instead would strand the chain forever, and swapping silently would hand
 the same conversation to a different model with no trace.
+
+Amendment (2026-11-12): a redundant `Task.model` must not strand a reusable
+chain in a parameter-error loop. Trim outer whitespace, then compare against
+the recorded key, or the independently resolved resume binding when a restored
+chain has no key. Never use this field to resolve a provider on a resume.
+Matching repeats follow exactly the omitted-model path, including fresh pool
+membership, authorization, fallback, cancellation, and concurrency checks.
+Different accounts remain distinct even if their model ids match. Missing or
+unverifiable identities fail with an instruction to omit `model`; they are not
+guessed or silently accepted. This is an additive admission relaxation with no
+storage or protocol-version change.
 
 ### 5. Cancellation ends execution without destroying explicit resume
 

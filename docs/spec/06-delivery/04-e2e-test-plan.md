@@ -14073,7 +14073,11 @@ This test plan spec is accepted when:
      ids as reported by `TaskWait`.
   6. Let a delegation fail after one successful read, then call `Task.resume`
      for it.
-  7. Send one `Task` call that carries both `resume` and `model`.
+  7. Resume a settled chain with `model` repeating its exact `providerId/modelId`
+     key, including outer whitespace; repeat for a stopped and transcript-restored
+     chain. Then try a different model, another account with the same model id,
+     and a bare model id. Revoke authorization or remove the pool before a
+     matching-key resume, and try two matching-key resumes concurrently.
   8. Remove the chain's recorded model from the configuration, then `Task.resume`
      the chain and read its delegation lifecycle details and card.
   9. Settle two `scout` chains, `resume` the older one, settle a third chain for
@@ -14106,8 +14110,12 @@ This test plan spec is accepted when:
     No work starts merely because cancellation finished or the app relaunched.
   - Step 6 resumes the failed chain like a completed one: the reads it already
     made seed the new run, and its failed assistant row is not replayed.
-  - Step 7 is refused as a tool error: a resumed run keeps the chain's model, and
-    the message points at starting a new delegation to change models.
+  - Step 7 accepts the exact repeated binding as if `model` were omitted,
+    preserving retained history and starting only one child. The requested key
+    never selects a new provider: different, bare, and unverifiable identities
+    fail before child execution. Fresh authorization and current pool membership
+    still apply; revocation or an empty pool cannot be bypassed by the repeated
+    key. Concurrent resumes cannot start two workers on one chain.
   - Step 8 still resumes, on the binding the definition resolves to now, and the
     delegation's lifecycle details carry the previous model id as
     `modelChangedFrom`. The parent sees it through the lifecycle snapshot it
@@ -14144,6 +14152,7 @@ This test plan spec is accepted when:
   transcript chain grouping are unit/regression covered
   (`packages/agent-runtime/src/delegation-chain.test.ts`,
   `delegation-history.test.ts`, `runtime.test.ts`,
+  `delegation-hot-policy-user-path.test.ts`,
   `apps/desktop/test/assistant-turns.test.mjs`); the desktop journey needs a
   capable environment. Required suites: `test:e2e`, `test:e2e:subagents`,
   `test:e2e:transcript`.

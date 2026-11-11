@@ -198,7 +198,7 @@ describe("hot delegation policy through the real parent and child agent loops", 
     } finally { await f.close(); }
   });
 
-  it("uses fresh runPolicy and model membership on an explicit resumed Task in the same turn", async () => {
+  it.each([undefined, "fixture/old"])("uses fresh runPolicy and model membership on an explicit resumed Task in the same turn: model=%s", async model => {
     let f: ReturnType<typeof fixture>;
     let resumed = false;
     f = fixture({ parent: index => {
@@ -209,7 +209,7 @@ describe("hot delegation policy through the real parent and child agent loops", 
       if (settled && !resumed) {
         resumed = true;
         if (typeof started?.delegationId !== "string") throw new Error("Missing initial delegation ID");
-        return immediate(task({ resume: started.delegationId }));
+        return immediate(task({ resume: started.delegationId, ...(model === undefined ? {} : { model }) }));
       }
       return immediate(settled ? text("Resume incorporated.") : call("TaskWait", {}));
     } });
@@ -228,6 +228,72 @@ describe("hot delegation policy through the real parent and child agent loops", 
       expect(details(f.events).at(-1)).toMatchObject({ modelId: "new", runPolicy: expect.objectContaining({ maxToolCalls: 2 }), resumedFrom: expect.any(String) });
     } finally { await f.close(); }
   });
+  it.each([
+    { model: undefined, accepted: true },
+    { model: "", accepted: true },
+    { model: "fixture/old", accepted: true },
+    { model: " fixture/old ", accepted: true },
+    { model: "fixture/new", accepted: false },
+    { model: "other-account/old", accepted: false },
+    { model: "old", accepted: false },
+  ])("validates a redundant resume model without changing its binding: $model", async ({ model, accepted }) => {
+    let args: ToolArgs = { model: "fixture/old", modelReason: "Use the old fixture for this check." };
+    let taskPending = true;
+    const f = fixture({ selectionMode: "task-fit", parent: index => {
+      if (index === 1) return immediate(call("TaskModels", {}));
+      if (taskPending) { taskPending = false; return immediate(task(args)); }
+      return immediate(text("Check incorporated."));
+    } });
+    try {
+      await f.prompt();
+      const original = details(f.events)[0];
+      if (typeof original?.delegationId !== "string") throw new Error("Missing initial delegation ID");
+      args = { resume: original.delegationId, ...(model === undefined ? {} : { model }) };
+      taskPending = true;
+      await f.prompt();
+      const result = details(f.events).at(-1);
+      expect(f.childRequests).toEqual(accepted ? ["old", "old"] : ["old"]);
+      expect(f.approvals).toHaveLength(accepted ? 2 : 1);
+      if (accepted) {
+        expect(result).toMatchObject({ resumedFrom: original.delegationId, modelId: "old" });
+        expect(result?.delegationId).not.toBe(original.delegationId);
+        expect(f.approvals[1]).toMatchObject({ providerId: "fixture", modelId: "old" });
+        expect(f.approvals[1].requestId).not.toBe(f.approvals[0].requestId);
+        const resumedRequest = transport.mock.calls.filter(([binding]) => binding.id === "old").at(-1);
+        expect(JSON.stringify(resumedRequest?.[1])).toContain("old completed");
+      } else {
+        expect(result?.error).toContain("cannot change its model");
+        expect(result?.delegationId).toBeUndefined();
+      }
+    } finally { await f.close(); }
+  });
+
+  it.each(["denied", "removed"] as const)("rechecks authorization for a redundant resume model: %s", async admission => {
+    let resuming = false;
+    let taskPending = true;
+    let args: ToolArgs = { model: "fixture/old" };
+    const f = fixture({ parent: () => {
+      if (taskPending) { taskPending = false; return immediate(task(args)); }
+      return immediate(text("Check incorporated."));
+    }, authorize: async () => resuming
+      ? { decision: "skip", reason: "Resume authorization revoked" }
+      : { decision: "allow", reason: "Initial authorization" } });
+    try {
+      await f.save(policy(["old"]));
+      await f.prompt();
+      const original = details(f.events)[0];
+      if (typeof original?.delegationId !== "string") throw new Error("Missing initial delegation ID");
+      if (admission === "removed") await f.save(policy([]));
+      args = { resume: original.delegationId, model: "fixture/old" };
+      resuming = true;
+      taskPending = true;
+      await f.prompt();
+      expect(f.childRequests).toEqual(["old"]);
+      expect(f.approvals).toHaveLength(admission === "denied" ? 2 : 1);
+      expect(details(f.events).at(-1)).toMatchObject({ code: "DELEGATION_NO_AUTHORIZED_MODEL" });
+    } finally { await f.close(); }
+  });
+
   it("refreshes a pending Task after settings save without restarting the parent", async () => {
     const entered = deferred<void>();
     const consent = deferred<DelegationApprovalDecision>();
