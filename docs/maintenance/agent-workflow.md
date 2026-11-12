@@ -28,7 +28,7 @@ preferences explicitly at user scope.
 ## README maintenance
 
 The update criteria live in
-[AGENTS.md §13](../../AGENTS.md#personal-edition-readme-maintenance), not an
+[AGENTS.md §13](https://github.com/saiveen1/PI-Desktop/blob/main/AGENTS.md#personal-edition-readme-maintenance), not an
 ignored local instruction file. The development workflow and change checklist
 route feature and improvement work through that assessment; delivery records
 whether the bilingual overview changed and why. The

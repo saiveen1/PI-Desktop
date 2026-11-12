@@ -25,7 +25,7 @@ when remote delivery is requested against a verified target remote.
 
 ### R1.1 — Keep the personal-edition overview current
 
-Apply [AGENTS.md §13](../../../AGENTS.md#personal-edition-readme-maintenance)
+Apply [AGENTS.md §13](https://github.com/saiveen1/PI-Desktop/blob/main/AGENTS.md#personal-edition-readme-maintenance)
 when assessing each feature, improvement, or user-relevant fix, including harness
 hardening. Update `README.md` and `README.zh-CN.md` together when the edition's
 overview changes; ordinary internal fixes need no homepage entry. Check originating

@@ -11130,11 +11130,15 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
   normal field and the shortcut, then save. 3) Reload the plugin list and press
   the new shortcut while the app window is focused. 4) Try a reserved app
   shortcut and repeat with the plugin scoped away from the current project.
+  5) Save another field while JSON object/array settings remain untouched, then
+  edit JSON to valid text, empty text, and invalid text and save each draft.
 - **Expected**: Controls are generated from the manifest, values persist in the
   plugin-private settings file, and `plugin:settingsChanged` is delivered. The
   new shortcut invokes the plugin command only in the focused app window and
   matching activation scope. Reserved/conflicting bindings are rejected; no OS
-  global shortcut is registered.
+  global shortcut is registered. Untouched JSON objects/arrays retain their
+  structured values; valid edited text is parsed, empty text saves `{}`, and
+  invalid JSON blocks the write with a field error.
 - **Specs linked**: `07-plugins/02-plugin-manifest-schema.md`,
   `07-plugins/03-plugin-api.md`, `07-plugins/11-plugin-storage-isolation.md`,
   ADR 0159
@@ -17529,16 +17533,21 @@ plugin-form fixtures in an isolated temporary directory at runtime.
 
 - **Preconditions**: Two or three enabled fixture extensions append different markers
   using `event.systemPrompt` in `before_agent_start`; the provider is a local
-  deterministic HTTP/SSE service.
+  deterministic HTTP/SSE service. The extensions also return successive
+  `before_provider_request` payload additions.
 - **Steps**: Run two turns through the real runtime and inspect both provider
   requests. Exercise multiple handlers, explicit replacements (including an
   empty string), missing/malformed returns, exceptions, timeout/late input
-  mutation, and Stop/disposal while a handler waits.
+  mutation, and Stop/disposal while a handler waits. Repeat provider-request
+  dispatches with multiple returning handlers and an unreturned input mutation.
 - **Expected**: All markers reach the provider in extension/registration order,
   once per turn. Identical inputs produce identical prompt bytes. Full string
   replacements remain supported. Only timely returned strings enter the chain;
   failed handlers do not discard earlier additions, cancelled turns send no
-  request, and the next turn can proceed. Other events retain existing folds.
+  request, and the next turn can proceed. Provider-request handlers receive
+  isolated copies of the last returned payload in order; unreturned mutations
+  are discarded and repeated requests do not accumulate additions. Unrelated
+  events retain existing folds.
 - **Specs linked**: `07-plugins/16-trusted-extensions.md` §6; ADR 0214; #1023.
 
 #### E2E-HOOKS-context-every-request: Context handlers shape every provider request

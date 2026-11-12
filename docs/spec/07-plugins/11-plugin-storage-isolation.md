@@ -46,6 +46,10 @@ settings are rejected. Provider API keys stay in the host secret store; the
 separate `provider.oauth` callback can receive only its contribution's OAuth
 credential. No generic plugin-secret read/write API exists.
 
+Generated `json` settings preserve untouched structured draft values. Textarea
+edits are parsed when saving; empty text becomes `{}`, while invalid JSON
+blocks the save with a field error before any settings write.
+
 ## 4. Filesystem and process trust
 
 `pi.fs.*` operates on the declared workspace/user-selected scope; it is not a

@@ -117,7 +117,7 @@ After implementation (or alongside it):
   the same `Policy-Sync:` token, and `pnpm check:agent-policy` passes. The
   reverse applies when only `CLAUDE.md` changed.
 - [ ] README impact was assessed under
-  [AGENTS.md §13](../../../AGENTS.md#personal-edition-readme-maintenance):
+  [AGENTS.md §13](https://github.com/saiveen1/PI-Desktop/blob/main/AGENTS.md#personal-edition-readme-maintenance):
   significant capabilities, user-relevant fixes/harness hardening, changed
   documented workflows/limitations, and stale claims were updated in both
   `README.md` and `README.zh-CN.md` in this task.
