@@ -116,6 +116,21 @@ After implementation (or alongside it):
   `CLAUDE.md` still only delegates to it (no duplicated rules), both files share
   the same `Policy-Sync:` token, and `pnpm check:agent-policy` passes. The
   reverse applies when only `CLAUDE.md` changed.
+- [ ] README impact was assessed under
+  [AGENTS.md §13](../../../AGENTS.md#personal-edition-readme-maintenance):
+  significant capabilities, user-relevant fixes/harness hardening, changed
+  documented workflows/limitations, and stale claims were updated in both
+  `README.md` and `README.zh-CN.md` in this task.
+- [ ] Local attribution was checked against originating commits and surviving
+  code differences at a named upstream revision, with evidence in maintenance
+  documentation. Upstream-only claims were excluded; mixed features describe
+  only the local increment, not the inherited capability.
+- [ ] README changes describe concrete user benefits, keep both languages
+  equivalent, preserve upstream credits, and distinguish source capabilities from
+  recorded releases without unverified claims. Existing sections were revised
+  rather than appending a change log.
+- [ ] Delivery reports the README update or why none was needed; routine internal
+  fixes and test-only changes do not require an unrelated homepage entry.
 - [ ] If architectural boundary changed: ADR is written or updated in `docs/adr/`.
 - [ ] If an implementation default changed: `decisions-log.md` entry updated.
 - [ ] If baseline frozen decisions are affected: baseline bump + explicit ADR (not MVP-normal).

@@ -11,6 +11,7 @@ second rulebook.
 | `AGENTS.md` | Authoritative repository policy for agents and maintainers |
 | `CLAUDE.md` | Short Claude Code / Claude Cowork entry point that delegates to `AGENTS.md` |
 | `docs/spec/` | Authoritative for product behavior, protocols, persistence, and security |
+| `README.md` / `README.zh-CN.md` | Equivalent current-source overviews of this edition's user-facing enhancements |
 | `docs/spec/06-delivery/03-ai-development-workflow.md` | Delivery workflow detail |
 | `docs/spec/06-delivery/05-change-checklist.md` | Pre-delivery checklist |
 | `pnpm check:agent-policy` | Mechanical gate for the two policy files |
@@ -23,6 +24,19 @@ when the two `Policy-Sync:` tokens differ.
 Durable project rules belong in tracked documents. Do not rely on an untracked
 local file or assume a client automatically reads it; configure machine-specific
 preferences explicitly at user scope.
+
+## README maintenance
+
+The update criteria live in
+[AGENTS.md §13](../../AGENTS.md#personal-edition-readme-maintenance), not an
+ignored local instruction file. The development workflow and change checklist
+route feature and improvement work through that assessment; delivery records
+whether the bilingual overview changed and why. The
+[personal-edition provenance map](personal-edition-provenance.md) records local
+increments and excluded upstream claims, including meaningful fixes and harness
+hardening. README is the capability overview, specs define exact behavior, and the
+generated changelog records releases. These have different purposes and must not
+become copies of one another.
 
 ## Build versus release
 

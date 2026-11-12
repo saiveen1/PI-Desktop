@@ -1,134 +1,185 @@
-# PI-Desktop
+# PI-Desktop · Personal Edition
 
 > **Current release line: 0.22.x (beta).**
 
-A local-first desktop workspace for AI agents: projects, sessions, models,
-plugins, and agent workflows in one persistent Electron app.
+An independently maintained, local-first AI agent workspace focused on
+**execution-harness hardening, multi-agent collaboration, and everyday usability**.
 
-This repository is an **independently maintained personal edition** of
-PI-Desktop. It is not an official upstream release, has no public download or
-support channel of its own, and is used on a beta release line. It is based on
-[upstream PI-Desktop](https://github.com/vastsa/PI-Desktop); the original
-project credits and the [LGPL-3.0 license](LICENSE) are retained, and
-upstream remains the source of the original product design and documentation.
+Based on [upstream PI-Desktop](https://github.com/vastsa/PI-Desktop), this edition
+continues to follow upstream updates, reviewing and integrating applicable changes
+while preserving local features and fixes. Features and releases evolve independently.
 
 [简体中文](README.zh-CN.md)
 
----
+## Local additions, hardening, and key fixes
 
-## What this edition is
+The highlights below describe **local increments to the upstream foundation**, not
+the upstream feature catalog. They cover current source, which may be newer than
+[recorded releases](CHANGELOG.md). The [provenance map](docs/maintenance/personal-edition-provenance.md)
+records the compared revisions, originating commits, implementation evidence, and
+excluded upstream features. Recent flows still need broader integration validation;
+beta is not a stability or installed-upgrade guarantee.
 
-- **Sessions and projects** with a multi-select session list, batch
-  archive/unarchive, recycle-bin restore, and confirmed permanent deletion.
-- **Agent delegation** with subagents: model scheduling and grouped approvals,
-  live policy updates, retained checkpoints, explicit retry/resume, and bounded
-  recovery instead of silent stalls.
-- **Chat files**: open with, save as, copy contents, and reveal in folder, plus
-  normalized Windows path references in assistant output.
-- **Notifications** unified across approval, question, and completion signals.
-- **Task continuation** that offers a single bounded follow-up when the current
-  checklist is still unfinished and stops when you stop it.
-- **Personal Windows builds**: one fixed NSIS x64 installer lane with
-  official automatic updates disabled for its personal installers.
+### Execution-harness hardening
 
-Some of these flows are recent and still under integration verification in
-daily use. Treat the beta line as a working state, not a stable-product
-promise. What changed, when, and from which commit is recorded in
-[CHANGELOG.md](CHANGELOG.md), which is derived from Git history rather than
-hand-written marketing notes.
+The harness is the layer that controls agent execution, tool calls, and recovery.
+This edition strengthens the existing framework rather than replacing it.
 
-## Requirements
+- **Broader repeated-failure protection.** Extend the existing Edit/patch guard to
+  Write and repeated identical Bash failures. Successful file changes allow a
+  meaningful retest; new, complete context feedback gets limited recovery room.
+  Host capacity refusals have a separate budget instead of looking like bad edits.
+- **Admission before execution.** Reserve background-command capacity before
+  starting a process, enforce per-session shell limits, and reserve Host handling
+  capacity for completion/cancellation controls. Permission waiting no longer
+  consumes the aggregate tool-request deadline; execution deadlines still apply.
+- **More recoverable tool arguments.** Accept supported legacy Edit replacements
+  with a tag or empty ops, explain conflicting insertion positions, and correct
+  background wait/stop target handling without relaxing file-version, context,
+  or authorization checks.
+- **Bounded correction instead of silent early completion.** When a main Agent
+  prints a tool call as ordinary text, prompt it to issue a real call at most once
+  per user turn—never execute that text directly. A separate, configurable
+  unfinished-checklist continuation can also advance current-turn work once.
+  These may add model usage and do not guarantee completion.
+- **Degenerate-output protection.** Interrupt detected long whitespace/symbol
+  runs in model text or thinking, retain partial results, and avoid automatic
+  replay. Large-output previews are bounded. This is not a general detector of
+  repetitive prose or poor answers.
+- **Explicit waiting and context control.** Main-session model requests gain a
+  configurable transport-idle policy rather than treating every output pause as
+  a broken request to replay. Local idle termination leaves retry to the user.
+  Context compaction remains runtime-controlled rather than a model-triggered
+  tool, while existing automatic and user `/compact` paths remain available.
 
-- Windows 10/11 x64 for the personal installer lane
-- Node.js `>=22.19`, pnpm `>=10`, and a stable Rust toolchain (with MSVC Build
-  Tools on Windows) for source builds
+### More controllable subagent collaboration
+
+- **Unified model pools and approvals.** Add grouped model approvals, recoverable
+  approval controls, live policy updates, and per-conversation candidate pools
+  and approval overrides. On-demand model descriptions support task-specific
+  selection; configurable failure handling remains within authorized models.
+- **Session and global task indexes.** Open the current session's subagents from
+  the topbar, or review cross-project delegation history and retained terminal
+  approval receipts. Historical approval is not fresh consent to run work.
+- **Progress checkpoints and direct follow-up.** Add automatically saved local
+  checkpoints and configurable work budgets to the existing resume mechanism.
+  In local Agent sessions, send instructions to a running child or explicitly
+  resume a settled task. Viewing history alone does not restart it.
+- **More accurate completion and recovery.** Do not treat an old progress message
+  or truncated ending as a final report; coalesce duplicate recovery requests
+  and support resuming work interrupted by a parent failure on the next user turn.
+  Fixed-tool delegates can load available skills without inheriting unrelated
+  plugin/MCP execution tools.
+
+### Conversation organization and notifications
+
+- **Project-scoped groups, colored labels, and deliberate ordering.** Groups
+  control placement; multiple labels do not duplicate conversations. Manual moves
+  and accepted user sends update activity order, not merely opening a chat or
+  receiving streamed output.
+- **Visible selection and reversible deletion.** Extend existing modifier-key
+  selection with checkboxes, selection controls, and batch archive/unarchive.
+  Local Desktop sessions gain a recycle bin with restore and separately confirmed
+  permanent deletion; native Pi and remote sessions are outside this trash flow.
+- **Unified core notification policy.** Bring approvals, questions, failures, and
+  completion under shared channel/sound preferences, with pending actions separate
+  from retained history. Notifications return to the relevant controls without
+  approving or restarting work for you.
+
+### Chat, file, and image refinements
+
+- **Task-first reading.** Collapse activity and thinking by default, show concise
+  task rows and failure summaries, share parent/child detail presentation, and keep
+  recorded file changes accessible during running, stopped, or failed turns.
+- **Expanded file actions.** Add Save as and supported text-content copying to chat
+  references, and extend Open with beyond HTML to default applications.
+- **Tool-image continuity.** Add generic tool-result galleries, preserve historical
+  previews, and group adjacent successful image Reads. Fix image retention and
+  delivery across follow-up requests and child-model contexts, with explicit
+  omission notices when model capability or image limits prevent delivery.
+
+### Fixes that matter in daily use
+
+- **Fix cascading file-tool blocking under multi-agent concurrency.** Long-running
+  searches could hold a Host-wide file lease, causing repeated read/write admission
+  timeouts across sessions and preventing agents from editing files. Use per-file
+  coordination with cancellation and resource cleanup, retaining same-file protection.
+- **Reading restoration that respects newer navigation.** Fix session-switch and
+  delayed-history races so old restoration results do not replace newer reading
+  intent or discard already loaded ranges.
+- **Clearer execution outcomes.** Distinguish failed, denied, skipped, interrupted,
+  and context-required tool results; retain phase/retry diagnostics and clear stale
+  running indicators and retry badges. Also fix rename-input reselection and
+  collapsed approval controls interfering with the composer.
+- **Targeted Windows and file-reference fixes.** Resolve bare filenames under an
+  explicitly stated Markdown directory, normalize references before worktree
+  rebasing, and default runner-child Python standard streams to UTF-8 only when
+  no encoding preference is inherited.
+- **Relocation compatibility.** Preserve project capability overrides across
+  Windows path normalization and remap local conversation-organization paths when
+  moving the data directory, building on the existing migration workflow.
 
 ## Run from source
 
-Run from an existing checkout with the required toolchains installed:
+Requirements: Node.js `>=22.19`, pnpm `>=10`, and a stable Rust toolchain;
+Windows also needs MSVC Build Tools. From the checkout:
 
 ```bash
 pnpm install
 pnpm dev
 ```
 
-`pnpm dev` isolates its data directory by default; it does not read or write an
-installed release profile. See `AGENTS.md` §5 before using
-`pnpm dev --inherit-data-dir`.
+This edition's `pnpm dev` clears inherited data-directory overrides by default.
+Do not point it at a running installation's profile. For checks and opt-in data
+reuse rules, see the [development workflow](docs/spec/06-delivery/03-ai-development-workflow.md).
 
-On Windows, `start-local.cmd` opens a source-launch console without packaging or
-installation. Set `start-local.data-dir.local` (Git-ignored) to one absolute
-existing data-directory path. The launcher refuses detected running owners and
-asks you to confirm a complete offline backup before granting read/write access.
-It does not create the backup or stop processes. `start-local.cmd -CheckOnly`
-checks prerequisites without launching. See the
-[local launcher contract](docs/spec/06-delivery/03-ai-development-workflow.md#windows-local-source-launcher).
+On Windows, [start-local.cmd](start-local.cmd) provides a source-launch console
+without packaging or installation. This is an **explicit existing-profile path**:
+configure the Git-ignored `start-local.data-dir.local`, stop all profile owners,
+and make a complete offline backup first. The launcher asks for confirmation but
+does not create the backup or stop processes. Read the
+[launcher instructions](docs/spec/06-delivery/03-ai-development-workflow.md#windows-local-source-launcher)
+before using it; `start-local.cmd -CheckOnly` checks prerequisites without launching.
 
-Useful checks:
+## Personal Windows builds
 
-```bash
-pnpm typecheck
-pnpm lint
-pnpm -r --if-present test
-pnpm check:agent-policy
-```
-
-## Build a personal installer
+The personal packaging path targets **Windows 10/11 x64** and produces an NSIS
+installer with official automatic updates disabled. Each build has a unique ID,
+source metadata, Git-derived change notes, and a SHA-256 checksum. Build cleanup
+removes intermediates, not previous installers.
 
 ```bash
-pnpm dist:personal --check                          # print the plan, build nothing
-pnpm dist:personal                                  # ordinary build: version unchanged
-pnpm dist:personal --check --release 0.23.0-beta.1  # preview a candidate (example)
-pnpm dist:personal --release 0.23.0-beta.1          # build that candidate
+pnpm dist:personal --check  # Preview the build plan without building
+pnpm dist:personal          # Build without changing the app version
 ```
 
-The build produces one Windows x64 NSIS installer EXE plus a SHA-256 checksum
-under `apps/desktop/release/personal/`, together with build metadata that
-records the exact Git source, dirty state, a unique build identifier, and
-Added/Fixed/Improved/Maintenance notes derived from Git. An ordinary build does
-not change the app version; only an explicitly requested candidate release
-selects a new one.
-
-**Packaging never installs or launches PI-Desktop.** Installing the EXE is your
-own step. Read
-[docs/spec/06-delivery/07-personal-release-runbook.md](docs/spec/06-delivery/07-personal-release-runbook.md)
-for the fixed pipeline, output layout, and its limits.
+Outputs go to `apps/desktop/release/personal/`. **Packaging does not install or
+launch the app.** Candidate releases, verification limits, and artifact details
+are covered by the [personal release runbook](docs/spec/06-delivery/07-personal-release-runbook.md).
 
 ## Documentation
 
-- [Plugin development guide](docs/plugin-development.md) — build a `.piplug`
-  package; the plugin specs remain normative for the API contract.
-- [Specification index](docs/spec/NAV.md) and
-  [architecture baseline](docs/spec/00-baseline.md).
-- [Personal release runbook](docs/spec/06-delivery/07-personal-release-runbook.md).
-- [Change checklist](docs/spec/06-delivery/05-change-checklist.md) and
-  [agent workflow](docs/spec/06-delivery/03-ai-development-workflow.md).
-- [E2E test plan](docs/spec/06-delivery/04-e2e-test-plan.md).
-- [AGENTS.md](AGENTS.md) — the authoritative repository rules for contributors
-  and AI agents.
-- [Policy maintenance map](docs/maintenance/agent-workflow.md) — where durable
-  project rules belong and how the entry points are checked.
-- [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
+- [Change provenance](docs/maintenance/personal-edition-provenance.md) — local
+  increments, meaningful fixes, and upstream items excluded from these highlights.
+- [Release history](CHANGELOG.md) — recorded versions and their source changes;
+  generated from release records, not a log of every unreleased source edit.
+- [Plugin development](docs/plugin-development.md) — build extensions for this
+  workspace; the plugin specifications remain authoritative for API contracts.
+- [Specifications](docs/spec/NAV.md) — detailed behavior and architecture.
+- [Development workflow](docs/spec/06-delivery/03-ai-development-workflow.md) and
+  [change checklist](docs/spec/06-delivery/05-change-checklist.md) — development
+  and verification guidance.
+- [Agent rules](AGENTS.md) and [policy maintenance](docs/maintenance/agent-workflow.md)
+  — repository rules, including keeping this overview current.
+- [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md).
 
-## Scope of this fork
+## Upstream and license
 
-Maintenance is independent of upstream. Public download, issue and community
-endpoints for this edition will be added when the repository is republished;
-upstream's channels are not support endpoints for this version. Upstream sync
-and contribution happen only when explicitly requested against a verified target.
+Thanks to PI-Desktop's original authors and upstream contributors for the
+foundation. This is not an official upstream release; upstream downloads and
+support channels are not distribution or support endpoints for this edition.
+Following upstream means reviewed source integration, not automatic replacement
+of personal builds or unconditional adoption of every upstream change.
 
-## Layout
-
-```text
-apps/desktop/       Electron app (main, preload, React renderer, tests)
-crates/host-core/   Rust host: persistence, native state, host RPC
-packages/           shared contracts, i18n, agent runtime, host runtime, plugin SDK
-docs/               specifications, ADRs, guides
-scripts/            repo automation, E2E, packaging
-```
-
-## License
-
-PI-Desktop is licensed under the GNU Lesser General Public License v3.0. See
-[LICENSE](LICENSE). Original authorship and upstream project credits are
-retained.
+Original authorship and project credits are retained. PI-Desktop is licensed
+under the GNU Lesser General Public License v3.0; see [LICENSE](LICENSE).

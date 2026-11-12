@@ -23,6 +23,19 @@ when remote delivery is requested against a verified target remote.
 - Architectural boundary changes (process model, IPC contract, storage ownership, security boundary) also require an ADR — see `docs/adr/README.md`.
 - Pure refactors preserve behavior and API contracts; use the same validation and delivery authorization rules as other changes.
 
+### R1.1 — Keep the personal-edition overview current
+
+Apply [AGENTS.md §13](../../../AGENTS.md#personal-edition-readme-maintenance)
+when assessing each feature, improvement, or user-relevant fix, including harness
+hardening. Update `README.md` and `README.zh-CN.md` together when the edition's
+overview changes; ordinary internal fixes need no homepage entry. Check originating
+commits and the surviving difference against a named upstream revision before
+claiming a local enhancement. Describe only the local increment of mixed features,
+and retain its evidence in maintenance documentation. Edit the relevant section
+instead of accumulating release-note bullets, keep unreleased work distinct from
+recorded releases, and leave generated release history to its existing workflow.
+Report the README update or the reason none was needed.
+
 ### R2 — Requested commits
 
 Commit only when the user requests it. Review the diff, stage explicit paths,

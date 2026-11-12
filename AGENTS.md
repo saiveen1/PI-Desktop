@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Policy-Sync: 2026-11-08.personal-edition.4
+Policy-Sync: 2026-11-12.personal-edition.6
 
 Mandatory rules for AI coding agents and maintainers working in PI-Desktop.
 
@@ -495,6 +495,30 @@ need no product-spec change. Development-workflow or validation-policy changes
 synchronize `docs/spec/06-delivery/`. Do not leave contradictory workflow
 instructions in the repository.
 
+### Personal-edition README maintenance
+
+For every feature, optimization, or behavior change, assess whether `README.md`
+and `README.zh-CN.md` still describe the current edition accurately. Update both
+in the same task for significant capabilities, user-relevant fixes or harness
+hardening, changed documented workflows/limitations, and stale claims. Routine
+internal fixes, refactors, and test-only work need no entry unless the overview
+changes; meaningful reliability fixes are not excluded merely because they are fixes.
+
+Keep the README focused on this edition's concrete additions, improvements, and
+fixes, not commit subjects or the full upstream catalog. Before attributing work,
+compare its originating commits and surviving implementation with a named upstream
+revision. A changelog entry, author name, or non-equivalent commit alone is not
+proof of local origin. For mixed features, describe only the local increment;
+exclude upstream-only or unverified claims. Record evidence in the maintenance
+documentation, not a growing commit list on the homepage.
+
+Revise existing sections rather than appending a running change log. Preserve
+upstream attribution, licensing, and the reviewed upstream-following policy.
+Keep both languages equivalent, distinguish current-source capabilities from
+recorded releases, and do not claim unverified performance, stability, security,
+or availability. Detailed behavior belongs in specs; release history follows the
+existing generated `CHANGELOG.md` workflow.
+
 ---
 
 ## 14. Issue Intake
@@ -606,6 +630,7 @@ At the end of a task, state briefly:
 * Observable behavior or contract that changed
 * Main files modified
 * Tests and checks actually run, with results
+* README synchronization, or why no overview update was needed
 * Verifications skipped and why
 * Known risks, compatibility impact, and remaining user decisions
 
