@@ -5,6 +5,7 @@ import test from "node:test";
 register(new URL("./helpers/ts-import-hooks.mjs", import.meta.url));
 const { createSessionSlice } = await import("../src/stores/slices/session-slice.ts");
 const { createSessionCoordination } = await import("../src/stores/runtime/session-coordination.ts");
+const { createTranscriptReadingRuntime } = await import("../src/stores/runtime/transcript-reading-runtime.ts");
 const { api } = await import("../src/lib/api.ts");
 
 function harness(t) {
@@ -14,6 +15,7 @@ function harness(t) {
     activeSessionId: "parent", isRunning: true, runningSessions: { parent: true },
     messages: [old, live], sessions: [{ id: "parent", title: "Source", mode: "agent" }],
     sessionHistory: { parent: { hasMoreBefore: true, contentLimited: true } },
+    transcriptViews: {},
     sessionMeta: {}, sessionCompactions: {}, planningStates: {},
     retainedSessionIds: ["parent"], retainedTranscripts: { parent: [old, live] },
     workPanelContexts: {}, workPanelTabs: [], workPanelOpen: false,
@@ -65,6 +67,55 @@ test("reply fork activates an independent child without hydrating or stopping it
   assert.deepEqual(h.get().messages.map(m => m.id), ["child-old"]);
   assert.deepEqual(h.get().sessions.map(s => s.id), ["child", "parent"]);
 });
+
+for (const entry of ["page", "search", "restore"]) {
+  for (const running of [false, true]) {
+    test(`reply fork from ${entry} history preserves the ${running ? "running" : "idle"} source`, async (t) => {
+      const h = harness(t);
+      const [old, tail] = h.get().messages;
+      const live = [{ ...tail, status: running ? "streaming" : "complete" }];
+      const history = { messageStart: 100, hasMoreBefore: true, contentLimited: true };
+      h.set({
+        messages: live, retainedTranscripts: { parent: live },
+        sessionHistory: { parent: history },
+        isRunning: running, runningSessions: running ? { parent: true } : {},
+      });
+      h.cache.set("parent", live);
+      const reading = createTranscriptReadingRuntime({ get: h.get, set: h.set }, async (id, options) => {
+        assert.equal(id, "parent");
+        if (entry === "page") assert.equal(options.messageBefore, 100);
+        else assert.equal(options.messageAround, "old");
+        return { session: {
+          id: "parent", messages: [old], messageStart: 0, messageEnd: 1,
+          hasMoreBefore: false, hasMoreAfter: true,
+        } };
+      });
+      if (entry === "page") await reading.actions.loadTranscriptPage("parent", "before");
+      else if (entry === "search") await reading.actions.navigateTranscript({
+        sessionId: "parent", messageId: "old", query: "first reply",
+      });
+      else assert.equal(await reading.actions.restoreTranscriptReading(
+        "parent", { messageId: "old", pinned: false }, new AbortController().signal,
+      ), "restored");
+
+      const view = h.get().transcriptViews.parent;
+      assert.ok(view.messages.some(message => message.id === "old"));
+      assert.equal(h.get().messages.some(message => message.id === "old"), false);
+      const action = h.slice.forkAssistantMessage("old");
+      h.complete();
+      await action;
+
+      assert.equal(api.forkSession.mock.callCount(), 1, "a displayed historical reply must reach the Host");
+      assert.equal(h.get().activeSessionId, "child");
+      assert.deepEqual(h.get().messages.map(message => message.id), ["child-old"]);
+      assert.equal(h.get().retainedTranscripts.parent, live);
+      assert.equal(h.cache.get("parent"), live);
+      assert.equal(h.get().sessionHistory.parent, history);
+      assert.equal(h.get().transcriptViews.parent, view);
+      assert.equal(Boolean(h.get().runningSessions.parent), running);
+    });
+  }
+}
 
 test("a fork that finishes after navigation lists the child without stealing the view", async (t) => {
   const h = harness(t);

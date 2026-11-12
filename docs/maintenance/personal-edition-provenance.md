@@ -65,6 +65,21 @@ installed/live-model behavior.
 
 ## Local interface, organization, and host fixes
 
+The historical-reply fork lookup amendment is based on personal source
+`d8f10f6ecc1e1d1e693d8717a3a2bf1f07af3ffe`, compared read-only with the
+locally recorded `upstream/main` revision
+`dd66ca037391da7378be25becb1a8bcb8054298f`; no fetch was performed for this
+comparison. That upstream's `forkAssistantMessage` searches only
+`state.messages` and silently returns when an older displayed reply is absent.
+The local [action](../../apps/desktop/src/stores/slices/session-slice.ts) uses
+the same reading-range projection as the transcript. Independent session forks,
+Host-owned canonical-prefix copying, and running-turn prefix guards remain
+inherited foundations, not local inventions. The
+[regression scenarios](../../apps/desktop/test/session-fork-running.test.mjs)
+cover upward paging, search navigation, and reading-position restoration with
+both idle and running sources, preserving source caches and reading ranges.
+Offline tests do not establish installed-application or live-model behavior.
+
 | Local increment | Originating local commits | Contrast with the audited upstream | Current implementation / coverage evidence |
 | --- | --- | --- | --- |
 | Current-session subagent entry and history-backed task index | `869bc1d18` | Upstream has child transcripts, but not this topbar entry or session-filtered history projection. | [Session index](https://github.com/saiveen1/PI-Desktop/blob/58c8ef37b/apps/desktop/src/features/delegations/SessionDelegationsPanel.tsx), [decision and coverage](../adr/session-subagent-topbar-index.md). |

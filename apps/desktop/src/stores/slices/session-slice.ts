@@ -47,6 +47,7 @@ import {
   mergeLiveSessionMessages,
 } from "../../lib/session-transcript";
 import { sessionReadLooksEmpty } from "../../lib/session-transcript-read";
+import { transcriptViewMessages } from "../../lib/transcript-reading";
 import type {
   AppState,
   DraftSessionConfiguration,
@@ -783,7 +784,9 @@ export function createSessionSlice({
       const state = get();
       const sessionId = state.activeSessionId;
       if (!sessionId || state.selectingSessionId) return;
-      const message = state.messages.find((candidate) => candidate.id === messageId);
+      const message = transcriptViewMessages(
+        state.messages, state.transcriptViews[sessionId],
+      ).find((candidate) => candidate.id === messageId);
       const source = state.sessions.find((session) => session.id === sessionId);
       if (!message || message.role !== "assistant" || !source) return;
       if (!sessionAllows(source, "canEditMessages")) return;

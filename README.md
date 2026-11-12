@@ -111,9 +111,11 @@ This edition strengthens the existing framework rather than replacing it.
   searches could hold a Host-wide file lease, causing repeated read/write admission
   timeouts across sessions and preventing agents from editing files. Use per-file
   coordination with cancellation and resource cleanup, retaining same-file protection.
-- **Reading restoration that respects newer navigation.** Fix session-switch and
-  delayed-history races so old restoration results do not replace newer reading
-  intent or discard already loaded ranges.
+- **Reliable reading restoration and historical reply branching.** Fix session-switch
+  and delayed-history races so old restoration results do not replace newer
+  reading intent or discard loaded ranges. Branch from paged, searched, or
+  restored replies outside the latest-message cache without rewriting the source
+  transcript or stopping a later turn.
 - **Clearer execution outcomes.** Distinguish failed, denied, skipped, interrupted,
   and context-required tool results; retain phase/retry diagnostics and clear stale
   running indicators and retry badges. Also fix rename-input reselection and

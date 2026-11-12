@@ -2170,8 +2170,13 @@ Single message render — either user (plaintext) or assistant (markdown streami
   menu reports through the toast host because the surface closes as soon
   as the item runs.
   Fork creates and activates an independent session whose snapshot ends at the
-  selected assistant response, requires an idle source, and leaves that
-  source's transcript, live runtime, and provider cache state untouched (D134).
+  selected assistant response and leaves the source's transcript, live runtime,
+  and provider cache state untouched (D134). Both the toolbar and context menu
+  resolve the anchor from the displayed reading range, including paged, searched,
+  and restored history absent from the latest-message cache. The Host copies the
+  canonical prefix without hydrating or replacing the source cache. A completed
+  historical prefix may be forked while a later source turn runs; whole-session
+  forks and anchors within the active turn remain rejected (ADR 0023).
   Opening a user-message editor must hydrate canonical history before seeding the
   draft when the loaded transcript is partial or display-limited. Never seed an
   editable draft from clipped display text. Failed reads keep the editor closed

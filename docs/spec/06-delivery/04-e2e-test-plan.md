@@ -7444,24 +7444,32 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
 
 - **Preconditions**: An idle conversation contains two completed user/assistant
   exchanges and the second assistant response has cache-token usage metadata.
+  An older completed reply is available only in the renderer reading range,
+  outside the latest-message cache.
 - **Steps**: 1) Hover the first assistant response and inspect its toolbar. 2)
   Click Fork. 3) Confirm the activated child ends at that response and append a
   prompt. 4) Reopen the source and inspect it. 5) Append a prompt to the child,
-  restart, and inspect source and child. 6) Repeat while the source is running.
+  restart, and inspect source and child. 6) Repeat while a later source turn runs.
+  7) Repeat toolbar and context-menu Fork after upward paging, search navigation,
+  and reading-position restoration reveal a reply absent from the latest cache.
 - **Expected**: The completed-assistant toolbar contains Copy, Fork, and
   Regenerate only — no Delete and no Edit (D137 moved Edit to user turns). Fork
-  is disabled during a source turn. It activates a separately titled session
-  whose history stops at the selected response; later source turns are absent.
-  Source text, version history, token metadata, later turns, runtime, and cache
-  state remain unchanged. Continuing the child affects only that child and
-  reseeds from its own remapped transcript.
+  activates a separately titled session whose history stops at the selected
+  response; later source turns are absent. Completed historical prefixes remain
+  forkable during a later turn, while anchors in that active turn are rejected.
+  Both entry points accept replies present only in the reading range and send
+  their anchor IDs to the Host instead of silently returning or hydrating the
+  source. Source text, version history, token metadata, later turns, reading
+  range, runtime, and cache state remain unchanged. Continuing the child affects
+  only that child and reseeds from its own remapped transcript.
 - **Specs linked**: `03-runtime/01-ipc-protocol.md`,
   `03-runtime/04-data-storage.md`, `03-runtime/06-host-rpc-protocol.md`,
   `04-ux/08-component-spec.md`, `08-meta/decisions-log.md` (D134, D137)
 - **Acceptance**: C (chat stream/sessions), F (persistence), Quality
 - **Milestone**: M5
 - **Status**: Unit-covered (`sessions::tests::message_scoped_fork_stops_at_selected_assistant_response`,
-  `session-fork.test.mjs`, `transcript-style.test.mjs`); full restart UI scenario Draft
+  `session-fork.test.mjs`, `session-fork-running.test.mjs`, `transcript-style.test.mjs`);
+  full restart UI scenario Draft
 
 #### E2E-071b: Forked session retains messages after the first AI turn completes
 
