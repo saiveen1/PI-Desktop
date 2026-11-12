@@ -12,6 +12,8 @@ export type ToolImageSet = {
   generated: boolean;
   images: ToolResultImage[];
   issueCodes: ImageInputIssueCode[];
+  /** Display-budget omission, never an authoritative model-input rejection. */
+  displayOmitted: boolean;
 };
 
 function record(value: unknown): Record<string, unknown> | undefined {
@@ -30,10 +32,15 @@ function candidates(value: unknown): unknown[] {
 const rasterMime = /^image\/(?:png|jpeg|gif|webp)$/;
 const base64 = /^[A-Za-z0-9+/]+={0,2}$/;
 
+function displayClipped(value: unknown): boolean {
+  return typeof value === "string" && value.includes("[truncated for display");
+}
+
 /** No URL fetching or arbitrary path inference: file refs still pass through Host containment. */
 function localRef(value: unknown): string {
   if (typeof value !== "string") return "";
   const path = value.trim();
+  if (displayClipped(path) || /[\x00-\x1f]/.test(path)) return "";
   return /^(?:[a-z][a-z\d+.-]*:)/i.test(path) && !/^[a-z]:[\\/]/i.test(path) ? "" : path;
 }
 
@@ -49,7 +56,7 @@ export function toolResultImageSet(message: { toolResult?: unknown }): ToolImage
   const details = record(payload);
   const result: ToolImageSet = {
     generated: details?.kind === "generated-images" || details?.kind === "image-generation-error",
-    images: [], issueCodes: [],
+    images: [], issueCodes: [], displayOmitted: false,
   };
   const issues = record(details?.imageInput)?.issues;
   const addIssue = (code: ImageInputIssueCode) => {
@@ -59,18 +66,35 @@ export function toolResultImageSet(message: { toolResult?: unknown }): ToolImage
     const code = record(issue)?.code;
     if (code === "MODEL_NO_VISION" || code === "IMAGE_TOO_LARGE" || code === "IMAGE_INVALID") addIssue(code);
   }
-  // Details retain originals; provider content can be a filtered mirror of those images.
+  // Older bounded projections may have a clipped details mirror but intact
+  // provider content. Validate both independently; never let a broken mirror
+  // mask a usable original, or promote a clipped ref/base64 prefix into a URL.
   const original = candidates(payload);
-  const entries = original.length ? original : candidates(raw);
-  const seen = new Set<string>();
-  entries.forEach((entry, index) => {
-    const image = record(entry);
+  const fallback = payload === raw ? [] : candidates(raw);
+  const groups = [original, fallback];
+  const entries = groups.flatMap((group, source) => group.map((value, index) => ({
+    value, index, source, defaultPath: group.length === 1 ? details?.path : undefined,
+  })));
+  const byData = new Map<string, ToolResultImage>();
+  const byRef = new Map<string, ToolResultImage>();
+  const visible = [new Set<number>(), new Set<number>()];
+  const omissions: Array<{ source: number; index: number }> = [];
+  entries.forEach(({ value, index, source, defaultPath }) => {
+    const omit = () => omissions.push({ source, index });
+    const image = record(value);
     const mimeType = typeof image?.mimeType === "string" ? image.mimeType.toLowerCase() : "";
-    const path = localRef(image?.path ?? image?.ref ?? (entries.length === 1 ? details?.path : undefined));
+    const ref = image?.path ?? image?.ref ?? defaultPath;
+    const path = localRef(ref);
     const data = image?.data;
-    if (!rasterMime.test(mimeType)) { addIssue("IMAGE_INVALID"); return; }
+    const clipped = displayClipped(value) || image?._truncated === true || displayClipped(data) || displayClipped(ref) || displayClipped(mimeType);
+    const omitted = image?.displayImageOmitted === true;
+    if (!rasterMime.test(mimeType)) {
+      if (clipped && (!mimeType || displayClipped(mimeType))) omit();
+      else addIssue("IMAGE_INVALID");
+      return;
+    }
     let dataUrl: string | undefined;
-    if (typeof data === "string") {
+    if (typeof data === "string" && !displayClipped(data)) {
       if (data.length > Math.ceil(MAX_INLINE_IMAGE_BYTES / 3) * 4) {
         addIssue("IMAGE_TOO_LARGE");
       } else if (!data || !base64.test(data) || data.length % 4 === 1) {
@@ -79,12 +103,33 @@ export function toolResultImageSet(message: { toolResult?: unknown }): ToolImage
         dataUrl = `data:${mimeType};base64,${data}`;
       }
     }
-    if (!dataUrl && !path) { addIssue("IMAGE_INVALID"); return; }
-    const identity = dataUrl ?? `${mimeType}:${path}`;
-    if (seen.has(identity)) return;
-    seen.add(identity);
-    result.images.push({ path, index, mimeType, ...(dataUrl ? { dataUrl } : {}) });
+    if (!dataUrl && !path) {
+      if (clipped || omitted && data === undefined) omit();
+      else addIssue("IMAGE_INVALID");
+      return;
+    }
+    visible[source].add(index);
+    const refIdentity = path ? `${mimeType}:${path}` : undefined;
+    const duplicate = dataUrl ? byData.get(dataUrl) : refIdentity ? byRef.get(refIdentity) : undefined;
+    if (duplicate) {
+      if (refIdentity) byRef.set(refIdentity, duplicate);
+      return;
+    }
+    const referenced = refIdentity ? byRef.get(refIdentity) : undefined;
+    if (dataUrl && referenced && !referenced.dataUrl) {
+      referenced.dataUrl = dataUrl;
+      byData.set(dataUrl, referenced);
+      return;
+    }
+    const next = { path, index: result.images.length, mimeType, ...(dataUrl ? { dataUrl } : {}) };
+    if (dataUrl) byData.set(dataUrl, next);
+    if (refIdentity) byRef.set(refIdentity, next);
+    result.images.push(next);
   });
+  // Equal-length mirrors can recover the same omitted position. Do not hide
+  // an extra missing original when provider content contains fewer images.
+  result.displayOmitted = omissions.some(({ source, index }) =>
+    original.length !== fallback.length || !visible[1 - source].has(index));
   cache.set(message, result);
   return result;
 }

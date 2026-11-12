@@ -145,11 +145,16 @@ tool results, not a `GenerateImages` tool-name allowlist. Host `Read.images`, MC
 one compact presentation. Generated-result contracts retain their existing card,
 download, setup navigation and partial-failure behavior.
 
-Each inspection result shows a localized image count, the originating tool and
-80-pixel thumbnails outside the turn's process disclosure. Expanding tool details
-does not duplicate the gallery or dump typed Base64 image fields. Mirrored copies
-inside one result are displayed once. Different tool calls and turns retain their
-own results; subagent turns use the same presentation.
+Inspection results show a localized image count, the originating tool and
+80-pixel thumbnails outside the turn's process disclosure. Consecutive successful
+`Read` image results in the same turn and delegation scope share one collapsible
+horizontal gallery, wrapping without shrinking thumbnails at narrow widths.
+Narrative/reasoning/search entries, other tools, failed reads and image-input
+warnings break adjacency. Expanding tool details does not duplicate the gallery
+or dump typed Base64 image fields. Mirrored copies inside one result are displayed
+once; separate calls are never deduplicated against one another. Each thumbnail
+retains its source message/call identity and filename, with source information in
+its accessible tooltip. Subagent turns use the same grouping and viewer.
 
 The count means images returned by the tool, not model analysis completed. Image
 input diagnostics explicitly distinguish unsupported vision, invalid data and
@@ -160,8 +165,11 @@ Thumbnails reuse the full-window image viewer, keyboard previous/next, Escape,
 focus restoration, zoom and download. Typed inline raster bytes are displayed
 without rereading the source file. File references use the existing session-bound
 contained image reader; no network URLs or arbitrary text paths are inferred as
-images. Missing/unreadable previews have a visible unavailable state. Viewer and
-selection state reset when the owning session or tool message changes.
+images. Missing/unreadable previews have a visible unavailable state. Viewer
+selection is tied to the owning session and source call/image identity. Appending
+an adjacent Read preserves the selected image, zoom and pending decode/navigation;
+switching sessions closes the viewer. A gallery never merges underlying tool
+messages or provider content.
 
 History uses the existing lossless tool-result storage and decoded image blocks;
 there is no new attachment store, persistence format or migration. Persisted

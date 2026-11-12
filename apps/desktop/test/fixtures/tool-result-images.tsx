@@ -6,6 +6,7 @@ import { catalogs } from "@pi-desktop/i18n";
 import type { UiMessage } from "@pi-desktop/shared";
 import { ToolResultImages } from "../../src/features/chat/transcript/ToolResultImages";
 import { AssistantTurn } from "../../src/features/chat/transcript/AssistantTurn";
+import { SubagentTurnContent } from "../../src/features/chat/transcript/SubagentTurnContent";
 import { TranscriptDisclosureProvider } from "../../src/features/chat/transcript/disclosure";
 import { SlotSessionProvider } from "../../src/plugins/renderer-slots/use-slots";
 import { buildTranscriptEntries } from "../../src/lib/assistant-turns";
@@ -32,17 +33,20 @@ const image = (color: string) => {
 const red = image("red"), blue = image("blue");
 const redUrl = `data:image/png;base64,${red.data}`, blueUrl = `data:image/png;base64,${blue.data}`;
 const message = (id: string, toolResult: unknown, toolName = "Read"): UiMessage => ({
-  id, role: "tool", content: "", toolName, toolArgs: { path: "sample.png" }, toolResult,
+  id, role: "tool", content: "", toolName, toolCallId: `call-${id}`, toolArgs: { path: "sample.png" }, toolResult,
   toolStatus: "success", status: "complete", createdAt: "2026-11-08T00:00:00Z",
 });
 const original = message("mcp", { content: [red, blue], details: { content: [red, blue, red] } }, "mcp_screenshot");
+const groupedReads = Array.from({ length: 6 }, (_, index) => message(`read-${index}`, {
+  path: `capture-${index}.png`, images: [index % 2 ? blue : red],
+}));
 const reads: Array<{ ref: string; sessionId?: string }> = [];
 api.fsReadImageDataUrl = async (ref, _mimeType, sessionId) => {
   reads.push({ ref, sessionId });
   return ref === "missing.png" ? { kind: "missing" } : { kind: "image", dataUrl: ref === "blue.png" ? blueUrl : redUrl };
 };
 useAppStore.setState({ activeSessionId: "unrelated-active-session" });
-const render = (messages: UiMessage[], sessionId = "session-a", turn = false) => {
+const render = (messages: UiMessage[], sessionId = "session-a", turn: boolean | "subagent" = false) => {
   const entries = buildTranscriptEntries([
     { id: "user", role: "user", content: "Inspect pictures", createdAt: "2026-11-08T00:00:00Z" },
     ...messages,
@@ -51,7 +55,8 @@ const render = (messages: UiMessage[], sessionId = "session-a", turn = false) =>
   const entry = entries.find((item) => item.kind === "assistant-turn");
   flushSync(() => view.render(<I18nextProvider i18n={i18n}><SlotSessionProvider sessionId={sessionId}>
     <TranscriptDisclosureProvider sessionId={sessionId}>
-      {turn && entry?.kind === "assistant-turn" ? <AssistantTurn entry={entry} isActive={false} />
+      {turn === "subagent" ? <SubagentTurnContent id="child" rows={messages.map((message) => ({ kind: "tool" as const, message }))} active={false} />
+        : turn && entry?.kind === "assistant-turn" ? <AssistantTurn entry={entry} isActive={false} />
         : messages.map((item) => <ToolResultImages key={item.id} message={item} />)}
     </TranscriptDisclosureProvider>
   </SlotSessionProvider></I18nextProvider>));
@@ -113,6 +118,12 @@ Object.assign(window, { toolImagesProbe: async (stage: string) => {
     check(selectedImage()?.src === blueUrl, "Missing middle image shifted the navigation index");
     render([message("failed", { error: "File not found", code: "FILE_NOT_FOUND" })]);
     check(!document.querySelector(".tool-result-images"), "Failed read claimed images were returned");
+    render([message("retained", { path: "missing.png", images: [red] })]); await decodeThumbnails();
+    check(document.querySelector<HTMLImageElement>(".tool-result-image-thumb img")?.src === redUrl, "Retained bytes depended on the missing original file");
+    render([message("display-omitted", { details: { images: [{ mimeType: "image/png", displayImageOmitted: true }],
+      imageInput: { imageCount: 1, includedCount: 1, issues: [] } } })]);
+    check(document.querySelector(".tool-result-images-notice")?.textContent === i18n.t("settings.imagePreviewUnavailable"), "Display omission was hidden or reported as invalid model input");
+    check(!document.querySelector(".tool-result-images-count"), "Omitted display claims viewable images");
     await i18n.changeLanguage("zh-CN"); render([warning]);
     check(document.body.textContent?.includes("图片未送入模型"), "Image feedback is not localized");
     await i18n.changeLanguage("en");
@@ -124,6 +135,55 @@ Object.assign(window, { toolImagesProbe: async (stage: string) => {
     const details = document.querySelector<HTMLButtonElement>(".turn-process button");
     if (details) flushSync(() => details.click());
     check(document.querySelectorAll(".tool-result-images").length === 2, "Opening process details duplicates images");
+  } else if (stage === "group") {
+    document.getElementById("root")!.style.cssText = "width:280px;margin:24px";
+    render(groupedReads, "session-a", true); await decodeThumbnails(); await frame();
+    check(document.querySelectorAll(".tool-result-images").length === 1, "Adjacent Read results must share one gallery");
+    check(document.querySelectorAll(".tool-result-image-thumb").length === 6, "Grouping lost images from separate calls");
+    check(document.body.textContent?.includes("Returned 6 images"), "Grouped count does not include every call");
+    const thumbs = [...document.querySelectorAll<HTMLButtonElement>(".tool-result-image-thumb")];
+    const boxes = thumbs.map((item) => item.getBoundingClientRect());
+    check(boxes[0].top === boxes[1].top && boxes[1].left > boxes[0].left, "Grouped images are not horizontal");
+    check(boxes[3].top > boxes[0].top && boxes.every((box) => box.width === 80), "Narrow group must wrap without shrinking thumbnails");
+    check(thumbs.every((item, index) => item.parentElement?.dataset.toolCallId === `call-read-${index}`), "Grouped thumbnail lost source call");
+    check(thumbs[1].getAttribute("aria-label")?.includes("capture-1.png") && thumbs[1].getAttribute("aria-label")?.includes("call-read-1"), "Source filename/call is not accessible");
+    const heading = document.querySelector<HTMLButtonElement>(".tool-result-images-heading")!;
+    flushSync(() => heading.click());
+    check(!document.querySelector(".tool-result-image-thumb") && heading.getAttribute("aria-expanded") === "false", "Group collapse is not shared");
+    flushSync(() => heading.click()); await decodeThumbnails();
+    trigger = document.querySelectorAll<HTMLButtonElement>(".tool-result-image-thumb")[1];
+    flushSync(() => trigger.click()); await frame(); await selectedImage()?.decode();
+    check(dialog()?.open && selectedImage()?.src === blueUrl, "Grouped click opened the wrong call");
+  } else if (stage === "group-next") {
+    await frame(); await selectedImage()?.decode();
+    check(selectedImage()?.src === redUrl && document.querySelector("dialog strong")?.textContent === "capture-2.png", "Keyboard did not cross to the next Read call");
+    const openDialog = dialog()!;
+    const zoomIn = [...openDialog.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.getAttribute("aria-label") === i18n.t("menu.zoomIn"))!;
+    flushSync(() => zoomIn.click());
+    const zoom = openDialog.querySelector("output")?.textContent;
+    check(zoom !== "100%", "Fixture did not change viewer zoom");
+    const pendingImage = openDialog.querySelectorAll<HTMLImageElement>(".generated-image-viewer-thumb img")[3];
+    let resolveDecode!: () => void;
+    pendingImage.decode = () => new Promise<void>((resolve) => { resolveDecode = resolve; });
+    flushSync(() => openDialog.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })));
+    render([...groupedReads, message("appended", { path: "later.png", images: [blue] })], "session-a", true);
+    await frame(); await selectedImage()?.decode();
+    check(dialog() === openDialog && openDialog.querySelector("output")?.textContent === zoom, "Appending a result remounted the viewer or reset zoom");
+    check(selectedImage()?.src === redUrl && document.querySelector("dialog strong")?.textContent === "capture-2.png", "Appending a result changed the selected call");
+    resolveDecode(); await frame(); await selectedImage()?.decode();
+    check(selectedImage()?.src === blueUrl && document.querySelector("dialog strong")?.textContent === "capture-3.png", "Appending discarded pending image navigation");
+  } else if (stage === "group-close") {
+    await frame();
+    check(!dialog() && document.activeElement === trigger, "Closing grouped viewer lost originating thumbnail focus");
+  } else if (stage === "group-boundaries") {
+    const narrative: UiMessage = { id: "between", role: "assistant", content: "Inspect another state", createdAt: "2026-11-08T00:00:00Z" };
+    render([groupedReads[0], groupedReads[1], narrative, groupedReads[2], message("bash", { text: "done" }, "Bash"), groupedReads[3], groupedReads[4]], "session-a", true);
+    check(document.querySelectorAll(".tool-result-images").length === 3, "Group crossed narrative or other-tool boundaries");
+    render(groupedReads, "session-a", "subagent"); await decodeThumbnails();
+    check(document.querySelectorAll(".tool-result-images").length === 1 && document.querySelectorAll(".tool-result-image-thumb").length === 6, "Subagent uses different image grouping");
+    flushSync(() => thumb().click()); await frame();
+    render(groupedReads.map((item) => ({ ...item, toolResult: { images: [blue] } })), "session-b", "subagent"); await decodeThumbnails();
+    check(!dialog(), "Grouped viewer leaked across owning sessions");
   } else if (stage === "generated") {
     const generated = message("generated", { details: { kind: "generated-images", results: [
       { status: "succeeded", path: "red.png", mimeType: "image/png" },
@@ -146,7 +206,7 @@ Object.assign(window, { toolImagesProbe: async (stage: string) => {
     document.documentElement.dataset.theme = stage.endsWith("light") ? "light" : "dark";
     document.getElementById("root")!.style.cssText = "width:280px;margin:24px";
     await i18n.changeLanguage("zh-CN");
-    render([original]); await decodeThumbnails(); await frame();
+    render(groupedReads, "session-a", true); await decodeThumbnails(); await frame();
     await Promise.all(document.getAnimations().map((animation) => animation.finished.catch(() => undefined)));
     await frame(); await frame();
     const rootBox = document.getElementById("root")!.getBoundingClientRect();

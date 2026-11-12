@@ -6,11 +6,12 @@ import { useReferencedImageDataUrl } from "../../../lib/use-referenced-image-dat
 
 export type GeneratedImageRef = ToolResultImage;
 
-export function GeneratedImageThumbnail({ image, selected, onSelect, className }: {
+export function GeneratedImageThumbnail({ image, selected, onSelect, className, source }: {
   image: GeneratedImageRef;
   selected: boolean;
   onSelect: (trigger: HTMLButtonElement) => void;
   className: string;
+  source?: string;
 }) {
   const { t } = useTranslation();
   const referencedSrc = useReferencedImageDataUrl(image.dataUrl ? null : image.path, image.mimeType);
@@ -21,7 +22,7 @@ export function GeneratedImageThumbnail({ image, selected, onSelect, className }
     <TooltipButton
       type="button"
       className={className}
-      tooltip={label}
+      tooltip={source ? `${label}\n${source}` : label}
       aria-current={selected ? "true" : undefined}
       onClick={(event) => onSelect(event.currentTarget)}
     >

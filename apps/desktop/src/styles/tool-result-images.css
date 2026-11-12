@@ -31,7 +31,9 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  min-width: 0;
 }
+.tool-result-image-item { flex: 0 0 auto; }
 .tool-result-image-thumbnails .tool-result-image-thumb {
   box-sizing: border-box;
   display: grid;

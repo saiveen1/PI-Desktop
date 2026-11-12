@@ -19820,22 +19820,40 @@ the latest destination. These assertions measure work counts, not device FPS.
 - **Steps:** Read a saved image through the existing Read tool. Inspect the next
   vision-model request for actual image blocks. Repeat with a text-only model,
   invalid image data and oversized input. Return two images through MCP/plugin
-  content blocks, including mirrored copies in details. Reload the transcript,
-  open thumbnails, navigate with left/right, close with Escape, switch sessions
-  with identical message IDs, and open process details. Repeat with missing refs
-  and a generated-image batch containing both successes and failures.
+  content blocks, including mirrored copies in details. Reload a bounded history
+  window with 31,929-, 7,255-, 37,395- and 29,152-byte
+  inline images duplicated in content/details. Repeat with an over-budget inline
+  image, a missing original file, clipped legacy mirrors and invalid/unsafe refs.
+  Open thumbnails, navigate with left/right, close with Escape, switch sessions
+  with identical message IDs, and open process details. Return six consecutive
+  successful Read images; collapse/reopen the combined gallery, navigate across
+  source calls, append a result while viewing, and repeat in a subagent turn.
+  Insert narrative, other tools and failed/input-warning calls between reads.
+  Check horizontal layout and wrapping at 280 pixels in light/dark themes.
+  Repeat with missing refs and a generated-image batch containing successes and failures.
 - **Expected:** Image bytes reach a compatible model; unsupported/invalid/oversize
   images produce explicit omission feedback without claiming analysis. Compact
   thumbnails remain associated with the originating call and appear only once.
+  Adjacent successful Read calls share one ordered gallery and heading, with
+  readable filename/call tooltips, horizontal wrapping, shared collapse and
+  keyboard navigation across calls. Appending preserves selection, zoom and
+  pending decode/navigation without remounting the viewer.
+  Narrative, non-image tools, diagnostic/error calls and delegation boundaries
+  remain separate. Main and subagent views agree; session switches close viewers.
   Persisted inline bytes are viewable without the source file. Keyboard selection,
   download targets, focus restoration and session isolation work. Missing resources
   display an unavailable state without a download. Tool details contain no typed
   binary dump. Generation retains its original cards and error/setup actions.
+  Bounded history never string-clips image bytes or identity fields. Fitting
+  retained bytes do not depend on the original file; over-budget previews use
+  typed refs or explicit display-only unavailability, not model-input rejection.
+  Uncapped history and persisted binary data remain lossless.
 - **Specs:** 03-runtime/02-agent-runtime; 03-runtime/03-tools-and-permissions;
-  03-runtime/21-image-generation.
+  03-runtime/21-image-generation; 03-runtime/04-data-storage.
 - **Acceptance:** Discoverable local image reads and honest, recoverable image history.
 - **Milestone:** Personal-edition maintenance.
-- **Status:** Runtime request/content tests and desktop parser tests;
+- **Status:** Rust `bounded_image_preview`, binary-storage and bounded-history
+  regressions; runtime request/content tests, desktop parser and grouping tests;
   `apps/desktop/test/tool-result-images-user-path.test.mjs` exercises production
   React components in isolated Chromium with API-boundary fixtures. This is not
   a live-provider analysis test or an installed-build verification.

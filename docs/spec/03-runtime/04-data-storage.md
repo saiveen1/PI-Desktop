@@ -1734,6 +1734,26 @@ line to the bounded page. This is derived read-only context, not a new persisted
 relationship or index. The renderer's unified reading view is shared by ordinary
 history and search; it never becomes canonical mutation or model input.
 
+Bounded tool-result projections budget typed image metadata and model-input
+diagnostics before binary bodies. Validated raster descriptors retain complete
+`mimeType` and local `path`/`ref` identities (including an unambiguous single-image
+Read result's enclosing path); identities are omitted, never string-clipped.
+Local references still require the existing Host containment checks. Inline
+`data` is included only as a complete base64 string within the remaining content
+budget; duplicate inline mirrors are not emitted twice. Retained inline bytes
+remain preferred even when the source path exists, so fitting images do not
+change when the file is modified or deleted. If the inline body cannot fit, the
+descriptor has `displayImageOmitted: true` and no `data`; an intact local reference
+may still supply a bounded preview through existing containment checks. This
+flag is not an `imageInput.issues` rejection and must not be reported as `IMAGE_INVALID` or as a
+model's inability to receive images. Malformed image input remains invalid.
+The renderer independently validates details and content candidates, allowing an
+intact content image to recover an older clipped details mirror; clipped paths
+and binary prefixes never become active image sources. The projection retains
+the existing 256-entry container ceiling and bounds preparation to 4096 nodes
+and 64 levels. These are read-only preview rules: stored binary data, lossless
+restoration, and uncapped provider history are unchanged.
+
 A bounded window is served through a per-session **transcript layout**: the byte
 offset of every message and compaction line, plus the file identity and complete
 prefix length those offsets describe. Serving a window seeks to its first

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
+import { watch } from "node:fs";
 import { createRequire } from "node:module";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -9,12 +10,50 @@ import { repositoryRoot, resolveElectronBinary } from "../../../scripts/e2e/boot
 
 const root = repositoryRoot();
 const { build } = createRequire(join(root, "packages/agent-runtime/package.json"))("esbuild");
-const stages = ["open", "next", "previous", "close", "keyboard-open", "close-again", "restore", "states", "turn", "generated", "snapshot-light", "snapshot-dark", "finish"];
+const stages = ["open", "next", "previous", "close", "keyboard-open", "close-again", "restore", "states", "turn", "group", "group-next", "group-close", "group-boundaries", "generated", "snapshot-light", "snapshot-dark", "finish"];
 
-test("tool images support compact previews, keyboard viewing, history, session isolation and generation", {
+async function runFixture(temp) {
+  const entry = join(temp, "main.cjs");
+  const binary = resolveElectronBinary(root).electronBinary;
+  if (process.platform === "win32") {
+    let watcher, timer, pid;
+    const report = new Promise((resolve, reject) => {
+      watcher = watch(temp, (_event, file) => {
+        if (String(file) !== "result.json") return;
+        void readFile(join(temp, "result.json"), "utf8").then(text => resolve(JSON.parse(text)), reject);
+      });
+      timer = setTimeout(() => reject(Error("Tool image fixture did not complete within 30s")), 30_000);
+    });
+    try {
+      const command = `"${binary}" "${entry}"`;
+      const script = `$r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{CommandLine='${command.replaceAll("'", "''")}'}; if ($r.ReturnValue -ne 0) { throw 'WMI fixture launch failed' }; $r.ProcessId`;
+      pid = Number(execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], { encoding: "utf8" }).trim());
+      assert.ok(pid > 0);
+      return await report;
+    } finally {
+      watcher?.close(); clearTimeout(timer);
+      // The fixture alone owns this process, which normally exits after writing its report.
+      if (pid) execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command",
+        `$p = Get-CimInstance Win32_Process -Filter 'ProcessId=${pid}'; if ($p -and $p.CommandLine.Contains('${entry.replaceAll("'", "''")}')) { Invoke-CimMethod -InputObject $p -MethodName Terminate | Out-Null }`]);
+    }
+  }
+  const env = { ...process.env };
+  delete env.ELECTRON_RUN_AS_NODE; delete env.PI_DESKTOP_DATA_DIR;
+  const child = spawn(binary, [entry], { env, stdio: ["ignore", "pipe", "pipe"] });
+  let output = "";
+  for (const stream of [child.stdout, child.stderr]) stream.on("data", chunk => { output += chunk; });
+  const timeout = setTimeout(() => child.kill(), 30_000);
+  try {
+    const code = await new Promise((resolve, reject) => { child.once("error", reject); child.once("close", resolve); });
+    return { code, output };
+  } finally { clearTimeout(timeout); }
+}
+
+test("tool images support grouped previews, keyboard viewing, history, session isolation and generation", {
   skip: process.platform === "linux" && !process.env.DISPLAY ? "Electron requires a display" : false,
 }, async () => {
   const temp = await mkdtemp(join(process.env.PI_SCRATCH_DIR || tmpdir(), "pi-tool-images-ui-"));
+  console.log(`TOOL_IMAGES_ARTIFACTS ${temp}`);
   try {
     await build({
       entryPoints: [join(root, "apps/desktop/test/fixtures/tool-result-images.tsx")],
@@ -27,55 +66,48 @@ test("tool images support compact previews, keyboard viewing, history, session i
       },
       nodePaths: [join(root, "apps/desktop/node_modules")],
     });
-    // The fixture uses esbuild, so expose Tailwind's token declarations as native CSS.
     const cssPath = join(temp, "renderer.css");
     await writeFile(cssPath, (await readFile(cssPath, "utf8")).replace(/@theme\s*\{/g, ":root {"));
     await writeFile(join(temp, "index.html"), '<!doctype html><meta charset="utf-8"><title>Tool image regression</title><link rel="stylesheet" href="renderer.css"><div id="root"></div><script type="module" src="renderer.js"></script>');
     await writeFile(join(temp, "main.cjs"), `
 const { app, BrowserWindow } = require("electron");
 const path = require("node:path");
+const fs = require("node:fs");
 app.setPath("userData", path.join(__dirname, "profile"));
+let output = "";
+const log = text => { output += text + "\\n"; console.log(text); fs.appendFileSync(path.join(__dirname, "progress.log"), text + "\\n"); };
+const finish = code => {
+  fs.writeFileSync(path.join(__dirname, "result.tmp"), JSON.stringify({ code, output }));
+  fs.renameSync(path.join(__dirname, "result.tmp"), path.join(__dirname, "result.json"));
+  app.exit(code);
+};
 app.whenReady().then(async () => {
   const win = new BrowserWindow({ show: false, width: 1000, height: 800,
     webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, backgroundThrottling: false } });
-  win.webContents.on("console-message", (event) => console.error(event.message));
+  win.webContents.on("console-message", event => log(event.message));
   try {
     await win.loadFile(path.join(__dirname, "index.html"));
     win.webContents.focus();
     for (const stage of ${JSON.stringify(stages)}) {
-      const keyCode = { next: "Right", previous: "Left", close: "Escape", "keyboard-open": "Enter", "close-again": "Escape" }[stage];
+      log("TOOL_IMAGES_STAGE " + stage);
+      const keyCode = { next: "Right", previous: "Left", close: "Escape", "keyboard-open": "Enter", "close-again": "Escape", "group-next": "Right", "group-close": "Escape" }[stage];
       if (keyCode) {
         win.webContents.sendInputEvent({ type: "keyDown", keyCode });
         if (keyCode === "Enter") win.webContents.sendInputEvent({ type: "char", keyCode: "\\r" });
         win.webContents.sendInputEvent({ type: "keyUp", keyCode });
       }
-      console.log("TOOL_IMAGES " + JSON.stringify(await win.webContents.executeJavaScript("window.toolImagesProbe(" + JSON.stringify(stage) + ")")));
-      if (stage.startsWith("snapshot-") && process.env.PI_SCRATCH_DIR) {
-        require("node:fs").writeFileSync(path.join(process.env.PI_SCRATCH_DIR, "tool-images-" + stage + ".png"), (await win.webContents.capturePage()).toPNG());
-      }
+      log("TOOL_IMAGES " + JSON.stringify(await win.webContents.executeJavaScript("window.toolImagesProbe(" + JSON.stringify(stage) + ")")));
+      if (stage.startsWith("snapshot-")) fs.writeFileSync(path.join(__dirname, stage + ".png"), (await win.webContents.capturePage()).toPNG());
     }
-    app.exit(0);
-  } catch (error) { console.error(error); app.exit(1); }
+    finish(0);
+  } catch (error) { log(error.stack || String(error)); finish(1); }
 });
 `);
-    const env = { ...process.env };
-    delete env.ELECTRON_RUN_AS_NODE;
-    delete env.PI_DESKTOP_DATA_DIR;
-    const child = spawn(resolveElectronBinary(root).electronBinary, [join(temp, "main.cjs")], {
-      env, windowsHide: true, stdio: ["ignore", "pipe", "pipe"],
-    });
-    let output = "";
-    for (const stream of [child.stdout, child.stderr]) stream.on("data", (chunk) => {
-      output += chunk;
-      for (const line of String(chunk).split(/\r?\n/)) if (line.startsWith("TOOL_IMAGES ")) console.log(line);
-    });
-    const timeout = setTimeout(() => child.kill(), 30_000);
-    let code;
-    try { code = await new Promise((resolve, reject) => { child.once("error", reject); child.once("close", resolve); }); }
-    finally { clearTimeout(timeout); }
+    const { code, output } = await runFixture(temp);
+    console.log(output.slice(-6000));
     assert.equal(code, 0, output.slice(-6000));
-    const results = output.split(/\r?\n/).filter((line) => line.startsWith("TOOL_IMAGES "))
-      .map((line) => JSON.parse(line.slice("TOOL_IMAGES ".length)));
-    assert.deepEqual(results, stages.map((stage) => ({ passed: true, stage })));
-  } finally { await rm(temp, { recursive: true, force: true }); }
+    const results = output.split(/\r?\n/).filter(line => line.startsWith("TOOL_IMAGES "))
+      .map(line => JSON.parse(line.slice("TOOL_IMAGES ".length)));
+    assert.deepEqual(results, stages.map(stage => ({ passed: true, stage })));
+  } finally { if (!process.env.PI_SCRATCH_DIR) await rm(temp, { recursive: true, force: true }); }
 });

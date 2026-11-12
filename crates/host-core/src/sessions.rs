@@ -10,6 +10,10 @@ use std::collections::HashMap;
 
 use crate::transcripts::{self, CompactionRecord, MessageRecord, RevisionRecord};
 
+mod display_preview;
+use display_preview::{preview_tool_result, preview_value, truncate_display_text};
+#[cfg(test)]
+mod display_preview_tests;
 mod fork_files;
 mod history_mutations;
 pub use history_mutations::{
@@ -851,72 +855,6 @@ pub(crate) fn record_to_ui(record: MessageRecord) -> UiMessage {
     }
 }
 
-const DISPLAY_TRUNCATION_MARKER: &str =
-    "\n\n[truncated for display; the full content remains in the transcript]";
-
-fn truncate_display_text(text: String, limit: usize) -> (String, bool) {
-    if text.chars().count() <= limit {
-        return (text, false);
-    }
-    let marker_len = DISPLAY_TRUNCATION_MARKER.chars().count();
-    if limit <= marker_len {
-        return (
-            DISPLAY_TRUNCATION_MARKER.chars().take(limit).collect(),
-            true,
-        );
-    }
-    let head = limit - marker_len;
-    (
-        format!(
-            "{}{}",
-            text.chars().take(head).collect::<String>(),
-            DISPLAY_TRUNCATION_MARKER
-        ),
-        true,
-    )
-}
-
-fn preview_value(value: Value, limit: usize) -> Value {
-    fn walk(value: Value, budget: &mut usize) -> Value {
-        if *budget == 0 {
-            return Value::String("[truncated for display]".into());
-        }
-        match value {
-            Value::String(text) => {
-                let (clipped, _) = truncate_display_text(text, *budget);
-                *budget = (*budget).saturating_sub(clipped.chars().count());
-                Value::String(clipped)
-            }
-            Value::Array(items) => {
-                let mut output = Vec::with_capacity(items.len().min(32));
-                for item in items {
-                    if *budget == 0 || output.len() >= 256 {
-                        output.push(Value::String("[truncated for display]".into()));
-                        break;
-                    }
-                    output.push(walk(item, budget));
-                }
-                Value::Array(output)
-            }
-            Value::Object(object) => {
-                let mut output = serde_json::Map::new();
-                for (key, item) in object {
-                    if *budget == 0 || output.len() >= 256 {
-                        output.insert("_truncated".into(), Value::Bool(true));
-                        break;
-                    }
-                    output.insert(key, walk(item, budget));
-                }
-                Value::Object(output)
-            }
-            other => other,
-        }
-    }
-
-    let mut budget = limit.max(1);
-    walk(value, &mut budget)
-}
-
 fn cap_record_block_value(value: &mut Value, budget: &mut usize) {
     let original = std::mem::take(value);
     *value = match original {
@@ -954,7 +892,12 @@ fn cap_record_blocks_for_display(record: &mut MessageRecord, limit: usize) {
             Some("tool_call") => {
                 for key in ["args", "result"] {
                     if let Some(value) = object.get_mut(key) {
-                        *value = preview_value(std::mem::take(value), limit);
+                        let original = std::mem::take(value);
+                        *value = if key == "result" {
+                            preview_tool_result(original, limit)
+                        } else {
+                            preview_value(original, limit)
+                        };
                     }
                 }
                 if let Some(text) = object.get_mut("text") {
@@ -981,9 +924,8 @@ fn record_to_ui_for_display(mut record: MessageRecord, limit: usize) -> UiMessag
     if let Some(args) = message.tool_args.take() {
         message.tool_args = Some(preview_value(args, limit));
     }
-    if let Some(result) = message.tool_result.take() {
-        message.tool_result = Some(preview_value(result, limit));
-    }
+    // Tool results were already projected before conversion. Do not run the
+    // generic string clipper over their atomic image descriptors/payloads.
     if let Some(error) = message.error.take() {
         message.error = Some(preview_value(error, limit));
     }

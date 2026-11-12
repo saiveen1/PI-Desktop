@@ -9,7 +9,7 @@ import { useAppStore } from "../../../stores/app-store";
 import { AssistantTurnParts } from "./AssistantTurnParts";
 import { TurnChangesCard } from "./TurnChangesCard";
 import { TurnProcess } from "./TurnProcess";
-import { ToolResultImages } from "./ToolResultImages";
+import { TurnToolImages } from "./ToolResultImages";
 import { SubagentUserMessage } from "./SubagentUserMessage";
 
 const NO_DELEGATIONS = new Map<string, never>();
@@ -44,7 +44,7 @@ function SubagentAssistantContent({ entry, active }: { entry: AssistantTurnEntry
       <AssistantTurnParts parts={summary.process} {...context} />
     </TurnProcess> : null}
     <AssistantTurnParts parts={summary.responses} {...context} />
-    {summary.tools.map((message) => <ToolResultImages key={message.id} message={message} />)}
+    <TurnToolImages parts={entry.parts} />
     <TurnChangesCard tools={summary.tools} />
   </>;
 }

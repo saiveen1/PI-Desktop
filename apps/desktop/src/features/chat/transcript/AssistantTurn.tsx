@@ -39,7 +39,7 @@ import {
   MessageTimestamp,
 } from "./shared";
 import { activityItemsEqual } from "./ActivityGroup";
-import { ToolResultImages } from "./ToolResultImages";
+import { TurnToolImages } from "./ToolResultImages";
 import { MessageRow } from "./MessageRow";
 import { ReviewChangeCard } from "../../../components/ReviewChangeCard";
 import { ToolRow } from "./ToolRow";
@@ -341,8 +341,6 @@ export const AssistantTurn = memo(function AssistantTurn({
   const toolsRef = useRef(summary.tools);
   const tools = reuseReferences(toolsRef.current, summary.tools);
   toolsRef.current = tools;
-  const toolImages = useMemo(() => tools
-    .map((message) => <ToolResultImages key={message.id} message={message} />), [tools]);
   // Delegation status/timing depends on actual tool messages, never on thinking
   // or text and never on a Task's attached child transcript identity.
   const delegationItems = useMemo(() => tools.map((message) => ({ kind: "tool" as const, message })), [tools]);
@@ -427,7 +425,7 @@ export const AssistantTurn = memo(function AssistantTurn({
         {/* The answer stays outside the process disclosure: it is what the turn
             produced, not part of what it did. */}
         <AssistantTurnParts parts={responses} {...partContext} />
-        {toolImages}
+        <TurnToolImages parts={entry.parts} />
         {/* Recorded work remains reachable during streaming and after interruption. */}
         <TurnChangesCard tools={tools} />
         {!isActive && metaMessage ? (
