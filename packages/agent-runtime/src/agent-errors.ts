@@ -1,4 +1,5 @@
 import { readProviderIdleTimeout } from "./provider-stream-idle-error.js";
+import { readOutputRepetition } from "./model-output-repetition.js";
 /**
  * Provider/model error classification for the agent path.
  *
@@ -548,6 +549,15 @@ export function classifyAgentError(err: unknown, responseStatus?: number): Class
     (err instanceof Error && err.name === "AbortError") ||
     envelope?.stopReason === "aborted" ||
     local?.causeName === "AbortError";
+  const repetition = readOutputRepetition(err);
+  if (repetition && !explicitlyAborted) {
+    return {
+      code: "MODEL_OUTPUT_REPETITION",
+      message: "Stopped abnormal repetitive model output. The partial reply is preserved; review it before continuing or changing models.",
+      retriable: false,
+      details: { origin: "local", phase: "stream", ...repetition },
+    };
+  }
   const idle = readProviderIdleTimeout(err);
   if (idle && !explicitlyAborted) {
     return {

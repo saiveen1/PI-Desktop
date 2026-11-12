@@ -394,6 +394,36 @@ normally without a correction nudge. Text is never parsed into executable
 arguments, tools are never silently activated, and no transport retry budget
 is spent.
 
+### Repetitive model-output circuit breaker
+
+Desktop main-Agent and delegated provider streams inspect text and thinking
+incrementally before forwarding deltas to the agent loop. A contiguous run of
+whitespace (including common invisible separators), punctuation and symbols
+trips at 4,096 characters with 512 newlines,
+or 8,192 characters without a newline requirement. Meaningful characters reset
+the run. Markdown fenced code is excluded; this is a conservative runaway-output
+guard, not a semantic judge of repetitive prose, code, logs, or task completion.
+Tool-call arguments and tool results are never inspected or rewritten.
+
+Each request owns its detector and abort controller. Detection cancels only
+that provider attempt and emits terminal `MODEL_OUTPUT_REPETITION`, with local
+provenance, the text/thinking channel and counts, never raw diagnostic content.
+The received text/thinking is retained unchanged for inspection, but tool calls
+in that unfinished response are removed before execution. Earlier successful
+tools are not replayed. No provider retry, checklist continuation or silent
+recovery is scheduled, even when infinite provider retry is enabled. A user
+Stop wins as cancellation; a new explicit prompt starts with fresh detectors.
+Already-failed provider responses keep their original error classification.
+
+Delta inspection consumes only newly appended text; terminal snapshots receive
+one full check so adapters delivering only a final response are covered. A
+single large provider frame may exceed the detection threshold before it can
+be interrupted, which is why bounded renderer previews remain mandatory.
+History and user messages are not cleaned or changed by this guard. Native Pi
+sessions and one-shot plugin/summary requests retain their existing behavior.
+
+See E2E-RUNTIME-repetitive-model-output and E2E-UI-bounded-repetitive-output.
+
 Before surfacing a pre-stream `PROVIDER_ERROR` for HTTP 400/422 whose message
 ends in `(no body)`, the runtime makes at most one silent repair attempt with
 the generated output-limit fields removed: `max_tokens`,

@@ -1856,6 +1856,30 @@ storage but compose into one assistant turn until the next user message.
   compaction has no model tool activity row; manual `/compact` retains its
   existing explicit feedback.
 
+### 7.4a Bounded Markdown and repetitive-output previews
+
+- Before math normalization, block splitting or Markdown parsing, raw source
+  exceeding 128 Ki UTF-16 code units or 2,000 lines enters a plain preview.
+  The existing 32 Ki streaming-tail limit uses the same preview. LF, CRLF and
+  lone CR line endings all count; a short character count cannot bypass the
+  line guard by emitting thousands of punctuation/blank lines.
+- Plain previews page the original text with a maximum of 32 Ki code units
+  and 800 line breaks per page, preserving UTF-16 surrogate pairs. They never
+  mount an unbounded `<pre>`, including when the user requests original text.
+- On each bounded page, runs of at least 80 short blank/punctuation-only lines
+  are replaced for display with a localized folded-line count. Original-text
+  and folded-preview controls retain the same raw page position. Folding is
+  display-only and applies to oversized sources as well as dense short ones.
+- Streaming follows the newest page until the reader navigates away. Appends
+  preserve reader position; source replacement resets it. Message Copy still
+  receives the unchanged complete source, not the folded/page text.
+- Paged/folded previews do not advertise Markdown source anchors: a synthetic
+  count or a page offset is not an original source span. Normal in-budget
+  Markdown, links, code, math and source anchors keep their existing behavior.
+  A source match outside the visible raw page requires page navigation.
+- Historical messages and persisted text are not rewritten or deleted. Runtime
+  repetition detection is separate: see the agent runtime specification.
+
 ### 7.5 Accessibility
 
 - `role="log"` container

@@ -14,6 +14,7 @@ import {
   type ClassifiedAgentError,
 } from "./agent-errors.js";
 import { readLocalRequestErrorDetails } from "./local-request-errors.js";
+import { readOutputRepetition } from "./model-output-repetition.js";
 import {
   describeProviderFetchFailure,
   type ProviderFetchFailure,
@@ -462,7 +463,7 @@ export function captureProviderResponse(
 
 function normalizeRateLimitMessage(message: AssistantMessage): AssistantMessage {
   // A previous HTTP response is not evidence about a later local failure.
-  if (readLocalRequestErrorDetails(message)) return message;
+  if (readLocalRequestErrorDetails(message) || readOutputRepetition(message)) return message;
   const errorMessage = message.errorMessage ?? "";
   if (/^\s*429\b/.test(errorMessage)) return message;
   return {

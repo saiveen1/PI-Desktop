@@ -926,6 +926,48 @@ being fetched on every subsequent poll.
 - **Coverage:** `text-tool-call.test.ts`, `text-tool-call-recovery.test.ts`,
   `malformed-tool-recovery.test.ts`.
 
+### E2E-UI-bounded-repetitive-output
+
+- **Preconditions:** Production Markdown, preview and Copy components mounted
+  in an isolated Electron fixture with synthetic text and an in-memory clipboard.
+- **Steps:** Render `:\n\n` repeated 12,300, 36,000 and 100,000 times. Toggle
+  original/folded view, navigate pages and Copy. Append to a streaming preview
+  after navigating backward; replace its source. Repeat in English and Chinese.
+  Exercise CR/LF/CRLF, surrogate boundaries, normal math/Markdown and sources
+  above 128 Ki code units.
+- **Expected:** Dense source bypasses Markdown parsing. Display stays within
+  one raw page (32 Ki code units, 800 line breaks), including original view.
+  Repetition folds on each page; navigation uses stable original page boundaries.
+  Copy returns the complete unmodified source. Streaming respects reader intent;
+  replacement resets navigation. No misleading source anchors mark the preview.
+- **Coverage:** `render-content-limits.test.mjs`,
+  `markdown-math-rendering.test.mjs`, `markdown-output-preview-user-path.test.mjs`.
+- **Specs:** Component spec §7.4a.
+- **Acceptance:** Offline unit, SSR and isolated component interaction checks.
+- **Milestone:** Maintenance.
+- **Status:** Automated fixture coverage; the daily Desktop/profile is not used.
+
+### E2E-RUNTIME-repetitive-model-output
+
+- **Preconditions:** Isolated main and delegated runtime fixtures; synthetic
+  provider SSE and Host responses, no live credentials or user profile.
+- **Steps:** Complete one tool, then stream thousands of colon/blank-line or
+  dash lines in text and thinking, including an unfinished sibling tool. Repeat
+  with chunk boundaries inside the pattern, only a final snapshot, infinite
+  retry enabled, stale HTTP 429 metadata, and user Stop. Send a new prompt.
+  Include ordinary prose, lists, tables, fenced code and repetitive tool JSON.
+- **Expected:** One `MODEL_OUTPUT_REPETITION` failure terminates only the
+  current request. Received partial text is preserved, previous tools are not
+  replayed, unfinished tools never execute, and no automatic continuation or
+  provider retry occurs. Cancellation stays aborted. Normal content and tool
+  arguments remain unchanged. A new explicit prompt can complete normally.
+- **Coverage:** `model-output-guard.test.ts`,
+  `model-output-repetition-user-path.test.ts`, shared error-code contract tests.
+- **Specs:** Runtime spec §Repetitive model-output circuit breaker; error codes §3.2.
+- **Acceptance:** Offline real-adapter/Agent-loop and unit checks.
+- **Milestone:** Maintenance.
+- **Status:** Automated fixture coverage; live-provider verification not required.
+
 ### E2E-PI-130-kernel-upgrade
 
 - **Preconditions:** Exact Pi 1.3.0 pins and migrated patches in a dedicated
@@ -11841,6 +11883,7 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
 
 | Acceptance | Scenarios |
 |---|---|
+| C / Data safety / Quality — Bounded repetitive output | E2E-UI-bounded-repetitive-output, E2E-RUNTIME-repetitive-model-output |
 | A / Data safety / Quality — Session multiselect and reversible deletion | E2E-SESSION-recycle-bin-and-multiselect |
 | C / E / Security / Quality — Live delegation policy, retry continuation and revision-bound grouped model consent | E2E-DELEGATION-scheduling-and-model-approval |
 | C / E / Data safety / Quality - Truthful terminal delivery and optional recovery | E2E-DELEGATION-terminal-delivery-and-recovery |

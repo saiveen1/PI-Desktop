@@ -336,6 +336,7 @@ import {
   providerSetupRetryDelayMs,
 } from "./provider-retry.js";
 import { streamIdleTimeoutMs, withProviderStreamIdleTimeout } from "./provider-stream-idle.js";
+import { withModelOutputGuard } from "./model-output-guard.js";
 
 import {
   ContextEstimateCalibration,
@@ -2351,7 +2352,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           attemptOptions,
           (retryOptions) => {
             const attempt = diagnosticAttempt;
-            return withProviderStreamIdleTimeout(m, retryOptions,
+            return withModelOutputGuard(m, retryOptions, guardedOptions => withProviderStreamIdleTimeout(m, guardedOptions,
               streamIdleTimeoutMs(this.providerStreamIdleTimeoutMinutes), timedOptions => accountModelStream(m, () =>
               this.thinkingLevel === "omit"
                 ? this.models.stream(omitThinkingModel(m), requestContext, timedOptions)
@@ -2367,7 +2368,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
               }), since => {
                 if (!this.disposed && !this.runCancelled && diagnostics === this.runDiagnostics)
                   this.setAgentActivity({ phase: "waiting-model", since, slow: true });
-              });
+              }));
           },
           {
             claim: (error, phase) => this.claimProviderRetry(error, phase),

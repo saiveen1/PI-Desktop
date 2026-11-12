@@ -35,6 +35,7 @@ describe("result helpers", () => {
     const newlyLiveCodes = [
       "CONTEXT_COMPACTION_FAILED",
       "EMPTY_MODEL_RESPONSE",
+      "MODEL_OUTPUT_REPETITION",
       "SUBAGENT_OUTPUT_TRUNCATED",
       "EDIT_TAG_REQUIRED",
       "EDIT_LEGACY_MATCH_FAILED",

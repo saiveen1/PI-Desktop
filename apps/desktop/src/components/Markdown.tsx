@@ -31,6 +31,8 @@ import {
   MAX_STREAMING_MARKDOWN_TAIL_CODE_UNITS,
   MAX_SYNC_MARKDOWN_CODE_UNITS,
 } from "../lib/render-content-limits";
+import { isMarkdownSourceTooLarge } from "../lib/render-content-limits";
+import { MarkdownPlainPreview } from "./MarkdownPlainPreview";
 import {
   beginRenderDiagnostic,
   recordRenderDiagnostic,
@@ -996,8 +998,7 @@ export const Markdown = memo(function Markdown({
     (event, target) => openFileMenu(event, { items: fileMenuItems(target) }),
     [fileMenuItems, openFileMenu],
   );
-  const { t } = useTranslation();
-  const fullSourceTooLarge = source.length > MAX_SYNC_MARKDOWN_CODE_UNITS;
+  const fullSourceTooLarge = useMemo(() => isMarkdownSourceTooLarge(source), [source]);
   const markdownTailLimit = streaming
     ? MAX_STREAMING_MARKDOWN_TAIL_CODE_UNITS
     : MAX_SYNC_MARKDOWN_CODE_UNITS;
@@ -1032,14 +1033,7 @@ export const Markdown = memo(function Markdown({
     <MarkdownFileMenuContext.Provider value={openMarkdownFileMenu}>
       <MarkdownBaseDirContext.Provider value={baseDir ?? ""}>
         {fullSourceTooLarge ? (
-          <div
-            className="markdown-plain-fallback"
-            data-source-start={0}
-            data-source-end={source.length}
-          >
-            <div role="status">{t("chat.markdownPlainTextFallback")}</div>
-            <pre>{source}</pre>
-          </div>
+          <MarkdownPlainPreview source={source} streaming={streaming} />
         ) : blocks.map((raw, i) => {
           const start = sourceOffset;
           sourceOffset = start + raw.length;
@@ -1047,15 +1041,7 @@ export const Markdown = memo(function Markdown({
           const tailTooLarge = streaming && raw.length > markdownTailLimit;
           if (tailTooLarge) {
             return (
-              <div
-                className="markdown-plain-fallback"
-                key={i}
-                data-source-start={start}
-                data-source-end={start + raw.length}
-              >
-                <div role="status">{t("chat.markdownPlainTextFallback")}</div>
-                <pre>{originalRaw}</pre>
-              </div>
+              <MarkdownPlainPreview key={i} source={originalRaw} streaming={streaming} />
             );
           }
           return (

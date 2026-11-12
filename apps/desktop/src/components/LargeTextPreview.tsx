@@ -1,6 +1,6 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { renderedTextPage } from "../lib/render-content-limits";
+import { createRenderedTextPager } from "../lib/render-content-limits";
 import { Button } from "./ui";
 
 export function LargeTextPreview({
@@ -19,7 +19,13 @@ export function LargeTextPreview({
   const [selectedPage, setSelectedPage] = useState<number | null>(() =>
     followLatest ? null : 0,
   );
-  const page = renderedTextPage(
+  const previousText = useRef(text);
+  useEffect(() => {
+    if (!text.startsWith(previousText.current)) setSelectedPage(followLatest ? null : 0);
+    previousText.current = text;
+  }, [text, followLatest]);
+  const pager = useRef(createRenderedTextPager());
+  const page = pager.current(
     text,
     selectedPage ?? 0,
     selectedPage === null,

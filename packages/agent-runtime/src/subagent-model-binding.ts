@@ -1,5 +1,6 @@
 import { createToolCallIdentity } from "./tool-call-dedupe.js";
 import { accountModelStream, type UsageObserver } from "./request-usage.js";
+import { withModelOutputGuard } from "./model-output-guard.js";
 import {
   buildProviderModel,
   copilotRequestHeaders,
@@ -120,14 +121,14 @@ export function subagentModelBinding(opts: {
         m,
         requestContext,
         sessionOptions,
-        (retryOptions) => accountModelStream(m, () =>
+        (retryOptions) => withModelOutputGuard(m, retryOptions, guardedOptions => accountModelStream(m, () =>
           omitThinking
-            ? models.stream(omitThinkingModel, requestContext, retryOptions)
-            : models.streamSimple(m, requestContext, retryOptions), {
+            ? models.stream(omitThinkingModel, requestContext, guardedOptions)
+            : models.streamSimple(m, requestContext, guardedOptions), {
               providerId: opts.provider.id,
               nativeCost: opts.provider.modelConfig?.nativeCost,
               onUsage: opts.onUsage,
-            }),
+            })),
         {
           allowOutputLimitRepair: retry.allowOutputLimitRepair,
           onRetry: retry.onRetry,

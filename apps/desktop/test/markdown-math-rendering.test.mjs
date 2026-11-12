@@ -34,7 +34,7 @@ test("TeX math and wrapped HTTP links render through the production Markdown pip
     const i18n = createInstance();
     await i18n.init({
       lng: "en",
-      resources: { en: { translation: catalogs.en } },
+      resources: { en: { translation: { ...catalogs.en, chat: { ...catalogs.en.chat, markdownFoldedLines: "{{count}} lines folded", markdownShowRaw: "Show original text", markdownShowFolded: "Show folded preview" } } } },
     });
     const render = (source, streaming = false) =>
       renderToStaticMarkup(
@@ -96,15 +96,24 @@ test("TeX math and wrapped HTTP links render through the production Markdown pip
     const largeMarkdown = "raw-source-".repeat(12_000);
     const largeMarkdownHtml = render(largeMarkdown);
     assert.match(largeMarkdownHtml, /role="status"/);
-    assert.match(largeMarkdownHtml, /data-source-start="0"/);
-    assert.match(largeMarkdownHtml, /data-source-end="132000"/);
+    assert.doesNotMatch(largeMarkdownHtml, /data-source-start=/);
+    assert.match(largeMarkdownHtml, /data-page-count="5"/);
     assert.match(largeMarkdownHtml, /<pre>raw-source-/);
     assert.doesNotMatch(largeMarkdownHtml, /<p>raw-source-/);
 
     const streamingMarkdownHtml = render(`# Settled\n\n${"large-tail-".repeat(3_000)}`, true);
     assert.match(streamingMarkdownHtml, /role="status"/);
-    assert.match(streamingMarkdownHtml, /<pre># Settled/);
+    assert.match(streamingMarkdownHtml, /data-page-index="1"/);
     assert.match(streamingMarkdownHtml, /large-tail-/);
+
+    for (const repetitions of [12_300, 36_000]) {
+      const dense = render(":\n\n".repeat(repetitions));
+      assert.match(dense, /lines folded/);
+      assert.match(dense, /Show original text/);
+      assert.doesNotMatch(dense, /data-source-start=/);
+      assert.ok(dense.length < 2000);
+    }
+    assert.match(render("# ordinary\n\ntext"), /<h1[^>]*>ordinary<\/h1>/);
 
     // Issue #541: display math whose body puts `=`, `-`, `+` or `*` on their
     // own lines used to be shredded by marked's block lexer (setext headings /
