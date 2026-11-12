@@ -2,7 +2,7 @@ import {
   type AgentMessage,
 } from "@earendil-works/pi-agent-core";
 import type { RetryPolicy, Usage } from "@earendil-works/pi-ai";
-import { truncateMessageText } from "./agent-messages.js";
+import { truncateMessageText, truncateTextWithMarker } from "./agent-messages.js";
 import {
   ESTIMATED_TEXT_CHARS_PER_TOKEN,
   estimateTokens,
@@ -44,12 +44,12 @@ export const COMPACTION_SUMMARY_RETRY_POLICY: RetryPolicy = {
 
 /**
  * Per-tool-result character cap on the reduced input. pi already caps at 2 000
- * when serializing; the reduced pass keeps a prefix a quarter of that so the
- * model still sees what each call returned without the bulk.
+ * when serializing; the reduced pass keeps a quarter of that, sharing the cap
+ * between the beginning and ending so completion receipts survive as well.
  */
 export const COMPACTION_REDUCED_TOOL_RESULT_CHARS = 500;
 
-const REDUCED_TOOL_RESULT_SUFFIX = "\n\n[... tool output truncated for the summary request]";
+const REDUCED_TOOL_RESULT_SUFFIX = "\n\n[... tool output truncated for the summary request ...]\n\n";
 /**
  * Tokens held back from the window for the summary prompt template itself, on
  * top of the model's own output allowance. The preflight guard and the chunk
@@ -97,7 +97,7 @@ export function estimateSummaryPromptTokens(input: CompactionSummaryInput): numb
 }
 
 /**
- * One bounded reduction of the summary input: tool results keep a short prefix
+ * One bounded reduction of the summary input: tool results keep both ends
  * and assistant thinking is dropped. User text, assistant text, and tool call
  * arguments survive intact, so the summary still covers every message the
  * checkpoint will file behind its boundary. Returns undefined when nothing was
@@ -142,8 +142,7 @@ function reduceMessage(message: AgentMessage): AgentMessage {
 }
 
 function boundToolResultText(text: string): string {
-  if (text.length <= COMPACTION_REDUCED_TOOL_RESULT_CHARS) return text;
-  return text.slice(0, COMPACTION_REDUCED_TOOL_RESULT_CHARS) + REDUCED_TOOL_RESULT_SUFFIX;
+  return truncateTextWithMarker(text, COMPACTION_REDUCED_TOOL_RESULT_CHARS, REDUCED_TOOL_RESULT_SUFFIX);
 }
 
 /**

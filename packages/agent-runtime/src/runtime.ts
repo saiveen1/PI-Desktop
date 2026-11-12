@@ -1,3 +1,4 @@
+import { selectActiveTurnTail } from "./compaction-continuity.js";
 import { activeToolSupportsImages } from "./tool-image-context.js";
 import { DEFAULT_DELEGATION_FAILURE_POLICY, type DelegationFailurePolicy } from "@pi-desktop/shared";
 import { DelegationMessages, subagentMessageReceipt, subagentMessageTaskId, subagentUserMessageId } from "./delegation-messages.js";
@@ -188,7 +189,6 @@ import {
 } from "./pi-runtime-compaction-plan.js";
 import { compact } from "./pi-runtime-compaction-summary.js";
 import {
-  ESTIMATED_TEXT_CHARS_PER_TOKEN,
   estimateContextTokens,
   estimateTokens,
 } from "./pi-runtime-estimates.js";
@@ -313,7 +313,6 @@ import {
   reduceSummaryInput,
 } from "./compaction-summary-input.js";
 import {
-  CHECKPOINT_TRUNCATION_MARKER,
   COMPACTION_RETAINED_TAIL_SHAPE,
   replayRetainedTail,
   selectRecentTail,
@@ -1321,14 +1320,10 @@ function compactionRetentionMode(details: unknown): CompactionRetentionMode {
 /**
  * The messages a stored checkpoint replays as real context after its summary.
  *
- * A checkpoint that recorded {@link COMPACTION_RETAINED_TAIL_SHAPE} keeps the
- * whole window it stored: it is a failed compaction's only record of the range
- * behind it, so narrowing the tail back to one user message would reinstate
- * exactly the amnesia the window fixes (#827). Records written before that
- * marker existed — and every successful checkpoint — keep the older
- * normalization: at most the latest user message, and none at all once the turn
- * is complete, so a restart cannot restore a sequence of executable-looking old
- * requests.
+ * Successful active checkpoints and retained-tail fallbacks mark a recent
+ * execution window for full replay. Unmarked legacy records keep the older
+ * normalization: at most the latest active user message, or none after a
+ * completed turn. Never expand an old checkpoint from unrelated transcript rows.
  */
 function retainedTailForContext(
   value: unknown,
@@ -1636,67 +1631,6 @@ function appendToolProgress(current: string, chunk: string): string {
   const tail = tailBudget > 0 ? takeSuffixCodeUnits(combined, tailBudget) : "";
   return `${head}${TOOL_PROGRESS_TRUNCATION_MARKER}${tail}`;
 }
-
-/** Bound a checkpoint message's text, naming the cut the way pi's tail does. */
-function truncateTextForCheckpoint(text: string, maxChars: number): string {
-  return truncateTextWithMarker(text, maxChars, CHECKPOINT_TRUNCATION_MARKER);
-}
-
-/**
- * Flatten a user message to plain text so it can be truncated at a token
- * budget. Images and other non-text blocks are named rather than kept: a
- * checkpoint that carried them would spend its whole budget on one of them.
- */
-function userMessageTextForCheckpoint(message: UserMessage): string {
-  if (typeof message.content === "string") return message.content;
-  return message.content
-    .map((block) =>
-      block.type === "text"
-        ? block.text
-        : `[${block.type} content omitted from checkpoint]`,
-    )
-    .join("\n");
-}
-
-function truncateUserMessageForCheckpoint(
-  message: UserMessage,
-  tokenBudget: number,
-): UserMessage {
-  return {
-    ...message,
-    content: truncateTextForCheckpoint(
-      userMessageTextForCheckpoint(message),
-      Math.max(1, Math.floor(tokenBudget * ESTIMATED_TEXT_CHARS_PER_TOKEN)),
-    ),
-  };
-}
-
-/**
- * Choose the user messages that survive a compaction boundary: newest first up
- * to `maxTokens`, truncating the one that crosses the budget instead of
- * dropping it, then restored to chronological order. This is Codex's
- * `build_compacted_history_with_limit` selection.
- */
-function selectRetainedUserMessages(
-  candidates: UserMessage[],
-  maxTokens: number,
-): UserMessage[] {
-  const selected: UserMessage[] = [];
-  let remaining = Math.max(0, maxTokens);
-  for (let index = candidates.length - 1; index >= 0 && remaining > 0; index -= 1) {
-    const message = candidates[index];
-    const tokens = estimateTokens(message);
-    if (tokens <= remaining) {
-      selected.push(message);
-      remaining -= tokens;
-      continue;
-    }
-    selected.push(truncateUserMessageForCheckpoint(message, remaining));
-    break;
-  }
-  return selected.reverse();
-}
-
 
 /** Rebuild a pi-ai tool result from a persisted tool row. Rows that never
  * finished (app quit / abort mid-tool) restore as errored results so the
@@ -7592,18 +7526,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     return retainedUserMessageBudget(budget);
   }
 
-  /**
-   * Prepare a checkpoint in Codex's shape: the summary covers every message
-   * since the previous boundary, and the only messages carried past the
-   * boundary are the latest user message only when the provider is still
-   * continuing the same turn. A completed turn carries no naked historical
-   * user messages into the next task.
-   *
-   * pi's cut point is still what marks the boundary, but the split it produces
-   * is folded back together (see `codexShapedPreparation`), so
-   * `budget.keepRecentTokens` no longer decides what survives. File operations
-   * are collected from that whole folded range, including the retained tail.
-   */
+  /** Summarize the whole boundary; retain bounded execution evidence only for an active task. */
   private prepareCompactionInput(
     entries: Entry[],
     budget: ContextBudget,
@@ -7627,7 +7550,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     );
     return {
       ok: true as const,
-      value: this.codexShapedPreparation(
+      value: this.continuityShapedPreparation(
         {
           ...prepared.value,
           ...(previousSummary === prepared.value.previousSummary
@@ -7636,33 +7559,23 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
         },
         retainedUserTokens,
         retentionMode,
+        buildSessionContext(entries, this.reasoningReplayIdentity()).messages,
+        budget.keepRecentTokens,
       ),
     };
   }
 
   /**
-   * Reshape a pi preparation the way Codex compacts:
-   *
-   * - Everything pi would have split across `messagesToSummarize`,
-   *   `turnPrefixMessages` and `retainedTail` is summarized as one range. The
-   *   three are contiguous and ordered, so concatenating them loses nothing —
-   *   and it is what makes dropping the tail safe: no message leaves the model
-   *   context without the summary covering it.
-   * - The retained tail is rebuilt from the latest user message only when the
-   *   turn is still active. Completed turns retain no user messages: their
-   *   summary is authoritative, and the next prompt becomes the sole new
-   *   instruction after the checkpoint. Dropping assistant messages also drops
-   *   their `toolCall` blocks, and their results go with them in the same pass,
-   *   so no orphaned tool call can reach a provider.
-   * - `firstKeptEntryId` points at the anchor the checkpoint is filed against.
-   *   It is ours, not pi's (see `ShapedPreparation`): pi 0.84 takes its own
-   *   boundary from the compaction entry, so this only feeds the persisted
-   *   record and the `compaction_end` event.
+   * Fold the full range into the summary and keep original provider messages
+   * separately: file-operation normalization must never rename retained calls.
+   * Completed tasks keep an empty tail so old requests cannot become new work.
    */
-  private codexShapedPreparation(
+  private continuityShapedPreparation(
     preparation: CompactionPreparation,
     retainedUserTokens: number,
     retentionMode: CompactionRetentionMode,
+    contextMessages: AgentMessage[],
+    keepRecentTokens: number,
   ): ShapedPreparation {
     // pi 0.84 replays a previous checkpoint's `retainedTail` as virtual entries
     // at the head of the compactable range, so those messages already arrive in
@@ -7691,18 +7604,16 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     for (const message of preparation.retainedTail) {
       collectMessageFileOperations(message, fileOps, executedCallIds);
     }
-    const latestUser = messagesToSummarize
-      .filter((message): message is UserMessage => message.role === "user")
-      .at(-1);
-    const candidates =
-      retentionMode === "active_turn" && latestUser ? [latestUser] : [];
     return {
       ...preparation,
       firstKeptEntryId: this.fullEntries.at(-1)?.id,
       messagesToSummarize,
       turnPrefixMessages: [],
       isSplitTurn: false,
-      retainedTail: selectRetainedUserMessages(candidates, retainedUserTokens),
+      retainedTail: retentionMode === "active_turn"
+        ? selectActiveTurnTail(contextMessages, keepRecentTokens, retainedUserTokens,
+          this.runDiagnostics?.snapshot(Date.now()).startedAt)
+        : [],
       fileOps,
     };
   }
@@ -8692,6 +8603,10 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           ...(isRecord(result.value.details) ? result.value.details : {}),
           strategy: "summary" satisfies CompactionStrategy,
           retainedTailMode: retentionMode,
+          ...(retentionMode === "active_turn" ? {
+            retainedTailShape: COMPACTION_RETAINED_TAIL_SHAPE,
+            retainedTailCount: preparation.value.retainedTail.length,
+          } : {}),
           ...this.retainedReasoningForCheckpoint(preparation.value),
         },
       ),

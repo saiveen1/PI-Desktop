@@ -8190,7 +8190,7 @@ describe("DesktopAgentRuntime per-turn context protection", () => {
     await runtime.dispose();
   });
 
-  it("keeps only user messages in the model context past a boundary", async () => {
+  it("keeps bounded current-task execution pairs in the context past a boundary", async () => {
     const runtime = createRuntime();
     const toolAssistant = {
       ...assistant,
@@ -8265,16 +8265,18 @@ describe("DesktopAgentRuntime per-turn context protection", () => {
     ).toEqual(["user", "user", "assistant", "toolResult"]);
     // The anchor becomes the next boundary.
     expect(preparation.value.firstKeptEntryId).toBe("large-tool-call");
-    expect(
-      preparation.value.retainedTail.map((message: any) => message.content),
-    ).toEqual(["inspect the log"]);
+    const retained = preparation.value.retainedTail as AgentMessage[];
+    expect(retained.map(message => message.role)).toEqual(["user", "assistant", "toolResult"]);
+    expect(retained[0]).toMatchObject({ content: "inspect the log" });
+    expect(retained.reduce((sum, message) => sum + estimateTokens(message), 0))
+      .toBeLessThanOrEqual(budget.keepRecentTokens);
 
     const checkpoint = (runtime as any).createCheckpoint(
       preparation.value,
       "large-tool-call",
       "Older work was summarized.",
       undefined,
-      { retainedTailMode: "active_turn" },
+      { retainedTailMode: "active_turn", retainedTailShape: "recent_window" },
     );
     const compacted = buildSessionContext(
       (runtime as any).entriesWithCompaction(checkpoint),
@@ -8282,16 +8284,14 @@ describe("DesktopAgentRuntime per-turn context protection", () => {
     expect(compacted.map((message: any) => message.role)).toEqual([
       "compactionSummary",
       "user",
+      "assistant",
+      "toolResult",
     ]);
-    // No assistant message means no toolCall block, so no orphaned tool call can
-    // reach a provider.
-    expect(
-      compacted.flatMap((message: any) =>
-        Array.isArray(message.content)
-          ? message.content.filter((block: any) => block.type === "toolCall")
-          : [],
-      ),
-    ).toEqual([]);
+    const calls = compacted.flatMap(message => message.role === "assistant"
+      ? message.content.filter(block => block.type === "toolCall").map(block => block.id) : []);
+    const results = compacted.filter(message => message.role === "toolResult").map(message => message.toolCallId);
+    expect(calls).toEqual(["large-tool-call"]);
+    expect(results).toEqual(calls);
     await runtime.dispose();
   });
 
@@ -8718,7 +8718,7 @@ describe("DesktopAgentRuntime per-turn context protection", () => {
     await runtime.dispose();
   });
 
-  it("summarizes an atomic parallel tool batch rather than carrying it forward", async () => {
+  it("summarizes an oversized parallel batch while retaining bounded complete pairs", async () => {
     const constrainedProvider: RuntimeProviderConfig = {
       ...provider,
       modelConfig: {
@@ -8798,7 +8798,7 @@ describe("DesktopAgentRuntime per-turn context protection", () => {
     expect(budget.tokens).toBeGreaterThan(budget.hardLimit);
     expect(preparation.ok).toBe(true);
     expect(preparation.value.firstKeptEntryId).toBe("parallel-tool-3");
-    // The batch that used to force a full-tail retention is now summary input.
+    // The summary still covers the full batch, independently of the bounded tail.
     expect(
       preparation.value.messagesToSummarize.map((message: any) => message.role),
     ).toEqual([
@@ -8809,7 +8809,11 @@ describe("DesktopAgentRuntime per-turn context protection", () => {
       "toolResult",
       "toolResult",
     ]);
-    expect(retainedTail.map((message: any) => message.role)).toEqual(["user"]);
+    expect(retainedTail.map((message: AgentMessage) => message.role)).toEqual([
+      "user", "assistant", "toolResult", "toolResult", "toolResult", "toolResult",
+    ]);
+    expect(retainedTail.reduce((sum: number, message: AgentMessage) => sum + estimateTokens(message), 0))
+      .toBeLessThanOrEqual(budget.keepRecentTokens);
     expect(retainedTail[0].content).toBe("inspect the repository");
     // The visible transcript keeps the complete results either way.
     expect(
@@ -12661,10 +12665,12 @@ describe("DesktopAgentRuntime retained-tail file operations (#2287 follow-up to 
       },
     ];
 
-    const shaped = (runtime as any).codexShapedPreparation(
+    const shaped = (runtime as any).continuityShapedPreparation(
       preparationWithTail(),
       0,
       "completed_turn",
+      [],
+      0,
     );
 
     expect([...shaped.fileOps.read]).toEqual(["src/ran.ts"]);

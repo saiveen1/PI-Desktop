@@ -26,6 +26,20 @@ application tests or establish installed-upgrade, performance, or security claim
 
 ## Local harness and delegation increments
 
+The execution-continuity amendment was added on personal base
+`58c8ef37b`, compared read-only with the same locally recorded upstream
+`7841a9828249e5f93c9aa1a85e3a096776bfe1b8`. That upstream's
+`runtime.ts` keeps only the latest user on successful active compaction, and
+`pi-runtime-messages.ts` retains only tool-output prefixes. This local change
+adds budgeted current-task execution pairs, head/tail summary excerpts and
+explicit continuation guidance; automatic compaction and checkpoint storage
+remain inherited foundations. See the
+[decision and regression scope](../adr/compaction-execution-continuity.md),
+[selector](../../packages/agent-runtime/src/compaction-continuity.ts) and
+[offline user path](../../packages/agent-runtime/src/compaction-continuity-user-path.test.ts).
+This comparison does not claim anything about un-fetched upstream changes or
+installed/live-model behavior.
+
 | Local increment | Originating local commits | Contrast with the audited upstream | Current implementation / coverage evidence |
 | --- | --- | --- | --- |
 | Broader repeated mutation/command failure protection | `d9bf50fa1` | Upstream already guards repeated Edit and shell-patch failures. Local work extends accounting to Write and identical ordinary Bash failures while preserving upstream owner isolation, and permits meaningful retests after successful file changes. This is not a blanket three-command limit. | [Guard](../../packages/agent-runtime/src/mutation-recovery-guard.ts), [runtime coverage](../../packages/agent-runtime/src/runtime-tool-recovery.test.ts). |

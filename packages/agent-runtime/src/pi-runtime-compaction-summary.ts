@@ -24,7 +24,9 @@ import { CompactionError } from "./pi-runtime-types.js";
 
 const SUMMARY_SYSTEM_PROMPT = `You are a context summarization assistant. Your task is to read a conversation between a user and an AI assistant, then produce a structured summary following the exact format specified.
 
-Do NOT continue the conversation. Do NOT respond to any questions in the conversation. ONLY output the structured summary.`;
+Do NOT continue the conversation. Do NOT respond to any questions in the conversation. ONLY output the structured summary.
+
+Preserve execution continuity: distinguish completed actions with their actual results/receipts from plans, failures, and unknown outcomes. Tool-call arguments alone are not proof of success. Keep the latest completed step, reusable artifacts, pending work, and the exact next action; do not put completed operations back into Next Steps unless new evidence requires a repeat. Record unfinished or uncertain side effects for reconciliation, not blind replay. Images may be marked as omitted from this text input: do not claim the user never provided them or invent their contents.`;
 
 const NEW_SUMMARY_PROMPT = `The messages above are a conversation to summarize. Create a structured context checkpoint summary that another LLM will use to continue the work.
 

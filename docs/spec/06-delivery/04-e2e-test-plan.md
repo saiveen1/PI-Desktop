@@ -8608,13 +8608,12 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
   - At the hard boundary a durable checkpoint is created before the next model
     request. The complete visible transcript is unchanged, and the continued
     task stays below the model-aware safe budget.
-  - After a checkpoint the next provider request contains no assistant or tool
-    message from before the boundary — only the summary and, while an active
-    turn continues, its latest user message, which may carry the
-    checkpoint-truncation marker. A completed-turn checkpoint has an empty
-    retained tail. The request contains no tool call without its result, and
-    expanding the original transcript rows still shows their complete
-    persisted results.
+  - A successful active checkpoint retains its summary, latest user goal and a
+    budgeted recent execution window, with original assistant/tool pairs and
+    completion receipts. It does not revive older user tasks. Oversized text
+    keeps both ends with a marker; unmatched calls/results are not sent.
+    Completed-turn checkpoints still have an empty tail. Expanding original
+    transcript rows shows complete persisted results, unchanged by compaction.
   - Restart restores the summary and the recorded active/completed retention
     mode, and every earlier compaction row is still drawn. A regenerate/fork
     before a checkpoint boundary drops that record specifically; records
@@ -8637,7 +8636,7 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
     request retries transient provider failures up to three times with
     2s/4s/8s backoff, Stop cancels the backoff, deterministic failures do not
     retry, and an input whose serialized prompt exceeds the window is sent
-    once more with tool results cut to a short prefix rather than skipping the
+    once more with smaller head/tail tool-result excerpts rather than skipping the
     model. If fallback persistence or the safe budget guard fails,
     `CONTEXT_COMPACTION_FAILED` is emitted once.
   - If the newest checkpoint is already the transcript leaf when a follow-up
@@ -15005,6 +15004,16 @@ This test plan spec is accepted when:
   7. In the isolated overflow fixture, pause compaction after the first provider
      response exceeds the context window. Inspect the rendered assistant turn,
      then let the retry complete.
+  8. Complete one synthetic mutation, request a checkpoint at the tool boundary,
+     and make the summary deliberately omit its receipt. Capture the next
+     provider request, JSON-round-trip the checkpoint through a fresh runtime,
+     and capture the resumed request. Include a parallel batch with long result
+     endings, an errored result, a missing result and an earlier completed task.
+  9. Accept same-turn steering and compact again; the original success receipt
+     remains in provider-visible `content`, not merely result `details`. Include
+     a text-heavy image goal, image results with duplicate metadata, and composite
+     call/result IDs sharing one wire ID. Check the 16 MiB tail ceiling, preserved
+     images when text-only trimming fits, activation markers and repaired pairs.
 - **Expected**: Automatic session compaction starts at
    `floor(hardLimit * 0.9)` for prompt, approved-plan, and in-run turn
    preflights; the estimate includes serialized messages, the active system
@@ -15014,23 +15023,30 @@ This test plan spec is accepted when:
    an empty retained tail; the next request contains its summary plus task C
    and no bare A/B prompts. An approved-plan checkpoint uses active-turn
    retention so the instruction survives before `continue()`. An active
-   checkpoint retains exactly the latest active user prompt, with no older
-   user prompts or pre-boundary assistant/tool messages. Restart honors
-   `retainedTailMode`, and legacy multi-user tails normalize to the latest user
-   message. During recoverable overflow compaction, the existing assistant
+   checkpoint retains the latest active user goal and budgeted recent execution
+   batches, not bare older user prompts. Original call IDs/names, success and
+   error receipts survive even if the summary omits them; missing results are
+   not invented. Retained usage does not trigger another compaction. Restart
+   honors `retainedTailMode` and `recent_window`; unmarked legacy tails keep the
+   older normalization. The continuation wrapper says this is not a new task
+   and asks for reconciliation before replaying uncertain side effects. During recoverable overflow compaction, the existing assistant
    bubble stays streaming without an error card; a successful retry completes
    that same bubble once. A failed retry surfaces its terminal error. If
    automatic summary generation fails at the hard boundary, the
-   fallback retains a bounded recent user tail. The visible transcript remains
+   fallback retains its bounded recent execution window. The visible transcript remains
    complete and checkpoint rows remain.
 - **Specs linked**: `03-runtime/02-agent-runtime.md`,
   `03-runtime/04-data-storage.md`, `03-runtime/16-tool-result-limits.md`,
-  `08-meta/decisions-log.md` (D623), ADR 0064, ADR 0136
+  `08-meta/decisions-log.md` (D623), ADR 0064, ADR 0136,
+  `docs/adr/compaction-execution-continuity.md`
 - **Acceptance**: C (chat/stream), F (persistence), Quality
 - **Milestone**: M5
 - **Status**: Unit-covered (`packages/agent-runtime/src/context-budget.test.ts`,
-  `runtime.test.ts`, `subagent-context.test.ts`); isolated overflow recovery
-  fixture passed through `pnpm test:e2e:transcript`; broader provider/UI journey Draft
+  `runtime.test.ts`, `subagent-context.test.ts`). Offline production Agent-loop
+  and checkpoint-restore coverage: `compaction-continuity-user-path.test.ts`;
+  paired-window budgets: `compaction-continuity.test.ts`. The isolated overflow
+  fixture was previously verified through `pnpm test:e2e:transcript`; live-model
+  repetition and the broader provider/UI journey remain unverified by this fix.
 
 #### E2E-165: A2A and Peer tools are withdrawn
 

@@ -5,6 +5,11 @@
 - Deciders: PI-Desktop core
 - Amends: ADR 0064 / D203
 
+> [Execution continuity](compaction-execution-continuity.md) amends clause 2 and
+> the assistant/tool-retention alternative below. Successful active turns now
+> keep bounded recent execution pairs with the latest user goal. Completed-turn
+> and legacy-record normalization remain unchanged; this is not a new task.
+
 ## Context
 
 Codex-shaped compaction kept several recent user prompts while dropping the

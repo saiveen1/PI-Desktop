@@ -1,26 +1,11 @@
 /**
- * The retained tail a *failed* compaction installs, and the shape marker that
- * tells a later rebuild to replay it verbatim.
- *
- * A successful checkpoint summarizes the whole range behind its boundary and
- * retains at most the latest user message (`codexShapedPreparation`). A
- * retained-tail fallback has no fresh summary at all, so its tail is the only
- * thing carrying the range forward — and a single user sentence left the model
- * with none of the decisions, paths, or unfinished work of the turn it was
- * continuing (issue #827, which is ADR 0049's "recent provider-valid message
- * tail" read literally).
- *
- * The fallback therefore retains the real recent window: the newest contiguous
- * run of messages in the compacted range, every role, under a token budget, and
- * marks the checkpoint with {@link COMPACTION_RETAINED_TAIL_SHAPE} so a restored
- * checkpoint replays that window instead of narrowing it back to one user
- * message (see `retainedTailForContext`). Records written before the marker
- * existed keep the old one-user-message normalization.
- *
- * Deliberately dependency-light, like `context-budget.ts`: token estimation is
- * owned by the runtime adapter, the record guard and text bounding are shared
- * helpers, and nothing here imports `runtime.ts`, so this module can never form
- * a cycle with it.
+ * Fallback tail selection and shared checkpoint replay. Failed summaries need
+ * the recent window as their only record of new work (ADR 0302). Successful
+ * active checkpoints use compaction-continuity.ts to preserve current-task
+ * execution evidence and share the same recent_window marker on restore.
+ * Unmarked legacy records keep the older latest-user normalization.
+ * This module does not import runtime.ts; both selectors share its text bounds
+ * and provider-valid replay helpers without creating a runtime cycle.
  */
 
 import type { AgentMessage } from "@earendil-works/pi-agent-core";

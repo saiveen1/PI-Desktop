@@ -38,10 +38,10 @@ A retained-tail fallback retains the real recent window: the newest contiguous
 messages of the compacted range, every role, bounded by the keep-recent target
 and by what the safe budget leaves once the carried-forward summary and the
 recovery notice are paid for. It records `details.retainedTailShape` as
-`recent_window`, and a checkpoint without that marker — every successful
-checkpoint, and every record written before the marker existed — still
-normalizes to its latest user message, so a restart cannot restore a sequence of
-executable-looking old requests. The fallback drops the assistant messages pi
+`recent_window`. Unmarked legacy checkpoints retain the older latest-user
+normalization, so a restart cannot restore a sequence of bare historical
+requests. [Execution continuity](compaction-execution-continuity.md) also uses
+this marker for new successful active-turn checkpoints. The fallback drops the assistant messages pi
 drops from the rebuilt context anyway (error, aborted, deferred) and any tool
 result whose tool call is not in the window, because a provider rejects a result
 whose call is missing. An `active_turn` fallback also keeps the active task's

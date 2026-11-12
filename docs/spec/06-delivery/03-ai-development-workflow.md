@@ -376,7 +376,7 @@ Format: `type(scope): description`
 ### 4.2 Language
 
 - Commit messages: **English only** (matches baseline language policy).
-- Body: optional; use for non-obvious context.
+- Body: required after a blank line; explain why the change is needed, wrapped around 72 columns (AGENTS.md §17).
 
 ### 4.3 One logical change per commit
 

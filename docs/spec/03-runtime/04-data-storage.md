@@ -478,11 +478,13 @@ Rules:
   longer exists is dropped, per record, on read and on fork.
   `throughMessageId` is the durable transcript boundary;
   `firstKeptMessageId` and `retainedTail` reproduce the summary + applicable
-  context after restart. `retainedTail` holds at most the latest user message
-  for an active turn; a completed-turn checkpoint has an empty tail. The
-  `details.retainedTailMode` value (`active_turn` or `completed_turn`) preserves
-  that boundary, while legacy records are normalized to their latest user
-  message. When the bound model requires DeepSeek-style reasoning replay,
+  context after restart. Successful active turns retain the active-run goal and steering
+  and a bounded recent assistant/tool execution window; successful completed
+  turns keep an empty tail. `details.retainedTailMode` preserves that boundary,
+  and the existing `details.retainedTailShape = "recent_window"` marks tails
+  that replay in full. Legacy unmarked records keep the older latest-user
+  normalization; no historical record is rewritten or schema migration needed.
+  When the bound model requires DeepSeek-style reasoning replay,
   `details.retainedReasoning` may hold a bounded list of prior thinking turns
   (text + thinking only) so post-compaction Completions requests can echo
   usable reasoning without restoring tool-call pairs (ADR 0256 / #296). Only

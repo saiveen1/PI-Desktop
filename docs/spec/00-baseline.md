@@ -57,14 +57,14 @@
 > context-recovery amendment in ADR 0049 adds a durable retained-tail
 > fallback for automatic compaction failures. D200 / ADR 0061 derives the
 > budgets from the model window instead of settings and removes the compaction
-> settings. D203 / ADR 0064 then rebuilds the mechanism to match Codex:
-> compaction is inline only, a checkpoint carries the summary plus the latest
-> active user message only while a turn continues; completed turns carry no
-> naked historical user messages. Each compaction adds a transcript row and one
-> warning, and a no-summary rollover family exists behind an internal switch.
-> The post-baseline runtime-owned context compaction amendment removes the
-> model-facing `new_context` tool and its invitation in budget reminders;
-> budget reminders, retention, storage, and lifecycle rules remain.
+> settings. D203 / ADR 0064 then made compaction inline with a durable summary,
+> task-boundary retention, a transcript row and one warning; a no-summary rollover
+> family exists behind an internal switch. The post-baseline runtime-owned
+> amendment removes the model-facing `new_context` tool and its invitation.
+> [Execution continuity](../adr/compaction-execution-continuity.md) further amends
+> successful active-turn retention: the current goal and bounded recent execution
+> pairs survive with the summary. Completed-turn and legacy-record boundaries,
+> budget guards, storage ownership and the inline lifecycle remain.
 > `0.4.12` standardizes home and thread-docked composer prompt rows without a
 > leading brand mark through D160 / ADR 0031 while preserving shell branding
 > elsewhere.
@@ -192,10 +192,10 @@
     `project.set`; group sessions and context default to the primary root,
     while explicit absolute paths under registered group roots use host
     canonical containment**
-43. Context management: **pi-native checkpoint summaries in Codex's shape —
-     runtime-owned inline compaction at `floor(hardLimit * 0.9)` before the next
-     provider request, with `hardLimit` as the final guard; the summary plus
-     only the latest active user message while a turn continues (and no naked
+43. Context management: **runtime-owned checkpoint summaries with execution continuity —
+     inline compaction at `floor(hardLimit * 0.9)` before the next provider request,
+     with `hardLimit` as the final guard; the summary plus the latest active user
+     goal and bounded recent execution pairs while a turn continues (no naked
      historical user messages after a completed turn), durable host checkpoints,
      one overflow retry, user `/compact`, and trusted-extension `ctx.compact()`.
      Every compaction adds a transcript row and one warning. No user-facing

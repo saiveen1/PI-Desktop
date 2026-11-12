@@ -688,14 +688,24 @@ without persisting anything or changing the active checkpoint; installation
 re-estimates, appends through host-core, updates the active checkpoint, and
 emits `compaction_end`. The blocking path composes the two back to back.
 
-**What survives a checkpoint.** A successful checkpoint leaves the model context
-as the summary plus, at most, one **user** message; assistant and tool messages
-are dropped from model context and remain in the visible transcript. The
-runtime-owned preparation chooses the cut point and preserves turn-boundary
-and split-turn handling, then folds the split-turn prefix and recent tail back
-into the summary input so the summary covers the whole compacted range.
+**What survives a checkpoint.** A successful active-turn checkpoint leaves the
+summary, the active run's user goal, steering and a bounded execution window from that
+task (see [execution continuity](../../adr/compaction-execution-continuity.md)).
+Assistant/tool batches retain original names, call IDs, arguments, result order
+and error flags; missing-result calls and orphan results are not reintroduced.
+The boundary batch may have text shortened at the middle, preserving both ends;
+opaque content that cannot fit is omitted as a unit, never mutated. Retained
+assistant usage is cleared because it measured the old context. The complete
+range still enters the summary input; visible messages are never rewritten.
+The existing run-start boundary keeps same-turn steering with its prior execution
+evidence. When that live boundary is unavailable, preparation conservatively
+starts at the latest user message. Steering never separates a retained call from
+its result. Existing wire-ID repair runs before pairing. The tail is also capped
+at 16 MiB serialized bytes; duplicate non-provider result details are omitted,
+but ToolSearch activation markers survive. User images are preserved when text
+truncation alone makes the goal fit; otherwise their omission is explicit.
 
-A **retained-tail fallback** is the exception, because no summary covers its
+A **retained-tail fallback** preserves its existing recovery behavior because no summary covers its
 range: it keeps the real recent window — the newest contiguous messages of the
 compacted range, every role, bounded by the keep-recent target and by what the
 safe budget leaves once the carried-forward summary and the recovery notice are
@@ -713,10 +723,10 @@ decides what a *successful* checkpoint leaves behind:
 
 - An `active_turn` checkpoint is created while the provider must continue the
   current task after a tool result, a `toolUse` turn, or overflow recovery. It
-  carries only the latest user message from the compacted range, up to the
-  retention limit below; if that message crosses the limit it is truncated
-  rather than dropped (`[checkpoint truncated: this message crossed the
-  retained context budget]`).
+  carries the current run's user goal, steering and recent complete assistant/tool batches,
+  within the keep-recent budget below. The goal receives at most half that
+  budget and the existing active-user cap. Truncated text is explicitly marked
+  (`[checkpoint truncated: this message crossed the retained context budget]`).
 - A `completed_turn` checkpoint is created at a terminal turn boundary, before
   a new user prompt, or for manual compaction. It carries no naked historical
   user messages. The summary is authoritative for completed work, and the next
@@ -729,12 +739,12 @@ decides what a *successful* checkpoint leaves behind:
 
 The retained-tail mode and shape are stored in the checkpoint's opaque `details`
 field, so a restart preserves the same task boundary and the same treatment of
-the tail. A checkpoint without the shape marker — every successful checkpoint,
-and every record written before the marker existed — is normalized to its latest
-user message only, so a restart cannot restore a sequence of
-executable-looking old requests. Dropping an assistant message also drops its
-tool calls, and the fallback drops the results of calls it did not keep, so no
-orphaned tool call or unmatched result can reach the provider. Assistant
+the tail. New successful active-turn records and fallback records use
+`recent_window`. Unmarked legacy checkpoints retain the older normalization:
+at most the latest user message for an active turn, no tail for a completed
+turn. They are not rewritten or expanded from old transcript messages.
+Assistant/tool pairs remain provider-valid, and raw tail messages are selected
+before summary-only file-operation name normalization. Assistant
 thinking shares the same character budget as text. Answer text is reserved
 first; a thinking block that has to be shortened drops its provider signature,
 so the replay is not a mutated signed trace. A block that still fits keeps its
@@ -777,10 +787,10 @@ configurable. Headroom is the maximum of a 16,384-token reserve floor, model
 maximum output capped at 25% of the context window, and a 5% safety margin. The
 reserve floor is itself capped at half the window. The cut-point target used by
 the runtime-owned preparation is derived from the model window as 20% of the hard budget clamped to
-8,000–64,000 tokens, then capped at half the hard budget; it decides where the
-boundary falls, not what survives it. The active-user retention limit is
-20,000 tokens, capped at half the hard budget so retention alone cannot fill a
-small window and leave the summary no room. A fallback's window is capped by
+8,000–64,000 tokens, then capped at half the hard budget. It also bounds the
+combined successful active-turn tail. The user goal receives at most half this
+tail budget and the 20,000-token active-user cap, leaving room for execution
+evidence. A fallback's window is capped by
 25% of the hard budget and by the room the carried-forward summary and the
 recovery notice leave, so recovery cannot install a checkpoint the guard
 rejects. None of these values are configurable.
@@ -839,10 +849,14 @@ The incoming user prompt participates in budgeting before the first provider
 request. The automatic summary request retries transient provider failures
 under a bounded pi-ai retry policy (3 retries, 2s/4s/8s backoff, cancelled by
 Stop); deterministic failures such as quota or auth return at once. The
-preflight guard sizes the prompt pi actually serializes — tool results already
-capped — rather than the raw messages, and when that prompt still exceeds the
-window it tries exactly one reduced input (tool results cut to a short prefix,
-thinking dropped, no message removed). If even that input does not fit, the range
+preflight guard sizes the actual serialized prompt rather than raw messages.
+Tool results keep both ends within 2,000 characters; one reduced pass uses
+500 characters and drops thinking without removing messages. User images are
+marked as present but not visually included in the text input. Summary and
+continuation prompts distinguish completed work from plans, failures and unknown
+outcomes: a checkpoint is not a new task, and uncertain side effects require
+reconciliation rather than blind replay. This reduces context loss but is not
+an exactly-once execution or model-compliance guarantee. If the input still does not fit, the range
 is split into contiguous chunks that each do: at most 16 requests, each carrying
 the previous chunk's summary through pi's update-the-summary prompt, with the
 range's file list appended on the last one, and the checkpoint reports the summed

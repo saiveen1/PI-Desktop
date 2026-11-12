@@ -2,6 +2,7 @@ import type { Message } from "@earendil-works/pi-ai";
 import { hostedSearchReplayProjection } from "@earendil-works/pi-ai/utils/hosted-search";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import { omitInadmissibleImages } from "./image-admission.js";
+import { truncateTextWithMarker } from "./agent-messages.js";
 
 export type CompactionSummaryMessage = {
   role: "compactionSummary";
@@ -44,7 +45,9 @@ type RuntimeMessage =
 
 export const COMPACTION_SUMMARY_PREFIX =
   "The conversation history before this point was compacted into the following summary:\n\n<summary>\n";
-export const COMPACTION_SUMMARY_SUFFIX = "\n</summary>";
+export const COMPACTION_SUMMARY_SUFFIX = `\n</summary>
+
+This is a context checkpoint, not a new task. The summary and any retained messages describe work already performed. Continue only unfinished work from the latest execution state; do not restart setup, reload skills, or repeat completed operations merely because context was compacted. Use recorded results and receipts to distinguish completed, failed, and unknown outcomes. Reconcile unknown outcomes before retrying side effects. Re-read or revalidate only when a specific missing fact, changed condition, or new instruction requires it; the latest user instruction still controls the task.`;
 export const BRANCH_SUMMARY_PREFIX =
   "The following is a summary of a branch that this conversation came back from:\n\n<summary>\n";
 export const BRANCH_SUMMARY_SUFFIX = "</summary>";
@@ -181,8 +184,7 @@ function safeJsonStringify(value: unknown): string {
 }
 
 function truncateForSummary(text: string, maxChars: number): string {
-  if (text.length <= maxChars) return text;
-  return `${text.slice(0, maxChars)}\n\n[... ${text.length - maxChars} more characters truncated]`;
+  return truncateTextWithMarker(text, maxChars, "\n\n[... middle truncated for the summary request ...]\n\n");
 }
 
 /** Stable plain-text representation used for summary request sizing and input. */
@@ -192,6 +194,10 @@ export function serializeConversation(messages: Message[]): string {
     if (message.role === "user") {
       const content = textFromContent(message.content, "");
       if (content) parts.push(`[User]: ${content}`);
+      if (Array.isArray(message.content)) {
+        const images = message.content.filter(block => block.type === "image").length;
+        if (images) parts.push(`[User attached ${images} image(s); visual content is not included in this text summary input. Do not infer that the attachments were absent.]`);
+      }
       continue;
     }
     if (message.role === "assistant") {

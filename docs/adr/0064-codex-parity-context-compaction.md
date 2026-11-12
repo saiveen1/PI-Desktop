@@ -5,6 +5,11 @@
 - Deciders: PI-Desktop core
 - Amends: ADR 0061 / ADR 0030 / D158 / D200; amended by ADR 0136
 
+> Successful active-turn retention is superseded by
+> [execution continuity](compaction-execution-continuity.md): the current goal
+> and bounded recent assistant/tool execution pairs survive alongside the summary.
+> Completed-turn, legacy-record and no-summary rollover boundaries remain unchanged.
+
 ## Context
 
 ADR 0061 made compaction imperceptible and cited Codex as the reference for

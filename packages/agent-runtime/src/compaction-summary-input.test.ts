@@ -132,7 +132,7 @@ describe("reduceSummaryInput", () => {
     expect(reduceSummaryInput(small)).toBeUndefined();
   });
 
-  it("keeps a bounded prefix of each tool result and marks the cut", () => {
+  it("keeps both ends of each tool result within the cap and marks the cut", () => {
     const reduced = reduceSummaryInput(
       input([user("ask"), toolResult("a".repeat(10_000)), toolResult("b".repeat(10_000), "tool-2")]),
     );
@@ -144,8 +144,9 @@ describe("reduceSummaryInput", () => {
     for (const result of results) {
       const text = (result as { content: Array<{ text: string }> }).content[0].text;
       expect(text.startsWith("a".repeat(10)) || text.startsWith("b".repeat(10))).toBe(true);
-      expect(text).toMatch(/truncated for the summary request\]$/);
-      expect(text.length).toBeLessThan(COMPACTION_REDUCED_TOOL_RESULT_CHARS + 100);
+      expect(text).toContain("truncated for the summary request");
+      expect(text.endsWith("a".repeat(10)) || text.endsWith("b".repeat(10))).toBe(true);
+      expect(text.length).toBeLessThanOrEqual(COMPACTION_REDUCED_TOOL_RESULT_CHARS);
     }
   });
 

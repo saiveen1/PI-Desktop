@@ -427,3 +427,4 @@ Each ADR includes:
 | 0345 | [One settings destination owns one subject](0345-one-settings-destination-one-subject.md) | Accepted (D684; amends D143, D166, D678) |
 | 0346 | [`@agent` mentions route a turn to a named subagent](0346-composer-agent-mentions.md) | Accepted (issue #986; extends 0024 / 0062) |
 | runtime-owned-context-compaction | [Runtime-owned context compaction initiation](runtime-owned-context-compaction.md) | Accepted (amends ADR 0064 / D203) |
+| compaction-execution-continuity | [Preserve execution continuity across successful compaction](compaction-execution-continuity.md) | Accepted (amends successful active-turn retention in ADR 0064 / ADR 0136; reuses ADR 0302's replay marker) |
