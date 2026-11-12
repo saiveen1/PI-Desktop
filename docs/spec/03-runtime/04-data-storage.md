@@ -2111,6 +2111,16 @@ and host error, so one unclassifiable head cannot starve every session's writes
 (D656). A restarted host is a new generation and retries the head at once.
 Quarantined appends are never replayed automatically, and `session.delete`
 drops that session's quarantined appends too.
+Every outbox and dead-letter snapshot, including an empty array, is written
+to its sibling temporary file before replacing the committed file by rename.
+Interrupted writes leave the previous committed snapshot readable; a failed
+replacement rejects the persistence operation instead of reporting success.
+This prevents process termination during clearing from truncating recovery
+files. A JSON parse failure (including an empty or torn file) quarantines the
+original bytes under a timestamped, non-overwriting `.corrupt` name before
+starting that queue empty, and emits a warning. Quarantined bytes are not
+replayed automatically. If quarantine cannot preserve the existing bytes,
+loading fails closed; valid JSON with an invalid outbox shape still rejects.
 When the 1024-entry cap remains
 full after a flush attempt, enqueue logs the rejected key/session and rejects;
 it does not report that entry as queued. Generic foreign-key errors are not
