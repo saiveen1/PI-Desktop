@@ -498,9 +498,12 @@ Main-window guarded additive channels use `delegation-history.ts` DTOs:
 | `delegationApprovalHistoryClear` | `pi-desktop/delegationApproval/history/clear` | none | `{ ok }` |
 
 Run queries accept nonnegative `offset`, `limit` 1–100, optional exact
-`projectPath`, and `status: all | running | ended`. Omitted scope is global.
-`nextOffset` advances scanned candidates, not filtered entries; empty pages may
-still have a continuation. Entries include source session/project metadata,
+`projectPath`, `sessionId`, and `status: all | running | ended`. A session ID
+must be a nonempty, trimmed identity of at most 256 UTF-16 units. Omitted
+session and project scopes are global. Session selection precedes pagination;
+status and project filtering follow the candidate window. `nextOffset` advances
+scanned candidates, not filtered entries; empty pages may still have a
+continuation. Entries include source session/project metadata,
 delegation/message identity, recorded task/model/result/status/timestamps and
 explicit task/report truncation flags. Details are a projection, never live
 authorization. Sender and shared payload validation remain mandatory.

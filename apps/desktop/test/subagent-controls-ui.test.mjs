@@ -191,7 +191,8 @@ test("the transcript renders child comments as user rows and follows newest chai
     toolResult: { details: { delegationId: "old", status: "completed" } } },
     { id: "latest", sessionId: "session", role: "tool", toolName: "Task", toolCallId: "latest", toolArgs: { task: "Resume", resume: "old" },
       toolResult: { details: { delegationId: "new", status: "running", failurePolicy: { mode: "stop", maxRetries: 2, maxFallbacks: 2 } } } },
-    { id: "comment", sessionId: "session", role: "user", content: "Inspect tests, not docs", parentToolCallId: "latest" }];
+    { id: "comment", sessionId: "session", role: "user", content: "Inspect tests, not docs", parentToolCallId: "latest" }]
+    .map((message, index) => ({ createdAt: new Date(Date.UTC(2026, 10, 12, 10, 0, index)).toISOString(), content: "", ...message }));
   Object.assign(useAppStore.getInitialState(), { activeSessionId: "session", sessions: [{ id: "session", source: "desktop" }], messages });
   const html = h.render(createElement(SubagentTranscriptTab, { delegationId: "old" }));
   assert.match(html, /class="message-row user" data-message-id="comment"/);

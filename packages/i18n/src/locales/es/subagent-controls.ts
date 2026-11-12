@@ -21,4 +21,13 @@ export const subagentControls = {
   tooLong: "Usa como máximo 32.000 caracteres.",
   notStarted: "No iniciada · Nueva entrada recibida",
   notStartedTasks: "Tareas no iniciadas · Nueva entrada recibida",
+  indexLabel: "Subagentes",
+  indexTitle: "Subagentes de esta sesión",
+  runningCount: "{{count}} en ejecución",
+  pendingCount: "{{count}} pendientes de aprobación",
+  startingCount: "{{count}} iniciándose",
+  historyCount: "Historial {{count}}",
+  statusUnavailable: "Estado no disponible",
+  loading: "Cargando…",
+  emptySession: "Aún no se han llamado subagentes en esta sesión.",
 };

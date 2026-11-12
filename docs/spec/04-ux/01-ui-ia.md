@@ -498,6 +498,7 @@ shared capability contract:
 | Profile menu | sidebar footer | Settings / Logs / Theme cycle (D041) |
 | Notification inbox | sidebar footer bell | All/Unread/Needs action; retained successful and failed tasks plus read-only approval receipts; bulk read and confirmed history-only clear |
 | Global delegations | persistent conversation/home toolbar entry | all-project paginated execution history, source-aware details without navigation, explicit Open source and handoff to existing approval controls; not a session work-panel tab |
+| Session subagents | persistent text entry in the conversation topbar | current-session running/approval status and history; opens the session index directly in the work panel and reuses existing task detail tabs |
 | Toasts | events (plugin toast, backend restored, copy) | top-center of the live main-content safe area; viewport fallback; 4s default, 8s for errors |
 | Project switcher | empty-home underlined project name | sidebar open projects + search + clone git project + open project |
 

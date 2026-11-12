@@ -31,6 +31,7 @@ import { workPanelLayout } from "../../lib/work-panel-resize";
 import { LiveVoiceStatusHost } from "../voice/live/LiveVoiceStatusHost";
 import { CollapsedTitlebarActions, RoutePending } from "./chrome";
 import { DelegationHistoryDialog } from "../delegations/DelegationHistoryDialog";
+import { SessionDelegationsButton } from "../delegations/SessionDelegationsButton";
 import { useAppShellRuntime } from "./useAppShellRuntime";
 
 const SettingsPage = lazy(() =>
@@ -194,6 +195,7 @@ export function AppShell() {
                     <IconNewSession size={15} />
                   </TooltipButton>
                 )}
+                <SessionDelegationsButton />
                 <TooltipButton type="button" className="title-nav-btn no-drag" tooltip={t("delegationHistory.title")}
                   ariaLabel={t("delegationHistory.title")} onClick={() => setDelegationsOpen(true)}>
                   <IconClock size={15} />

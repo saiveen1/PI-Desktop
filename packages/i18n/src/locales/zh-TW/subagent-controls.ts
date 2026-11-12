@@ -21,4 +21,13 @@ export const subagentControls = {
   tooLong: "請勿超過 32,000 個字元。",
   notStarted: "未啟動 · 收到新輸入",
   notStartedTasks: "任務未啟動 · 收到新輸入",
+  indexLabel: "子代理",
+  indexTitle: "目前對話子代理",
+  runningCount: "{{count}} 執行中",
+  pendingCount: "{{count}} 待核准",
+  startingCount: "{{count}} 啟動中",
+  historyCount: "歷史 {{count}}",
+  statusUnavailable: "狀態暫不可用",
+  loading: "載入中…",
+  emptySession: "目前對話尚未呼叫子代理。",
 };

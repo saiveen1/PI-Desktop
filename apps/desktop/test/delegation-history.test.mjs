@@ -33,9 +33,10 @@ test("run history IPC forwards only validated queries from the main window", asy
   registerDelegationHistoryIpc({ registrar: r, getHost: () => ({ async call(method, params) { calls.push([method, params]); return page; } }) });
   const handler = handlers.get(shared.IPC.invoke.delegationHistoryList);
   assert.deepEqual(await handler({ sender: "main" }), page);
-  await handler({ sender: "main" }, { offset: 200, limit: 50, status: "ended", projectPath: "D:/work" });
-  assert.deepEqual(calls, [["delegation.history.list", {}], ["delegation.history.list", { offset: 200, limit: 50, status: "ended", projectPath: "D:/work" }]]);
-  for (const args of [[{ limit: 500 }], [{ authorize: true }], [{}, {}]]) {
+  const query = { offset: 200, limit: 50, status: "ended", projectPath: "D:/work", sessionId: "session-1" };
+  await handler({ sender: "main" }, query);
+  assert.deepEqual(calls, [["delegation.history.list", {}], ["delegation.history.list", query]]);
+  for (const args of [[{ limit: 500 }], [{ authorize: true }], [{}, {}], ...["", " s", "s ", "x".repeat(257), null, 5].map(sessionId => [{ sessionId }])]) {
     await assert.rejects(handler({ sender: "main" }, ...args), /Invalid delegation history query/);
   }
   await assert.rejects(handler({ sender: "plugin" }, { limit: 10 }), /PERMISSION_DENIED/);

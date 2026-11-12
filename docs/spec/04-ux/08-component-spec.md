@@ -1493,6 +1493,27 @@ opens automatically. A second row activation does not close the tab.
   same Active / Needs attention / Completed list as the parent process. Choosing
   a task activates its detail through the existing tab architecture; this is
   not a replacement single-dock routing system.
+- The conversation topbar has a permanent text **Subagents** entry for local
+  sessions, including an empty state before the first call. It shows actual
+  running delegates, pending approvals, starting calls or retained history;
+  pending approval and creation never count as execution. Failure/timeout needs
+  attention and read failures remain explicit. The entry survives completion,
+  chat scrolling and work-panel maximization without opening itself.
+- Activation opens the session-scoped `subagents` index tab directly. The detail's
+  **All tasks** action opens that same index; per-task detail tabs still coexist.
+  The global clock entry remains a separate all-session history surface.
+- The index combines paginated Host history filtered by `sessionId` with live
+  Task snapshots, deduplicated by message/delegation identity. It is independent
+  of the parent's visible history/search range. Lifecycle tools, nested child
+  tools and background Bash jobs never inflate counts. The shared subscription
+  releases on unmount; stale requests cannot publish after refresh or switching.
+- The index uses existing task rows and authorized controls, plus this session's
+  live approvals targeting their exact request/revision. Missing historical
+  details use a bounded, local session read without moving the parent transcript.
+  Earlier/later controls extend that local range while preserving the original
+  Task and existing child rows; the first loaded page is not treated as complete.
+  A retained report is shown when its original child answer is not in the loaded
+  range; truncation remains explicit. Read errors expose Retry.
 - The selected detail header shows the task description as its title, with
   role/name fallback, its stable identity icon, passive effective model plus
   concrete non-`off` thinking text, and authorized Stop/failed Retry controls.

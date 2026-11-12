@@ -21,4 +21,13 @@ export const subagentControls = {
   tooLong: "En fazla 32.000 karakter kullanın.",
   notStarted: "Başlatılmadı · Yeni girdi alındı",
   notStartedTasks: "Görevler başlatılmadı · Yeni girdi alındı",
+  indexLabel: "Alt ajanlar",
+  indexTitle: "Bu oturumun alt ajanları",
+  runningCount: "{{count}} çalışıyor",
+  pendingCount: "{{count}} onay bekliyor",
+  startingCount: "{{count}} başlatılıyor",
+  historyCount: "Geçmiş {{count}}",
+  statusUnavailable: "Durum alınamıyor",
+  loading: "Yükleniyor…",
+  emptySession: "Bu oturumda henüz alt ajan çağrılmadı.",
 };

@@ -150,6 +150,7 @@ test("rendered Markdown and file chips map source-only hits to their visible own
     const focus = { sessionId: "s", messageId: "child", query: "needle", requestId: 1 };
     const child = {
       id: "child",
+      createdAt: "2026-11-12T10:00:01.000Z",
       role: "assistant",
       content: "Read **needle** now.",
       parentToolCallId: "task",
@@ -157,6 +158,7 @@ test("rendered Markdown and file chips map source-only hits to their visible own
     };
     const parent = {
       id: "parent-row",
+      createdAt: "2026-11-12T10:00:00.000Z",
       role: "tool",
       toolName: "Task",
       toolCallId: "task",
@@ -200,9 +202,9 @@ test("rendered Markdown and file chips map source-only hits to their visible own
         ),
       );
 
-    // A settled group folds by default, the Task fan-out among them; search
+    // Task rows stay directly visible; ordinary settled groups fold and search
     // still reveals the group that owns the hit.
-    assert.match(group(null), /class="tool-activity-header" aria-expanded="false"/);
+    assert.match(group(null), /class="subagent-task-list is-inline"/);
     const ordinaryItems = Array.from({ length: 5 }, (_, index) => ({
       kind: "tool",
       message: {

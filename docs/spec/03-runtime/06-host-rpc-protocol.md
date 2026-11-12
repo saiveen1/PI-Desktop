@@ -964,10 +964,13 @@ activation-scope filtering (`CAPABILITY_INVALID` for an unknown scope).
 
 ### Delegation history (additive, protocol v11)
 
-- `delegation.history.list({ offset?, limit?, status?, projectPath? })` returns
+- `delegation.history.list({ offset?, limit?, status?, projectPath?, sessionId? })` returns
   `{ entries, nextOffset }` across non-deleted sessions. Default scope is all
-  projects; `limit` is 1–100 and `status` is `all | running | ended`.
-  Offset counts indexed Task candidates, not matches, so a filtered empty page
+  projects and sessions; `limit` is 1–100 and `status` is `all | running | ended`.
+  An optional exact `sessionId` must be nonempty, trimmed, and at most 256 UTF-16
+  units. Session selection occurs before pagination; status, project, and deleted
+  session filtering remain after candidate selection. Offset counts indexed Task
+  candidates within the selected session, not matches, so a filtered empty page
   may have a continuation. Canonical JSONL supplies task, report, model,
   status and source metadata. Text is bounded at 32,768 UTF-16 units with
   task/report truncation flags. A recorded running row without a live owning

@@ -52,6 +52,7 @@ import { ReviewTab } from "./ReviewTab";
 import { FilesTab } from "./FilesTab";
 import { PluginViewTab } from "./PluginViewTab";
 import { SubagentTranscriptTab } from "./SubagentTranscriptTab";
+import { SessionDelegationsPanel } from "../../features/delegations/SessionDelegationsPanel";
 import {
   MAIN_PANE_MIN_WIDTH,
   WORK_PANEL_COMPACT_MIN_WIDTH,
@@ -69,6 +70,7 @@ const TAB_ICONS = {
   file: IconFileText,
   plugin: IconPlug,
   subagent: IconBot,
+  subagents: IconBot,
 } as const;
 
 type WorkPanelResizeState = {
@@ -122,6 +124,7 @@ function tabLabel(
     return view?.title ?? tab.resource ?? t("panel.tabs.plugin");
   }
   if (tab.kind === "new") return t("panel.new.title");
+  if (tab.kind === "subagents") return t("subagentControls.indexLabel");
   if (tab.kind === "subagent") return tab.label ?? t("panel.tabs.subagent");
   if (tab.kind !== "file") return t(`panel.tabs.${tab.kind}`);
   const path = tab.resource ?? "";
@@ -1086,6 +1089,12 @@ function LocalWorkPanel({
           </div>
         </header>
         <div className="work-panel-body">
+          {activeTab?.kind === "subagents" && (
+            <div id={`work-panel-surface-${activeTab.id}`} className="work-panel-tabpane" role="tabpanel"
+              aria-labelledby={`work-panel-tab-${activeTab.id}`}>
+              <SessionDelegationsPanel />
+            </div>
+          )}
           {activeTab?.kind === "subagent" && (
             <div
               key={activeTab.id}

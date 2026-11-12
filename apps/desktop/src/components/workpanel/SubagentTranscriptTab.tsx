@@ -1,4 +1,4 @@
-import { Fragment, useLayoutEffect, useMemo, useState } from "react";
+import { Fragment, useLayoutEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { SubagentRunPolicySummary } from "./SubagentRunPolicySummary";
 import { SubagentDiagnosticsSummary } from "./SubagentDiagnosticsSummary";
@@ -7,15 +7,14 @@ import { SubagentChildComposer } from "./SubagentChildComposer";
 import { DelegationSelectionSummary } from "../../features/chat/transcript/DelegationSelectionSummary";
 import { SubagentStopButton } from "../../features/chat/transcript/SubagentStopButton";
 import { SubagentRetryButton } from "../../features/chat/transcript/SubagentRetryButton";
-import { SubagentTaskList } from "../../features/chat/transcript/SubagentTaskList";
 import { SubagentTurnContent } from "../../features/chat/transcript/SubagentTurnContent";
 import { TranscriptDisclosureProvider } from "../../features/chat/transcript/disclosure";
 import { delegateModelId, delegateThinkingLevel } from "../../features/chat/transcript/model";
 import { SlotSessionProvider } from "../../plugins/renderer-slots/use-slots";
-import { collectDelegationFailures, collectDelegationStatuses, delegationIsCreating, isDelegationActivityItem } from "../../lib/subagent-topology";
+import { collectDelegationFailures, collectDelegationStatuses, delegationIsCreating } from "../../lib/subagent-topology";
 import { delegationIdForMessage } from "../../lib/subagent-panel";
 import { subagentTaskOutcome, subagentTaskStatusKey, subagentTaskTitle, subagentTaskTone } from "../../lib/subagent-task-presentation";
-import { subagentWorkPanelTab } from "../../lib/work-panel-tabs";
+import { subagentsWorkPanelTab } from "../../lib/work-panel-tabs";
 import { toolResultPayload } from "../../lib/tool-presentation";
 import { buildSubagentTranscript } from "../../lib/subagent-transcript";
 import { DisclosureAnchorContext } from "../../lib/disclosure-anchor-context";
@@ -25,7 +24,8 @@ import { useFollowScroll } from "../../hooks/use-follow-scroll";
 import { useTranscriptView } from "../../hooks/use-transcript-view";
 import { useTranscriptSearchFocus } from "../../hooks/use-transcript-search-focus";
 import { IconArrowDown, IconChevronLeft, IconSparkles } from "../icons";
-import { TooltipButton } from "../ui";
+import { Button, TooltipButton } from "../ui";
+import { useSubagentHistory } from "../../features/delegations/useSubagentHistory";
 
 /** Task detail, direct input and index share the originating session and chain. */
 export function SubagentTranscriptTab({ delegationId }: { delegationId: string }) {
@@ -39,15 +39,14 @@ export function SubagentTranscriptTab({ delegationId }: { delegationId: string }
 
 function SubagentTranscriptSurface({ delegationId, sessionId }: { delegationId: string; sessionId: string }) {
   const { t } = useTranslation();
-  const [indexOpen, setIndexOpen] = useState(false);
   const transcript = useTranscriptView(sessionId);
-  const { messages } = transcript;
+  const history = useSubagentHistory(sessionId, delegationId, transcript.messages, transcript.hasMoreBefore || transcript.hasMoreAfter);
+  const { messages } = history;
   const openTab = useAppStore((state) => state.openWorkPanelTabForSession);
   const items = useMemo(() => messages.filter(message => message.role === "tool")
     .map(message => ({ kind: "tool" as const, message })), [messages]);
   const sessionRunning = useAppStore((state) => state.runningSessions[sessionId] === true);
-  const statuses = useMemo(() => collectDelegationStatuses(items, { turnLive: sessionRunning }), [items, sessionRunning]);
-  const tasks = useMemo(() => items.filter(isDelegationActivityItem), [items]);
+  const statuses = useMemo(() => new Map([...collectDelegationStatuses(items, { turnLive: sessionRunning }), ...history.statuses]), [items, sessionRunning, history.statuses]);
   const transcriptResult = useMemo(() => buildSubagentTranscript(messages, delegationId), [messages, delegationId]);
   const selectedCall = transcriptResult?.latestCall;
   const selected = selectedCall ? { kind: "tool" as const, message: selectedCall } : undefined;
@@ -70,42 +69,37 @@ function SubagentTranscriptSurface({ delegationId, sessionId }: { delegationId: 
     return transcriptResult?.turns.some(turn => turn.rows.some(row => row.message.id === focus.messageId)) ? focus : null;
   }, [transcript.focus, transcriptResult]);
   useTranscriptSearchFocus({
-    target: searchTarget, visible: !indexOpen,
+    target: searchTarget, visible: true,
     source: messages.find(message => message.id === searchTarget?.messageId)?.content ?? "",
     scrollRef, contentRef, contentVersion: messages, onNavigate: releaseFollow,
   });
   useLayoutEffect(() => {
-    if (searchTarget) setIndexOpen(false);
-    else jumpToLatest();
+    if (!searchTarget) jumpToLatest();
   }, [jumpToLatest, searchTarget]);
   useLayoutEffect(() => {
-    if (!indexOpen) scheduleFollowScroll();
-  }, [messages, indexOpen, scheduleFollowScroll]);
-  const openTask = (id: string, name: string) => {
-    setIndexOpen(false);
-    if (id !== selectedId) openTab(sessionId, subagentWorkPanelTab(id, name));
-  };
+    scheduleFollowScroll();
+  }, [messages, scheduleFollowScroll]);
   return <TranscriptSearchContext.Provider value={searchTarget}><DisclosureAnchorContext.Provider value={disclosureAnchorNotifier}>
     <div className="subagent-transcript-tab" data-testid="subagent-transcript-tab">
       <header className="subagent-transcript-heading" data-tone={selected ? subagentTaskTone(selected.message) : 0}>
-        {!indexOpen ? <TooltipButton tooltip={t("chat.taskGroups.back")} ariaLabel={t("chat.taskGroups.back")} onClick={() => setIndexOpen(true)}>
+        <TooltipButton tooltip={t("chat.taskGroups.back")} ariaLabel={t("chat.taskGroups.back")}
+          onClick={() => openTab(sessionId, subagentsWorkPanelTab())}>
           <IconChevronLeft size={16} />
-        </TooltipButton> : null}
+        </TooltipButton>
         <span className="subagent-task-icon" aria-hidden><IconSparkles size={17} /></span>
-        <strong className="subagent-task-title">{indexOpen ? t("chat.subagentTopology") : title}</strong>
-        {!indexOpen && modelLabel ? <span className="subagent-transcript-model" title={modelLabel}>{modelLabel}</span> : null}
-        {!indexOpen && selected ? <span className="subagent-task-status" role="status">{t(subagentTaskStatusKey(selected.message, statuses))}</span> : null}
-        {!indexOpen ? <>
+        <strong className="subagent-task-title">{title}</strong>
+        {modelLabel ? <span className="subagent-transcript-model" title={modelLabel}>{modelLabel}</span> : null}
+        {selected ? <span className="subagent-task-status" role="status">{t(subagentTaskStatusKey(selected.message, statuses))}</span> : null}
           <SubagentStopButton delegationId={selectedId} running={delegateRunning} name={title} compact />
           <SubagentRetryButton delegationId={selectedId} failed={outcome === "failed"} compact />
-        </> : null}
       </header>
-      {indexOpen ? <div className="subagent-transcript-scroll">
-        <SubagentTaskList grouped items={tasks} delegationStatuses={statuses} onOpen={openTask} />
-      </div> : null}
-      <div ref={scrollRef} data-scroll-owner="follow" className="subagent-transcript-scroll" hidden={indexOpen}
+      <div ref={scrollRef} data-scroll-owner="follow" className="subagent-transcript-scroll"
         onScroll={handleScroll} role="log" aria-live="polite" aria-label={t("panel.subagent")} tabIndex={0}>
         <div ref={contentRef} className="subagent-transcript-list">
+          {history.loading ? <p role="status">{t("delegationHistory.loading")}</p> : null}
+          {history.hasMoreBefore ? <Button size="sm" variant="ghost" disabled={history.loading}
+            onClick={() => { releaseFollow(); void history.loadMore("before"); }}>{t("chat.showEarlierMessages")}</Button> : null}
+          {history.error ? <p role="alert">{t("delegationHistory.loadFailed")} <Button size="sm" variant="ghost" onClick={history.retry}>{t("delegationHistory.retry")}</Button></p> : null}
           {failure && outcome !== "running" && outcome !== "completed" ? <p className="tool-row-status error" role="alert">{failure.message || failure.code}</p> : null}
           <details className="subagent-task-report">
             <summary>{t("chat.runDetails.title")}</summary>
@@ -123,17 +117,24 @@ function SubagentTranscriptSurface({ delegationId, sessionId }: { delegationId: 
               <SubagentTurnContent id={`${delegationId}:${index}`} rows={turn.rows}
                 active={delegateRunning && index === transcriptResult.turns.length - 1} />
             </Fragment>
-          )) : <div className="subagent-transcript-empty" role="status">{t("panel.subagentEmpty")}</div>}
+          )) : !history.loading && !history.error ? <div className="subagent-transcript-empty" role="status">{t("panel.subagentEmpty")}</div> : null}
+          {history.entry?.report && !transcriptResult?.turns.some(turn => turn.rows.some(row => row.kind === "answer" && row.message.content.trim() === history.entry?.report?.trim())) ? <section className="subagent-task-report">
+            <h3>{t("delegationHistory.report")}</h3>
+            {history.entry.reportTruncated ? <p role="note">{t("delegationHistory.truncated")}</p> : null}
+            <div className="message-user-text selectable">{history.entry.report}</div>
+          </section> : null}
+          {history.hasMoreAfter ? <Button size="sm" variant="ghost" disabled={history.loading}
+            onClick={() => void history.loadMore("after")}>{t("chat.loadLaterMessages")}</Button> : null}
         </div>
       </div>
-      {!indexOpen ? <div className="subagent-transcript-input">
+      <div className="subagent-transcript-input">
         {showJump ? <TooltipButton type="button" className="jump-latest-btn subagent-transcript-jump"
           tooltip={t("chat.scrollToBottom")} ariaLabel={t("chat.scrollToBottom")} onClick={jumpToLatest}>
           <IconArrowDown size={14} />
         </TooltipButton> : null}
         <SubagentChildComposer sessionId={sessionId} chainId={transcriptResult?.chainId ?? delegationId}
           delegationId={recordedId} outcome={outcome}>{null}</SubagentChildComposer>
-      </div> : null}
+      </div>
     </div>
   </DisclosureAnchorContext.Provider></TranscriptSearchContext.Provider>;
 }

@@ -7,6 +7,7 @@ import { catalogs } from "@pi-desktop/i18n";
 import { IPC } from "@pi-desktop/shared";
 import { AssistantTurn } from "../../src/features/chat/transcript/AssistantTurn";
 import { SubagentTranscriptTab } from "../../src/components/workpanel/SubagentTranscriptTab";
+import { SessionDelegationsPanel } from "../../src/features/delegations/SessionDelegationsPanel";
 import { TranscriptDisclosureProvider } from "../../src/features/chat/transcript/disclosure";
 import { SlotSessionProvider } from "../../src/plugins/renderer-slots/use-slots";
 import { buildTranscriptEntries } from "../../src/lib/assistant-turns";
@@ -17,6 +18,8 @@ await i18n.use(initReactI18next).init({ lng: "en", resources: { en: { translatio
 const calls = [];
 window.piDesktop = { platform: "win32", channels: IPC, invoke: async (channel, request) => {
   calls.push({ channel, request });
+  if (channel === IPC.invoke.delegationHistoryList) return { ok: true, data: { entries: [], nextOffset: null } };
+  if (channel === IPC.invoke.delegationApprovalList) return { ok: true, data: { requests: [] } };
   if (channel === IPC.invoke.agentSendSubagentMessage) return { ok: true, data: {
     accepted: true, turnId: "fixture-turn", delegationId: request.delegationId, delivery: "steered",
   } };
@@ -52,6 +55,7 @@ useAppStore.setState({ activeSessionId: "fixture", sessions: [{ id: "fixture", s
 const root = createRoot(document.getElementById("root"));
 function Panel() {
   const tab = useAppStore(state => state.workPanelTabs.find(tab => tab.id === state.activeWorkPanelTabId));
+  if (tab?.kind === "subagents") return <SessionDelegationsPanel />;
   return <SubagentTranscriptTab delegationId={tab?.kind === "subagent" ? tab.resource : "a"} />;
 }
 function render() {

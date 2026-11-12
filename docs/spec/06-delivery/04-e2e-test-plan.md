@@ -2,6 +2,32 @@
 
 
 
+## E2E-SUBAGENT-session-topbar-index
+
+- **Environment:** Production renderer components with synthetic IPC in an
+  isolated browser/profile under session scratch. No installed Desktop, daily
+  data, provider request, or installation.
+- **Steps:** Start with an empty local session, then mix active, creating,
+  completed, failed and stopped Tasks with lifecycle/Bash calls and approvals
+  from two sessions. Open the index from the topbar, navigate to detail and back,
+  settle tasks, switch sessions while history is pending, and refresh out of
+  order. Read an older Task absent from the chat window and page both directions
+  to retrieve child evidence beyond its first page. Settle an unloaded Task via
+  `message_end` while the parent runs, then deliver stale creation/poll snapshots.
+  Check keyboard entry,
+  long labels, narrow light/dark layouts and source-session Stop/Retry.
+- **Expected:** Text entry stays visible after completion; counts are scoped,
+  deduplicated, independent of chat paging, and distinguish approval/creation
+  from execution. One index tab is reused; existing detail controls keep their
+  identity. Old responses do not overwrite newer state or another session.
+  Historical detail/report reads do not move the main chat. Errors stay visible
+  with recovery; no automatic navigation, execution, or approval occurs.
+- **Automation:** `session-delegations.test.mjs`,
+  `session-delegations-ui.test.mjs`, existing task-reading, work-panel tab and
+  delegation-history contracts, plus Host session-filter pagination tests.
+- **Specs:** Component spec §§5.7/9.9 and the additive delegation-history query
+  contracts. Integrated Desktop/OS hit testing remains separately authorized.
+
 ## E2E-PERSONAL-build-identity-and-explicit-beta
 
 - **Environment:** Isolated temporary Git repositories, existing ASAR tooling,

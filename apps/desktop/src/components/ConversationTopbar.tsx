@@ -28,6 +28,7 @@ import {
   IconSearch,
 } from "./icons";
 import { TooltipButton } from "./ui";
+import { SessionDelegationsButton } from "../features/delegations/SessionDelegationsButton";
 
 function projectName(path?: string | null, name?: string | null) {
   if (name) return name;
@@ -324,6 +325,7 @@ export function ConversationTopbar({
       </div>
 
       <div className="ct-right">
+        <SessionDelegationsButton />
         <div className="ct-actions">
           <TooltipButton type="button" className="ct-icon-btn" tooltip={t("delegationHistory.title")}
             ariaLabel={t("delegationHistory.title")} onClick={onOpenDelegations}>

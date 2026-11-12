@@ -55,17 +55,15 @@ test("a task list row opens the originating session's subagent tab", () => {
   // The overlay state and its actions are gone: closing happens per tab.
   assert.doesNotMatch(storeSource, /subagentPanel/);
   assert.doesNotMatch(storeSource, /toggleSubagentPanel|closeSubagentPanel/);
-  assert.match(tabsSource, /\| "plugin"\s*\|\s*"subagent";/);
+  assert.match(tabsSource, /\| "plugin"\s*\|\s*"subagent"\s*\|\s*"subagents";/);
   assert.match(
     tabsSource,
     /export function subagentWorkPanelTab\(\s*delegationId: string,\s*agentName\?: string,\s*\): WorkPanelTab \{/,
   );
   assert.match(tabsSource, /id: `subagent:\$\{delegationId\}`/);
-  assert.match(tabsSource, /tab\.kind === "subagent"\)/);
-  // Retained runtime state must survive the session-switch sanitizer.
-  assert.match(tabsSource, /export function subagentTabDisplayLabels\(/);
-  assert.match(tabsSource, /tab\.kind === "subagent"\)/);
-  // Retained runtime state must survive the session-switch sanitizer.
+  assert.match(tabsSource, /tab\.kind === "subagent" \|\| tab\.kind === "subagents"/);
+  // Both index and detail survive the session-switch sanitizer.
+  assert.match(tabsSource, /export function subagentsWorkPanelTab\(/);
   assert.match(tabsSource, /export function subagentTabDisplayLabels\(/);
 });
 test("failed task rows expose a direct local subagent retry", () => {
@@ -95,11 +93,14 @@ test("the work panel renders the delegation tab like every other resource", () =
   assert.doesNotMatch(appSource, /subagentPanelOpen/);
 });
 
-test("the detail combines shared reading components with explicit child input", () => {
+test("the detail combines shared reading components with explicit child input", async () => {
   assert.match(tabSource, /data-testid="subagent-transcript-tab"/);
   assert.match(tabSource, /buildSubagentTranscript\(messages, delegationId\)/);
   assert.match(tabSource, /<SubagentTurnContent/);
-  assert.match(tabSource, /<SubagentTaskList/);
+  assert.match(tabSource, /openTab\(sessionId, subagentsWorkPanelTab\(\)\)/);
+  const indexSource = await readFile(new URL("../src/features/delegations/SessionDelegationsPanel.tsx", import.meta.url), "utf8");
+  assert.match(indexSource, /<SubagentTaskList grouped/);
+  assert.match(workPanelSource, /<SessionDelegationsPanel/);
   assert.match(tabSource, /className="subagent-transcript-model"/);
   assert.match(tabSource, /<SubagentStopButton/);
   assert.match(tabSource, /<SubagentRetryButton/);

@@ -15,6 +15,13 @@ pub struct Query {
     pub limit: Option<u64>,
     pub status: Option<String>,
     pub project_path: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_session_id")]
+    pub session_id: Option<String>,
+}
+fn deserialize_session_id<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> std::result::Result<Option<String>, D::Error> {
+    String::deserialize(deserializer).map(Some)
 }
 struct Candidate {
     id: String,
@@ -167,6 +174,14 @@ pub fn check(query: &Query) -> std::result::Result<(), &'static str> {
     {
         return Err("Invalid project path");
     }
+    if query.session_id.as_ref().is_some_and(|id| {
+        id.is_empty()
+            || id.trim_matches(|c: char| (c.is_whitespace() && c != '\u{85}') || c == '\u{feff}')
+                != id
+            || id.encode_utf16().count() > 256
+    }) {
+        return Err("Invalid session id");
+    }
     Ok(())
 }
 pub fn list(db: &Database, query: Query) -> Result<Value> {
@@ -178,27 +193,31 @@ pub fn list(db: &Database, query: Query) -> Result<Value> {
         .project_path
         .as_deref()
         .and_then(crate::db::normalize_project_path);
-    // Dedicated rebuildable index bounds candidate selection; filters intentionally
-    // run after the fixed candidate window, including project and deleted sessions.
+    // Session scope selects candidates before pagination; other filters retain
+    // their existing post-window semantics, including deleted sessions.
     let mut stmt = db.conn().prepare_cached(
         "SELECT m.id,m.session_id,s.title,p.path,p.name,t.status,t.ended_at
         FROM messages m INDEXED BY idx_messages_task_history
         JOIN sessions s ON s.id=m.session_id LEFT JOIN projects p ON p.id=s.project_id
         LEFT JOIN turns t ON t.id=m.turn_id
-        WHERE m.tool_name='Task' ORDER BY m.created_at DESC,m.mid DESC LIMIT ?1 OFFSET ?2",
+        WHERE m.tool_name='Task' AND (?3 IS NULL OR m.session_id=?3)
+        ORDER BY m.created_at DESC,m.mid DESC LIMIT ?1 OFFSET ?2",
     )?;
     let rows = stmt
-        .query_map(params![(limit + 1) as i64, offset as i64], |r| {
-            Ok(Candidate {
-                id: r.get(0)?,
-                session: r.get(1)?,
-                title: r.get(2)?,
-                path: r.get(3)?,
-                project: r.get(4)?,
-                turn_status: r.get(5)?,
-                ended: r.get(6)?,
-            })
-        })?
+        .query_map(
+            params![(limit + 1) as i64, offset as i64, query.session_id],
+            |r| {
+                Ok(Candidate {
+                    id: r.get(0)?,
+                    session: r.get(1)?,
+                    title: r.get(2)?,
+                    path: r.get(3)?,
+                    project: r.get(4)?,
+                    turn_status: r.get(5)?,
+                    ended: r.get(6)?,
+                })
+            },
+        )?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     let more = rows.len() > limit as usize;
     let mut entries = Vec::new();

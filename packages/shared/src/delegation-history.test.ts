@@ -12,11 +12,11 @@ const entry = (extra: Record<string, unknown> = {}) => ({
 
 describe("delegation history boundary", () => {
   it("strictly validates bounded pagination, filters and paired receipt identity", () => {
-    for (const query of [{}, { offset: 0, limit: 100, status: "ended", projectPath: "D:/work" }]) {
+    for (const query of [{}, { offset: 0, limit: 100, status: "ended", projectPath: "D:/work", sessionId: "s" }, { sessionId: "😀".repeat(128) }]) {
       expect(isDelegationRunHistoryQuery(query)).toBe(true);
     }
     for (const query of [null, [], { offset: -1 }, { limit: 101 }, { limit: 0 }, { status: "approved" },
-      { projectPath: " " }, { authorize: true }]) {
+      { projectPath: " " }, { authorize: true }, ...["", " ", " s", "s ", "x".repeat(257), "😀".repeat(129), null, 123].map(sessionId => ({ sessionId }))]) {
       expect(isDelegationRunHistoryQuery(query)).toBe(false);
     }
     for (const input of [{}, { sessionId: "s", requestId: "r" }]) {

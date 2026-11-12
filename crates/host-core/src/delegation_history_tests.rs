@@ -11,6 +11,7 @@ fn query(offset: u64, limit: u64, status: &str, path: Option<&str>) -> Query {
         limit: Some(limit),
         status: Some(status.into()),
         project_path: path.map(str::to_owned),
+        session_id: None,
     }
 }
 #[test]
@@ -75,6 +76,88 @@ fn canonical_old_rows_projects_deleted_and_candidate_cursor() {
         1
     );
 }
+#[test]
+fn session_scope_precedes_pagination_and_composes_with_existing_filters() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = Database::open_in_dir(dir.path()).unwrap();
+    let a = sessions::create_session(&db, None, None, None, None, None).unwrap();
+    let b = sessions::create_session(&db, None, None, None, None, None).unwrap();
+    let project = crate::db::upsert_project_row(db.conn(), "/history-session-project", false)
+        .unwrap()
+        .unwrap();
+    db.conn()
+        .execute(
+            "UPDATE sessions SET project_id=?1 WHERE id=?2",
+            params![project, a.id],
+        )
+        .unwrap();
+    db.conn()
+        .execute(
+            "INSERT INTO turns(id,session_id,status,started_at) VALUES ('active',?1,'running',1)",
+            [&a.id],
+        )
+        .unwrap();
+    sessions::append_message(&db, &a.id, &task("a-old", "completed"), None).unwrap();
+    sessions::append_message(&db, &b.id, &task("b-old", "completed"), None).unwrap();
+    sessions::append_message(&db, &a.id, &task("a-running", "running"), Some("active")).unwrap();
+    sessions::append_message(&db, &b.id, &task("b-new", "completed"), None).unwrap();
+    let scoped = |offset, status, path| Query {
+        session_id: Some(a.id.clone()),
+        ..query(offset, 1, status, path)
+    };
+    let first = list(&db, scoped(0, "running", Some("/history-session-project"))).unwrap();
+    assert_eq!(first["entries"][0]["messageId"], "a-running");
+    assert_eq!(first["entries"][0]["status"], "running");
+    assert_eq!(first["nextOffset"], 1);
+    let second = list(&db, scoped(1, "ended", Some("/history-session-project"))).unwrap();
+    assert_eq!(second["entries"][0]["messageId"], "a-old");
+    assert!(second["nextOffset"].is_null());
+    let filtered = list(&db, scoped(0, "ended", Some("/history-session-project"))).unwrap();
+    assert_eq!(filtered["entries"], json!([]));
+    assert_eq!(filtered["nextOffset"], 1);
+    assert_eq!(
+        list(&db, scoped(0, "all", Some("/other-project"))).unwrap()["entries"],
+        json!([])
+    );
+    let missing = Query {
+        session_id: Some("missing".into()),
+        ..Query::default()
+    };
+    assert_eq!(
+        list(&db, missing).unwrap(),
+        json!({"entries":[],"nextOffset":null})
+    );
+    db.conn()
+        .execute("UPDATE sessions SET deleted_at=1 WHERE id=?1", [&a.id])
+        .unwrap();
+    let deleted = list(&db, scoped(0, "all", None)).unwrap();
+    assert_eq!(deleted["entries"], json!([]));
+    assert_eq!(deleted["nextOffset"], 1);
+}
+
+#[test]
+fn session_identity_validation_matches_the_shared_boundary() {
+    for id in [
+        "",
+        " ",
+        " s",
+        "s ",
+        "\u{feff}s",
+        &"x".repeat(257),
+        &"😀".repeat(129),
+    ] {
+        let query: Query = serde_json::from_value(json!({"sessionId":id})).unwrap();
+        assert!(check(&query).is_err(), "accepted {id:?}");
+    }
+    for id in ["s", &"😀".repeat(128)] {
+        let query: Query = serde_json::from_value(json!({"sessionId":id})).unwrap();
+        assert!(check(&query).is_ok());
+    }
+    for value in [json!(null), json!(42)] {
+        assert!(serde_json::from_value::<Query>(json!({"sessionId":value})).is_err());
+    }
+}
+
 #[test]
 fn terminal_turn_interrupts_running_snapshot_and_preserves_other_terminal_states() {
     let c = Candidate {

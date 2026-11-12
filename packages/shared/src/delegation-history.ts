@@ -1,7 +1,7 @@
 import { isDelegationApprovalPrompt, type DelegationApprovalPrompt } from "./delegation-approval.js";
 
 export type DelegationRunHistoryQuery = {
-  offset?: number; limit?: number; status?: "all" | "running" | "ended"; projectPath?: string;
+  offset?: number; limit?: number; status?: "all" | "running" | "ended"; projectPath?: string; sessionId?: string;
 };
 export type DelegationRunHistoryEntry = {
   id: string; sessionId: string; sessionTitle: string; projectPath?: string | null; projectTitle?: string;
@@ -22,11 +22,12 @@ const record = (v: unknown): v is Record<string, unknown> => v !== null && typeo
 const identity = (v: unknown): v is string => typeof v === "string" && v.length > 0 && v.length <= 256 && v.trim() === v;
 const timestamp = (v: unknown): v is string => typeof v === "string" && Number.isFinite(Date.parse(v)) && new Date(v).toISOString() === v;
 export function isDelegationRunHistoryQuery(v: unknown): v is DelegationRunHistoryQuery {
-  return record(v) && Object.keys(v).every(k => ["offset", "limit", "status", "projectPath"].includes(k)) &&
+  return record(v) && Object.keys(v).every(k => ["offset", "limit", "status", "projectPath", "sessionId"].includes(k)) &&
     (v.offset === undefined || (Number.isSafeInteger(v.offset) && Number(v.offset) >= 0)) &&
     (v.limit === undefined || (Number.isSafeInteger(v.limit) && Number(v.limit) >= 1 && Number(v.limit) <= 100)) &&
     (v.status === undefined || ["all", "running", "ended"].includes(String(v.status))) &&
-    (v.projectPath === undefined || (typeof v.projectPath === "string" && v.projectPath.trim() === v.projectPath && v.projectPath.length > 0 && v.projectPath.length <= 4096));
+    (v.projectPath === undefined || (typeof v.projectPath === "string" && v.projectPath.trim() === v.projectPath && v.projectPath.length > 0 && v.projectPath.length <= 4096)) &&
+    (v.sessionId === undefined || identity(v.sessionId));
 }
 export function isDelegationApprovalHistoryMarkRead(v: unknown): v is DelegationApprovalHistoryMarkRead {
   return record(v) && Object.keys(v).every(k => k === "sessionId" || k === "requestId") &&

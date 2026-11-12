@@ -23,7 +23,8 @@ export function subagentTaskTone(message: UiMessage): number {
 }
 
 export function subagentTaskOutcome(message: UiMessage, statuses?: ReadonlyMap<string, SubagentOutcome>): SubagentOutcome {
-  const outcome = subagentOutcome(message, statuses);
+  let outcome = subagentOutcome(message, statuses);
+  if (outcome === "running" && delegationIsCreating(message)) outcome = statuses?.get(delegationIdForMessage(message)) ?? outcome;
   if (outcome === "not_started") return outcome;
   const status = getToolStatus(message).kind;
   if (status === "skipped" || status === "interrupted" || status === "context-required") return "aborted";

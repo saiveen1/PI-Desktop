@@ -1,0 +1,28 @@
+/* One readable status entry; retain the host theme and window-drag boundary. */
+.session-subagents-button {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 320px;
+  gap: 6px;
+  color: var(--ds-text-secondary);
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+.session-subagents-button > svg,
+.session-subagents-label { flex: 0 0 auto; }
+.session-subagents-button[data-active="true"],
+.session-subagents-button[aria-pressed="true"] { color: var(--ds-text-primary); background: var(--ds-tile); }
+.session-subagents-button[data-attention="true"] { color: var(--ds-warning); }
+.session-subagents-summary { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-xs); }
+.session-subagents-panel { display: flex; flex-direction: column; height: 100%; min-height: 0; min-width: 0; }
+.session-subagents-heading { display: flex; align-items: center; gap: 8px; padding: 12px; border-bottom: 1px solid var(--ds-border); }
+.session-subagents-heading > svg { flex: 0 0 auto; color: var(--ds-text-secondary); }
+.session-subagents-heading h2 { flex: 1; min-width: 0; margin: 0; font-size: var(--text-sm); font-weight: var(--font-weight-medium); overflow-wrap: anywhere; }
+.session-subagents-scroll { flex: 1; min-height: 0; overflow: auto; padding: 12px; }
+.session-subagents-scroll > p { color: var(--ds-text-secondary); font-size: var(--text-sm); }
+.session-subagents-scroll > [role="alert"] { color: var(--ds-error); }
+.session-subagents-approval { display: flex; align-items: center; gap: 8px; padding: 8px 0; }
+.session-subagents-approval > span { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: var(--text-sm); }
+.session-subagents-approval > button { flex: 0 0 auto; }
+.conversation-topbar .ct-right:has(.session-subagents-button) { flex-shrink: 1; max-width: 72%; }
+.conversation-topbar .ct-actions { flex-shrink: 0; }

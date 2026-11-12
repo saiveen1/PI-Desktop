@@ -386,6 +386,7 @@ Each ADR includes:
 | 0316 | [The Live Voice call bar is a docked desktop widget window](0316-live-voice-docked-widget.md) | Accepted |
 | turn-process-and-thinking-display | [Turn process and thinking presentation](turn-process-and-thinking-display.md) | Accepted; presentation defaults amended by task-first-transcript-presentation |
 | task-first-transcript-presentation | [Task-first transcript presentation](task-first-transcript-presentation.md) | Accepted; isolated component acceptance verified; integrated Desktop not run |
+| session-subagent-topbar-index | [Current-session subagent entry and history index](session-subagent-topbar-index.md) | Accepted; isolated component paths verified; installed Desktop not run |
 | provider-display-order | [Provider display order](provider-display-order.md) | Accepted |
 | registry-header-variable-spelling | [Remote header variables accept the registry's `{name}` spelling](registry-header-variable-spelling.md) | Proposed |
 | provider-system-certificates | [Desktop sidecar uses OS-trusted certificates](provider-system-certificates.md) | Accepted |

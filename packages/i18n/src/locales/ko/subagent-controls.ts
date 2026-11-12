@@ -21,4 +21,13 @@ export const subagentControls = {
   tooLong: "32,000자 이하로 입력하세요.",
   notStarted: "시작 안 됨 · 새 입력 수신",
   notStartedTasks: "작업 시작 안 됨 · 새 입력 수신",
+  indexLabel: "하위 에이전트",
+  indexTitle: "현재 세션의 하위 에이전트",
+  runningCount: "{{count}}개 실행 중",
+  pendingCount: "{{count}}개 승인 대기",
+  startingCount: "{{count}}개 시작 중",
+  historyCount: "기록 {{count}}개",
+  statusUnavailable: "상태 확인 불가",
+  loading: "불러오는 중…",
+  emptySession: "이 세션에서 아직 하위 에이전트를 호출하지 않았습니다.",
 };
