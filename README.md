@@ -157,6 +157,17 @@ Outputs go to `apps/desktop/release/personal/`. **Packaging does not install or
 launch the app.** Candidate releases, verification limits, and artifact details
 are covered by the [personal release runbook](docs/spec/06-delivery/07-personal-release-runbook.md).
 
+### Build in GitHub Actions
+
+The personal fork's [Personal Windows workflow](.github/workflows/personal-windows.yml)
+builds code pushes to `main` without changing the version. Successful runs retain
+the installer and provenance as downloadable Actions artifacts for 30 days.
+For a new beta, use **Run workflow** on `main` and explicitly enter a newer
+`release_version`; leaving it empty only builds. A successful manual release
+records version/history files and publishes a `personal-v` prerelease in this
+fork. It does not enable automatic updates in the installed app. Setup, permissions
+and recovery limits are in the [Actions runbook](docs/spec/06-delivery/07-personal-release-runbook.md#github-actions-personal-fork-only).
+
 ## Documentation
 
 - [Change provenance](docs/maintenance/personal-edition-provenance.md) — local

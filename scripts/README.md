@@ -35,6 +35,7 @@ disagrees, so a green `check:release-docs` is a precondition, not a substitute.
 | `workspace-version.mjs` | shared helper, not a CLI | One guarded version plan for workspace packages, Cargo, APP_VERSION and README release lines; rollback preserves concurrent edits |
 | `personal-build-source.mjs` | shared helper, not a CLI | Local-only Git snapshots, commit-category evidence and explicit newer-beta validation |
 | `personal-release-notes.mjs` | shared helper, not a CLI | Validate `docs/releases/history.json`, render per-build notes and generate the personal changelog without fictitious past releases |
+| `personal-ci.mjs` | `node scripts/personal-ci.mjs stage\|prepare-release` | Personal-fork Actions boundary: verify installer bytes/provenance, stage exactly four delivery files, or reconstruct and stage explicit beta version/history metadata. Never builds, installs, commits, tags or publishes itself |
 | `check-linux-host-glibc.mjs` | `node scripts/check-linux-host-glibc.mjs [bin]` | Fail a Linux host-core binary whose needed glibc is above 2.35 |
 | `make-icon.py` | `python3 scripts/make-icon.py` | Derive the package PNG, the macOS tray template, and the iconset/ICNS from the canonical PNG |
 | `publish-screenshots.py` | `python3 scripts/publish-screenshots.py` | Publish documentation screenshots |
@@ -113,6 +114,18 @@ Desktop profile, model call or executable capability is used. Output records
 the candidate/base and Host binary hash; uncommitted task changes are explicit.
 
 ## Continuous integration
+
+The personal fork uses `.github/workflows/personal-windows.yml`: code pushes to
+`main` build a Windows installer via `pnpm dist:personal`; manual dispatch with a
+newer explicit beta version additionally records and publishes that candidate.
+Build access is read-only; the separate publication job alone can write. Its
+`personal-v` tags do not trigger the inherited multi-platform release lane.
+Keep inherited workflows disabled in the personal fork. See the
+[personal Actions runbook](../docs/spec/06-delivery/07-personal-release-runbook.md#github-actions-personal-fork-only)
+for permissions, artifacts, bot commits and interrupted-publication recovery.
+
+The workflows below are inherited upstream infrastructure, not the personal
+installer publication entry.
 
 `.github/workflows/ci.yml` runs two jobs on pushes to `main`, on pull requests,
 and on manual dispatch, skipping both when a change touches only `docs/**` or

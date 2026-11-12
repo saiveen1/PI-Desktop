@@ -1,0 +1,165 @@
+name: Personal Windows
+run-name: Personal Windows ${{ inputs.release_version || github.sha }}
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: 'Optional newer X.Y.Z-beta.N: build and publish a personal prerelease; empty means build only'
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: personal-windows
+  cancel-in-progress: false
+
+env:
+  PERSONAL_RELEASE_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.release_version || '' }}
+
+jobs:
+  build:
+    if: github.repository == 'saiveen1/PI-Desktop' && github.ref == 'refs/heads/main'
+    runs-on: windows-2025
+    outputs:
+      artifact_id: ${{ steps.installer.outputs.artifact-id }}
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@f53f5227a9e83886ab598c617f3c170fab62f0d3 # v6
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+
+      - uses: Swatinem/rust-cache@e9d7b9f1e587218970671bac74e5511ed9506e6a # v2
+
+      - name: Validate workflow identity and input
+        run: node --input-type=module -e "import {personalCiIdentity} from './scripts/personal-ci.mjs'; personalCiIdentity(process.env);"
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Offline release and policy regression
+        run: |
+          pnpm check:agent-policy
+          node --test apps/desktop/test/personal-ci.test.mjs apps/desktop/test/personal-release.test.mjs apps/desktop/test/personal-release-history.test.mjs apps/desktop/test/workspace-version.test.mjs apps/desktop/test/agent-policy-sync.test.mjs
+
+      - name: Build the personal installer
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          args=()
+          if [[ -n "$PERSONAL_RELEASE_VERSION" ]]; then
+            args+=(--release "$PERSONAL_RELEASE_VERSION")
+          fi
+          pnpm dist:personal --check "${args[@]}"
+          pnpm dist:personal "${args[@]}"
+
+      - name: Typecheck and lint the built source
+        run: |
+          pnpm --filter @pi-desktop/desktop typecheck
+          pnpm lint
+
+      - name: Verify and stage delivery files
+        run: node scripts/personal-ci.mjs stage
+
+      - name: Upload installer and provenance
+        id: installer
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: personal-windows-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .artifacts/personal-ci/deliverables/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: personal-windows-log-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .artifacts/personal-release/build.log
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 14
+
+  publish:
+    needs: build
+    if: github.repository == 'saiveen1/PI-Desktop' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.release_version != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      PERSONAL_ARTIFACT_DIR: .artifacts/personal-ci/download
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          path: ${{ env.PERSONAL_ARTIFACT_DIR }}
+          artifact-ids: ${{ needs.build.outputs.artifact_id }}
+          merge-multiple: true
+
+      - name: Reconstruct and stage verified release metadata
+        id: prepare
+        run: node scripts/personal-ci.mjs prepare-release
+
+      - name: Commit metadata and atomically publish personal tag
+        env:
+          PERSONAL_TAG: ${{ steps.prepare.outputs.tag }}
+        run: |
+          test "$(git ls-remote origin refs/heads/main | cut -f1)" = "$GITHUB_SHA"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git diff --cached --check
+          git commit -m "chore(release): record personal $PERSONAL_RELEASE_VERSION" -m "Record the explicitly selected beta and its verified installer provenance from Actions run $GITHUB_RUN_ID."
+          git tag -a "$PERSONAL_TAG" -m "Personal beta $PERSONAL_RELEASE_VERSION; Actions run $GITHUB_RUN_ID"
+          git push --atomic --no-follow-tags origin HEAD:refs/heads/main "refs/tags/$PERSONAL_TAG"
+
+      - name: Publish prerelease assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PERSONAL_TAG: ${{ steps.prepare.outputs.tag }}
+        run: |
+          notes=("$PERSONAL_ARTIFACT_DIR/"*.exe.changes.md)
+          test "${#notes[@]}" -eq 1
+          gh release create "$PERSONAL_TAG" --repo "$GITHUB_REPOSITORY" \
+            --verify-tag --prerelease --latest=false \
+            --title "PI-Desktop Personal $PERSONAL_RELEASE_VERSION" \
+            --notes-file "${notes[0]}" \
+            "$PERSONAL_ARTIFACT_DIR/"*.exe \
+            "$PERSONAL_ARTIFACT_DIR/"*.exe.sha256 \
+            "$PERSONAL_ARTIFACT_DIR/"*.exe.changes.md \
+            "$PERSONAL_ARTIFACT_DIR/"*.exe.build-info.json

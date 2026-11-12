@@ -146,3 +146,71 @@ A simulated runner test or read-only preflight is not a real installer build.
 A successful offline package build is not an installation, first-launch,
 Authenticode or existing-profile upgrade test. Stop at delivery; installation,
 profile access, Git tags and remote publication require separate authorization.
+
+## GitHub Actions: personal fork only
+
+[Personal Windows](../../../.github/workflows/personal-windows.yml) is restricted
+to `saiveen1/PI-Desktop`, branch `main`. Code pushes build the current version;
+documentation-only pushes do not. Manual dispatch with an empty `release_version`
+also builds without publishing. The Windows job installs locked dependencies on
+the clean hosted runner and calls the same `pnpm dist:personal` entry, with offline
+release/policy regression, Desktop typecheck and lint. It never installs or
+launches Desktop. No signing credential or personal access token is required for
+this unsigned personal lane.
+
+Successful delivery uploads exactly the installer, its SHA-256, change notes and
+build-info sidecars as `personal-windows-<run-id>-<attempt>`, retained for 30 days.
+The build log is a separate 14-day artifact, including failed builds when the log
+exists. Artifacts are downloadable from the completed run; they are not a GitHub
+Release, a new version, an updater feed, or proof of installation compatibility.
+
+### Explicit beta publication
+
+In Actions, select **Personal Windows → Run workflow → main** and enter a newer
+`X.Y.Z-beta.N` in `release_version`. This explicit action authorizes the workflow's
+metadata commit, personal tag and prerelease publication; a push never does.
+
+1. Windows validates the input, builds with `pnpm dist:personal --release`, and
+   verifies version, source identity and the installer hash before upload.
+2. A separate read/write publication job checks out the exact built source and
+   downloads the delivery by the successful build job's artifact ID, not the
+   publication attempt number (which can change on failed-job reruns). It rechecks bytes, source/version,
+   Git-derived notes and the allowlisted version changes. It reconstructs version
+   and release-history files using the existing helpers; no downloaded source
+   patch is applied. Build metadata records the original source plus its explicit
+   version override, not the later metadata-only commit.
+3. The bot commits only those version/history files, then atomically pushes `main`
+   and `personal-vX.Y.Z-beta.N`. A changed remote `main` or existing conflicting
+   tag fails without force, rebase or overwrite. The personal tag does not match
+   the inherited `v*.*.*` release trigger.
+4. The job creates a prerelease with the four verified files. Only this job has
+   `contents: write`; the build job has read-only access and no persisted checkout
+   credentials. Standard `GITHUB_TOKEN` supplies publication permission. A
+   repository/ruleset that disallows the bot's push fails rather than bypassing it.
+
+The build script itself remains build-only. The workflow is the separately
+authorized publishing layer. After a release, fetch/review its bot commit before
+further local work; do not overwrite it with a stale branch or reuse its version.
+The workflow never enables the installed app's updater.
+
+### Initial setup and interrupted publication
+
+On a recreated fork, keep inherited workflows disabled and enable only
+`personal-windows.yml` for the personal lane. Check the repository's actual Actions
+state; copying YAML is not proof that a run started. The Actions page must show a
+successful Windows build and its installer artifact before claiming cloud packaging
+works. The first build can be manually dispatched with no version to verify setup.
+
+Runs are serialized with running work preserved; GitHub may replace an older
+pending run with a newer queued run. If `main` advances during a beta build, inspect
+the new source and dispatch a fresh candidate rather than force-pushing. If the
+metadata/tag push succeeded but Release creation/upload failed, keep those refs and
+the exact run's artifacts. Inspect the existing Release and complete only missing
+publication of that same artifact/tag; do not rebuild and overwrite an issued
+version, delete tags automatically, or blindly rerun the entire release.
+
+Offline regression: `node --test apps/desktop/test/personal-ci.test.mjs`. It covers
+ordinary builds, explicit version/history reconstruction, tampered artifacts,
+source mismatch, extra files, dirty checkouts and non-fast-forward atomic rejection
+using synthetic packages and temporary local Git remotes. It is not live GitHub
+publication or a real installer test.

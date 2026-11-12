@@ -114,6 +114,16 @@ pnpm dist:personal          # 构建，不改变应用版本
 产物位于 `apps/desktop/release/personal/`。**打包不会安装或启动应用。**
 候选版本发布、验证范围和产物详情见[个人发布说明](docs/spec/06-delivery/07-personal-release-runbook.md)。
 
+### 使用 GitHub Actions 构建
+
+个人 fork 的 [Personal Windows 工作流](.github/workflows/personal-windows.yml)
+在代码推送到 `main` 后构建，不自动修改版本号；成功运行的安装包与溯源文件作为 Actions
+产物保留 30 天，可在对应运行页面下载。
+需要新 beta 时，在 `main` 上点击 **Run workflow**，明确填写更高的 `release_version`；
+留空则只构建。手动发布成功后会保存版本／历史文件，并在自己的 fork 创建 `personal-v`
+预发布版本，不会开启已安装应用的自动更新。初次配置、权限和失败恢复说明见
+[Actions 发布说明](docs/spec/06-delivery/07-personal-release-runbook.md#github-actions-personal-fork-only)。
+
 ## 文档
 
 - [改动来源说明](docs/maintenance/personal-edition-provenance.md)：本地增量、重要修复及未列入亮点的上游功能。
