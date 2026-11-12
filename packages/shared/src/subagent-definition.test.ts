@@ -504,10 +504,25 @@ describe("resolveSubagentToolNames", () => {
     "mcp-foo",
   ];
 
-  it("returns only the declared list when inherit is off", () => {
+  it("adds only the available Skill loader when inherit is off", () => {
+    const tools = ["Read", "Bash"];
     expect(
-      resolveSubagentToolNames({ tools: ["Read", "Bash"] }, parent),
-    ).toEqual(["Read", "Bash"]);
+      resolveSubagentToolNames({ tools }, parent),
+    ).toEqual(["Read", "Bash", "Skill"]);
+    expect(tools).toEqual(["Read", "Bash"]);
+  });
+
+  it("keeps the declared tools when the parent has no Skill loader", () => {
+    expect(
+      resolveSubagentToolNames({ tools: ["Read"] }, ["Read", "Bash", "mcp-foo"]),
+    ).toEqual(["Read"]);
+  });
+
+  it("does not duplicate Skill or grant mutation to a read-only definition", () => {
+    const reader = definition({ tools: ["Read", "Skill"] });
+    const resolved = resolveSubagentToolNames(reader, parent);
+    expect(resolved).toEqual(["Read", "Skill"]);
+    expect(subagentCanMutate(reader, resolved)).toBe(false);
   });
 
   it("unions parent tools minus the deny list", () => {

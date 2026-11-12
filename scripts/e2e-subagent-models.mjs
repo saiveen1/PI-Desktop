@@ -116,6 +116,14 @@ const lines = readNdjsonLines(child.stdout, (line) => {
       send(params.key === "fixture/dynamic" && dynamicEnabled
         ? { id: message.id, result: model("dynamic") }
         : { id: message.id, error: { code: -32000, message: "model is not enabled for delegation" } });
+    } else if (method === "provider.delegationSnapshot") {
+      send({ id: message.id, error: { code: -32601, message: "provider.delegationSnapshot is unsupported by this fixture" } });
+    } else if (method === "session.appendMessage") {
+      send({ id: message.id, result: null });
+    } else if (method === "tools.fileBatchCapabilities") {
+      send({ id: message.id, result: { version: 1, supported: false } });
+    } else if (method === "todos.get") {
+      send({ id: message.id, result: { sessionId: params.sessionId, todos: [] } });
     } else {
       send({ id: message.id, result: method === "session.get" ? { session: { messages: histories.get(params.id) ?? [] } } : {} });
     }
@@ -166,13 +174,17 @@ async function run(id, args, expectedModel, keys = ["fixture/allowed"], sessionI
     pluginSkills: inheritCatalog ? fixtureSkills : undefined,
     subagentProviders: { ...bindings, ...options.bindings }, subagentModelKeys: keys,
   });
-  await until(() => events.some((e) => e.sessionId === sessionId && e.turnId === id && e.event.type === "agent_end" && !e.parentToolCallId));
+  await until(() => {
+    const failure = events.find((e) => e.sessionId === sessionId && e.turnId === id && e.event.type === "error" && !e.parentToolCallId);
+    assert.ok(!failure, `sidecar scenario failed: ${JSON.stringify(failure?.event)}`);
+    return events.some((e) => e.sessionId === sessionId && e.turnId === id && e.event.type === "agent_end" && !e.parentToolCallId);
+  });
   const captured = requests.slice(before);
   const parent = captured.find((p) => p.tools?.some((t) => t.function?.name === "Task"));
   assert.ok(parent, "parent provider request reached local transport");
   const system = parent.messages.filter((m) => m.role === "system").map((m) => m.content).join("\n");
   assert.ok(!system.includes("`fixture/private`"), "private pin must not enter override catalog");
-  assert.ok(parent.tools.find((t) => t.function?.name === "Task").function.description.includes(`Default model: fixture/${primaryModel}`));
+  assert.ok(parent.tools.find((tool) => tool.function?.name === "Task").function.description.includes("TaskModels"));
   const delegates = captured.filter((p) => !p.tools?.some((t) => t.function?.name === "Task"));
   assert.ok(delegates.every((p) => p.fixtureAccount !== "private-account"), "resume must not send a request using another definition's private binding");
   if (expectedModel) assert.deepEqual(delegates.map((p) => p.model), options.expectedAttempts ?? [expectedModel]);
@@ -184,11 +196,11 @@ async function run(id, args, expectedModel, keys = ["fixture/allowed"], sessionI
     const task = parent.tools.find((tool) => tool.function?.name === "Task");
     const toolResult = captured.flatMap((request) => request.messages)
       .find((message) => message.role === "tool" && JSON.stringify(message.content).includes("not available for delegation"));
-    for (const text of [system, task.function.description, JSON.stringify(toolResult?.content)]) {
-      assert.ok(text.includes("Settings → Models"), "empty overrides must point to model settings");
-      assert.ok(text.includes("Advanced") && text.includes("Available for AI delegation") && text.includes("save"), "guidance must name the opt-in control and save action");
-      assert.ok(text.includes("Omit"), "empty overrides must not imply delegation is unavailable");
-    }
+    assert.ok(task.function.description.includes("TaskModels"), "model guidance is requested on demand");
+    const text = JSON.stringify(toolResult?.content);
+    assert.ok(text.includes("Settings → Models"), "empty overrides must point to model settings");
+    assert.ok(text.includes("Advanced") && text.includes("Available for AI delegation") && text.includes("save"), "guidance must name the opt-in control and save action");
+    assert.ok(text.includes("Omit"), "empty overrides must not imply delegation is unavailable");
   }
   if (fallbackModels) {
     for (const pin of fallbackModels) {
@@ -259,9 +271,10 @@ async function run(id, args, expectedModel, keys = ["fixture/allowed"], sessionI
         assert.ok(!delegatedToolNames.includes(denied), `${denied} must not be inherited`);
       }
     } else {
-      assert.deepEqual(delegatedToolNames, ["Read", "Glob", "Grep", "Bash"]);
-      assert.ok(!delegatedToolNames.includes("Skill"), "builtin explorer must not inherit Skill");
-      assert.ok(!delegatedSystem.includes("# Skills"), "builtin explorer must not receive Skill guidance");
+      assert.deepEqual(delegatedToolNames, ["Read", "Glob", "Grep", "Bash", "Skill", "TaskReport"]);
+      assert.match(delegatedSystem, /# Skills/);
+      assert.match(delegatedSystem, /fixture\.skills\/release-notes/);
+      assert.ok(!delegatedToolNames.includes("plugin_fixture_echo"), "builtin explorer must not inherit plugin tools");
     }
   }
   if (!fallbackModels) console.log(`PASS E2E-166 ${id}`);

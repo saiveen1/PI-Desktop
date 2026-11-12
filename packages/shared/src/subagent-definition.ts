@@ -81,9 +81,9 @@ export type SubagentDefinition = {
   filePath?: string;
 };
 
-/** Tools a definition may declare by name. Plugin, skill, mode and meta tools
- * are not on this list; a document opts into the parent's live catalog with
- * `tools: inherit` instead (ADR 0246). */
+/** Tools a definition may declare by name. Skill is supplied separately when
+ * available; plugin tools require `tools: inherit`, and mode/meta tools remain
+ * outside this list (ADR 0246). */
 export const SUBAGENT_ASSIGNABLE_TOOLS = [
   "Read",
   "Glob",
@@ -123,7 +123,7 @@ export const SUBAGENT_INHERIT_DENY_TOOLS: readonly string[] = [
 /**
  * Resolve the tool-name set a delegate should receive at spawn time.
  *
- * - Without `inheritTools`, this is the declared list only (today's behavior).
+ * - Without `inheritTools`, only the declared list and the available Skill loader.
  * - With `inheritTools`, the parent's live tool catalog is unioned in after
  *   dropping {@link SUBAGENT_INHERIT_DENY_TOOLS}. Explicit assignable extras
  *   are still included so a definition can add Bash on top of inherit.
@@ -135,7 +135,9 @@ export function resolveSubagentToolNames(
   const declared = definition.tools.filter(
     (name) => name !== SUBAGENT_INHERIT_TOKEN,
   );
-  if (!definition.inheritTools) return [...declared];
+  // Loading instructions must not require inheriting executable plugin/MCP tools.
+  if (parentToolNames.includes("Skill") && !declared.includes("Skill")) declared.push("Skill");
+  if (!definition.inheritTools) return declared;
   const deny = new Set(SUBAGENT_INHERIT_DENY_TOOLS);
   const resolved: string[] = [];
   for (const name of [...parentToolNames, ...declared]) {

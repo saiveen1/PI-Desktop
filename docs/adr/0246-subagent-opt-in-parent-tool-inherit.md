@@ -94,3 +94,28 @@ list, not silent session equality.
   parent.
 - **Add `Skill` to `SUBAGENT_ASSIGNABLE_TOOLS` only.** Rejected: no MCP/plugin
   tools, still a second catalog.
+
+## Amendment — 2026-11-12: Skill loading without broad tool inheritance
+
+Fixed-tool delegates can be instructed to load a skill by project rules while
+having neither the `Skill` tool nor its catalog. Searching guessed filesystem
+paths is not an equivalent loader and can select the wrong skill document.
+
+At spawn, every definition receives `Skill` once when it exists in the parent's
+live catalog, including builtins and non-inheriting user definitions. The
+existing resolved-tool guidance supplies the matching skill index; bodies
+still load on demand through the session-owned Host bridge. An empty skill
+catalog supplies neither the tool nor the index. Host activation, project
+scoping, permission checks and error attribution remain authoritative.
+
+This is the only implicit addition to fixed tool lists. Plugin/MCP tools,
+mutation tools and parent control tools do not follow it. `tools: inherit`
+retains its explicit broader meaning and deny list; `Skill` remains outside
+the assignable frontmatter names, so existing documents need no migration.
+Read-only delegates remain read-only. Skill instructions do not grant the
+tools or permissions they describe.
+
+This amends decisions 1 and 5 above for instruction loading only. Making every
+builtin inherit the full catalog was rejected because it would unnecessarily
+grant executable plugin/MCP capabilities. Requiring parents to copy bodies or
+guess paths was rejected because it bypasses the current skill lookup contract.

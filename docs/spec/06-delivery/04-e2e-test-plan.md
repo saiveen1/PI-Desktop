@@ -9861,13 +9861,26 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
     the deny list. Its system prompt lists those names, includes the `# Skills`
     catalog, and says it may change files when the parent catalog includes
     Bash/Edit/Write.
-  - `explorer` still has only `Read, Glob, Grep, Bash` and cannot call Skill.
+  - `explorer` receives only `Read, Glob, Grep, Bash, Skill` as working tools
+    plus the existing runtime-owned `TaskReport`, not plugin/MCP tools or
+    other parent capabilities. Its prompt includes the skill index.
   - The Task catalog line for `worker` reads `(tools: inherit)`.
+  - Repeat with builtin `fixer`, read-only `code-reviewer`, and a fixed-tool
+    user definition. Each can load a listed skill on its first turn through
+    the session Host bridge. Bodies are not preloaded; the project instruction
+    chain remains last and read-only framing does not gain mutation rights.
+  - With an empty skill catalog, fixed-tool delegates receive neither `Skill`
+    nor `# Skills`. If the Host denies a load, the child receives an attributed
+    tool error, not a successful body or a filesystem fallback.
 - **Specs linked**: `03-runtime/03-tools-and-permissions.md` §10.2,
   `03-runtime/02-agent-runtime.md` §5f/§7.2b, ADR 0246, issue #215
 - **Acceptance**: E (tools & permissions), Security
 - **Milestone**: M6+
 - **Status**: Automated by `test:e2e:subagents` (host-core create/read/on-disk/active/loader inherit round-trip) and `test:e2e:subagent-models` (real sidecar/local transport Task spawn, inherited Skill/plugin catalog minus the deny list, and builtin explorer isolation). Unit coverage remains in `packages/shared`, `packages/agent-runtime`, and host-core `user_subagents`; the UI inherit-checkbox journey remains Draft. Required suites: `test:e2e`, `test:e2e:subagents`, `test:e2e:subagent-models`.
+  - The bounded Skill exception is additionally covered by
+    `packages/agent-runtime/src/delegation-skills-user-path.test.ts`: real parent
+    and child Agent loops with synthetic provider and Host boundaries cover all
+    five builtins, a fixed-tool user definition, empty catalogs and Host denial.
 
 #### E2E-145: Tool results read as structured blocks, never JSON
 

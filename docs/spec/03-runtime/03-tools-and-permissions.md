@@ -986,13 +986,16 @@ with any assignable extras, then drops `Task` / `TaskModels` / `TaskWait` / `Tas
 `TaskStop`, `EnterPlanMode` / `EnterGoalMode`, `asktool`, `new_context`, and
 `ToolSearch`. Builtins do not opt in. `inherit` is visible in the Markdown and
 in Settings; host-core keeps the token so an inherit-only document still
-loads. Plugin tools, `Skill`, and MCP tools are therefore available to a
-delegate only through this opt-in, never by putting those names on the
-assignable whitelist.
+loads. Plugin and MCP tools are available to a delegate only through this
+opt-in, never by putting those names on the assignable whitelist.
 
-Without `tools: inherit`, a delegate's available tools are its definition's,
-never its session's: it cannot gain a tool because the parent has it, and a
-session cannot lend mutation rights to a read-only delegate. Delegate calls
+Without `tools: inherit`, a delegate receives its definition's tools plus
+`Skill` exactly once when that loader exists in the parent's live catalog
+(ADR 0246 amendment). This instruction-loading exception also supplies the
+matching skill index; an empty catalog adds neither. It does not grant tools
+mentioned in skill documents, plugin/MCP capabilities or mutation rights to a
+read-only delegate. Skill bodies remain lazy, and Host activation and project
+scoping checks still apply. Delegate calls
 are built by the session runtime and go through the same `tools.execute` path,
 so path rules (§4), Bash rules (§5), permission modes (§6), the operating-mode
 matrix (§10) and auditing (§9) apply unchanged — evaluated against the owning

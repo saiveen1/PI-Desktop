@@ -1237,8 +1237,11 @@ Frontmatter adds `permission: inherit | ask | accept-edits | auto` (default
 `inherit`), which controls the scope the delegate's tool calls resolve under
 instead of the session mode (§5f.1). `tools: inherit` (alone or with assignable
 extras) opts a definition into the parent session's live tool catalog minus a
-deny list (ADR 0246 / D415); builtins stay on today's whitelist. `idle-timeout`
-and `max-duration` still parse for compatibility but no longer kill a run
+deny list (ADR 0246 / D415). Fixed-tool definitions, including builtins, also
+receive `Skill` when present in the parent catalog, without any other implicit
+tool inheritance. The matching skill index follows the resolved tool set;
+bodies still load through the Host on demand. `idle-timeout` and `max-duration`
+still parse for compatibility but no longer kill a run
 (D328). Only builtin and user definitions may declare a permission scope —
 both express a choice the user already made, whereas a project definition
 arrives with the repository, so honoring its scope would let cloned code grant
@@ -2176,7 +2179,8 @@ The framing states the shape of the delegate's situation, which is not
 inferable from the body: it is one delegated task, the delegate cannot see the
 user, ask a question, or delegate further, it has exactly the listed tools, and
 its final message is the only thing the main agent receives. Listed names are
-the spawn-time resolved set when `tools: inherit` is on. A read-only
+the spawn-time resolved set, including the available `Skill` loader for fixed
+tool lists and the broader catalog when `tools: inherit` is on. A read-only
 definition is additionally told never to report an edit it could not have made;
 a write-capable one is told to touch only the files the task is about.
 Mutation framing uses the resolved set, not the raw frontmatter extras.

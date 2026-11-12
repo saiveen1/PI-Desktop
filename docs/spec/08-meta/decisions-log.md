@@ -5227,6 +5227,10 @@ Validation contract: E2E-SIDEBAR-global-pinned-conversations.
 - host-core keeps the `inherit` token so inherit-only documents load and
   Settings round-trips them. See ADR 0246, issue #215, PR #319, and
   E2E-SUBAGENT-inherit-parent-tools.
+- Amendment (2026-11-12): all fixed-tool delegates also receive the available
+  `Skill` loader and matching catalog, without inheriting plugin/MCP tools or
+  mutation rights. Bodies remain lazy and Host-checked; an empty catalog adds
+  nothing. ADR 0246 records the bounded instruction-loading exception.
 
 ### Tray session shortcuts (issue #293)
 
