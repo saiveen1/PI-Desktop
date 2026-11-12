@@ -2,6 +2,48 @@
 
 This is the personal edition's release record, generated from `docs/releases/history.json`. Ordinary builds do not create releases or change the beta version. Commit-subject categories are traceability aids, not stability or test claims.
 
+## 0.22.0-beta.10 — 2026-11-12
+
+Source: `27b3fe481e2b3008795c886665d4c938306e4b3e`; build: `20261112T223739070Z-g27b3fe481e2b-08fa430e`; SHA-256: `92a3ec28adb86a0713558e368ed65b7541f6dc1a094a44bc2210282bc01b2b04`.
+
+Verified by offline package checks only; no installation or profile-upgrade claim.
+
+### Added
+
+- feat(ci): automate personal Windows builds and explicit beta publication (`58c8ef37b2c7`)
+- feat(desktop): surface current-session subagents in the topbar (`869bc1d18076`)
+- feat(dev): add fixed Windows source launcher (`001c3215e4f7`)
+
+### Fixed
+
+- fix(runtime): expose the main agent request model identity (`27b3fe481e2b`)
+- fix(desktop): allow branching from historical replies (`d0f4fd890372`)
+- fix(runtime): preserve execution continuity across compaction (`c191a980a00b`)
+- fix(agent-runtime): chain before\_provider\_request payloads across handlers (`fcaba495a5ce`)
+- fix(plugins): save untouched json settings without stringifying them (`f0a5f562f53f`)
+- fix(desktop): preserve image previews and group adjacent reads (`59a49cdb9d73`)
+- fix(agent-runtime): guard the retained-tail file-op collection by executed calls (`1fa106889fa0`)
+- fix(outbox): timestamped non-overwriting quarantine and fail-closed quarantine failures (\#2284 review) (`7987bab0cb8f`)
+- fix(runtime): make skills available to fixed-tool delegates (`a6f1e80109c0`)
+- fix(outbox): quarantine corrupt session outbox instead of fatal exit (`7ef2b21595ae`)
+- fix(agent-runtime): guard split-turn prefix calls by execution results (`b6afc4a4ceba`)
+- fix(outbox): atomically persist empty recovery snapshots (`3a61e4cde1ad`)
+- fix(runtime): guard repetitive model output and previews (`5b4fd2c28eed`)
+- fix(agent-runtime): keep length-stopped and mid-batch-interrupted calls out of compaction file ops (`4d8d4a89e0d9`)
+- fix(agent-runtime): recover text-form tool calls once per turn (`0008cb59f39e`)
+- fix(delegation): accept redundant model bindings on resume (`9272af7659c1`)
+
+### Improved
+
+- No changes recorded in this category.
+
+### Maintenance
+
+- docs(readme): center personal enhancements and verified provenance (`d4cc2151a843`)
+- test(outbox): cover double corruption and failed-quarantine fail-closed boot (\#2284 review) (`5c24dc83768e`)
+- test(outbox): cover zero-byte, torn and dead-letter corrupt recovery (`5196448124f0`)
+- chore(release): record 0.22.0-beta.9 personal candidate (`7b18ec7d9903`)
+
 ## 0.22.0-beta.9 — 2026-11-11
 
 Source: `bf47f63d43b38d84c960262d829f240d7381dfd0`; build: `20261111T184751186Z-gbf47f63d43b3-117c5691`; SHA-256: `ce4d8ef239fb54dce03e1920f8f10aa72d94624d437e205e7688d2753583c67d`.

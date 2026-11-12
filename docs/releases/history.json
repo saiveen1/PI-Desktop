@@ -208,6 +208,137 @@
   },
   "releases": [
     {
+      "version": "0.22.0-beta.10",
+      "sourceCommit": "27b3fe481e2b3008795c886665d4c938306e4b3e",
+      "sourceFingerprint": "a8ca988b977bdc1f71abd3156473d56040754bf90af761836e5c71a4b39250fb",
+      "versionOverride": {
+        "from": "0.22.0-beta.9",
+        "to": "0.22.0-beta.10"
+      },
+      "buildId": "20261112T223739070Z-g27b3fe481e2b-08fa430e",
+      "builtAt": "2026-11-12T22:41:46.767Z",
+      "sha256": "92a3ec28adb86a0713558e368ed65b7541f6dc1a094a44bc2210282bc01b2b04",
+      "artifact": "PI-Desktop-Personal-Setup-0.22.0-beta.10-20261112T223739070Z-g27b3fe481e2b-08fa430e.exe",
+      "changes": [
+        {
+          "commit": "27b3fe481e2b3008795c886665d4c938306e4b3e",
+          "subject": "fix(runtime): expose the main agent request model identity",
+          "category": "Fixed"
+        },
+        {
+          "commit": "d0f4fd89037249fe81f7b71934dbd864ff2a33bc",
+          "subject": "fix(desktop): allow branching from historical replies",
+          "category": "Fixed"
+        },
+        {
+          "commit": "c191a980a00bb5bcb13009508d4fc6f4c447af5e",
+          "subject": "fix(runtime): preserve execution continuity across compaction",
+          "category": "Fixed"
+        },
+        {
+          "commit": "fcaba495a5cefca9be881cfaff149c1bead9fcad",
+          "subject": "fix(agent-runtime): chain before_provider_request payloads across handlers",
+          "category": "Fixed"
+        },
+        {
+          "commit": "58c8ef37b2c7a2edb0d43507c621faa1a5a6e0f5",
+          "subject": "feat(ci): automate personal Windows builds and explicit beta publication",
+          "category": "Added"
+        },
+        {
+          "commit": "f0a5f562f53f3f6b4910e9598b6fd81c74612a4d",
+          "subject": "fix(plugins): save untouched json settings without stringifying them",
+          "category": "Fixed"
+        },
+        {
+          "commit": "d4cc2151a84308fa669a7d41940cb2008f834f80",
+          "subject": "docs(readme): center personal enhancements and verified provenance",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "59a49cdb9d73046ecbe512615aa770a720e84ecb",
+          "subject": "fix(desktop): preserve image previews and group adjacent reads",
+          "category": "Fixed"
+        },
+        {
+          "commit": "869bc1d1807674e643ff864eee8dc7287dec549c",
+          "subject": "feat(desktop): surface current-session subagents in the topbar",
+          "category": "Added"
+        },
+        {
+          "commit": "1fa106889fa02f9c5c134468e46db4bed8fb0403",
+          "subject": "fix(agent-runtime): guard the retained-tail file-op collection by executed calls",
+          "category": "Fixed"
+        },
+        {
+          "commit": "5c24dc83768e7b8c3ce877b33ba86197ca269618",
+          "subject": "test(outbox): cover double corruption and failed-quarantine fail-closed boot (#2284 review)",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "7987bab0cb8fc389eb470fbb581fe5dfcdc3f609",
+          "subject": "fix(outbox): timestamped non-overwriting quarantine and fail-closed quarantine failures (#2284 review)",
+          "category": "Fixed"
+        },
+        {
+          "commit": "a6f1e80109c0bc803b058c4421dae831f8b8d52f",
+          "subject": "fix(runtime): make skills available to fixed-tool delegates",
+          "category": "Fixed"
+        },
+        {
+          "commit": "5196448124f0529a9903cb349de0a62d1a303afa",
+          "subject": "test(outbox): cover zero-byte, torn and dead-letter corrupt recovery",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "7ef2b21595ae0a9ce7e86e325222a01f9792b21d",
+          "subject": "fix(outbox): quarantine corrupt session outbox instead of fatal exit",
+          "category": "Fixed"
+        },
+        {
+          "commit": "b6afc4a4ceba5b7e353f3df9ed701ed354c89072",
+          "subject": "fix(agent-runtime): guard split-turn prefix calls by execution results",
+          "category": "Fixed"
+        },
+        {
+          "commit": "3a61e4cde1ad3034331f04a9e560dbace69d6cc1",
+          "subject": "fix(outbox): atomically persist empty recovery snapshots",
+          "category": "Fixed"
+        },
+        {
+          "commit": "5b4fd2c28eed1d9d6de4262ced0a4569926b2fa5",
+          "subject": "fix(runtime): guard repetitive model output and previews",
+          "category": "Fixed"
+        },
+        {
+          "commit": "4d8d4a89e0d9f7a693f74a8f7493ff00b96ea300",
+          "subject": "fix(agent-runtime): keep length-stopped and mid-batch-interrupted calls out of compaction file ops",
+          "category": "Fixed"
+        },
+        {
+          "commit": "001c3215e4f7ac81b8364e1cd4e4ac3317b717e6",
+          "subject": "feat(dev): add fixed Windows source launcher",
+          "category": "Added"
+        },
+        {
+          "commit": "0008cb59f39eec0c32676e9af54f7e82e53c5ed3",
+          "subject": "fix(agent-runtime): recover text-form tool calls once per turn",
+          "category": "Fixed"
+        },
+        {
+          "commit": "9272af7659c147bc560a275fcfc80f58ba5136bf",
+          "subject": "fix(delegation): accept redundant model bindings on resume",
+          "category": "Fixed"
+        },
+        {
+          "commit": "7b18ec7d9903a75e6358e5e9c5939d6655f54910",
+          "subject": "chore(release): record 0.22.0-beta.9 personal candidate",
+          "category": "Maintenance"
+        }
+      ],
+      "validation": "Offline package checks only; no profile compatibility or Authenticode claim."
+    },
+    {
       "version": "0.22.0-beta.9",
       "sourceCommit": "bf47f63d43b38d84c960262d829f240d7381dfd0",
       "sourceFingerprint": "380f399eae59c39ba7c2205f02c4e727887d072fd6a4ee30e0c8aa044a18ce82",
