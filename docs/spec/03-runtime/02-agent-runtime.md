@@ -2072,6 +2072,30 @@ longer exist, and the sidecar's tool description must stay byte-identical in
 substance to host-core's `builtin_tool_defs()` entry, because a model taught one
 grammar and validated against another fails every call.
 
+### 7.0.2 Main-agent request identity
+
+Desktop-managed main agents receive a `Current runtime model identity` block in
+the existing trailing `context` section. It contains the exact active request
+model ID and configured provider/account ID as JSON-quoted data, not the display
+name, delegation catalog, or a historical assistant's model. It explicitly
+permits using the decoded model ID for identity answers and an `AI-Model` trailer
+when requested by repository policy; it does not itself authorize a commit.
+The block is request-configuration evidence, not proof of upstream weights,
+provider-reported response identity, or undisclosed gateway routing. No key,
+endpoint, headers, or full provider configuration is included.
+
+Persona replacement/append files retain the block. Runtime reconstruction with a
+new binding updates the effective context at the continuation boundary without
+rewriting old records; a trusted-extension agent activation refreshes it in place.
+Unchanged bindings do not introduce per-request timestamps or identity churn.
+Compaction retains it through the existing system checkpoint. Native Pi prompts
+and delegate prompts are unchanged, as are trusted extensions' explicit prompt
+replacement hooks. This adds no RPC, settings, or persisted schema.
+
+Coverage: `runtime-model-identity.test.ts` exercises the real main Agent loop
+with synthetic Host/provider boundaries; E2E-RUNTIME-main-model-identity records
+the user path and live-provider verification limits.
+
 ### 7.1 Active tool context and on-demand loading (D185, ADR 0048)
 
 The sidecar builds one complete tool registry. By default, each provider request

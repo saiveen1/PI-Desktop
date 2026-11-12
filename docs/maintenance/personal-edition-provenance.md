@@ -29,6 +29,17 @@ Documentation and supported source-asset links remain site-relative.
 
 ## Local harness and delegation increments
 
+The main-model identity addition starts from personal source `d0f4fd890`,
+compared read-only with locally recorded upstream
+`dd66ca037391da7378be25becb1a8bcb8054298f` (no fetch). That upstream's
+`composeSystemPrompt` carries persona, tools and project context but no active
+main-model identity. The local
+[prompt](../../packages/agent-runtime/src/runtime-model-identity.ts) adds only
+request-binding IDs and their limits; existing provider selection, chronological
+system state and checkpoints remain inherited. The
+[offline user path](../../packages/agent-runtime/src/runtime-model-identity.test.ts)
+checks provider-visible identity, not live backend weights or routing.
+
 The execution-continuity amendment was added on personal base
 `58c8ef37b`, compared read-only with the same locally recorded upstream
 `7841a9828249e5f93c9aa1a85e3a096776bfe1b8`. That upstream's

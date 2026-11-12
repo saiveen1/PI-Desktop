@@ -51,6 +51,10 @@ This edition strengthens the existing framework rather than replacing it.
   a broken request to replay. Local idle termination leaves retry to the user.
   Context compaction remains runtime-controlled rather than a model-triggered
   tool, while existing automatic and user `/compact` paths remain available.
+- **Runtime-confirmed main-model identity.** The main Agent receives its exact
+  active request model and provider IDs, including after model changes, so it
+  can answer identity questions and fill requested `AI-Model` trailers without
+  guessing. This identifies the configured request, not undisclosed gateway routing.
 - **Execution continuity after compaction.** Main-session active-task checkpoints retain the
   current request plus a budgeted window of recent progress and paired tool
   receipts, including after restart, rather than relying on the summary alone.

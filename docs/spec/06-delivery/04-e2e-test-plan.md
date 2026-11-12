@@ -11975,6 +11975,7 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
 
 | Acceptance | Scenarios |
 |---|---|
+| B / C / Quality — Runtime-confirmed main-model identity | E2E-RUNTIME-main-model-identity |
 | C / Data safety / Quality — Bounded repetitive output | E2E-UI-bounded-repetitive-output, E2E-RUNTIME-repetitive-model-output |
 | A / Data safety / Quality — Session multiselect and reversible deletion | E2E-SESSION-recycle-bin-and-multiselect |
 | C / E / Security / Quality — Live delegation policy, retry continuation and revision-bound grouped model consent | E2E-DELEGATION-scheduling-and-model-approval |
@@ -21632,3 +21633,22 @@ Build two actual runtimes with identical configuration and different scratch dir
 - **Acceptance / milestone:** Compatibility and local-fix preservation; maintenance.
 - **Status:** Candidate regression scenarios. Actual commands, results and unrun
   Electron/installed-profile checks are recorded in the integration delivery report.
+
+### E2E-RUNTIME-main-model-identity — Main Agent knows its request model
+
+- **Preconditions:** A Desktop-managed main session with a configured provider
+  and exact model ID; synthetic Host/provider boundaries for offline coverage.
+- **Steps:** Ask which model is active and request an `AI-Model` trailer. Repeat
+  with Agent/Plan and custom persona/append files. Continue the same binding,
+  restore recorded system history under a different binding, activate a trusted
+  extension model, and compact/continue the context.
+- **Expected:** Provider-visible instructions contain the current exact model
+  and provider IDs, not display names, delegation candidates or stale IDs.
+  Unchanged identity causes no extra journal writes. Historical records remain
+  intact. The instructions distinguish configured requests from undisclosed
+  backend routing and contain no credentials, endpoint or headers.
+- **Specs:** Agent Runtime §7.0.2.
+- **Acceptance:** B / C / Quality; exact identity without guesses or secret leaks.
+- **Milestone:** Personal-edition maintenance.
+- **Status:** Offline Agent-loop regression in `runtime-model-identity.test.ts`.
+  No live provider response, installed Desktop, or upgrade validation is claimed.

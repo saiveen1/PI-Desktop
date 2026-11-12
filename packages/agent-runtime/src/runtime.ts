@@ -193,6 +193,7 @@ import {
   estimateTokens,
 } from "./pi-runtime-estimates.js";
 import { convertToLlm } from "./pi-runtime-messages.js";
+import { runtimeModelIdentityPrompt } from "./runtime-model-identity.js";
 import type {
   CompactionEntry,
   CompactionPreparation,
@@ -2581,6 +2582,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
         ...(this.scratchDir ? [
           `Your scratch directory for this session is \`${formatScratchDirForShell(this.commandShell, this.scratchDir)}\` (in Bash: ${shellScratchVariable(this.commandShell)}).`,
         ] : []),
+        runtimeModelIdentityPrompt(this.provider.id, this.model.id),
       ].join("\n\n"), this.modeState.instructions()),
     };
     const composed = Object.values(this.composedSections).filter(Boolean).join("\n\n");
@@ -2946,6 +2948,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     this.thinkingLevel = clampThinkingLevel(this.provider, this.thinkingLevel);
     this.agent.state.model = model;
     this.agent.state.thinkingLevel = agentThinkingLevel(this.thinkingLevel);
+    this.setAgentSystemPrompt(this.composeSystemPrompt());
   }
 
   async activateTrustedExtensionAgent(agentKey: string, modelId: string): Promise<boolean> {
