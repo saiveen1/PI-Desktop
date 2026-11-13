@@ -25,6 +25,7 @@ import type { AgentOptions } from "@earendil-works/pi-agent-core";
 import type { SubagentThinkingLevel } from "@pi-desktop/shared";
 import type { ClassifiedAgentError } from "./agent-errors.js";
 import type { ProviderFetchFailure } from "./provider-transport-recovery.js";
+import type { AssistantMessageEventStream } from "@earendil-works/pi-ai";
 
 export type SubagentProviderRetryState = {
   allowOutputLimitRepair?: () => boolean;
@@ -44,6 +45,7 @@ export function subagentModelBinding(opts: {
   maxTokens?: number;
   onUsage?: UsageObserver;
   uniqueToolCalls?: ReturnType<typeof createToolCallIdentity>;
+  observeStream?: (createStream: () => AssistantMessageEventStream) => AssistantMessageEventStream;
 }, retry: SubagentProviderRetryState) {
   // A definition may cap the delegate's own output (issue #171). The
   // catalog's published limit keeps applying otherwise, so this is an
@@ -121,14 +123,16 @@ export function subagentModelBinding(opts: {
         m,
         requestContext,
         sessionOptions,
-        (retryOptions) => withModelOutputGuard(m, retryOptions, guardedOptions => accountModelStream(m, () =>
-          omitThinking
+        (retryOptions) => withModelOutputGuard(m, retryOptions, guardedOptions => {
+          const createStream = () => omitThinking
             ? models.stream(omitThinkingModel, requestContext, guardedOptions)
-            : models.streamSimple(m, requestContext, guardedOptions), {
-              providerId: opts.provider.id,
-              nativeCost: opts.provider.modelConfig?.nativeCost,
-              onUsage: opts.onUsage,
-            })),
+            : models.streamSimple(m, requestContext, guardedOptions);
+          return accountModelStream(m, () => opts.observeStream ? opts.observeStream(createStream) : createStream(), {
+            providerId: opts.provider.id,
+            nativeCost: opts.provider.modelConfig?.nativeCost,
+            onUsage: opts.onUsage,
+          });
+        }),
         {
           allowOutputLimitRepair: retry.allowOutputLimitRepair,
           onRetry: retry.onRetry,

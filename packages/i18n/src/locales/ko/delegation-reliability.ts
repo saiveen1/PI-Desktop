@@ -1,3 +1,5 @@
+import { delegationObservability } from "../en/delegation-observability.js";
+
 export const delegationReliabilitySettings = {
   providerStreamIdleTimeout: "모델 연결 유휴 시간 제한",
   providerStreamIdleTimeoutDesc: "선택한 시간 동안 응답 데이터가 없을 때만 취소합니다. 오래 생각하는 것만으로 요청을 다시 시작하지 않습니다. 다음 턴부터 적용되며, 끄면 멈춘 요청을 직접 중지해야 합니다.",
@@ -12,6 +14,7 @@ export const delegationReliabilitySettings = {
 };
 
 export const delegationDiagnostics = {
+  ...delegationObservability,
   "title": "위임 세부 정보",
   "requestedModel": "요청 모델",
   "actualModel": "실제 모델",

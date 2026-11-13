@@ -25,6 +25,7 @@
 - [README.md](03-runtime/README.md)
 - [01-ipc-protocol.md](03-runtime/01-ipc-protocol.md)
 - [02-agent-runtime.md](03-runtime/02-agent-runtime.md)
+- [delegation-observability.md](03-runtime/delegation-observability.md)
 - [03-tools-and-permissions.md](03-runtime/03-tools-and-permissions.md)
 - [04-data-storage.md](03-runtime/04-data-storage.md)
 - [05-host-core-rust.md](03-runtime/05-host-core-rust.md)

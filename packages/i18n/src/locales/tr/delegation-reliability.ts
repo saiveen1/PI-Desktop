@@ -1,3 +1,5 @@
+import { delegationObservability } from "../en/delegation-observability.js";
+
 export const delegationReliabilitySettings = {
   providerStreamIdleTimeout: "Model bağlantısı boşta kalma zaman aşımı",
   providerStreamIdleTimeoutDesc: "Yalnızca seçilen süre boyunca yanıt verisi gelmezse iptal eder. Uzun düşünme tek başına isteği yeniden başlatmaz. Sonraki turda uygulanır; kapalıyken takılan isteği elle durdurun.",
@@ -12,6 +14,7 @@ export const delegationReliabilitySettings = {
 };
 
 export const delegationDiagnostics = {
+  ...delegationObservability,
   "title": "Görevlendirme ayrıntıları",
   "requestedModel": "İstenen model",
   "actualModel": "Kullanılan model",

@@ -179,6 +179,8 @@ describe("subagent recovery through the real loop", { timeout: 60_000 }, () => {
         usage: { input: 10, output: 5, cacheRead: 0, cacheWrite: 0, totalTokens: 15,
           cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
       };
+      // Recovery may retain only output observed before cancellation, not text first invented by an abort result.
+      queueMicrotask(() => stream.push({ type: "start", partial: message }));
       const finish = () => { stream.push({ type: "error", reason: "aborted", error: message }); stream.end(message); };
       if (options?.signal?.aborted) queueMicrotask(finish);
       else options?.signal?.addEventListener("abort", finish, { once: true });

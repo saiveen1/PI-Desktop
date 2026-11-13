@@ -1,3 +1,5 @@
+import { delegationObservability } from "./delegation-observability.js";
+
 export const delegationReliabilitySettings = {
   providerStreamIdleTimeout: "模型连接空闲超时",
   providerStreamIdleTimeoutDesc: "仅在选定时间内没有收到响应数据时取消。长时间思考本身不会重启请求。从下一轮生效；关闭时若请求卡住需手动停止。",
@@ -12,6 +14,7 @@ export const delegationReliabilitySettings = {
 };
 
 export const delegationDiagnostics = {
+  ...delegationObservability,
   "title": "委派详情",
   "requestedModel": "请求模型",
   "actualModel": "实际模型",

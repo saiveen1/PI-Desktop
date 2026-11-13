@@ -663,6 +663,40 @@ being fetched on every subsequent poll.
 - **Status:** Implementation candidate; final integrated verification pending.
   The user requested implementation before further test execution.
 
+### E2E-DELEGATION-observations-and-approval-sound
+
+- **Preconditions:** Real parent/child loops with synthetic transport and tools,
+  isolated Host data/scratch and production renderer components. No daily profile,
+  installed Desktop or paid model request.
+- **Steps:** Admit a model, record authorization and actual provider attempts,
+  execute new and repeated read evidence, complete a Write, then hold a pending
+  tool past the diagnostic window. Exercise model failure/fallback, parent-fatal
+  cancellation, valid final report, partial evidence and TaskWait delivery.
+  Reopen persisted history and compare actual models, times and output usage.
+  Test old/malformed observations and bounded arrays. In Scheduling configure
+  sound, volume and repeat; preview the draft. Hydrate pending approvals, deliver
+  a live arrival and an old revision before the initial list, reopen/refresh,
+  then approve/cancel/expire/fall back while a sound delivery is pending.
+- **Expected:** Quiet pending tools are not killed or replayed; runtime-owned
+  evidence distinguishes activity from new outcomes and survives interruption.
+  Authorization is not provider start, and process end is not report delivery.
+  One actual report reaches the parent; later metadata refreshes use the same
+  canonical Task row. History strips unknown/private fields, rejects malformed
+  measurements and keeps old missing facts unavailable. Throughput labels include
+  tools/waits or request transport time, not pure generation speed. Preview uses
+  draft volume without saving. Initial hydration does not sound, genuine arrivals
+  do, configured repeats remain active and all terminal paths stop reminders.
+- **Traceability:** [Delegation observations](../03-runtime/delegation-observability.md),
+  runtime §5f, global delegation history and terminal reliability ADRs.
+- **Candidate entry points:** `subagent-observability.test.ts`,
+  `delegation-observation.test.ts`, `delegation-terminal-user-path.test.ts`,
+  Host `delegation_history_tests.rs`, shared `delegation-history.test.ts`, and
+  desktop `subagent-diagnostics.test.mjs`, `delegation-approval-state.test.mjs`,
+  `notification-delivery.test.mjs`, `core-notification-user-path.test.mjs`.
+- **Acceptance:** C / E / Data safety / Quality. **Milestone:** maintenance.
+- **Status:** Candidate validation is recorded in the implementation delivery;
+  physical audio, installed-app and live-provider acceptance are separate.
+
 ### E2E-DELEGATION-admission-contract-and-stop
 
 - **Preconditions:** A healthy Host authorizer, two enabled auto-permitted
@@ -11998,6 +12032,7 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
 | A / Data safety / Quality — Session multiselect and reversible deletion | E2E-SESSION-recycle-bin-and-multiselect |
 | C / E / Security / Quality — Live delegation policy, retry continuation and revision-bound grouped model consent | E2E-DELEGATION-scheduling-and-model-approval |
 | C / E / Data safety / Quality - Truthful terminal delivery and optional recovery | E2E-DELEGATION-terminal-delivery-and-recovery |
+| C / E / Data safety / Quality - Recorded observations, throughput and approval sound | E2E-DELEGATION-observations-and-approval-sound |
 | C / E / Security / Quality - Admission normalization and acknowledged stopping | E2E-DELEGATION-admission-contract-and-stop |
 | C / Data safety / Quality - Bounded unknown upstream response recovery | E2E-PROVIDER-unknown-upstream-recovery-policy |
 | A / F / Quality — Self-managed daily release and isolated Dev | E2E-RELEASE-self-managed-daily-build |

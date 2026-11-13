@@ -226,8 +226,18 @@ describe("terminal delegation delivery through Task, TaskList and TaskWait", () 
         && event.type === "message_end" && event.message.toolName === "Task"
         && isRecord(event.message.toolResult) && isRecord(event.message.toolResult.details)
         && event.message.toolResult.details.status === "completed" ? [event.message] : []);
-      expect(settlements).toHaveLength(1);
-      expect(settlements[0]?.toolResult).toMatchObject({ details: { report: finalReport } });
+      expect(settlements).toHaveLength(2);
+      expect(new Set(settlements.map(row => row.id)).size).toBe(1);
+      expect(settlements[0]?.toolResult).toMatchObject({ details: { report: finalReport,
+        usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
+        observation: { selectedModel: "fixture/child", phase: "ended", attemptCount: 2,
+          approvals: [expect.objectContaining({ status: "pending" }), expect.objectContaining({ status: "accepted" })],
+          reportProducedAt: expect.any(Number) } } });
+      expect(settlements[0]?.toolResult).not.toHaveProperty("details.observation.reportDeliveredAt");
+      expect(settlements[1]?.toolResult).toMatchObject({ details: { report: finalReport,
+        observation: { reportDeliveredAt: expect.any(Number) } } });
+      expect(firstDelegation(f.results.get("TaskWait"))).toMatchObject({
+        observation: { reportDeliveredAt: expect.any(Number) } });
     } finally { await f.close(); }
   });
 

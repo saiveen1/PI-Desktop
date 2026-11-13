@@ -17,6 +17,12 @@ const calls = [], navigation = [], events = new Set();
 const first = new Promise((resolve) => { resolveFirst = resolve; });
 const entry = (id, status, project) => ({ id, sessionId: `source-${id}`, sessionTitle: `Session ${id}`, projectTitle: project, delegationId: id, messageId: id, agentName: `Agent ${id}`, description: `Description ${id}`, status, createdAt: "2026-01-01T00:00:00Z", task: "Full task\nEND", report: "Full report\nEND", reportTruncated: true });
 const a = entry("a", "running", "Project A"), b = entry("b", "completed", "Project B");
+Object.assign(b, { requestedModel: "account/requested", modelId: "fallback", startedAt: "2026-01-01T00:00:01.000Z", completedAt: "2026-01-01T00:00:03.000Z", usage: { inputTokens: 30, outputTokens: 100, totalTokens: 130 }, observation: {
+  version: 1, selectedModel: "account/fallback", phase: "ended", lastActivityAt: 3000,
+  diagnostic: { state: "ended", observedAt: 3000, thresholdMs: 0, reason: "ended" }, executionStartedAt: 1500, executionEndedAt: 3000, reportProducedAt: 3000,
+  attemptCount: 1, attemptsOmitted: 0, attempts: [{ sequence: 1, model: "account/fallback", startedAt: 1500, finishedAt: 2500, outcome: "completed", providerDurationMs: 1000, usage: { inputTokens: 30, outputTokens: 100, totalTokens: 130 } }],
+  approvalsOmitted: 0, approvals: [{ model: "account/fallback", status: "accepted", at: 1200 }], completedToolCalls: 0, failedToolCalls: 0, pendingTools: [], pendingToolsOmitted: 0, recentTools: [], confirmedWritePaths: [], confirmedWritePathsOmitted: 0,
+} });
 api.listDelegationApprovals = async () => ({ requests });
 api.onDelegationApprovalChanged = () => () => {};
 api.onAgentEvent = (listener) => { events.add(listener); return () => events.delete(listener); };
@@ -40,6 +46,8 @@ window.historyProbe = async () => {
   check(document.documentElement.textContent.includes("Project B") && !document.documentElement.textContent.includes("Agent a"), "Stale query must not replace ended filter");
   click('[data-delegation-id="b"]'); await tick();
   check(navigation.length === 0 && document.documentElement.textContent.includes("Full task") && document.documentElement.textContent.includes("delegationHistory.truncated"), "Detail must preserve text without navigation");
+  check(document.documentElement.textContent.includes("account/fallback") && document.documentElement.textContent.includes("chat.delegationDiagnostics.observation.approvalStates.accepted") && document.documentElement.textContent.includes("chat.delegationDiagnostics.observation.requestThroughput"), "Detail renders recorded authorization and provider attempt");
+  check(document.documentElement.textContent.includes("chat.delegationDiagnostics.throughput") && document.documentElement.textContent.includes("100"), "Detail renders recorded run usage and throughput");
   press("delegationHistory.back"); await tick();
   check(document.activeElement?.dataset.delegationId === "b", "Back restores row focus");
   press("delegationHistory.filters.all"); await tick(); press("delegationHistory.loadMore"); await tick();

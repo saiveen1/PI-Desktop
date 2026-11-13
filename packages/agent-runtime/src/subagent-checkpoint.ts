@@ -1,4 +1,4 @@
-import { isDelegationRunPolicySnapshot, type DelegationRunPolicy } from "@pi-desktop/shared";
+import { isDelegationRunPolicySnapshot, parseSubagentObservation, type SubagentObservation, type DelegationRunPolicy } from "@pi-desktop/shared";
 import { createHash, randomUUID } from "node:crypto";
 import { closeSync, fstatSync, lstatSync, mkdirSync, openSync, readSync, realpathSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, relative } from "node:path";
@@ -32,6 +32,7 @@ export type SubagentCheckpoint = {
   contextDegraded?: boolean;
   outputTruncated?: boolean;
   terminal?: SubagentTerminalDiagnostics;
+  observation?: SubagentObservation;
 };
 type CheckpointLocation = { scratchDir?: string; delegateSessionId?: string; parentToolCallId: string };
 export type PersistSubagentCheckpointOptions = CheckpointLocation & { checkpoint: SubagentCheckpoint };
@@ -137,6 +138,8 @@ function validate(value: unknown, options: ReadSubagentCheckpointOptions): Subag
   if (value.runPolicy !== undefined && !isDelegationRunPolicySnapshot(value.runPolicy)) fail("checkpoint-invalid");
   const terminal = parseSubagentTerminalDiagnostics(value.terminal);
   if (value.terminal !== undefined && !terminal) fail("checkpoint-invalid");
+  const observation = parseSubagentObservation(value.observation);
+  if (value.observation !== undefined && !observation) fail("checkpoint-invalid");
   // Only known fields survive: no arbitrary persisted context, tools, or credentials.
   return {
     version: 1, sessionId: options.sessionId, agentName: options.agentName, delegateSessionId: chainId(options),
@@ -151,6 +154,7 @@ function validate(value: unknown, options: ReadSubagentCheckpointOptions): Subag
     ...(typeof value.contextDegraded === "boolean" ? { contextDegraded: value.contextDegraded } : {}),
     ...(typeof value.outputTruncated === "boolean" ? { outputTruncated: value.outputTruncated } : {}),
     ...(terminal ? { terminal } : {}),
+    ...(observation ? { observation } : {}),
     ...(value.error !== undefined ? { error: restoredError(value.error) } : {}),
   };
 }

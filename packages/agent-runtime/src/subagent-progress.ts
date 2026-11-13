@@ -4,6 +4,8 @@ import { Type } from "typebox";
 import { isRecord } from "./agent-messages.js";
 import { persistSubagentCheckpoint, type SubagentCheckpoint, type PersistSubagentCheckpointResult } from "./subagent-checkpoint.js";
 import type { SubagentTerminalDiagnostics } from "./subagent-terminal.js";
+import type { SubagentObservation } from "@pi-desktop/shared";
+import { subagentEvidenceHandoff } from "./subagent-observability.js";
 
 export const SUBAGENT_REPORT_TOOL = "TaskReport";
 export const SUBAGENT_FINAL_REPORT_PROMPT = "Stop exploration and write a self-contained partial report from the evidence already collected: confirmed findings with file references, completed work, unresolved questions, and the exact next step. No tools are available. Do not claim unfinished work is complete.";
@@ -12,7 +14,6 @@ export const SUBAGENT_FINAL_REPORT_PROMPT = "Stop exploration and write a self-c
 export class SubagentProgress {
   private report = "";
   private latestOutput = "";
-  private pending = new Map<string, string>();
   persistence: PersistSubagentCheckpointResult = {};
   /** Reporting diagnostics never determine whether work may continue. */
   error?: { code: string; message: string };
@@ -27,6 +28,7 @@ export class SubagentProgress {
       contextCompactions: number; contextDegraded: boolean;
     };
     initialReport?: string;
+    observation: () => SubagentObservation;
   }) {
     this.report = options.initialReport ?? "";
     this.tool = {
@@ -68,19 +70,16 @@ export class SubagentProgress {
 ${summary.trim()}`;
   }
 
-  started(id: string, name: string): void { this.pending.set(id, name); }
-  ended(id: string): void { this.pending.delete(id); }
 
   partialText(output: string): string {
     if (output.trim()) this.latestOutput = output;
     const lastOutput = output || this.latestOutput;
-    if (!this.report && !lastOutput && this.pending.size === 0) return "No findings have been reported yet. Inspect the retained tool history before continuing; the task is incomplete.";
+    const evidence = subagentEvidenceHandoff(this.options.observation());
     return [this.report || (lastOutput
       ? "No separate findings summary was saved. The retained assistant output below is partial progress, not a final deliverable."
-      : "No findings have been reported yet."),
-      lastOutput !== this.report ? lastOutput : "", this.pending.size
-      ? `Interrupted or pending tools (their effects may need verification): ${[...this.pending.values()].join(", ")}.`
-      : ""].filter(Boolean).join("\n\n") || "No findings have been reported yet. Inspect the retained tool history before continuing; the task is incomplete.";
+      : "No findings have been reported yet. Inspect the retained tool history before continuing; the task is incomplete."),
+      lastOutput !== this.report ? lastOutput : "", evidence,
+    ].filter(Boolean).join("\n\n");
   }
 
   save(status: SubagentCheckpoint["status"], report: string, error?: { code: string; message: string }, terminal?: SubagentTerminalDiagnostics): PersistSubagentCheckpointResult {
@@ -91,6 +90,7 @@ ${summary.trim()}`;
         terminationReason: error?.code === "SUBAGENT_BUDGET_EXHAUSTED" ? "budget_exhausted" : status,
         ...(error ? { error } : {}),
         ...(terminal ? { terminal } : {}),
+        observation: this.options.observation(),
       },
     });
     return this.persistence;

@@ -1149,6 +1149,10 @@ transient and never restored into durable UI messages or transcript records.
 
 ## 5f. Subagent delegation (D201, ADR 0062, ADR 0089)
 
+The additive [delegation observation contract](delegation-observability.md) defines
+bounded lifecycle evidence, diagnostic-only non-progress observation, historical
+usage/timing measurements, and approval sound hydration/preview semantics.
+
 The session Agent can hand separable pieces of work to delegates that run in
 their own context, in the background, and report back on demand.
 

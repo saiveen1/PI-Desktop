@@ -2,7 +2,7 @@ const STOP_REASONS = ["stop", "tool_calls", "length", "error", "aborted", "unkno
 const RAW_STOP_REASONS = ["stop", "toolUse", "tool_calls", "length", "max_tokens", "error", "aborted"] as const;
 const REPORT_OUTCOMES = ["delivered", "missing", "truncated", "invalid_tool_ending", "error", "cancelled"] as const;
 const DECISIONS = ["selected", "skipped", "cancelled"] as const;
-import { PROVIDER_RETRY_MAX_RETRIES } from "@pi-desktop/shared";
+import { PROVIDER_RETRY_MAX_RETRIES, parseSubagentObservation, type SubagentObservation } from "@pi-desktop/shared";
 
 type StopReason = typeof STOP_REASONS[number];
 type RawStopReason = typeof RAW_STOP_REASONS[number];
@@ -14,6 +14,14 @@ export type SubagentDiagnostics = {
   actualModel?: string;
   turns?: number;
   toolCalls?: number;
+  lastToolName?: string;
+  activityPhase?: "waiting-model" | "retrying";
+  startedAt?: number;
+  completedAt?: number;
+  elapsedMs?: number;
+  outputTokens?: number;
+  outputTokensPerSecond?: number;
+  observation?: SubagentObservation;
   retry?: { attempt: number; limit: number | "unlimited"; message?: string };
   terminal?: {
     stopReason: StopReason;
@@ -41,6 +49,10 @@ function text(value: unknown, limit = 1000): string | undefined {
 function counter(value: unknown): number | undefined {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : undefined;
 }
+function timestamp(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0 && Number.isFinite(new Date(value).getTime()) ? value : undefined;
+}
+
 
 function member<T extends string>(values: readonly T[], value: unknown): value is T {
   return typeof value === "string" && values.includes(value as T);
@@ -63,16 +75,27 @@ export function subagentDiagnostics(payload: unknown): SubagentDiagnostics | und
     const message = text(row.message, 600);
     return model && code && message ? [{ model, code, message }] : [];
   });
+  const startedAt = timestamp(payload.startedAt);
+  const completedAt = timestamp(payload.completedAt);
+  const elapsedMs = startedAt !== undefined && completedAt !== undefined && completedAt > startedAt
+    ? completedAt - startedAt : undefined;
+  const outputTokens = record(payload.usage) ? counter(payload.usage.outputTokens) : undefined;
+  const observation = parseSubagentObservation(payload.observation);
   const result: SubagentDiagnostics = {
     requestedModel: text(scheduling?.requestedModel, 385),
     actualModel: text(payload.modelId, 256),
     turns: counter(payload.turns),
     toolCalls: counter(payload.toolCalls),
+    lastToolName: text(payload.lastToolName, 256),
+    startedAt, completedAt, elapsedMs, outputTokens,
+    outputTokensPerSecond: outputTokens && elapsedMs ? outputTokens / (elapsedMs / 1000) : undefined,
+    observation,
     decisions,
     modelFailures,
   };
   const terminal = payload.terminal;
   const activity = payload.activity;
+  if (record(activity) && member(["waiting-model", "retrying"] as const, activity.phase)) result.activityPhase = activity.phase;
   if (record(activity) && activity.phase === "retrying" && counter(activity.attempt) !== undefined) {
     result.retry = {
       attempt: activity.attempt as number,
@@ -100,5 +123,6 @@ export function subagentDiagnostics(payload: unknown): SubagentDiagnostics | und
     if (code && message) result.error = { code, message };
   }
   return result.requestedModel || result.actualModel || result.turns !== undefined || result.toolCalls !== undefined ||
+    result.startedAt !== undefined || result.completedAt !== undefined || result.outputTokens !== undefined || result.lastToolName || result.activityPhase || result.observation ||
     result.terminal || result.retry || result.error || decisions.length || modelFailures.length ? result : undefined;
 }

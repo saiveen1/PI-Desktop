@@ -1,3 +1,5 @@
+import { delegationObservability } from "../en/delegation-observability.js";
+
 export const delegationReliabilitySettings = {
   providerStreamIdleTimeout: "Leerlaufzeit der Modellverbindung",
   providerStreamIdleTimeoutDesc: "Bricht nur ab, wenn innerhalb der gewählten Zeit keine Antwortdaten eintreffen. Langes Nachdenken startet die Anfrage nicht neu. Gilt ab der nächsten Runde; deaktivierte festgefahrene Anfragen müssen manuell gestoppt werden.",
@@ -12,6 +14,7 @@ export const delegationReliabilitySettings = {
 };
 
 export const delegationDiagnostics = {
+  ...delegationObservability,
   "title": "Delegationsdetails",
   "requestedModel": "Angefordertes Modell",
   "actualModel": "Tatsächliches Modell",

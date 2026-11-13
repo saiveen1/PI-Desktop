@@ -13,9 +13,11 @@ export const approvalIsLive = (request: DelegationApprovalPrompt, now: number) =
 export function createDelegationApprovalState(client: DelegationApprovalSourceClient) {
   const records = new Map<string, DelegationApprovalPrompt>();
   const eventVersions = new Map<string, number>();
+  const hydrated = new Set<string>();
   const listeners = new Set<() => void>();
   let snapshot = { requests: [] as DelegationApprovalPrompt[], loading: true, loadError: false };
   let references = 0, generation = 0;
+  let listeningSince = 0;
   let off: (() => void) | undefined;
   const emit = () => { for (const listener of listeners) listener(); };
   const merge = (request: DelegationApprovalPrompt) => {
@@ -26,7 +28,7 @@ export function createDelegationApprovalState(client: DelegationApprovalSourceCl
     records.set(key, request);
     if (records.size > 512) {
       for (const [oldKey, old] of records) {
-        if (old.status !== "pending" && oldKey !== key) { records.delete(oldKey); eventVersions.delete(oldKey); break; }
+        if (old.status !== "pending" && oldKey !== key) { records.delete(oldKey); eventVersions.delete(oldKey); hydrated.delete(oldKey); break; }
       }
     }
     snapshot = { ...snapshot, requests: [...records.values()] };
@@ -47,7 +49,10 @@ export function createDelegationApprovalState(client: DelegationApprovalSourceCl
       }
       for (const request of result.requests) {
         const key = approvalKey(request);
-        if (eventVersions.get(key) === atStart.get(key)) merge(request);
+        if (eventVersions.get(key) === atStart.get(key)) {
+          if (!records.has(key)) hydrated.add(key);
+          merge(request);
+        }
       }
     } catch {
       if (references && operation === generation) snapshot = { ...snapshot, loadError: true };
@@ -57,13 +62,18 @@ export function createDelegationApprovalState(client: DelegationApprovalSourceCl
   };
   return {
     getSnapshot: () => snapshot,
+    isHydrated: (sessionId: string, requestId: string | undefined) =>
+      requestId !== undefined && hydrated.has(approvalKey({ sessionId, requestId })),
     subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
     merge,
     reload,
     retain() {
       if (++references === 1) {
+        listeningSince = Date.now();
         off = client.onDelegationApprovalChanged(({ request }) => {
           const key = approvalKey(request);
+          // A replay/update can beat the initial list after renderer reload.
+          if (!records.has(key) && Date.parse(request.createdAt) < listeningSince) hydrated.add(key);
           eventVersions.set(key, (eventVersions.get(key) ?? 0) + 1);
           merge(request);
         });

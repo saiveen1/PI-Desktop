@@ -26,6 +26,7 @@ import { useTranscriptSearchFocus } from "../../hooks/use-transcript-search-focu
 import { IconArrowDown, IconChevronLeft, IconSparkles } from "../icons";
 import { Button, TooltipButton } from "../ui";
 import { useSubagentHistory } from "../../features/delegations/useSubagentHistory";
+import { delegationHistoryDiagnostics } from "../../features/delegations/session-delegation-tasks";
 
 /** Task detail, direct input and index share the originating session and chain. */
 export function SubagentTranscriptTab({ delegationId }: { delegationId: string }) {
@@ -106,7 +107,7 @@ function SubagentTranscriptSurface({ delegationId, sessionId }: { delegationId: 
             <DelegationSelectionSummary payload={payload} />
             <SubagentRunPolicySummary payload={payload} />
             <SubagentFailurePolicySummary payload={payload} />
-            <SubagentDiagnosticsSummary payload={payload} />
+            <SubagentDiagnosticsSummary payload={payload ?? (history.entry ? delegationHistoryDiagnostics(history.entry) : undefined)} />
           </details>
           {transcriptResult ? transcriptResult.turns.map((turn, index) => (
             <Fragment key={`${delegationId}:${index}`}>

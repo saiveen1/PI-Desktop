@@ -12,6 +12,8 @@ export type NotificationEntry = {
   body: string;
   createdAt?: string;
   expiresAt?: number;
+  /** Suppress only the initial sound for a request restored from a host snapshot. */
+  hydrated?: boolean;
 };
 type Dependencies = {
   settings: () => NotificationSettings | undefined;
@@ -55,13 +57,13 @@ export function createNotificationDelivery(deps: Dependencies) {
     return !disposed && pending.get(row.entry.id) === row
       && (row.entry.expiresAt === undefined || row.entry.expiresAt > now());
   }
-  async function deliver(entry: NotificationEntry, row?: Pending): Promise<NotificationDeliveryResult> {
+  async function deliver(entry: NotificationEntry, row?: Pending, silent = false): Promise<NotificationDeliveryResult> {
     if (row?.delivering) return { shown: false, reason: "duplicate" };
     if (row) row.delivering = true;
-    try { return await present(entry, row); }
+    try { return await present(entry, row, silent); }
     finally { if (row) row.delivering = false; }
   }
-  async function present(entry: NotificationEntry, row?: Pending): Promise<NotificationDeliveryResult> {
+  async function present(entry: NotificationEntry, row?: Pending, silent = false): Promise<NotificationDeliveryResult> {
     const generation = row?.generation;
     const current = () => !disposed && (!row || alive(row) && row.generation === generation);
     const policy = resolveNotificationPolicy(deps.settings(), entry.target.kind);
@@ -79,7 +81,7 @@ export function createNotificationDelivery(deps: Dependencies) {
     }
     if (result.reason === "disabled" || result.reason === "duplicate" || result.reason === "stale") return result;
     if (!result.shown) deps.inApp(entry);
-    if (latest.sound && latest.volume > 0) {
+    if (!silent && latest.sound && latest.volume > 0) {
       try { deps.sound(latest.volume); } catch (error) { report(error); }
     }
     return result;
@@ -133,7 +135,7 @@ export function createNotificationDelivery(deps: Dependencies) {
         if (existing) { existing.entry = entry; continue; }
         const row = { entry, deliveredAt: now(), generation: 0 };
         pending.set(id, row);
-        if (!seen.has(id)) { remember(id); void deliver(entry, row); }
+        if (!seen.has(id)) { remember(id); void deliver(entry, row, entry.hydrated === true); }
       }
       arm();
     },

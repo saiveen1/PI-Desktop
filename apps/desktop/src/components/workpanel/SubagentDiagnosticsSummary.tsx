@@ -1,10 +1,13 @@
 import { useTranslation } from "react-i18next";
-import { subagentDiagnostics } from "../../lib/subagent-diagnostics";
+import { subagentDiagnostics, type SubagentDiagnostics } from "../../lib/subagent-diagnostics";
+import { SubagentObservationSummary } from "./SubagentObservationSummary";
 
-export function SubagentDiagnosticsSummary({ payload }: { payload: unknown }) {
+export function SubagentDiagnosticsSummary({ payload, history = false }: { payload: unknown; history?: boolean }) {
   const { t, i18n } = useTranslation();
-  const facts = subagentDiagnostics(payload);
-  if (!facts) return null;
+  const parsed = subagentDiagnostics(payload);
+  if (!parsed && !history) return null;
+  const facts: SubagentDiagnostics = parsed ?? { decisions: [], modelFailures: [] };
+  const data = facts;
   const number = new Intl.NumberFormat(i18n.language);
   const terminal = facts.terminal;
   return <section className="px-4 pb-4 text-xs text-text-secondary" aria-label={t("chat.delegationDiagnostics.title")}>
@@ -18,6 +21,35 @@ export function SubagentDiagnosticsSummary({ payload }: { payload: unknown }) {
         <dt>{t("chat.delegationDiagnostics.actualModel")}</dt>
         <dd className="min-w-0 break-all">{facts.actualModel}</dd>
       </div> : null}
+      {facts.startedAt !== undefined ? <div className="flex flex-wrap justify-between gap-x-4">
+        <dt>{t("chat.delegationDiagnostics.runStarted")}</dt>
+        <dd><time dateTime={new Date(facts.startedAt).toISOString()}>{new Date(facts.startedAt).toLocaleString(i18n.language)}</time></dd>
+      </div> : null}
+      {facts.activityPhase ? <div className="flex flex-wrap justify-between gap-x-4">
+        <dt>{t("chat.delegationDiagnostics.currentActivity")}</dt>
+        <dd>{t(`chat.delegationDiagnostics.phases.${facts.activityPhase}`)}</dd>
+      </div> : null}
+      {facts.lastToolName ? <div className="flex flex-wrap justify-between gap-x-4">
+        <dt>{t("chat.delegationDiagnostics.lastTool")}</dt><dd className="break-all">{facts.lastToolName}</dd>
+      </div> : null}
+      {data.completedAt !== undefined || history ? <>
+        <div className="flex flex-wrap justify-between gap-x-4">
+          <dt>{t("chat.delegationDiagnostics.completedAt")}</dt>
+          <dd>{data.completedAt !== undefined ? <time dateTime={new Date(data.completedAt).toISOString()}>{new Date(data.completedAt).toLocaleString(i18n.language)}</time> : t("chat.delegationDiagnostics.unavailable")}</dd>
+        </div>
+        <div className="flex flex-wrap justify-between gap-x-4">
+          <dt>{t("chat.delegationDiagnostics.elapsed")}</dt>
+          <dd>{facts.elapsedMs !== undefined ? t("chat.delegationDiagnostics.seconds", { value: number.format(facts.elapsedMs / 1000) }) : t("chat.delegationDiagnostics.unavailable")}</dd>
+        </div>
+        <div className="flex flex-wrap justify-between gap-x-4">
+          <dt>{t("chat.delegationDiagnostics.outputTokens")}</dt>
+          <dd>{facts.outputTokens !== undefined ? number.format(facts.outputTokens) : t("chat.delegationDiagnostics.unavailable")}</dd>
+        </div>
+        <div className="flex flex-wrap justify-between gap-x-4">
+          <dt>{t("chat.delegationDiagnostics.throughput")}</dt>
+          <dd>{facts.outputTokensPerSecond !== undefined ? t("chat.delegationDiagnostics.tokensPerSecond", { value: number.format(facts.outputTokensPerSecond) }) : t("chat.delegationDiagnostics.unavailable")}</dd>
+        </div>
+      </> : null}
       {facts.turns !== undefined && facts.toolCalls !== undefined ? <div className="flex flex-wrap justify-between gap-x-4">
         <dt>{t("chat.delegationDiagnostics.activity")}</dt>
         <dd>{t("chat.delegationDiagnostics.activityCounts", { turns: number.format(facts.turns), tools: number.format(facts.toolCalls) })}</dd>
@@ -55,6 +87,7 @@ export function SubagentDiagnosticsSummary({ payload }: { payload: unknown }) {
         <dd className="break-words"><code>{facts.error.code}</code>{" "}{facts.error.message}</dd>
       </div> : null}
     </dl>
+    {facts.observation ? <SubagentObservationSummary observation={facts.observation} /> : null}
     {facts.decisions.length ? <details className="mt-2">
       <summary>{t("chat.delegationDiagnostics.selection")}</summary>
       <ol className="mt-2 space-y-2">

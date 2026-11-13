@@ -254,3 +254,90 @@ fn truncation_never_exceeds_the_shared_utf16_bound() {
             <= TEXT_LIMIT
     );
 }
+
+#[test]
+fn recorded_usage_survives_reload_without_copying_unbounded_operation_data() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = Database::open_in_dir(dir.path()).unwrap();
+    let session = sessions::create_session(&db, None, None, None, None, None).unwrap();
+    let mut row = task("metrics", "completed");
+    let details = &mut row.tool_result.as_mut().unwrap()["details"];
+    details["usage"] = json!({"inputTokens":80,"outputTokens":20,"totalTokens":100,
+        "operations":[{"private":"never projected"}]});
+    details["turns"] = json!(3);
+    details["toolCalls"] = json!(2);
+    sessions::append_message(&db, &session.id, &row, None).unwrap();
+    drop(db);
+    let db = Database::open_in_dir(dir.path()).unwrap();
+    let page = list(&db, Query::default()).unwrap();
+    let entry = &page["entries"][0];
+    assert_eq!(entry["startedAt"], ms_to_ts(1793880000000));
+    assert_eq!(
+        entry["usage"],
+        json!({"inputTokens":80,"outputTokens":20,"totalTokens":100})
+    );
+    assert_eq!(entry["turns"], 3);
+    assert_eq!(entry["toolCalls"], 2);
+
+    let mut legacy = task("legacy-metrics", "completed");
+    let details = legacy.tool_result.as_mut().unwrap()["details"]
+        .as_object_mut()
+        .unwrap();
+    details.remove("startedAt");
+    details.insert(
+        "usage".into(),
+        json!({"inputTokens":1,"outputTokens":-1,"totalTokens":0}),
+    );
+    details.insert("turns".into(), json!(1.5));
+    sessions::append_message(&db, &session.id, &legacy, None).unwrap();
+    let page = list(&db, Query::default()).unwrap();
+    let entry = &page["entries"][0];
+    assert!(entry.get("startedAt").is_none());
+    assert!(entry.get("usage").is_none());
+    assert!(entry.get("turns").is_none());
+    assert!(entry.get("toolCalls").is_none());
+}
+
+#[test]
+fn lifecycle_projection_is_bounded_allowlisted_and_durable() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = Database::open_in_dir(dir.path()).unwrap();
+    let session = sessions::create_session(&db, None, None, None, None, None).unwrap();
+    let mut row = task("observation", "completed");
+    let observed = json!({"version":1,"selectedModel":"account/model","phase":"ended",
+        "lastActivityAt":120,"executionStartedAt":100,"executionEndedAt":120,
+        "reportProducedAt":120,"reportDeliveredAt":125,"lastMeaningfulProgressAt":110,
+        "diagnostic":{"state":"ended","observedAt":120,"thresholdMs":30000,"reason":"Run ended"},
+        "attemptCount":1,"attemptsOmitted":0,"approvalsOmitted":0,"completedToolCalls":0,
+        "failedToolCalls":0,"pendingToolsOmitted":0,"confirmedWritePathsOmitted":0,
+        "attempts":[{"sequence":1,"model":"account/model","startedAt":100,"finishedAt":120,
+            "outcome":"completed","providerDurationMs":20,"usage":{"inputTokens":10,"outputTokens":5,"totalTokens":15},
+            "credentials":"must not escape"}],"approvals":[],"pendingTools":[],"recentTools":[],
+        "confirmedWritePaths":[],"thinking":"must not escape"});
+    row.tool_result.as_mut().unwrap()["details"]["observation"] = observed.clone();
+    sessions::append_message(&db, &session.id, &row, None).unwrap();
+    drop(db);
+    let db = Database::open_in_dir(dir.path()).unwrap();
+    let page = list(&db, Query::default()).unwrap();
+    let result = &page["entries"][0]["observation"];
+    assert_eq!(result["reportDeliveredAt"], 125);
+    assert_eq!(result["attempts"][0]["usage"]["outputTokens"], 5);
+    assert!(result.get("thinking").is_none());
+    assert!(result["attempts"][0].get("credentials").is_none());
+    let mut unresolved = observed.clone();
+    unresolved["attempts"] =
+        json!([{"sequence":1,"model":"account/model","startedAt":100,"outcome":"unresolved"}]);
+    let projected = observation::project(&unresolved).unwrap();
+    assert_eq!(projected["attempts"][0]["outcome"], "unresolved");
+    assert!(projected["attempts"][0].get("finishedAt").is_none());
+    assert!(projected["attempts"][0].get("providerDurationMs").is_none());
+    let mut invalid = observed.clone();
+    invalid["attempts"] = json!(vec![observed["attempts"][0].clone(); 65]);
+    assert!(observation::project(&invalid).is_none());
+    invalid = observed.clone();
+    invalid["attemptCount"] = json!(2);
+    assert!(observation::project(&invalid).is_none());
+    invalid = observed;
+    invalid["attempts"][0]["usage"]["outputTokens"] = json!(-1);
+    assert!(observation::project(&invalid).is_none());
+}

@@ -6,6 +6,7 @@ import { isAgentSendSubagentMessageRequest, type AgentSendSubagentMessageRequest
 import { DelegationRecovery } from "./delegation-recovery.js";
 import type { AgentRetrySubagentResponse } from "@pi-desktop/shared";
 import { DelegationAdmissionError, DelegationScheduler, type DelegationDecisionRecord } from "./delegation-scheduler.js";
+import { deliveredDelegationObservation, withInitialDelegationApprovals } from "./delegation-observation.js";
 import { DelegationPolicyState } from "./delegation-policy-state.js";
 import { subagentTaskDeclaration } from "./delegation-tool.js";
 import { parseSubagentTerminalDiagnostics } from "./subagent-terminal.js";
@@ -600,6 +601,7 @@ export type DelegationRecord = {
   completedAt?: number;
   result?: SubagentRunResult;
   checkpoint?: PersistSubagentCheckpointResult;
+  observation?: SubagentRunResult["observation"];
   runPolicy?: Readonly<DelegationRunPolicy>;
   failurePolicy?: Readonly<DelegationFailurePolicy>;
   completion: Promise<void>;
@@ -655,6 +657,8 @@ function delegationSummary(record: DelegationRecord): Record<string, unknown> {
     ...(record.completedAt ? { completedAt: record.completedAt } : {}),
     ...(record.result?.modelFailures ? { modelFailures: record.result.modelFailures } : {}),
     ...(record.result?.terminal ? { terminal: record.result.terminal } : {}),
+    ...(record.result?.usage ? { usage: record.result.usage } : {}),
+    ...(record.observation ? { observation: record.observation } : {}),
     ...(record.scheduling ? { scheduling: record.scheduling } : {}),
     ...(record.result?.error ? { error: record.result.error } : {}),
     // A delegate that compacted or lost history says so in its lifecycle
@@ -5205,6 +5209,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           scheduling: { requestedModel: scheduler.requestedModel, modelReason: modelReason?.trim(), decisions: scheduler.decisions },
         };
         this.delegations.set(delegationId, record);
+        const initialApprovals = scheduler.approvals.map(row => ({ ...row }));
         let subagentRun: SubagentRun;
         try {
           const delegatePrompt = (instructions: ProjectInstructions | undefined) => composeSubagentSystemPrompt({
@@ -5219,6 +5224,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           const scopedTools = this.scopeDelegateTools(tools, definition, delegationId, worktreeKey, applyInstructions);
           subagentRun = new SubagentRun({
             definition,
+            builtinToolNames,
             sessionId: this.sessionId,
             turnId: this.turnId,
             parentToolCallId: toolCallId,
@@ -5230,6 +5236,11 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
             failurePolicy,
             onCheckpoint: (paths) => {
               record.checkpoint = paths;
+              this.publishDelegationSettlement(record);
+            },
+            onObservation: (observation) => {
+              if (record.status !== "running") return;
+              record.observation = withInitialDelegationApprovals(observation, initialApprovals);
               this.publishDelegationSettlement(record);
             },
             task,
@@ -5355,6 +5366,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
             modelId: provider.modelId,
             thinkingLevel,
             ...(record.scheduling ? { scheduling: record.scheduling } : {}),
+            ...(record.observation ? { observation: record.observation } : {}),
             ...(resumedChain ? { resumedFrom: resume } : {}),
           },
         };
@@ -5467,6 +5479,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
         ? "stopped"
         : result.status;
     record.result = result;
+    record.observation ??= result.observation;
     record.sendMessage = undefined;
     record.completedAt = Date.now();
     // Resolve before event publication or bookkeeping: none of those side
@@ -5509,6 +5522,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     const details = isRecord(original) && isRecord(original.details) ? original.details : undefined;
     if (record.status === "running" && details?.modelId === record.modelId &&
         details?.turns === record.turns && details?.toolCalls === record.toolCalls &&
+        JSON.stringify(details?.observation) === JSON.stringify(record.observation) &&
         agentActivityEqual(details?.activity as AgentActivity | undefined, record.activity) &&
         details?.thinkingLevel === record.thinkingLevel &&
         details?.checkpointPath === record.checkpoint?.checkpointPath &&
@@ -5834,6 +5848,11 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       for (const record of settled) {
         if (formatted.includedDelegationIds.has(record.delegationId)) {
           record.reportDelivered = true;
+          const delivered = deliveredDelegationObservation(record.observation);
+          if (delivered !== record.observation) {
+            record.observation = delivered;
+            this.publishDelegationSettlement(record);
+          }
         }
       }
       const text = [
@@ -5964,6 +5983,8 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           ...(record.result?.error ? { error: record.result.error } : {}),
           ...(record.result?.terminal ? { terminal: record.result.terminal } : {}),
           ...(record.result?.modelFailures ? { modelFailures: record.result.modelFailures } : {}),
+          ...(record.result?.usage ? { usage: record.result.usage } : {}),
+          ...(record.observation ? { observation: record.observation } : {}),
           ...(record.scheduling ? { scheduling: record.scheduling } : {}),
           turns: record.result?.turns ?? record.turns,
           toolCalls: record.result?.toolCalls ?? record.toolCalls,
@@ -6002,6 +6023,11 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
             formatted.includedDelegationIds.has(record.delegationId)
           ) {
             record.reportDelivered = true;
+            const delivered = deliveredDelegationObservation(record.observation);
+            if (delivered !== record.observation) {
+              record.observation = delivered;
+              this.publishDelegationSettlement(record);
+            }
           }
         }
         return {
@@ -6014,7 +6040,10 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           details: {
             status: interrupted ? "interrupted" : timedOut ? "timeout" : "completed",
             ...(unknownIds.length ? { unknownIds } : {}),
-            delegations: results,
+            delegations: results.map(row => {
+              const observation = this.delegations.get(row.delegationId)?.observation;
+              return observation ? { ...row, observation } : row;
+            }),
           },
         };
       },

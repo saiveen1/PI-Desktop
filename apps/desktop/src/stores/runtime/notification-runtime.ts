@@ -31,7 +31,8 @@ function copy(kind: CoreNotificationSource, sessionId: string): { title: string;
   }
 }
 function entryFor(item: PendingNotification): NotificationEntry {
-  return { ...item, id: notificationIdentity(item.target), ...copy(item.target.kind, item.target.sessionId) };
+  return { ...item, id: notificationIdentity(item.target), ...copy(item.target.kind, item.target.sessionId),
+    hydrated: item.target.kind === "delegation-approval" && source().isHydrated(item.target.sessionId, item.target.requestId) };
 }
 function publishPending() {
   const next = active?.pending() ?? [];

@@ -70,10 +70,15 @@ This edition strengthens the existing framework rather than replacing it.
   and approval overrides. On-demand model descriptions support task-specific
   selection; configurable failure handling remains within authorized models.
 - **Session and global task indexes.** Open the current session's subagents from
-  the topbar, or review cross-project delegation history and retained terminal
-  approval receipts. Historical approval is not fresh consent to run work.
-- **Progress checkpoints and direct follow-up.** Add automatically saved local
-  checkpoints and configurable work budgets to the existing resume mechanism.
+  the topbar, or review cross-project history with recorded models, completion
+  times, output tokens and explicitly labeled run/request throughput. Missing
+  old measurements stay unavailable; throughput is not pure generation speed.
+  Retained approval receipts never provide fresh consent to run work.
+- **Progress checkpoints and direct follow-up.** Alongside configurable work
+  budgets, automatically saved checkpoints retain bounded tool evidence,
+  confirmed writes and uncertain pending effects.
+  Runtime observations distinguish quiet tools, model waiting and no new evidence
+  without imposing a hidden kill deadline or mandatory model progress reports.
   In local Agent sessions, send instructions to a running child or explicitly
   resume a settled task. Viewing history alone does not restart it.
 - **More accurate completion and recovery.** Do not treat an old progress message
@@ -81,6 +86,8 @@ This edition strengthens the existing framework rather than replacing it.
   and support resuming work interrupted by a parent failure on the next user turn.
   Fixed-tool delegates can load available skills without inheriting unrelated
   plugin/MCP execution tools.
+  Recorded authorization, provider attempts, execution end and report delivery
+  can be inspected separately without opening raw logs.
 
 ### Conversation organization and notifications
 
@@ -96,6 +103,9 @@ This edition strengthens the existing framework rather than replacing it.
   completion under shared channel/sound preferences, with pending actions separate
   from retained history. Notifications return to the relevant controls without
   approving or restarting work for you.
+  Delegation sound preferences include a draft-volume preview; restoring pending
+  approvals does not replay their initial chime, while configured repeats remain
+  active until the request settles.
 
 ### Chat, file, and image refinements
 

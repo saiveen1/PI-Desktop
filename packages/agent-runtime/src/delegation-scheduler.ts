@@ -9,6 +9,7 @@ import {
   type DelegationApprovalRequest,
   type DelegationSelection,
   type DelegationSettings,
+  type SubagentApprovalObservation,
 } from "@pi-desktop/shared";
 import type { RuntimeProviderConfig } from "./provider-binding.js";
 import type { CurrentDelegationPolicy } from "./delegation-policy-state.js";
@@ -57,6 +58,7 @@ type Options = {
 /** Owns one delegation's candidate order and grants, never the session's authority. */
 export class DelegationScheduler {
   readonly decisions: DelegationDecisionRecord[] = [];
+  readonly approvals: SubagentApprovalObservation[] = [];
   readonly requestedModel?: string;
   readonly minContextWindow?: number;
   private readonly approved = new Set<string>();
@@ -170,6 +172,7 @@ export class DelegationScheduler {
       return provider;
     }
     const requestId = randomUUID();
+    this.approvals.push({ model: key, status: "pending", at: Date.now() });
     let cancel = () => {};
     const aborted = new Promise<DelegationApprovalDecision>(resolve => {
       cancel = () => {
@@ -195,6 +198,8 @@ export class DelegationScheduler {
     } finally {
       signal?.removeEventListener("abort", cancel);
     }
+    this.approvals.push({ model: key, status: result?.decision === "allow" ? "accepted"
+      : result?.decision === "cancel" ? "cancelled" : "rejected", at: Date.now() });
     signal?.throwIfAborted();
     if (result?.decision === "cancel") {
       this.decisions.push({ model: key, decision: "cancelled", reason: result.reason });

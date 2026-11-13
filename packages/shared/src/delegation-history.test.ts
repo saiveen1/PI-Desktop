@@ -43,6 +43,17 @@ describe("delegation history boundary", () => {
     expect(isDelegationRunHistoryPage({ entries: [entry(), entry()], nextOffset: null })).toBe(false);
   });
 
+  it("validates optional recorded execution times and usage without inventing legacy facts", () => {
+    expect(isDelegationRunHistoryEntry(entry({ startedAt: "2026-11-05T12:00:00.000Z",
+      usage: { inputTokens: 50, outputTokens: 10, totalTokens: 60 }, turns: 2, toolCalls: 1 }))).toBe(true);
+    for (const extra of [{ startedAt: 123 }, { startedAt: "invalid" }, { turns: -1 },
+      { toolCalls: 1.5 }, { usage: null }, { usage: { outputTokens: 10 } },
+      { usage: { inputTokens: 50, outputTokens: -1, totalTokens: 49 } },
+      { usage: { inputTokens: 50, outputTokens: Infinity, totalTokens: 60 } }]) {
+      expect(isDelegationRunHistoryEntry(entry(extra))).toBe(false);
+    }
+  });
+
   it("allowlists only the four additive renderer history channels", () => {
     const channels = {
       delegationHistoryList: "pi-desktop/delegationHistory/list",

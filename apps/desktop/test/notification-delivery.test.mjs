@@ -125,3 +125,30 @@ test("audio failure is best effort and leaves the live request and in-app surfac
   assert.equal(driver.pending().length, 1); assert.equal(banners.length, 1); assert.equal(errors.length, 1);
   driver.dispose();
 });
+
+test("approval audio plays once by default and stops repeating immediately on settlement", async () => {
+  const f = fixture();
+  f.settings({ version: 1, delegation: { sound: true, volume: 35, repeatIntervalSeconds: 0 } });
+  const item = entry();
+  f.driver.sync([item]); await f.tick(0);
+  f.driver.sync([item]); await f.tick(20_000);
+  assert.deepEqual(f.sounds, [35]);
+  f.settings({ version: 1, delegation: { sound: true, volume: 35, repeatIntervalSeconds: 10 } });
+  await f.tick(10_000); assert.deepEqual(f.sounds, [35, 35]);
+  f.driver.sync([]); await f.tick(20_000);
+  assert.deepEqual(f.sounds, [35, 35]); assert.equal(f.timers.size, 0);
+  f.driver.dispose();
+});
+
+test("hydrated approvals are silent initially, repeat on schedule, and stop on fallback", async () => {
+  const f = fixture(); f.settings({ version: 1, delegation: { volume: 40, repeatIntervalSeconds: 10 } });
+  const item = { ...entry(), hydrated: true };
+  f.driver.sync([item]); await f.tick(0);
+  assert.equal(f.banners.length, 1); assert.deepEqual(f.sounds, []);
+  f.driver.sync([{ ...item, target: { ...item.target, revision: 2 } }]);
+  await f.tick(9_999); assert.deepEqual(f.sounds, []);
+  await f.tick(1); assert.deepEqual(f.sounds, [40]);
+  f.driver.sync([]); await f.tick(20_000);
+  assert.deepEqual(f.sounds, [40]); assert.equal(f.timers.size, 0);
+  f.driver.dispose();
+});

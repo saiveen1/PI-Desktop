@@ -56,6 +56,7 @@ export * from "./delegation-limits.js";
 export * from "./session-delegation.js";
 export * from "./delegation-approval.js";
 export * from "./delegation-history.js";
+export * from "./delegation-observability.js";
 export * from "./delegation-admission.js";
 export * from "./provider-presets.js";
 export * from "./provider-endpoint.js";

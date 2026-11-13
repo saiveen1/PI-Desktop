@@ -54,6 +54,24 @@ remain inherited foundations. See the
 This comparison does not claim anything about un-fetched upstream changes or
 installed/live-model behavior.
 
+The delegation-observation amendment starts from personal source `fa809a755`
+and was compared read-only with locally recorded upstream
+`30dd376e23a02a378d3f0f43f2eee8cc135ac0a0` (no fetch). That revision lacks the
+personal `subagent-progress.ts`, `subagent-diagnostics.ts`, scheduling editor
+and canonical `delegation_history.rs` surfaces, as verified by `git ls-tree`.
+The underlying Agent loop, tools and resumable delegation remain inherited.
+This amendment extends the existing local checkpoints (`c2a651ff9`) and terminal
+integrity (`4da7b50ef`) with bounded runtime observations and consumer-delivery
+metadata; it does not claim to originate delegation or token accounting.
+See the [recorded-facts contract](../spec/03-runtime/delegation-observability.md),
+[observer](../../packages/agent-runtime/src/subagent-observability.ts),
+[Host projection](../../crates/host-core/src/delegation_history_observation.rs)
+and [production diagnostics](../../apps/desktop/src/components/workpanel/SubagentObservationSummary.tsx).
+The sound increment is draft-volume preview and refresh/reopen hydration
+deduplication on top of the existing core notification preferences, not a new
+notification subsystem. Source-level tests and isolated fixtures do not establish
+physical audio, installed-app behavior or pure model-generation performance.
+
 | Local increment | Originating local commits | Contrast with the audited upstream | Current implementation / coverage evidence |
 | --- | --- | --- | --- |
 | Broader repeated mutation/command failure protection | `d9bf50fa1` | Upstream already guards repeated Edit and shell-patch failures. Local work extends accounting to Write and identical ordinary Bash failures while preserving upstream owner isolation, and permits meaningful retests after successful file changes. This is not a blanket three-command limit. | [Guard](../../packages/agent-runtime/src/mutation-recovery-guard.ts), [runtime coverage](../../packages/agent-runtime/src/runtime-tool-recovery.test.ts). |

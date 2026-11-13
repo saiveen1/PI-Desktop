@@ -3,13 +3,23 @@ import { delegationIdForMessage } from "../../lib/subagent-panel";
 import { collectDelegationStatuses, delegationIsCreating, isDelegationActivityItem, type DelegationActivityItem } from "../../lib/subagent-topology";
 import { subagentTaskOutcome } from "../../lib/subagent-task-presentation";
 
+/** Project only recorded start/end values; createdAt may be a Task-row fallback. */
+export function delegationHistoryDiagnostics(entry: DelegationRunHistoryEntry) {
+  return {
+    modelId: entry.modelId, scheduling: { requestedModel: entry.requestedModel },
+    startedAt: entry.startedAt ? Date.parse(entry.startedAt) : undefined,
+    completedAt: entry.status !== "interrupted" && entry.completedAt ? Date.parse(entry.completedAt) : undefined,
+    usage: entry.usage, turns: entry.turns, toolCalls: entry.toolCalls, observation: entry.observation,
+  };
+}
+
 /** A display-only adapter; never inserts history projections into the transcript/store. */
 export function delegationHistoryTask(entry: DelegationRunHistoryEntry): DelegationActivityItem {
   return { kind: "tool", message: {
     id: entry.messageId, role: "tool", content: entry.report ?? "", createdAt: entry.createdAt,
     toolName: "Task", toolCallId: entry.messageId, toolStatus: "success", status: "complete",
     toolArgs: { agent: entry.agentName, description: entry.description, task: entry.task },
-    toolResult: { details: { delegationId: entry.delegationId, status: entry.status, error: entry.error } },
+    toolResult: { details: { ...delegationHistoryDiagnostics(entry), delegationId: entry.delegationId, status: entry.status, error: entry.error } },
   } };
 }
 

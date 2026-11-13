@@ -8,6 +8,8 @@ use rusqlite::params;
 use serde::Deserialize;
 use serde_json::{json, Value};
 const TEXT_LIMIT: usize = 32768;
+#[path = "delegation_history_observation.rs"]
+mod observation;
 #[derive(Default, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Query {
@@ -97,6 +99,25 @@ fn project(c: &Candidate, message: sessions::UiMessage) -> Option<Value> {
     let mut out = json!({"id":format!("{}:{}",c.session,c.id),"sessionId":c.session,"sessionTitle":c.title,
         "projectPath":c.path,"delegationId":delegation,"messageId":c.id,"status":status,
         "createdAt":stamp(&details["startedAt"]).unwrap_or(message.created_at)});
+    if let Some(started) = stamp(&details["startedAt"]) {
+        out["startedAt"] = json!(started);
+    }
+    let count = |v: &Value| v.as_u64().filter(|n| *n <= 9_007_199_254_740_991);
+    for key in ["turns", "toolCalls"] {
+        if let Some(value) = count(&details[key]) {
+            out[key] = json!(value);
+        }
+    }
+    if let (Some(input), Some(output), Some(total)) = (
+        count(&details["usage"]["inputTokens"]),
+        count(&details["usage"]["outputTokens"]),
+        count(&details["usage"]["totalTokens"]),
+    ) {
+        out["usage"] = json!({"inputTokens":input,"outputTokens":output,"totalTokens":total});
+    }
+    if let Some(value) = observation::project(&details["observation"]) {
+        out["observation"] = value;
+    }
     bounded(&mut out, "sessionTitle", &c.title, None);
     if let Some(title) = &c.project {
         bounded(&mut out, "projectTitle", title, None);

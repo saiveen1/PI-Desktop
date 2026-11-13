@@ -1,3 +1,5 @@
+import { delegationObservability } from "../en/delegation-observability.js";
+
 export const delegationReliabilitySettings = {
   providerStreamIdleTimeout: "Tiempo de inactividad de conexión del modelo",
   providerStreamIdleTimeoutDesc: "Cancela solo si no llegan datos durante el tiempo seleccionado. Pensar durante mucho tiempo no reinicia la solicitud. Se aplica desde el siguiente turno; si se desactiva, detén manualmente las solicitudes bloqueadas.",
@@ -12,6 +14,7 @@ export const delegationReliabilitySettings = {
 };
 
 export const delegationDiagnostics = {
+  ...delegationObservability,
   "title": "Detalles de delegación",
   "requestedModel": "Modelo solicitado",
   "actualModel": "Modelo utilizado",

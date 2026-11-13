@@ -1,4 +1,6 @@
 import { isDelegationApprovalPrompt, type DelegationApprovalPrompt } from "./delegation-approval.js";
+import type { MessageUsage } from "./types/messages.js";
+import { parseSubagentObservation, type SubagentObservation } from "./delegation-observability.js";
 
 export type DelegationRunHistoryQuery = {
   offset?: number; limit?: number; status?: "all" | "running" | "ended"; projectPath?: string; sessionId?: string;
@@ -8,6 +10,11 @@ export type DelegationRunHistoryEntry = {
   delegationId: string; messageId: string; agentName: string; description: string;
   status: "running" | "completed" | "failed" | "stopped" | "aborted" | "timed_out" | "interrupted";
   createdAt: string; completedAt?: string; modelId?: string; modelReason?: string; requestedModel?: string;
+  /** Actual recorded start, unlike createdAt which can fall back to the Task row timestamp. */
+  startedAt?: string;
+  usage?: Pick<MessageUsage, "inputTokens" | "outputTokens" | "totalTokens">;
+  observation?: SubagentObservation;
+  turns?: number; toolCalls?: number;
   task: string; report?: string; error?: { code: string; message: string };
   taskTruncated?: boolean; reportTruncated?: boolean;
 };
@@ -56,6 +63,14 @@ export function isDelegationRunHistoryEntry(v: unknown): v is DelegationRunHisto
     !text(v.description) || !text(v.task) || !RUN_STATUSES.includes(String(v.status)) ||
     !timestamp(v.createdAt)) return false;
   if (v.completedAt !== undefined && !timestamp(v.completedAt)) return false;
+  if (v.startedAt !== undefined && !timestamp(v.startedAt)) return false;
+  for (const key of ["turns", "toolCalls"] as const) {
+    if (v[key] !== undefined && !(Number.isSafeInteger(v[key]) && Number(v[key]) >= 0)) return false;
+  }
+  if (v.observation !== undefined && !parseSubagentObservation(v.observation)) return false;
+  if (v.usage !== undefined && (!record(v.usage) ||
+    !["inputTokens", "outputTokens", "totalTokens"].every(key =>
+      record(v.usage) && Number.isSafeInteger(v.usage[key]) && Number(v.usage[key]) >= 0))) return false;
   if (v.projectPath !== undefined && v.projectPath !== null && !text(v.projectPath, 4096)) return false;
   for (const key of ["projectTitle", "modelId", "modelReason", "requestedModel"] as const) {
     if (v[key] !== undefined && !text(v[key])) return false;

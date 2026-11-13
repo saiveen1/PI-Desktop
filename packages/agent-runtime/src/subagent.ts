@@ -81,6 +81,8 @@ import {
   type DelegateTurnUpdate,
 } from "./subagent-context.js";
 import { SubagentProgress, SUBAGENT_REPORT_TOOL, SUBAGENT_FINAL_REPORT_PROMPT } from "./subagent-progress.js";
+import { SubagentObserver } from "./subagent-observability.js";
+import type { SubagentObservation } from "@pi-desktop/shared";
 import {
   readSubagentTerminalResponse,
   subagentReportOutcome,
@@ -148,6 +150,7 @@ export type SubagentRunResult = {
   partial?: boolean;
   terminal?: SubagentTerminalDiagnostics;
   runPolicy?: Readonly<DelegationRunPolicy>;
+  observation?: SubagentObservation;
   error?: {
     code: string;
     message: string;
@@ -185,6 +188,8 @@ export type SubagentRunOptions = {
   onCheckpoint?: (paths: { checkpointPath?: string; reportPath?: string; error?: string }) => void;
   /** Live child counters; never forwarded as parent turn lifecycle events. */
   onProgress?: (progress: { turns: number; toolCalls: number }) => void;
+  /** Observable request/tool facts; never a request for parent supervision. */
+  onObservation?: (observation: SubagentObservation) => void;
   /** The delegated instruction, written by the parent model. */
   task: string;
   /** Provider resolved by Electron main (the definition's pin, or the
@@ -208,6 +213,8 @@ export type SubagentRunOptions = {
   /** Host-backed tools, built by the session runtime so a delegate's calls
    * take the exact same path as the parent's. */
   tools: AgentTool[];
+  /** Provenance from the runtime registry, not inferred from a dynamic tool's name. */
+  builtinToolNames?: ReadonlySet<string>;
   /** Ordered preparation owned by this delegate, never the parent's prompt state. */
   beforeToolCall?: (context: BeforeToolCallContext) => Promise<BeforeToolCallResult | undefined>;
   /** After pi ends one turn of this delegate, its tool batch included. */
@@ -334,6 +341,7 @@ export class SubagentRun {
   };
   private runAbortController = new AbortController();
   private readonly progress: SubagentProgress;
+  private readonly observer: SubagentObserver;
   private admittedToolCalls = 0;
   private finalizing = false;
   private reportRecoveryAttempt = 0;
@@ -353,9 +361,12 @@ export class SubagentRun {
     this.provider = opts.provider;
     this.thinkingLevel = opts.thinkingLevel;
     this.attemptedModels.add(`${opts.provider.id}/${opts.provider.modelId}`);
+    this.observer = new SubagentObserver(`${opts.provider.id}/${opts.provider.modelId}`, () => this.saveProgress(),
+      new Set(opts.builtinToolNames ?? []));
     this.progress = new SubagentProgress({
       scratchDir: opts.scratchDir, delegateSessionId: opts.delegateSessionId,
       parentToolCallId: opts.parentToolCallId, initialReport: opts.initialReport,
+      observation: () => this.observer.snapshot(),
       metadata: () => ({
         version: 1, sessionId: opts.sessionId,
         delegateSessionId: opts.delegateSessionId ?? opts.parentToolCallId,
@@ -449,6 +460,7 @@ export class SubagentRun {
     const { signal } = this.opts;
     if (signal?.aborted) return this.result("aborted", this.lastReportText);
     this.saveProgress();
+    this.observer.start();
     this.startBudgetTimer();
     const onAbort = () => {
       this.runAbortController.abort();
@@ -506,6 +518,7 @@ export class SubagentRun {
       this.conversation.close();
       signal?.removeEventListener("abort", onAbort);
       this.clearBudgetTimer();
+      this.observer.stop();
       this.finalizeCurrentAssistant();
     }
     // User cancellation always wins over a simultaneous runtime limit.
@@ -561,6 +574,7 @@ export class SubagentRun {
   private saveProgress(): void {
     const saved = this.progress.save("running", this.progress.partialText(this.lastReportText));
     this.opts.onCheckpoint?.(saved);
+    this.opts.onObservation?.(this.observer.snapshot());
   }
 
   private modelBinding() {
@@ -587,6 +601,7 @@ export class SubagentRun {
       sessionId: this.opts.sessionId,
       maxTokens: this.opts.definition.maxTokens,
       onUsage: usage => this.recordUsage(usage),
+      observeStream: createStream => this.observer.observeStream(`${provider.id}/${provider.modelId}`, createStream),
       uniqueToolCalls: this.uniqueToolCalls,
     }, this.retryState);
   }
@@ -706,7 +721,18 @@ export class SubagentRun {
           message: `The carried context (~${budget.tokens} tokens) does not fit this model's safe budget (${budget.hardLimit} tokens).` });
         continue;
       }
-      const admitted = this.opts.authorizeModel ? await this.opts.authorizeModel(provider, this.runSignal()) : true;
+      let admitted: boolean | RuntimeProviderConfig;
+      if (this.opts.authorizeModel) {
+        this.observer.approval(identity, "pending");
+        try {
+          admitted = await this.opts.authorizeModel(provider, this.runSignal());
+          this.observer.approval(typeof admitted === "object" ? `${admitted.id}/${admitted.modelId}` : identity,
+            this.runSignal().aborted ? "cancelled" : admitted ? "accepted" : "rejected");
+        } catch (error) {
+          this.observer.approval(identity, this.runSignal().aborted ? "cancelled" : "rejected");
+          throw error;
+        }
+      } else admitted = true;
       if (!admitted) {
         this.recordModelFailure(identity, { code: "MODEL_NOT_AUTHORIZED", message: "The alternative model was not authorized for this delegation." });
         fallbacks = this.opts.refreshFallbackModels ? await this.opts.refreshFallbackModels() : fallbacks;
@@ -738,6 +764,7 @@ export class SubagentRun {
       this.lastReportText = "";
       this.terminalResponse = undefined;
       this.opts.onModelChange?.(this.provider, this.thinkingLevel);
+      this.observer.selected(`${this.provider.id}/${this.provider.modelId}`);
       return !this.runSignal().aborted;
     }
     return false;
@@ -788,6 +815,7 @@ export class SubagentRun {
 
   private publishProviderRetry(error: ReturnType<typeof classifyAgentError>, attempt: number, delayMs: number): void {
     this.providerRetries++;
+    this.observer.phase("retrying");
     const unknown = isUnknownUpstreamBadRequest(error);
     if (this.failurePolicy.mode !== "inherit") {
       attempt = this.providerTransientRetryAttempt + this.providerRateLimitRetryAttempt + this.providerUnknownRetryAttempt;
@@ -864,6 +892,7 @@ export class SubagentRun {
     },
   ): SubagentRunResult {
     const name = this.opts.definition.name;
+    this.observer.end(status === "completed" && subagentReportOutcome(this.terminalResponse) === "delivered");
     const body = status === "completed" ? report.trim() : this.progress.partialText(report || this.lastReportText);
     const text =
       status === "completed"
@@ -928,6 +957,7 @@ export class SubagentRun {
       ...(persisted.error ? { checkpointError: persisted.error } : {}),
       ...(status !== "completed" ? { partial: true } : {}),
       terminal,
+      observation: this.observer.snapshot(),
       ...(error ? { error } : {}),
     };
   }
@@ -1185,10 +1215,10 @@ export class SubagentRun {
           toolName: event.toolName,
           args: event.args,
         });
-        this.progress.started(event.toolCallId, event.toolName);
-        this.saveProgress();
+        this.observer.toolStarted(event.toolCallId, event.toolName, event.args);
         break;
       case "tool_execution_update":
+        this.observer.activity();
         this.emit({
           type: "tool_update",
           toolCallId: event.toolCallId,
@@ -1196,8 +1226,7 @@ export class SubagentRun {
         });
         break;
       case "tool_execution_end":
-        this.progress.ended(event.toolCallId);
-        this.saveProgress();
+        this.observer.toolEnded(event.toolCallId, event.result, event.isError);
         this.emit({
           type: "tool_end",
           toolCallId: event.toolCallId,

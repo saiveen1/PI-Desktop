@@ -205,3 +205,27 @@ test("an unrelated settings save keeps active reminders; actual preference chang
   assert.equal(h.store.getState().pendingAsks.a.length, 1);
   stop();
 });
+
+test("restart hydrates approvals silently; only new live identities sound across revisions and reopened views", async () => {
+  const h = harness(); h.snapshot({ requests: [approval()] });
+  let sounds = 0;
+  globalThis.window.AudioContext = class {
+    state = "running"; currentTime = 0; destination = {};
+    createOscillator() { return { frequency: { setValueAtTime() {} }, connect() {}, start() { sounds++; }, stop() {} }; }
+    createGain() { return { gain: { setValueAtTime() {}, linearRampToValueAtTime() {}, exponentialRampToValueAtTime() {} }, connect() {} }; }
+    close() { return Promise.resolve(); }
+  };
+  let stop = h.startCoreNotifications(); await drain();
+  assert.equal(sounds, 0); assert.equal(h.store.getState().toasts.length, 1);
+  h.emit("approval", { request: approval("pending", 2) }); await drain();
+  stop(); stop = h.startCoreNotifications(); await drain();
+  assert.equal(sounds, 0);
+  const live = { ...approval(), requestId: "new" };
+  h.emit("approval", { request: live }); await drain();
+  assert.equal(sounds, 1);
+  h.emit("approval", { request: { ...live, revision: 2 } }); await drain();
+  h.emit("approval", { request: { ...live, revision: 3, status: "invalidated" } }); await drain();
+  assert.equal(sounds, 1);
+  assert.ok(h.dismissed.some(item => item.retire && item.id.includes("new")));
+  stop();
+});

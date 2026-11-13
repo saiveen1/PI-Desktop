@@ -53,8 +53,19 @@ export async function notificationUserPath({ root, i18next, until, paint }) {
   fail = false; await save("global");
   renderSettings("delegation"); check(button(t("mode")).textContent.includes(t("inherit")), "Delegation inherits by default");
   await choose(t("mode"), t("custom")); click(t("sound")); input(t("repeat"), 5);
+  check(button(t("preview")).disabled, "Muted delegation preview is disabled");
   check(button(i18next.t("common.save") + " " + t("delegation")).disabled, "Invalid repeat cannot save");
-  input(t("repeat"), 10); await save("delegation");
+  click(t("sound")); input(t("volumeLabel"), 40);
+  const AudioContext = window.AudioContext; const gains = [];
+  window.AudioContext = class {
+    state = "running"; currentTime = 0; destination = {};
+    createOscillator() { return { frequency: { setValueAtTime() {} }, connect() {}, start() {}, stop() {} }; }
+    createGain() { return { gain: { setValueAtTime() {}, linearRampToValueAtTime(value) { gains.push(value); }, exponentialRampToValueAtTime() {} }, connect() {} }; }
+    close() { return Promise.resolve(); }
+  };
+  try { click(t("preview")); } finally { window.AudioContext = AudioContext; }
+  check(Math.abs(gains[0] - 0.0088) < 1e-9, "Delegation preview uses draft volume and existing chime");
+  click(t("sound")); input(t("repeat"), 10); await save("delegation");
   renderSettings("global"); await choose(t("channel"), t("system")); await save("global");
   check(saved.notifications.delegation.sound === false && saved.notifications.delegation.repeatIntervalSeconds === 10, "Global save preserves latest override");
   click(t("test")); await until(() => document.querySelector('[role="status"]')?.textContent === t("requested"));

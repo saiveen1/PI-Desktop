@@ -3,6 +3,8 @@ import { useTranslation } from "react-i18next";
 import { isNotificationTarget, type DelegationRunHistoryEntry } from "@pi-desktop/shared";
 import { IconClose } from "../../components/icons";
 import { Button, OverlayBackdrop, SegmentedControl, TooltipButton, portalOverlay } from "../../components/ui";
+import { SubagentDiagnosticsSummary } from "../../components/workpanel/SubagentDiagnosticsSummary";
+import { delegationHistoryDiagnostics } from "./session-delegation-tasks";
 import { approvalIsLive, useDelegationApprovals } from "../../components/delegation-approval/useDelegationApprovals";
 import { api } from "../../lib/api";
 import { useBlockingOverlay } from "../../lib/blocking-overlay";
@@ -127,10 +129,11 @@ export function DelegationHistoryDialog({ onClose }: { onClose: () => void }) {
           {navigationError ? <p role="alert">{t("delegationHistory.navigationFailed")}</p> : null}
           <h3>{detail.agentName}</h3><p>{source(detail)}</p><p>{detail.description}</p>
           <dl><dt>{t("delegationHistory.status")}</dt><dd>{t(`delegationHistory.statuses.${detail.status}`)}</dd><dt>{t("delegationHistory.created")}</dt><dd>{date(detail.createdAt)}</dd>
-            {detail.completedAt ? <><dt>{t("delegationHistory.completed")}</dt><dd>{date(detail.completedAt)}</dd></> : null}
+            {detail.completedAt && detail.status !== "interrupted" ? <><dt>{t("delegationHistory.completed")}</dt><dd>{date(detail.completedAt)}</dd></> : null}
             {detail.modelId ? <><dt>{t("delegationHistory.model")}</dt><dd>{detail.modelId}</dd></> : null}
             {detail.requestedModel ? <><dt>{t("delegationHistory.requestedModel")}</dt><dd>{detail.requestedModel}</dd></> : null}
             {detail.modelReason ? <><dt>{t("delegationHistory.modelReason")}</dt><dd>{detail.modelReason}</dd></> : null}</dl>
+          <SubagentDiagnosticsSummary history payload={delegationHistoryDiagnostics(detail)} />
           <h4>{t("delegationHistory.task")}</h4>{detail.taskTruncated ? <p role="note">{t("delegationHistory.truncated")}</p> : null}<pre className="selectable">{detail.task}</pre>
           {detail.report !== undefined ? <><h4>{t("delegationHistory.report")}</h4>{detail.reportTruncated ? <p role="note">{t("delegationHistory.truncated")}</p> : null}<pre className="selectable">{detail.report}</pre></> : null}
           {detail.error ? <><h4>{t("delegationHistory.error")}</h4><pre className="selectable">{detail.error.code}: {detail.error.message}</pre></> : null}
@@ -143,7 +146,7 @@ export function DelegationHistoryDialog({ onClose }: { onClose: () => void }) {
           </section>
           <section className="delegation-history-runs"><div className="delegation-history-section-head"><h3>{t("delegationHistory.runs")}</h3><Button size="sm" variant="ghost" onClick={() => void load(0, filter)}>{t("delegationHistory.refresh")}</Button></div>
             <SegmentedControl className="delegation-history-filters" role="group" label={t("delegationHistory.filter")} value={filter} onChange={setFilter} options={(["all", "running", "ended"] as const).map((value) => ({ value, label: t(`delegationHistory.filters.${value}`) }))} />
-            {entries.map((entry) => <Button key={entry.id} data-delegation-id={entry.id} variant="ghost" className="delegation-history-row" onClick={() => { detailReturn.current = entry.id; setDetail(entry); requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLButtonElement>(".delegation-history-detail-head button")?.focus()); }}><span><strong>{entry.agentName}</strong><span>{source(entry)}</span><span>{entry.description}</span>{entry.modelId ? <span>{t("delegationHistory.model")}: {entry.modelId}</span> : null}</span><span className="delegation-history-row-meta"><span>{t(`delegationHistory.statuses.${entry.status}`)}</span><time dateTime={entry.createdAt}>{date(entry.createdAt)}</time></span></Button>)}
+            {entries.map((entry) => <Button key={entry.id} data-delegation-id={entry.id} variant="ghost" className="delegation-history-row" onClick={() => { detailReturn.current = entry.id; setDetail(entry); requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLButtonElement>(".delegation-history-detail-head button")?.focus()); }}><span><strong>{entry.agentName}</strong><span>{source(entry)}</span><span>{entry.description}</span>{entry.requestedModel ? <span>{t("delegationHistory.requestedModel")}: {entry.requestedModel}</span> : null}{entry.modelId ? <span>{t("chat.delegationDiagnostics.actualModel")}: {entry.modelId}</span> : null}</span><span className="delegation-history-row-meta"><span>{t(`delegationHistory.statuses.${entry.status}`)}</span><time dateTime={entry.createdAt}>{date(entry.createdAt)}</time>{entry.completedAt && entry.status !== "interrupted" ? <span>{t("delegationHistory.completed")}: <time dateTime={entry.completedAt}>{date(entry.completedAt)}</time></span> : null}</span></Button>)}
             {loading ? <p role="status">{t("delegationHistory.loading")}</p> : null}
             {errorOffset !== null ? <div role="alert">{t("delegationHistory.loadFailed")} <Button size="sm" onClick={() => void load(errorOffset, filter)}>{t("delegationHistory.retry")}</Button></div> : null}
             {!loading && errorOffset === null && !entries.length && nextOffset === null ? <p>{t("delegationHistory.empty")}</p> : null}

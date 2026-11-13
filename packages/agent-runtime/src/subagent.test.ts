@@ -228,13 +228,22 @@ describe("SubagentRun event forwarding", () => {
     expect(JSON.stringify(requests)).not.toContain("bad-call");
   });
 
-  it("keeps the no-pass selection out of the agent's canonical state", () => {
-    const { run } = createRun({ thinkingLevel: "omit" });
-
+  it("keeps the no-pass selection out of canonical state and the actual completions request", async () => {
+    const { run } = createRun({ thinkingLevel: "omit", provider: {
+      ...provider, apiKey: "fixture-key", supportsReasoning: true, supportedThinkingLevels: ["off", "high"],
+      modelConfig: { source: "generic", name: "Fixture reasoning model", reasoning: true, baseUrl: "https://fixture.invalid/v1",
+        thinkingLevelMap: { off: "none", high: "high" }, input: ["text"], contextWindow: 128_000, maxTokens: 8192 },
+    } });
+    const requests: Record<string, unknown>[] = [];
+    const fetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      requests.push(JSON.parse(typeof init?.body === "string" ? init.body : "{}"));
+      return new Response("Fixture authentication failure", { status: 401 });
+    });
+    await run.agent.streamFunction(run.agent.state.model,
+      { systemPrompt: "system", messages: [], tools: [] }, { fetch }).result();
     expect(run.agent.state.thinkingLevel).toBe("off");
-    expect(run.agent.streamFunction.toString()).toContain(
-      "models.stream(omitThinkingModel, requestContext, retryOptions)",
-    );
+    expect(requests).toHaveLength(1);
+    expect(requests[0].reasoning_effort).toBeUndefined();
   });
   it("retains completed same-id rounds in a resumed subagent request", () => {
     const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);

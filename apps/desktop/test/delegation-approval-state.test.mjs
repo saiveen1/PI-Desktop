@@ -31,3 +31,26 @@ test("a list refresh cannot discard a newer event or publish after disposal", as
   f.emit(row(1)); stop(); f.snapshot([]); await Promise.resolve(); await Promise.resolve();
   assert.equal(f.source.getSnapshot().requests[0].status, "pending");
 });
+
+test("snapshot hydration is distinguished from live events even during refresh", async () => {
+  const f = fixture(); const stop = f.source.retain();
+  const live = { ...row(), requestId: "live" };
+  f.emit(live); f.snapshot([row(), live]); await Promise.resolve(); await Promise.resolve();
+  assert.equal(f.source.isHydrated("s", "r"), true);
+  assert.equal(f.source.isHydrated("s", "live"), false);
+  f.emit(row(2));
+  assert.equal(f.source.isHydrated("s", "r"), true);
+  stop();
+});
+
+test("old request updates arriving before the initial list are hydration, not new arrivals", async () => {
+  const f = fixture(); const stop = f.source.retain();
+  f.emit({ ...row(2), createdAt: "2020-01-01T00:00:00.000Z" });
+  const fresh = { ...row(), requestId: "fresh", createdAt: new Date(Date.now()).toISOString() };
+  f.emit(fresh);
+  assert.equal(f.source.isHydrated("s", "r"), true);
+  assert.equal(f.source.isHydrated("s", "fresh"), false);
+  f.snapshot([row(), fresh]); await Promise.resolve(); await Promise.resolve();
+  assert.equal(f.source.getSnapshot().requests.find(r => r.requestId === "r").revision, 2);
+  stop();
+});

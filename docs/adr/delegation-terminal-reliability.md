@@ -64,6 +64,16 @@ Persist only allowlisted stop reasons, content/tool counts and report outcomes;
 do not log thinking text, credentials or replay material. Approval accepted,
 execution started, stop requested and final delivery remain distinct states.
 
+### Amendment: bounded runtime observations and consumer delivery
+
+The [observation contract](../spec/03-runtime/delegation-observability.md)
+adds allowlisted version-1 observational facts to the existing Task/checkpoint
+records and canonical Host history projection. Actual request attempts,
+authorization, tool evidence, execution end, report production and parent
+delivery remain separate. The 30-second diagnostic window does not terminate
+work or impose periodic model reports. No new state authority, tool replay,
+approval capability, IPC channel or SQLite migration is introduced.
+
 ## Consequences
 
 The changes add optional settings and diagnostic fields without changing SQLite
