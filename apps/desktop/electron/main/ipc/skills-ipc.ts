@@ -1,6 +1,6 @@
 import { app, dialog, shell } from "electron";
 import { importSkillFolders, readLastSkillImportDirectory, writeLastSkillImportDirectory } from "../skill-folder-import";
-import { ErrorCodes, IPC, type ActivationScope, type AgentCapabilityMove, type AgentCapabilityQuery, type BuiltinSkillRecord, type UserSkillRecord, type UserSubagentRecord } from "@pi-desktop/shared";
+import { ErrorCodes, IPC, type AppSettings, type ActivationScope, type AgentCapabilityMove, type AgentCapabilityQuery, type BuiltinSkillRecord, type UserSkillRecord, type UserSubagentRecord } from "@pi-desktop/shared";
 import { loadSubagentDefinitions, type UserSubagentDocument } from "@pi-desktop/agent-runtime";
 import { builtinSkillCatalog } from "../builtin-skills";
 import type { HostProcess } from "../host-process";
@@ -352,10 +352,13 @@ export function registerSkillsIpc({
    */
   handle(IPC.invoke.subagentCatalog, async () => {
     const projectPath = (await optionalWorkspaceRoot()) ?? undefined;
+    const settingsHost = getHost();
+    const settings = settingsHost?.isAvailable() ? await settingsHost.call<AppSettings>("settings.get") : undefined;
     const disabled = await disabledBuiltinSubagents();
     const { definitions, builtins, diagnostics } = await loadSubagentDefinitions(
       projectPath,
       {
+        limits: settings?.delegation?.limits,
         userDocuments: await activeUserSubagentDocuments(projectPath),
         disabledBuiltins: disabled,
       },

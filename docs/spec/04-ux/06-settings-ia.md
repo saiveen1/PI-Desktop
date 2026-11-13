@@ -812,6 +812,19 @@ profiles.
 
 ### Subagent scheduling model editor
 
+Scheduling includes a Capacity limits card with two global integer fields:
+Role catalog limit (1–128, default 16, including builtins) and Concurrent
+subagents per conversation (1–64, default 10). These persist as optional
+`delegation.limits.maxDefinitions` / `maxConcurrent`, not role frontmatter or a
+per-window cumulative task quota. Labels explain prompt-token/API/resource costs.
+Catalog changes apply when Desktop next loads the runtime catalog; concurrency
+changes affect later Task admissions without terminating existing children.
+Show inclusive ranges/defaults, retain invalid drafts with localized feedback,
+and block Save for empty, fractional or out-of-range values. Restore capacity
+defaults changes only these fields, preserving model/approval/execution drafts.
+Use the existing explicit Save transaction; failure retains all draft values.
+Viewing legacy defaults does not write settings. Old policies keep 16/10.
+
 Subagents has separate Roles and Scheduling tabs. Scheduling adds an Execution
 and recovery card with three numeric controls: optional tool budget, optional
 run duration in seconds, and final report timeout, plus a report-recovery toggle.

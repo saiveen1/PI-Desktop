@@ -55,9 +55,13 @@ PI-Desktop ships three builtins inline in `agent-runtime` (`explorer`,
 are combined with the builtins by name. There is no project-level subagent
 capability source; the global user catalog is the only user-managed layer.
 The catalog is re-read
-on every session launch, capped at `MAX_SUBAGENT_DEFINITIONS` (16), and a
-malformed document degrades to a launch diagnostic — it never costs the session
-its other delegates or its turn.
+on every session launch. The original fixed cap was 16; the 2026-11-12 capacity
+amendment exposes `AppSettings.delegation.limits.maxDefinitions` (1–128,
+default 16) in Subagents → Scheduling. Unique-name/user precedence and dropped-name
+diagnostics remain; no definition files are deleted. A larger role menu adds
+prompt tokens and selection complexity, so this remains a finite user-selected
+capacity, not an unlimited catalog. Missing fields preserve old behavior.
+A malformed document degrades to a launch diagnostic without losing the turn.
 
 Frontmatter keys: `name`, `description`, `tools`, `model`, `thinkingLevel`,
 `maxTurns`, `idle-timeout`, and `max-duration`. Key spelling is matched

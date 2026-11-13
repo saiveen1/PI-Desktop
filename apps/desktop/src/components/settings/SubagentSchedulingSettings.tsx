@@ -15,6 +15,7 @@ import { Button, Field, Input, SettingsToggle, Textarea } from "../ui";
 import { SettingsMenuSelect } from "./SettingsMenuSelect";
 import { SubagentRunPolicySettings } from "./SubagentRunPolicySettings";
 import { SubagentFailurePolicySettings } from "./SubagentFailurePolicySettings";
+import { SubagentLimitSettings } from "./SubagentLimitSettings";
 import { NotificationPreferences } from "./NotificationPreferences";
 import "../../styles/subagent-scheduling.css";
 
@@ -58,7 +59,7 @@ export function SubagentSchedulingSettings({ saveSettings }: {
   const choice = candidates.find((model) => referenceId(model) === selected)
     ?? candidates.find((model) => model.available);
   const valid = isDelegationSettings(value);
-  const modelPolicyValid = isDelegationSettings({ ...value, runPolicy: undefined, failurePolicy: undefined });
+  const modelPolicyValid = isDelegationSettings({ ...value, runPolicy: undefined, failurePolicy: undefined, limits: undefined });
   const orderedModels = [...value.models].sort((a, b) =>
     (Number.isFinite(a.priority) ? a.priority : Infinity)
     - (Number.isFinite(b.priority) ? b.priority : Infinity));
@@ -152,6 +153,8 @@ export function SubagentSchedulingSettings({ saveSettings }: {
           </div>
         </SettingsRow>
       </SettingsCard>
+      <SubagentLimitSettings limits={value.limits} disabled={saving || !settings}
+        onChange={(limits) => change({ ...value, limits })} />
       <SubagentRunPolicySettings policy={value.runPolicy} disabled={saving || !settings}
         onChange={(runPolicy) => change({ ...value, runPolicy })} />
       <SubagentFailurePolicySettings policy={value.failurePolicy} disabled={saving || !settings}

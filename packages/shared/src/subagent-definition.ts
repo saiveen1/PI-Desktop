@@ -15,6 +15,7 @@
  *   `tools: inherit` (nested Task / mode-switch tools stay denied).
  */
 
+import { DEFAULT_DELEGATION_LIMITS, resolveDelegationLimits, type DelegationLimits } from "./delegation-limits.js";
 import {
   SUBAGENT_THINKING_LEVELS,
   type SubagentThinkingLevel,
@@ -207,11 +208,11 @@ export const PERMISSION_DECLARING_SOURCES: ReadonlySet<SubagentSource> = new Set
   ["builtin", "user"] as const,
 );
 
-/** Caps that keep delegation cheap and predictable (see ADR 0062). */
-export const MAX_SUBAGENT_DEFINITIONS = 16;
+/** Legacy default exports; effective caps come from DelegationSettings.limits. */
+export const MAX_SUBAGENT_DEFINITIONS = DEFAULT_DELEGATION_LIMITS.maxDefinitions;
 export const MAX_SUBAGENT_PROVIDERS = 8;
-/** Running delegates per session, across batches (see ADR 0089). */
-export const MAX_SUBAGENT_CONCURRENCY = 10;
+/** Default running delegates per session, across batches (see ADR 0089). */
+export const MAX_SUBAGENT_CONCURRENCY = DEFAULT_DELEGATION_LIMITS.maxConcurrent;
 /** Resumable chains kept per subagent name before the oldest is evicted
  * (ADR 0279). A chain is one delegate session across any number of `resume`s. */
 export const MAX_RESUMABLE_CHAINS_PER_AGENT = 2;
@@ -591,13 +592,14 @@ function parseTimeoutSeconds(
  * Merge discovered definitions into the list the runtime offers.
  *
  * Precedence is user registry > builtin, so a global document retunes a
- * builtin without renaming it. The result is capped: past
- * `MAX_SUBAGENT_DEFINITIONS` the catalog stops being a menu the model can
- * reason about, and every extra entry costs prompt tokens on every turn.
+ * builtin without renaming it. Bound the menu the model must reason about;
+ * every extra entry costs prompt tokens on every turn.
  */
 export function mergeSubagentDefinitions(
   definitions: readonly SubagentDefinition[],
+  limits?: Partial<DelegationLimits>,
 ): { definitions: SubagentDefinition[]; dropped: string[] } {
+  const { maxDefinitions } = resolveDelegationLimits(limits);
   const byName = new Map<string, SubagentDefinition>();
   // Highest-precedence source first, so the first entry for a name wins it.
   const ordered = [
@@ -607,7 +609,7 @@ export function mergeSubagentDefinitions(
   const dropped: string[] = [];
   for (const definition of ordered) {
     if (byName.has(definition.name)) continue;
-    if (byName.size >= MAX_SUBAGENT_DEFINITIONS) {
+    if (byName.size >= maxDefinitions) {
       dropped.push(definition.name);
       continue;
     }

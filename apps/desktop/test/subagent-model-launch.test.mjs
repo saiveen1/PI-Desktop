@@ -50,9 +50,9 @@ test("launch resolves definition-only pins without granting Task.model selection
     },
     normalizeThinkingLevel: () => "off",
   });
-  const launch = () => runtime.resolveAgentRuntimeLaunch("session", {
+  const launch = (settings = {}) => runtime.resolveAgentRuntimeLaunch("session", {
     providerId: provider.id, modelId: "parent", projectPath: root,
-  }, {});
+  }, settings);
   const initial = (await launch()).sidecarParams;
   assert.ok(initial.subagentProviders["fixture/private"]);
   assert.ok(initial.subagentProviders["fixture/backup"]);
@@ -79,4 +79,15 @@ test("launch resolves definition-only pins without granting Task.model selection
   assert.equal(collision.subagentProviders["fixture/private"].id, provider.id);
   assert.equal(collision.subagentProviders["other-account/private"].id, "other-account");
   assert.deepEqual(collision.subagentModelKeys, ["other-account/private"]);
+
+  // Capacity settings reach both the loaded catalog and Task admission policy.
+  for (const maxDefinitions of [1, 2]) {
+    const limits = { maxDefinitions, maxConcurrent: 12 };
+    const configured = (await launch({ delegation: {
+      version: 1, approvalTimeoutSeconds: 60, models: [], limits,
+    } })).sidecarParams;
+    assert.equal(configured.subagents.length, maxDefinitions);
+    assert.equal(configured.subagents[0].name, "private-reviewer");
+    assert.deepEqual(configured.delegationSettings.limits, limits);
+  }
 });

@@ -21,6 +21,9 @@ pub(super) fn validate(settings: &Value) -> Result<(), &'static str> {
     if let Some(failure_policy) = policy.get("failurePolicy") {
         validate_failure_policy(failure_policy)?;
     }
+    if let Some(limits) = policy.get("limits") {
+        validate_limits(limits)?;
+    }
     let models = policy
         .get("models")
         .and_then(Value::as_array)
@@ -64,6 +67,23 @@ pub(super) fn validate(settings: &Value) -> Result<(), &'static str> {
         }
         if !identities.insert((provider_id, model_id)) {
             return Err("delegation.models contains a duplicate providerId/modelId pair");
+        }
+    }
+    Ok(())
+}
+
+fn validate_limits(value: &Value) -> Result<(), &'static str> {
+    let limits = value
+        .as_object()
+        .ok_or("delegation.limits must be an object")?;
+    for (key, value) in limits {
+        let (min, max) = match key.as_str() {
+            "maxDefinitions" => (1.0, 128.0),
+            "maxConcurrent" => (1.0, 64.0),
+            _ => return Err("delegation.limits contains an unknown field"),
+        };
+        if !integer_in_range(Some(value), min, max) {
+            return Err("delegation.limits values must be integers within the supported range");
         }
     }
     Ok(())
@@ -142,6 +162,7 @@ pub(super) mod tests {
         json!({
             "version": 1,
             "approvalTimeoutSeconds": 60,
+            "limits": { "maxDefinitions": 24, "maxConcurrent": 12 },
             "runPolicy": { "maxToolCalls": 27, "maxDurationSeconds": 120,
                 "finalReportTimeoutSeconds": 9 },
             "models": [
@@ -304,10 +325,49 @@ pub(super) mod tests {
             value["failurePolicy"] = failure_policy;
             cases.push(value);
         }
+        for (field, max) in [("maxDefinitions", 128), ("maxConcurrent", 64)] {
+            for invalid in [
+                json!(0),
+                json!(max + 1),
+                json!(1.5),
+                json!("1"),
+                Value::Null,
+                json!(false),
+            ] {
+                let mut value = policy();
+                value["limits"] = json!({field: invalid});
+                cases.push(value);
+            }
+        }
+        for limits in [Value::Null, json!([]), json!(true), json!({"typo": 1})] {
+            let mut value = policy();
+            value["limits"] = limits;
+            cases.push(value);
+        }
         let mut duplicate = policy();
         duplicate["models"][1]["modelId"] = json!("economy");
         cases.push(duplicate);
         cases
+    }
+
+    #[test]
+    fn delegation_settings_capacity_preserves_legacy_and_accepts_partial_boundaries() {
+        let legacy =
+            json!({"delegation": {"version": 1, "approvalTimeoutSeconds": 60, "models": []}});
+        assert!(validate(&legacy).is_ok());
+        assert!(legacy["delegation"].get("limits").is_none());
+        for limits in [
+            json!({}),
+            json!({"maxDefinitions": 1}),
+            json!({"maxConcurrent": 1}),
+            json!({"maxDefinitions": 128, "maxConcurrent": 64}),
+        ] {
+            let mut settings = legacy.clone();
+            settings["delegation"]["limits"] = limits;
+            let before = settings.clone();
+            assert!(validate(&settings).is_ok());
+            assert_eq!(settings, before);
+        }
     }
 
     #[test]

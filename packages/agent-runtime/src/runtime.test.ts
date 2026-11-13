@@ -190,6 +190,9 @@ function createRuntime(
     subagents: SubagentDefinition[];
     subagentProviders: Record<string, RuntimeProviderConfig>;
     subagentModelKeys: string[];
+    delegationSettings: import("@pi-desktop/shared").DelegationSettings;
+    delegationAuthorization: boolean;
+    delegationSnapshot: () => unknown;
     pluginSkills: import("./plugin-skills-prompt.js").PluginSkillDef[];
     commandShell: CommandShellOption;
     jevApiKey: string;
@@ -201,7 +204,7 @@ function createRuntime(
   const host = (overrides.host ?? { call: vi.fn(), onNotification: vi.fn(() => () => {}) }) as unknown as RuntimeHost;
   return new DesktopAgentRuntime({
     host: { ...host, call: <T>(method: string, ...args: [params?: unknown, timeout?: number]): Promise<T> =>
-      method === "provider.delegationSnapshot" ? Promise.resolve(undefined as T) : host.call(method, ...args) },
+      method === "provider.delegationSnapshot" ? Promise.resolve(overrides.delegationSnapshot?.() as T) : host.call(method, ...args) },
     sessionId: "session-1",
     mode: overrides.mode === "chat" ? "plan" : overrides.mode ?? "agent",
     jevApiKey: overrides.jevApiKey,
@@ -223,6 +226,8 @@ function createRuntime(
     subagents: overrides.subagents,
     subagentProviders: overrides.subagentProviders,
     subagentModelKeys: overrides.subagentModelKeys,
+    delegationSettings: overrides.delegationSettings,
+    delegationAuthorization: overrides.delegationAuthorization,
     projectInstructions: overrides.projectInstructions,
     projectMemory: overrides.projectMemory,
     pluginSkills: overrides.pluginSkills,
@@ -10934,14 +10939,24 @@ describe("DesktopAgentRuntime subagents", () => {
     await runtime.dispose();
   });
 
-  it("caps running delegates per session at MAX_SUBAGENT_CONCURRENCY", async () => {
-    const runtime = createRuntime({ subagents: [explorer] });
+  it.each([undefined, 1, 12])("caps running delegates per session at configured capacity %s", async (maxConcurrent) => {
+    const runtime = createRuntime({ subagents: [explorer],
+      subagentProviders: { [`${provider.id}/${provider.modelId}`]: provider },
+      delegationAuthorization: true,
+      host: { call: vi.fn(async (method: string) => method === "provider.authorizeDelegation"
+        ? { decision: "allow", reason: "Capacity fixture grant" } : undefined) },
+      delegationSettings: maxConcurrent === undefined ? undefined : {
+        version: 1, approvalTimeoutSeconds: 60, limits: { maxConcurrent },
+        models: [{ providerId: provider.id, modelId: provider.modelId, enabled: true, priority: 1, approval: "auto", description: "" }],
+      },
+    });
     subagentRuns.calls.length = 0;
     subagentRuns.instances.length = 0;
     subagentRuns.deferred = true;
     subagentRuns.resolveRun = undefined;
     const tool = taskTool(runtime);
-    const MAX = MAX_SUBAGENT_CONCURRENCY;
+    const MAX = maxConcurrent ?? MAX_SUBAGENT_CONCURRENCY;
+    expect(tool.description).toContain(`At most ${MAX} subagents may run concurrently`);
 
     const ids: string[] = [];
     for (let index = 0; index < MAX; index += 1) {
@@ -10956,7 +10971,7 @@ describe("DesktopAgentRuntime subagents", () => {
       task: "Find it.",
     });
     expect(over.content[0].text).toContain(
-      `${MAX} subagents are already running`,
+      `concurrency limit (${MAX})`,
     );
     await expect(
       (runtime as any).agent.afterToolCall({ toolCall: { id: "task-over" } }),
@@ -10979,6 +10994,41 @@ describe("DesktopAgentRuntime subagents", () => {
     subagentRuns.deferred = false;
 
     await runtime.dispose();
+  });
+
+  it("applies live capacity changes without stopping active delegates", async () => {
+    let cap = 2;
+    const key = `${provider.id}/${provider.modelId}`;
+    const runtime = createRuntime({ subagents: [explorer], subagentProviders: { [key]: provider },
+      delegationAuthorization: true,
+      host: { call: vi.fn(async (method: string) => method === "provider.authorizeDelegation"
+        ? { decision: "allow", reason: "Capacity fixture grant" } : method === "provider.resolveSubagentModel" ? provider : undefined) },
+      delegationSnapshot: () => ({ revision: `capacity-${cap}`, modelKeys: [key], settings: {
+        version: 1, approvalTimeoutSeconds: 60, limits: { maxConcurrent: cap },
+        models: [{ providerId: provider.id, modelId: provider.modelId, enabled: true, priority: 1, approval: "auto", description: "" }],
+      } }),
+    });
+    subagentRuns.deferred = true;
+    const task = runtimeTool(runtime, "Task");
+    try {
+      const first = await task.execute("capacity-first", { agent: "explorer", task: "Inspect" });
+      const second = await task.execute("capacity-second", { agent: "explorer", task: "Inspect" });
+      expect(first.details).toHaveProperty("delegationId");
+      expect(second.details).toHaveProperty("delegationId");
+      cap = 1;
+      const denied = await task.execute("capacity-denied", { agent: "explorer", task: "Inspect" });
+      expect(JSON.stringify(denied)).toContain("concurrency limit (1)");
+      const list = await runtimeTool(runtime, "TaskList").execute("capacity-list", {});
+      expect(JSON.stringify(list).match(/"status":"running"/g)?.length).toBeGreaterThanOrEqual(2);
+      cap = 3;
+      const admitted = await task.execute("capacity-third", { agent: "explorer", task: "Inspect" });
+      expect(admitted.details).toHaveProperty("delegationId");
+      const active = await runtimeTool(runtime, "TaskList").execute("capacity-active", {});
+      expect(JSON.stringify(active).match(/"status":"running"/g)?.length).toBeGreaterThanOrEqual(3);
+    } finally {
+      subagentRuns.deferred = false;
+      await runtime.dispose();
+    }
   });
 
   it("keeps running delegates after the parent run ends", async () => {

@@ -139,7 +139,7 @@ import {
   isAskToolQuestionWithinLimit,
   isToolsOutputParams,
   MAX_ASK_TOOL_QUESTION_CHARS,
-  MAX_SUBAGENT_CONCURRENCY,
+  resolveDelegationLimits,
   normalizeAskToolOption,
   normalizeSubagentName,
   proposalKindForMode,
@@ -5085,10 +5085,10 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           const current = this.resolveResumeChain(resume, definition.name);
           if (!current.ok) return this.subagentToolError(toolCallId, current.message);
         }
-        if (this.runningDelegations().length >= MAX_SUBAGENT_CONCURRENCY) {
-          return this.subagentToolError(
-            toolCallId,
-            `${MAX_SUBAGENT_CONCURRENCY} subagents are already running for this session. Wait for some with TaskWait or stop them with TaskStop before delegating more.`,
+        const { maxConcurrent } = resolveDelegationLimits(this.delegationPolicy.value.settings?.limits);
+        if (this.runningDelegations().length >= maxConcurrent) {
+          return this.subagentToolError(toolCallId,
+            `The session's subagent concurrency limit (${maxConcurrent}) is reached. Wait for some with TaskWait or stop them with TaskStop before delegating more.`,
           );
         }
         const modelChangedFrom = resumedChain?.latestModelId && resumedChain.latestModelId !== provider.modelId

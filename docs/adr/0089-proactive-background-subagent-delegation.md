@@ -90,9 +90,16 @@ available to eligible builtin and user definitions.
 
 ### 5. Concurrency
 
-`MAX_SUBAGENT_CONCURRENCY` becomes a per-session running cap of 10 (was a
-per-batch cap of 4). `Task` fails with a tool error when the session already
-runs 10 delegates, telling the model to wait or stop first.
+The original per-session running cap was 10 (previously a per-batch cap of 4).
+The 2026-11-12 capacity amendment makes it `delegation.limits.maxConcurrent`
+(1–64, default 10), configured in Subagents → Scheduling. The live Host policy
+snapshot carries it; Task checks it after model authorization and reports the
+effective cap. Lowering it does not stop existing children, but later starts
+and resumes wait for free capacity. Settled tasks release slots, so cumulative
+task creation is not capped. The finite upper bound limits accidental API and
+sidecar fan-out. Legacy default exports, approval gates, child work budgets and
+history retention remain compatible. New optional fields use the existing
+version-1 settings JSON with validation and no database-schema migration.
 
 ## Consequences
 

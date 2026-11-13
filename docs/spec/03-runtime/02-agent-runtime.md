@@ -1243,9 +1243,12 @@ builtins are filtered by that same app-local state inside it (ADR 0270).
 Electron main loads
 `subagentProviders` in the sidecar params; definition edits take effect on the
 next catalog load. Saved scheduling guidance and model availability also refresh
-at the request/admission boundaries above. The catalog is capped at `MAX_SUBAGENT_DEFINITIONS` (16);
-a malformed or unreadable document becomes a launch diagnostic and never fails
-the launch.
+at the request/admission boundaries above. The catalog uses
+`AppSettings.delegation.limits.maxDefinitions` (integer 1–128, default 16).
+Each launch merges unique names with user definitions before builtins, then
+caps the catalog and diagnoses dropped names; files are never deleted. This is
+a role-menu limit, not cumulative Task creation or a window-wide quota.
+A malformed or unreadable document becomes a launch diagnostic, not a launch failure.
 
 Frontmatter adds `permission: inherit | ask | accept-edits | auto` (default
 `inherit`), which controls the scope the delegate's tool calls resolve under
@@ -1277,7 +1280,20 @@ the on-demand catalog of §7.1. Execution of all four is restricted to Agent mod
   whose tools are all unavailable each return a tool error explaining the
   failure rather than throwing), starts the delegate **in the background**, and
   returns immediately with a `delegationId`. Starting fails with a tool error
-  when the session already runs `MAX_SUBAGENT_CONCURRENCY` (10) delegates.
+  when the session reaches the current `delegation.limits.maxConcurrent`
+  (integer 1–64, default 10). It counts only running delegates in that session;
+  completed/stopped tasks free slots, and later Tasks can keep being created.
+
+  The optional `limits` object extends the existing version-1 settings JSON.
+  Missing fields keep 16/10 without rewriting old settings or changing the
+  database schema. Renderer/shared and Host validate integers and reject null,
+  unknown keys and out-of-range values. The live policy snapshot carries limits;
+  Task rechecks concurrency after model authorization. Lowering the saved cap
+  never stops active tasks; it blocks new starts/resumes until enough retire.
+  Catalog capacity applies on the next Desktop runtime launch/catalog preview.
+  Task guidance exposes the effective concurrency cap. Global history retention,
+  model authorization, child work budgets and standalone headless launch policy
+  remain unchanged.
 
   The `Task` tool accepts an optional `model` parameter
   (`"provider/modelId"`) that overrides the delegate's model for that run.

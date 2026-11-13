@@ -23,6 +23,7 @@ import {
   subagentPinnedProviders,
   OAUTH_AUTH_KIND,
   type SubagentDefinition,
+  type DelegationLimits,
 } from "@pi-desktop/shared";
 import {
   capabilitiesFromModelConfig,
@@ -285,6 +286,8 @@ export type LoadSubagentOptions = {
    * stay out of `definitions` but still reach `builtins`.
    */
   disabledBuiltins?: readonly string[];
+  /** Global catalog cap; missing fields preserve the historical defaults. */
+  limits?: Partial<DelegationLimits>;
 };
 
 function loadUserSubagents(documents: readonly UserSubagentDocument[]): {
@@ -338,7 +341,7 @@ export async function loadSubagentDefinitions(
     ...disk.definitions,
     ...user.definitions,
     ...builtin.definitions,
-  ]);
+  ], options.limits);
   const diagnostics = [
     ...disk.diagnostics,
     ...user.diagnostics,

@@ -1,4 +1,5 @@
 import type { SessionThinkingLevel } from "./types/models.js";
+import { isDelegationLimits, type DelegationLimits } from "./delegation-limits.js";
 
 /** Host-owned policy for every AI-initiated delegation. No credentials live here. */
 export type DelegationModel = {
@@ -118,6 +119,8 @@ export type DelegationSettings = {
   runPolicy?: Partial<DelegationRunPolicy>;
   /** Missing or inherit preserves the session's existing retry/fallback behavior. */
   failurePolicy?: DelegationFailurePolicy;
+  /** Catalog size at launch and live per-session Task admission cap. */
+  limits?: Partial<DelegationLimits>;
 };
 
 /** New and legacy-seeded settings wait five minutes; saved values stay intact. */
@@ -193,6 +196,7 @@ export function isDelegationSettings(value: unknown): value is DelegationSetting
     !Array.isArray(config.models) || config.models.length > 128) return false;
   if (config.runPolicy !== undefined && !isDelegationRunPolicy(config.runPolicy)) return false;
   if (config.failurePolicy !== undefined && !isDelegationFailurePolicy(config.failurePolicy)) return false;
+  if (config.limits !== undefined && !isDelegationLimits(config.limits)) return false;
   const identities = new Set<string>();
   for (const value of config.models) {
     if (!value || typeof value !== "object") return false;

@@ -111,6 +111,20 @@ describe("loadSubagentDefinitions", () => {
     expect(definitions.map((d) => d.name)).toContain("code-reviewer");
   });
 
+  it.each([1, 24, 128])("loads the configured catalog cap %s without consuming role definitions", async (maxDefinitions) => {
+    const userDocuments = Array.from({ length: 130 }, (_, index) => ({
+      id: `custom-${index}`,
+      document: `---\nname: custom-${index}\ndescription: Custom worker\n---\nInspect and report.\n`,
+    }));
+    for (let launch = 0; launch < 2; launch++) {
+      const catalog = await loadSubagentDefinitions(null, { userDocuments, limits: { maxDefinitions } });
+      expect(catalog.definitions).toHaveLength(maxDefinitions);
+      expect(catalog.definitions.every(definition => definition.source === "user")).toBe(true);
+      expect(catalog.diagnostics.join(" ")).toContain("catalog cap");
+    }
+    expect(userDocuments).toHaveLength(130);
+  });
+
   it("drops a switched-off builtin from the catalog and keeps it as a builtin row", async () => {
     const { definitions, builtins, diagnostics } = await loadSubagentDefinitions(null, {
       disabledBuiltins: ["fixer"],

@@ -48,6 +48,7 @@ export function delegationPolicySnapshot(value: unknown): DelegationPolicySnapsh
       version: 1 as const, approvalTimeoutSeconds: settings.approvalTimeoutSeconds,
       models: settings.models.map(row => ({ providerId: row.providerId, modelId: row.modelId,
         enabled: row.enabled, priority: row.priority, approval: row.approval, description: row.description })),
+      ...(settings.limits !== undefined ? { limits: { ...settings.limits } } : {}),
       ...(settings.runPolicy !== undefined ? { runPolicy: { ...resolveDelegationRunPolicy(settings.runPolicy) } } : {}),
     } } : {}),
   };

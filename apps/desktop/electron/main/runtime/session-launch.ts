@@ -583,6 +583,7 @@ export function createSessionLaunchRuntime({
     // live on this side. The user's own definitions (D202) are scope-filtered like the
     // skills above; a delegate the model can see is one it will try to call.
     const subagentCatalog = await loadSubagentDefinitions(localInstructionRoot, {
+      limits: settings.delegation?.limits,
       userDocuments: await activeUserSubagentDocuments(projectPath),
       // A switched-off builtin is dropped from what this prompt may delegate to.
       disabledBuiltins: await disabledBuiltinSubagents(),

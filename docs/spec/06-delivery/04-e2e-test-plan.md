@@ -548,6 +548,12 @@ being fetched on every subsequent poll.
   exact targets and collaboration spawn/send/Send now. Exercise generic plugin
   approval independently. In Scheduling, retain the existing 40-model sorted
   selector, keyboard editing, failed-save and responsive-layout checks.
+  Edit catalog/concurrency capacity above and below 16/10. Reject empty, zero,
+  fractional and over-range inputs; save/reopen, inject a failed save, retry and
+  restore capacity defaults while retaining other policy drafts. Load more than
+  16 user roles, then lower the cap and reload; repeat in another conversation.
+  Keep two children running, lower concurrency to one, reject another Task,
+  then raise it to three and admit one without stopping the original children.
 - Expected: Retry retains history/checkpoints and completed tools. Parent input
   stays usable without cancelling the child, one loop consumes accepted steering
   and the child report once, and the durable turn finalizes exactly once. Stop
@@ -583,6 +589,13 @@ being fetched on every subsequent poll.
   be revived by list/ACK races. Generic plugin dialogs retain their behavior.
   Scheduling sorting remains a stable presentation projection; drafts/selection
   survive reorder/save failure and only one detail form is mounted.
+  Capacity defaults remain 16/10 without a write for old policies; both new
+  optional fields round-trip through Host settings and live policy snapshots.
+  Catalog capacity is per loaded unique-role menu, never cumulative task count;
+  dropped definitions are diagnosed, not deleted. Desktop launch and preview
+  use the saved cap. Concurrency applies per session only to running Tasks;
+  slot release permits more tasks. Live lowering does not abort active children.
+  Shared/Host validation agree on ranges (definitions 1–128, concurrency 1–64).
 - Traceability: [runtime §5f](../03-runtime/02-agent-runtime.md#5f-subagent-delegation-d201-adr-0062-adr-0089),
   [core IPC §5.2c](../03-runtime/01-ipc-protocol.md#52c-delegation-model-approval),
   [approval UX §9a](../04-ux/03-permission-ux.md#9a-delegation-model-approval-center),
@@ -592,6 +605,9 @@ being fetched on every subsequent poll.
   `packages/shared/src/delegation-policy.test.ts`,
   `packages/shared/src/delegation-approval.test.ts` and
   `packages/shared/src/protocol.test.ts` cover policy/DTO/channel contracts.
+  `packages/shared/src/delegation-limits.test.ts`, agent-runtime catalog/runtime
+  tests, host-runtime `delegation-limits.test.ts` and Host delegation-settings
+  validation/round-trip tests cover capacity defaults, bounds and admission.
   `packages/agent-runtime/src/manual-recovery-user-path.test.ts` covers retry,
   steering, report continuation and terminal cleanup;
   `packages/agent-runtime/src/delegation-recovery-user-path.test.ts` covers restored
@@ -604,7 +620,9 @@ being fetched on every subsequent poll.
   `apps/desktop/test/delegation-approval-ui.test.mjs` mounts the production center
   with controlled IPC for ACK/arrival/reader/layout interactions.
   `apps/desktop/test/subagent-scheduling-user-path.test.mjs` covers the production
-  settings editor; `apps/desktop/test/delegation-send-now.test.mjs` and
+  settings editor and capacity fields; `apps/desktop/test/subagent-capacity-ipc.test.mjs`
+  covers online capacity preview, offline builtin fallback and invalid limits.
+  `apps/desktop/test/delegation-send-now.test.mjs` and
   `apps/desktop/test/session-collaboration-service.test.mjs` cover collaboration.
 - Milestone: Product maintenance. Status: manual-retry phase-1 verification is
   recorded by its implementation owner; phase-2 integration/targeted test results

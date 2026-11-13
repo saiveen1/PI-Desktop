@@ -52,6 +52,7 @@ export * from "./mode-definition.js";
 export * from "./mode-definition-parse.js";
 export * from "./subagent-presets.js";
 export * from "./delegation-policy.js";
+export * from "./delegation-limits.js";
 export * from "./session-delegation.js";
 export * from "./delegation-approval.js";
 export * from "./delegation-history.js";

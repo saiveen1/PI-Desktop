@@ -16,7 +16,7 @@ import { flushSync } from "react-dom";
 import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
 import { catalogs } from "@pi-desktop/i18n";
-import { IPC, bindingForCustomModel, DEFAULT_DELEGATION_RUN_POLICY, DELEGATION_RUN_POLICY_LIMITS } from "@pi-desktop/shared";
+import { IPC, bindingForCustomModel, DEFAULT_DELEGATION_LIMITS, DELEGATION_LIMIT_RANGES, DEFAULT_DELEGATION_RUN_POLICY, DELEGATION_RUN_POLICY_LIMITS } from "@pi-desktop/shared";
 import { delegationRunPolicyFields } from "../../apps/desktop/src/lib/subagent-run-policy";
 import { SubagentTranscriptTab } from "../../apps/desktop/src/components/workpanel/SubagentTranscriptTab";
 import { SubagentSettingsPage } from "../../apps/desktop/src/components/settings/SubagentSettingsPage";
@@ -283,7 +283,7 @@ window.runPolicyProbe = async () => {
 
   // Render the real work-panel tab against task metadata and different global settings.
   const snapshot = { maxToolCalls: 0, maxDurationSeconds: 77, checkpointInterval: 9, maxCheckpointRequests: 4, finalReportTimeoutSeconds: 61 };
-  const task = (id, delegationId, runPolicy) => ({ id, sessionId: "policy-session", role: "tool", content: "", status: "complete",
+  const task = (id, delegationId, runPolicy) => ({ id, sessionId: "policy-session", role: "tool", content: "", status: "complete", createdAt: "2026-11-12T00:00:00.000Z",
     toolName: "Task", toolCallId: "call-" + id, toolArgs: { task: "Inspect " + delegationId },
     toolResult: { details: { delegationId, status: "completed", ...(runPolicy === undefined ? {} : { runPolicy }) } } });
   flushSync(() => useAppStore.setState({ activeSessionId: "policy-session", runningSessions: {}, messages: [
@@ -316,6 +316,71 @@ window.runPolicyProbe = async () => {
   useAppStore.setState({ settings: persisted, providers: structuredClone(originalProviders), activeSessionId: null,
     messages: [], runningSessions: {}, settingsAnchor: null });
   return { passed: true, fields: delegationRunPolicyFields.length, settingsWrites, snapshotRendered: true };
+};
+
+window.capacityProbe = async () => {
+  const labels = { maxDefinitions: "settings.delegationMaxDefinitions", maxConcurrent: "settings.delegationMaxConcurrent" };
+  const values = () => Object.fromEntries(Object.entries(labels).map(([key, label]) => [key, Number(field(i18n.t(label)).value)]));
+  const equals = (actual, expected, message) => check(JSON.stringify(actual) === JSON.stringify(expected), message + ": " + JSON.stringify(actual));
+  const saved = () => waitFor(() => [...document.querySelectorAll('[role="status"]')]
+    .some(node => node.textContent === i18n.t("settings.delegationSaved")), "capacity save did not finish");
+  for (const [locale, catalog] of Object.entries(catalogs)) {
+    i18n.addResourceBundle(locale, "translation", flatten(catalog));
+    await i18n.changeLanguage(locale);
+    render();
+    click(i18n.t("settings.delegationScheduling"));
+    equals(values(), DEFAULT_DELEGATION_LIMITS, locale + " capacity defaults differ");
+  }
+  await i18n.changeLanguage("en");
+  render();
+  click("Scheduling");
+  check(writes.length === 0 && persisted.delegation === undefined, "reading capacity defaults wrote settings");
+  for (const [key, range] of Object.entries(DELEGATION_LIMIT_RANGES)) {
+    const label = i18n.t(labels[key]);
+    const node = field(label);
+    check(node.min === String(range.min) && node.max === String(range.max), "capacity range not exposed accessibly");
+    for (const invalid of ["", 0, range.max + 1, 1.5]) {
+      input(label, invalid);
+      check(button("Save").disabled && field(label).getAttribute("aria-invalid") === "true", "invalid capacity accepted: " + key);
+      check(field(label).value === String(invalid), "capacity input silently clamped");
+      check([...document.querySelectorAll('[role="alert"]')].some(node => node.textContent === i18n.t("settings.delegationRunInvalid")), "capacity validation error missing");
+      check(![...document.querySelectorAll('[role="alert"]')].some(node => node.textContent === i18n.t("settings.delegationInvalid")), "capacity showed unrelated model error");
+      flushSync(() => button("Save").click());
+      check(writes.length === 0, "invalid capacity saved");
+    }
+    input(label, DEFAULT_DELEGATION_LIMITS[key]);
+  }
+  input(i18n.t(labels.maxDefinitions), 24);
+  input(i18n.t(labels.maxConcurrent), 12);
+  input(description("legacy"), "Keep model guidance");
+  input(waitLabel, 17);
+  click("Save");
+  await saved();
+  equals(persisted.delegation.limits, { maxDefinitions: 24, maxConcurrent: 12 }, "capacity not persisted");
+  render();
+  click("Scheduling");
+  equals(values(), persisted.delegation.limits, "capacity lost on reopen");
+  input(i18n.t(labels.maxDefinitions), 32);
+  input(i18n.t(labels.maxConcurrent), 20);
+  failNext = true;
+  const before = JSON.stringify(persisted);
+  click("Save");
+  await waitFor(() => document.querySelector('[role="alert"]')?.textContent.includes("fixture disk unavailable"), "capacity failure hidden");
+  equals(values(), { maxDefinitions: 32, maxConcurrent: 20 }, "failed save lost capacity draft");
+  check(JSON.stringify(persisted) === before, "failed save altered stored capacity");
+  click("Save");
+  await saved();
+  equals(persisted.delegation.limits, { maxDefinitions: 32, maxConcurrent: 20 }, "retry lost capacity draft");
+  click(i18n.t("settings.delegationLimitsReset"));
+  equals(values(), DEFAULT_DELEGATION_LIMITS, "capacity reset failed");
+  check(field(description("legacy")).value === "Keep model guidance" && field(waitLabel).value === "17", "capacity reset overwrote other settings");
+  click("Save");
+  await saved();
+  render();
+  click("Scheduling");
+  equals(values(), DEFAULT_DELEGATION_LIMITS, "capacity reset not retained");
+  check(JSON.stringify(useAppStore.getState().providers) === JSON.stringify(originalProviders), "capacity save mutated providers");
+  return { passed: true, locales: Object.keys(catalogs).length, settingsWrites: writes.length };
 };
 
 window.schedulingProbe = async () => {
@@ -498,6 +563,8 @@ app.whenReady().then(async () => {
     console.log("SCHEDULING_PROBE " + JSON.stringify(await win.webContents.executeJavaScript("window.schedulingProbe().catch(error => { console.error(error.stack); throw error; })")));
     await win.loadFile(path.join(__dirname, "index.html"));
     console.log("RUN_POLICY_PROBE " + JSON.stringify(await win.webContents.executeJavaScript("window.runPolicyProbe().catch(error => { console.error(error.stack); throw error; })")));
+    await win.loadFile(path.join(__dirname, "index.html"));
+    console.log("CAPACITY_PROBE " + JSON.stringify(await win.webContents.executeJavaScript("window.capacityProbe().catch(error => { console.error(error.stack); throw error; })")));
     app.exit(0);
   } catch (error) { console.error(error?.stack ?? error); app.exit(1); }
 });`);
@@ -516,6 +583,11 @@ app.whenReady().then(async () => {
       code = await new Promise((resolve, reject) => { child.once("error", reject); child.once("close", resolve); });
     } finally { clearTimeout(timer); }
     assert.equal(code, 0, output.slice(-8000));
+    const capacityLine = output.split(/\r?\n/).find(item => item.startsWith("CAPACITY_PROBE "));
+    assert.ok(capacityLine, output.slice(-8000));
+    assert.deepEqual(JSON.parse(capacityLine.slice("CAPACITY_PROBE ".length)), {
+      passed: true, locales: 9, settingsWrites: 4,
+    });
     const policyLine = output.split(/\r?\n/).find((item) => item.startsWith("RUN_POLICY_PROBE "));
     assert.ok(policyLine, output.slice(-8000));
     assert.deepEqual(JSON.parse(policyLine.slice("RUN_POLICY_PROBE ".length)), {
