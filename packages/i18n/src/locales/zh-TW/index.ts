@@ -3041,6 +3041,13 @@ sklm: {
       errorTooBig: "正文超過了大小上限。",
     },
     subagents: {
+      skills: "可載入技能",
+      skillsInherit: "繼承主會話全部可用技能（預設）",
+      skillsHint: "關閉繼承後可選擇零個或多個技能。選項來自目前工作區，僅能載入啟動時主會話可用的技能，不會授予外掛或 MCP 工具。",
+      skillsEmpty: "目前工作區沒有可用技能。空選擇會停用技能載入。",
+      skillsUnavailable: "{{id}}（此處不可用）",
+      skillsLoadFailed: "無法載入技能。請重新開啟編輯器重試；已儲存的選擇保持不變。",
+      errorSkills: "最多選擇 256 個技能，技能目錄 ID 每個不超過 256 個字元。",
       fallbackModels: "備用模型",
       fallbackModelsHint: "目前模型重試失敗後依序切換，保留已完成的工具結果；停止會取消整個子任務。",
       fallbackAdd: "新增備用模型",

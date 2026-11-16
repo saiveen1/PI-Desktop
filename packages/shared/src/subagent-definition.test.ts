@@ -11,6 +11,8 @@ import {
   normalizeSubagentName,
   parseSubagentDefinition,
   resolveSubagentToolNames,
+  normalizeSubagentSkills,
+  resolveSubagentSkills,
   subagentCanMutate,
   subagentPinnedProviders,
   subagentToolsLabel,
@@ -660,5 +662,50 @@ describe("definition fallback models", () => {
   it("rejects a malformed fallback rather than silently changing the requested chain", () => {
     const result = parse("---\ndescription: Bad fallback.\nfallbackModels: [vendor/valid, bare-model]\n---\nFinish.");
     expect(result.ok).toBe(false);
+  });
+});
+
+describe("subagent skill selection", () => {
+  it("keeps old documents inherit-all and explicit empty lists empty", () => {
+    const old = parse("---\ndescription: Read evidence.\n---\nRead.");
+    expect(old.ok && old.definition.skills).toBeUndefined();
+    for (const field of ["skills: []", "skills:"]) {
+      const result = parse(`---\ndescription: Read evidence.\n${field}\n---\nRead.`);
+      expect(result.ok && result.definition.skills).toEqual([]);
+    }
+  });
+
+  it.each(["skills: [user:review, fixture/review, user:review]", "skills:\n  - user:review\n  - 'fixture/review'\n  - user:review"])("normalizes the flat list syntax: %s", field => {
+    const result = parse(`---\ndescription: Read evidence.\n${field}\n---\nRead.`);
+    expect(result.ok && result.definition.skills).toEqual(["user:review", "fixture/review"]);
+  });
+
+  it("rejects malformed/unbounded IDs and selections at the boundary", () => {
+    for (const value of [null, "all", [123], [""], ["bad id"], ["x\npermission: auto"], ["a".repeat(257)], Array(257).fill("a")]) {
+      expect(() => normalizeSubagentSkills(value)).toThrow();
+    }
+    expect(normalizeSubagentSkills([" fixture/review ", "fixture/review", "a".repeat(256)])).toEqual(["fixture/review", "a".repeat(256)]);
+    for (const field of ["skills: [bad id]", `skills: [${"a".repeat(257)}]`, `skills: [${Array(257).fill("a").join(",")}]`]) {
+      expect(parse(`---\ndescription: Read evidence.\n${field}\n---\nRead.`).ok).toBe(false);
+    }
+  });
+
+  it("intersects exact IDs without manufacturing unknown or duplicate catalog entries", () => {
+    const parent = [{ id: "fixture/review" }, { id: "fixture/test" }];
+    expect(resolveSubagentSkills({}, parent)).toEqual(parent);
+    expect(resolveSubagentSkills({ skills: ["fixture/review", "missing", "fixture/review"] }, parent)).toEqual([parent[0]]);
+    expect(resolveSubagentSkills({ skills: [] }, parent)).toEqual([]);
+    expect(resolveSubagentSkills({ skills: ["missing"] }, parent)).toEqual([]);
+  });
+
+  it("withholds Skill for empty effective selections even under tools: inherit", () => {
+    for (const inheritTools of [false, true]) {
+      for (const skills of [[], ["missing"]]) {
+        const tools = resolveSubagentToolNames({ tools: ["Read"], inheritTools, skills }, ["Read", "Skill", "Task", "plugin"], ["fixture/review"]);
+        expect(tools).not.toContain("Skill");
+        expect(tools).not.toContain("Task");
+        expect(tools.includes("plugin")).toBe(inheritTools);
+      }
+    }
   });
 });

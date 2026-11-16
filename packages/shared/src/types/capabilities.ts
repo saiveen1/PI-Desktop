@@ -191,6 +191,8 @@ export type UserSubagentRecord = {
    * document opts into the parent session catalog (ADR 0246).
    */
   tools: string[];
+  /** Omitted inherits all parent-available skills; [] selects none. */
+  skills?: string[];
   /** `<provider>/<model>` pin, resolved against providers at launch. */
   model?: string;
   /** Ordered fallback pins; empty clears the list, absent preserves it on update. */
@@ -211,6 +213,8 @@ export type UserSubagentInput = {
   description?: string;
   body?: string;
   tools?: string[];
+  /** Omitted preserves on update; null restores inherit-all; [] selects none. */
+  skills?: string[] | null;
   /** Empty string clears the pin; absent leaves it unchanged. */
   model?: string;
   /** Ordered fallback pins; empty clears the list, absent preserves it on update. */

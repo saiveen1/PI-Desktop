@@ -24,7 +24,7 @@ import {
   draftFromDefinition,
   draftFromRecord,
   emptySubagentDraft,
-  mergeSubagentToolGrant,
+  subagentDraftToInput,
   subagentPresetCopyKey,
   type SubagentDraft,
 } from "./SubagentEditorSheet";
@@ -175,20 +175,7 @@ export function AgentSubagentsPage() {
   const save = async () => {
     if (!editor) return;
     const { draft, editing } = editor;
-    const payload = {
-      name: draft.name.trim(),
-      description: draft.description.trim(),
-      body: draft.body,
-      tools: mergeSubagentToolGrant(draft.inheritTools, draft.tools),
-      // An empty string clears a pinned model; omitting it would keep the old one.
-      model: draft.model.trim(),
-      fallbackModels: draft.fallbackModels.map((pin) => pin.trim()),
-      thinkingLevel: draft.thinkingLevel,
-      // `0` clears the output cap, so the delegate follows the model again.
-      maxTokens: draft.maxTokens,
-      enabled: draft.enabled,
-      scope: draft.scope,
-    };
+    const payload = subagentDraftToInput(draft);
     setSaving(true);
     try {
       if (editing) await api.updateUserSubagent(editing.id, payload);

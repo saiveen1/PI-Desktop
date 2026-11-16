@@ -31,7 +31,7 @@ export function subagentTaskDeclaration(options: {
       "To run delegates concurrently, emit several Task calls in one assistant message. A message that mixes Task with any other tool runs one call at a time. You may keep working or talk to the user while they run; the runtime delivers their reports when they finish. Call TaskStop only to cancel.",
       "To continue a previous subagent, pass its `resume` id (the `delegationId` returned by Task). Saying \"reuse\" in prose is not enough. Omit `model` when resuming; repeating the exact retained provider/model key is tolerated but never changes model selection or authorization. Start a new delegation to change models.",
       "Stopped, aborted, interrupted and budget-exhausted delegates retain reports and can be explicitly resumed once settled. Use TaskWait to read their partial results before deciding to continue; a cancellation never resumes automatically.",
-      "When the parent has skills, every delegate also receives Skill and the skill catalog. This does not grant other plugin or MCP tools; those still require tools: inherit.",
+      "When the parent has skills, delegates receive Skill and the skill catalog by default, restricted by each role's skills selection. An empty effective selection provides neither. This does not grant other plugin or MCP tools; those still require tools: inherit.",
       `Available subagents:\n${catalog}`,
     ].join("\n\n"),
     parameters: Type.Object({

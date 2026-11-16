@@ -3045,6 +3045,13 @@ sklm: {
       "errorTooBig": "Das Dokument überschreitet die Größenbeschränkung."
     },
     "subagents": {
+      skills: "Ladbare Skills",
+      skillsInherit: "Alle beim übergeordneten Agenten verfügbaren Skills erben (Standard)",
+      skillsHint: "Vererbung ausschalten, um keinen oder mehrere Skills auszuwählen. Die Auswahl stammt aus dem aktuellen Arbeitsbereich und wird beim Start auf die verfügbaren Skills beschränkt. Gewährt keine Plugin- oder MCP-Tools.",
+      skillsEmpty: "Im aktuellen Arbeitsbereich sind keine Skills verfügbar. Eine leere Auswahl deaktiviert das Laden von Skills.",
+      skillsUnavailable: "{{id}} (hier nicht verfügbar)",
+      skillsLoadFailed: "Skills konnten nicht geladen werden. Editor zum Wiederholen neu öffnen; gespeicherte Auswahlen bleiben unverändert.",
+      errorSkills: "Höchstens 256 Skills mit gültigen Katalog-IDs auswählen (jeweils bis zu 256 Zeichen).",
       fallbackModels: "Ersatzmodelle",
       fallbackModelsHint: "Nach fehlgeschlagenen Modellwiederholungen der Reihe nach versuchen. Werkzeugergebnisse bleiben erhalten; Stopp beendet die gesamte Aufgabe.",
       fallbackAdd: "Ersatzmodell hinzufügen",

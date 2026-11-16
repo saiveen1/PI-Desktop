@@ -16,6 +16,7 @@ vi.mock("./provider-binding.js", async original => {
 });
 
 const skill = { id: "fixture/review", name: "Fixture review", description: "Review isolated fixture evidence." };
+const otherSkill = { id: "fixture/test", name: "Fixture test", description: "Run isolated fixture checks." };
 const skillBody = "# Fixture review\nReport only verified evidence.";
 const deniedBody = "Skill: fixture/review is disabled.";
 const definitions = BUILTIN_SUBAGENT_DOCUMENTS.map(document => {
@@ -56,7 +57,7 @@ function call(name: string, args: ToolArgs): AssistantMessage["content"] {
   return [{ type: "toolCall", id: crypto.randomUUID(), name, arguments: args }];
 }
 
-function fixture(definition: SubagentDefinition, options: { skills?: boolean; denied?: boolean } = {}) {
+function fixture(definition: SubagentDefinition, options: { skills?: boolean; denied?: boolean; load?: string | false } = {}) {
   const sessionId = "delegation-skills-fixture";
   const events: AgentEventEnvelope[] = [];
   const taskDescriptions: string[] = [];
@@ -74,8 +75,8 @@ function fixture(definition: SubagentDefinition, options: { skills?: boolean; de
     }
     children.push({ tools: getCurrentTools(context.messages).map(tool => tool.name),
       prompt: getCurrentSystemPrompt(context.messages), messages: JSON.stringify(context.messages) });
-    return reply(children.length === 1 && options.skills !== false
-      ? call("Skill", { id: skill.id })
+    return reply(children.length === 1 && options.skills !== false && options.load !== false
+      ? call("Skill", { id: options.load ?? skill.id })
       : [{ type: "text", text: "Fixture review complete." }]);
   });
   const runtime = new DesktopAgentRuntime({
@@ -83,7 +84,7 @@ function fixture(definition: SubagentDefinition, options: { skills?: boolean; de
     commandShell: { id: "bash", label: "Bash", dialect: "posix", available: true, isDefault: true },
     subagents: [{ ...definition, model: { providerId: "fixture", modelId: "child" } }],
     subagentProviders: { "fixture/child": provider("child") },
-    pluginSkills: options.skills === false ? [] : [skill],
+    pluginSkills: options.skills === false ? [] : [skill, otherSkill],
     pluginTools: [{ name: "plugin_fixture_mutate", description: "Must not be inherited implicitly", parameters: {} }],
     projectInstructions: { entries: [{ source: "AGENTS.md", content: "Follow the fixture review skill." }] },
     host: { call: async <T>(method: string, params?: unknown): Promise<T> => {
@@ -120,12 +121,13 @@ describe("delegated skills through real parent and child agent loops", () => {
     try {
       await f.prompt();
       expect(f.events.filter(({ event }) => event.type === "error")).toEqual([]);
-      expect(f.taskDescriptions[0]).toContain("every delegate also receives Skill and the skill catalog");
+      expect(f.taskDescriptions[0]).toContain("restricted by each role's skills selection");
       expect(f.children).toHaveLength(2);
       const first = f.children[0];
       expect(first.tools.filter(name => name !== "TaskReport")).toEqual([...definition.tools, "Skill"]);
       expect(first.prompt).toContain("# Skills");
       expect(first.prompt).toContain(skill.id);
+      expect(first.prompt).toContain(otherSkill.id);
       expect(first.prompt).not.toContain(skillBody);
       expect(first.prompt.indexOf("# Skills")).toBeLessThan(first.prompt.indexOf("# Project instructions"));
       if (definition.name === "code-reviewer" || definition.name === "reader") {
@@ -160,4 +162,52 @@ describe("delegated skills through real parent and child agent loops", () => {
       expect(skillResult(f.events)).toMatchObject({ agentName: "reader", parentToolCallId: expect.any(String), event: { isError: true } });
     } finally { await f.runtime.dispose(); }
   });
+
+  it("restricts a selected subset and ignores unknown IDs without inheriting executable tools", async () => {
+    const f = fixture({ ...reader, skills: [skill.id, "missing", skill.id] });
+    try {
+      await f.prompt();
+      expect(f.children[0].tools.filter(name => name !== "TaskReport")).toEqual(["Read", "Skill"]);
+      expect(f.children[0].prompt).toContain(skill.id);
+      expect(f.children[0].prompt).not.toContain(otherSkill.id);
+      expect(f.children[0].prompt).not.toContain("`missing`");
+      expect(f.executions).toEqual([expect.objectContaining({ toolName: "Skill", args: { id: skill.id } })]);
+    } finally { await f.runtime.dispose(); }
+  });
+
+  it.each([{ skills: [] }, { skills: ["missing"] }])("omits the loader and catalog for an empty effective selection $skills", async ({ skills }) => {
+    const f = fixture({ ...reader, skills }, { load: false });
+    try {
+      await f.prompt();
+      expect(f.children).toHaveLength(1);
+      expect(f.children[0].tools.filter(name => name !== "TaskReport")).toEqual(["Read"]);
+      expect(f.children[0].prompt).not.toContain("# Skills");
+      expect(f.executions).toEqual([]);
+    } finally { await f.runtime.dispose(); }
+  });
+
+  it("rejects a forged out-of-selection Skill load before reaching the Host", async () => {
+    const f = fixture({ ...reader, skills: [skill.id] }, { load: otherSkill.id });
+    try {
+      await f.prompt();
+      expect(f.children[0].prompt).not.toContain(otherSkill.id);
+      expect(f.executions).toEqual([]);
+      expect(f.children[1].messages).toContain("Skill is not available to this subagent.");
+      expect(skillResult(f.events)).toMatchObject({ agentName: "reader", event: { isError: true } });
+    } finally { await f.runtime.dispose(); }
+  });
+
+  it("keeps the existing tools: inherit deny rules while disabling skills", async () => {
+    const f = fixture({ ...reader, tools: [], inheritTools: true, skills: [] }, { load: false });
+    try {
+      await f.prompt();
+      expect(f.children[0].tools).toContain("plugin_fixture_mutate");
+      for (const denied of ["Skill", "Task", "TaskWait", "TaskList", "TaskStop", "ToolSearch", "asktool", "new_context"]) {
+        expect(f.children[0].tools).not.toContain(denied);
+      }
+      expect(f.children[0].prompt).not.toContain("# Skills");
+      expect(f.executions).toEqual([]);
+    } finally { await f.runtime.dispose(); }
+  });
+
 });

@@ -145,6 +145,7 @@ import {
   normalizeSubagentName,
   proposalKindForMode,
   resolveSubagentToolNames,
+  resolveSubagentSkills,
   splitInlineContent,
   subagentModelKey,
   type ProposalKind,
@@ -4651,9 +4652,9 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
    * collaboration rules are deliberately left out — a delegate has no user to
    * talk to, and its report format is set by `composeSubagentSystemPrompt`.
    */
-  private subagentGuidance(definition: SubagentDefinition, instructions: ProjectInstructions | null | undefined = this.projectInstructions): string[] {
+  private subagentGuidance(definition: SubagentDefinition, instructions: ProjectInstructions | null | undefined = this.projectInstructions, skills = resolveSubagentSkills(definition, this.pluginSkills)): string[] {
     const tools = new Set(
-      resolveSubagentToolNames(definition, [...this.toolCatalog.keys()]),
+      resolveSubagentToolNames(definition, [...this.toolCatalog.keys()], skills.map((skill) => skill.id)),
     );
     const blocks: string[] = [];
     if (tools.has("Read") || tools.has("Grep") || tools.has("Glob")) {
@@ -4675,7 +4676,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       );
     }
     if (tools.has(SKILL_TOOL_NAME)) {
-      const skillsPrompt = pluginSkillsPrompt(this.pluginSkills);
+      const skillsPrompt = pluginSkillsPrompt(skills);
       if (skillsPrompt) blocks.push(skillsPrompt);
     }
     const projectPrompt = projectInstructionsPrompt(instructions ?? undefined);
@@ -4991,9 +4992,11 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
             );
           }
         }
+        const skills = resolveSubagentSkills(definition, this.pluginSkills);
         const declaredToolNames = resolveSubagentToolNames(
           definition,
           [...this.toolCatalog.keys()],
+          skills.map((skill) => skill.id),
         );
         const tools = declaredToolNames
           .map((name) => this.toolCatalog.get(name))
@@ -5214,14 +5217,14 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
         try {
           const delegatePrompt = (instructions: ProjectInstructions | undefined) => composeSubagentSystemPrompt({
             definition,
-            guidance: this.subagentGuidance(definition, instructions ?? null),
+            guidance: this.subagentGuidance(definition, instructions ?? null, skills),
             toolNames: declaredToolNames,
           });
           const applyInstructions = (instructions: ProjectInstructions | undefined) => {
             subagentRun.setSystemPrompt(delegatePrompt(instructions));
           };
           const builtinToolNames = new Set(tools.filter((tool) => this.builtinTools.has(tool)).map((tool) => tool.name));
-          const scopedTools = this.scopeDelegateTools(tools, definition, delegationId, worktreeKey, applyInstructions);
+          const scopedTools = this.scopeDelegateTools(tools, definition, delegationId, worktreeKey, applyInstructions, skills);
           subagentRun = new SubagentRun({
             definition,
             builtinToolNames,
@@ -5269,7 +5272,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
             },
             systemPrompt: composeSubagentSystemPrompt({
               definition,
-              guidance: this.subagentGuidance(definition),
+              guidance: this.subagentGuidance(definition, this.projectInstructions, skills),
               toolNames: declaredToolNames,
             }),
             tools: scopedTools,
@@ -5381,10 +5384,12 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     mutationOwner: string,
     worktreeKeyOrApply?: string | ((instructions: ProjectInstructions | undefined) => void),
     applyInstructions?: (instructions: ProjectInstructions | undefined) => void,
+    skills = resolveSubagentSkills(definition, this.pluginSkills),
   ): AgentTool[] {
     const worktreeKey = typeof worktreeKeyOrApply === "string" ? worktreeKeyOrApply : undefined;
     const apply = typeof worktreeKeyOrApply === "function" ? worktreeKeyOrApply : applyInstructions;
     const scope = definition.permission ?? DEFAULT_SUBAGENT_PERMISSION;
+    const skillIds = new Set(skills.map((skill) => skill.id));
     return tools.map((tool) => ({
       ...tool,
       execute: async (toolCallId, args, signal, onUpdate) => {
@@ -5394,6 +5399,10 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
         }
         if (worktreeKey) this.delegateWorktrees.set(toolCallId, worktreeKey);
         try {
+          if (tool.name === SKILL_TOOL_NAME && (!isRecord(args) || typeof args.id !== "string"
+            || !skillIds.has(args.id) || !this.pluginSkills.some((skill) => skill.id === args.id))) {
+            return this.subagentToolError(toolCallId, "Skill is not available to this subagent.");
+          }
           return await this.instructionExecution.run(
             apply ?? (() => undefined),
             () => tool.execute(toolCallId, args, signal, onUpdate),

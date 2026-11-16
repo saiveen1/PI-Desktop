@@ -3045,6 +3045,13 @@ sklm: {
       "errorTooBig": "Le document dépasse la taille limite."
     },
     "subagents": {
+      skills: "Compétences qu’il peut charger",
+      skillsInherit: "Hériter de toutes les compétences disponibles du parent (par défaut)",
+      skillsHint: "Désactivez l’héritage pour sélectionner zéro ou plusieurs compétences. Les choix viennent de l’espace de travail actuel et sont limités aux compétences disponibles au démarrage. N’accorde aucun outil de plugin ou MCP.",
+      skillsEmpty: "Aucune compétence disponible dans cet espace de travail. Une sélection vide désactive leur chargement.",
+      skillsUnavailable: "{{id}} (indisponible ici)",
+      skillsLoadFailed: "Impossible de charger les compétences. Rouvrez l’éditeur pour réessayer ; les sélections enregistrées restent inchangées.",
+      errorSkills: "Sélectionnez au plus 256 compétences avec des identifiants de catalogue valides (256 caractères maximum chacun).",
       fallbackModels: "Modèles de secours",
       fallbackModelsHint: "Essayés dans cet ordre après échec des tentatives. Les résultats des outils sont conservés ; Arrêter annule toute la tâche.",
       fallbackAdd: "Ajouter un modèle de secours",

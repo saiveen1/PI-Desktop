@@ -1,4 +1,5 @@
 mod model_fallbacks;
+mod skill_selection;
 
 use crate::activation::ActivationScope;
 use crate::agent_capabilities::{
@@ -60,6 +61,8 @@ pub struct UserSubagentRecord {
     #[serde(default)]
     pub tools: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skills: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub fallback_models: Vec<String>,
@@ -82,6 +85,8 @@ pub struct UserSubagentInput {
     pub description: Option<String>,
     pub body: Option<String>,
     pub tools: Option<Vec<String>>,
+    #[serde(default, deserialize_with = "skill_selection::deserialize_update")]
+    pub skills: Option<Option<Vec<String>>>,
     pub model: Option<String>,
     pub fallback_models: Option<Vec<String>>,
     pub thinking_level: Option<String>,
@@ -214,6 +219,7 @@ fn parse_record(path: &Path, state: &CapabilityState) -> Option<UserSubagentReco
         enabled,
         scope: ActivationScope::default(),
         tools,
+        skills: skill_selection::parse(&raw).ok()?,
         model: front
             .get("model")
             .cloned()
@@ -239,6 +245,9 @@ fn render_document(record: &UserSubagentRecord, body: &str) -> String {
         output.push_str("tools: inherit\n");
     } else {
         output.push_str(&format!("tools: [{}]\n", record.tools.join(", ")));
+    }
+    if let Some(skills) = &record.skills {
+        output.push_str(&format!("skills: [{}]\n", skills.join(", ")));
     }
     if let Some(model) = &record.model {
         output.push_str(&format!("model: {model}\n"));
@@ -349,6 +358,11 @@ impl UserSubagentRegistry {
             enabled: input.enabled.unwrap_or(true),
             scope: ActivationScope::default(),
             tools,
+            skills: input
+                .skills
+                .flatten()
+                .map(|values| skill_selection::normalize(&values))
+                .transpose()?,
             model: normalize_model(input.model.as_deref())?,
             fallback_models: model_fallbacks::normalize(
                 input.fallback_models.as_deref().unwrap_or(&[]),
@@ -423,6 +437,11 @@ impl UserSubagentRegistry {
         next.name = name.clone();
         next.description = description;
         next.tools = tools;
+        if let Some(skills) = input.skills {
+            next.skills = skills
+                .map(|values| skill_selection::normalize(&values))
+                .transpose()?;
+        }
         next.model = match input.model {
             Some(value) if value.trim().is_empty() => None,
             Some(value) => normalize_model(Some(value.as_str()))?,
@@ -549,6 +568,70 @@ impl UserSubagentRegistry {
 mod tests {
     use super::*;
     use tempfile::tempdir;
+    #[test]
+    fn skill_selection_round_trips_create_update_and_restore_inherit() {
+        use crate::agent_capabilities::test_support;
+        let data = tempdir().unwrap();
+        let agents = tempdir().unwrap();
+        let mut registry = UserSubagentRegistry::new(data.path());
+        test_support::with_global_agents(agents.path(), || {
+            let input = serde_json::from_value(serde_json::json!({
+                "name": "reader", "description": "Read evidence", "body": "Read it.",
+                "skills": ["fixture/review", "missing", "fixture/review"]
+            }))
+            .unwrap();
+            let record = registry.create(input).unwrap();
+            assert_eq!(
+                record.skills,
+                Some(vec!["fixture/review".into(), "missing".into()])
+            );
+            assert!(fs::read_to_string(&record.path)
+                .unwrap()
+                .contains("skills: [fixture/review, missing]"));
+            let unchanged = registry
+                .update("reader", UserSubagentInput::default())
+                .unwrap()
+                .unwrap();
+            assert_eq!(unchanged.skills, record.skills);
+            let none = registry
+                .update("reader", serde_json::from_str(r#"{"skills":[]}"#).unwrap())
+                .unwrap()
+                .unwrap();
+            assert_eq!(none.skills, Some(vec![]));
+            assert!(fs::read_to_string(&none.path)
+                .unwrap()
+                .contains("skills: []"));
+            assert_eq!(
+                serde_json::to_value(&none).unwrap()["skills"],
+                serde_json::json!([])
+            );
+            let inherited = registry
+                .update(
+                    "reader",
+                    serde_json::from_str(r#"{"skills":null}"#).unwrap(),
+                )
+                .unwrap()
+                .unwrap();
+            assert_eq!(inherited.skills, None);
+            assert!(!fs::read_to_string(&inherited.path)
+                .unwrap()
+                .contains("skills:"));
+            assert!(serde_json::to_value(&inherited)
+                .unwrap()
+                .get("skills")
+                .is_none());
+            let invalid = serde_json::from_str(r#"{"skills":["bad id"]}"#).unwrap();
+            assert!(registry.update("reader", invalid).is_err());
+            assert_eq!(registry.read("reader").unwrap().unwrap().0.skills, None);
+        });
+        for malformed in [
+            r#"{"skills":false}"#,
+            r#"{"skills":[1]}"#,
+            r#"{"skills":"all"}"#,
+        ] {
+            assert!(serde_json::from_str::<UserSubagentInput>(malformed).is_err());
+        }
+    }
 
     #[test]
     fn parser_rejects_missing_description() {
@@ -647,6 +730,7 @@ mod tests {
             enabled: false,
             scope: ActivationScope::default(),
             tools: vec!["Read".into()],
+            skills: None,
             model: None,
             fallback_models: Vec::new(),
             thinking_level: None,
@@ -669,6 +753,7 @@ mod tests {
             enabled: true,
             scope: ActivationScope::default(),
             tools: vec!["Read".into()],
+            skills: None,
             model: None,
             fallback_models: Vec::new(),
             thinking_level: None,

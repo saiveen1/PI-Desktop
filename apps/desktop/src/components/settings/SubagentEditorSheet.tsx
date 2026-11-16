@@ -11,6 +11,7 @@ import {
   findSubagentPreset,
   isSubagentAssignableTool,
   isSubagentMutatingTool,
+  normalizeSubagentSkills,
   resolveScope,
   type ActivationScope,
   type SubagentDefinition,
@@ -18,6 +19,7 @@ import {
   type SubagentThinkingLevel,
   type ProviderPublic,
   type UserSubagentRecord,
+  type UserSubagentInput,
 } from "@pi-desktop/shared";
 import { useAppStore } from "../../stores/app-store";
 import { Button, Field, HelpIcon, Input, SettingsToggle, Textarea, TooltipButton, cx, portalOverlay } from "../ui";
@@ -32,6 +34,7 @@ import {
 import { SubagentModelPicker } from "./SubagentModelPicker";
 import { SubagentFallbackModels } from "./SubagentFallbackModels";
 import { SettingsMenuSelect } from "./SettingsMenuSelect";
+import { SubagentSkillsField } from "./SubagentSkillsField";
 
 /** Hard cap host-core enforces on a definition document. */
 export const MAX_SUBAGENT_BYTES = 32 * 1024;
@@ -44,6 +47,7 @@ export type SubagentDraft = {
   tools: string[];
   /** Frontmatter `tools: inherit` — union the parent session catalog. */
   inheritTools: boolean;
+  skills: string[] | undefined;
   /** `<provider>/<model>`, or empty for "same model as this session". */
   model: string;
   fallbackModels: string[];
@@ -81,6 +85,23 @@ export function mergeSubagentToolGrant(
   tools: readonly string[],
 ): string[] {
   return inheritTools ? [SUBAGENT_INHERIT_TOKEN, ...tools] : [...tools];
+}
+
+/** Full editor saves use null to restore inherit-all rather than preserve an old list. */
+export function subagentDraftToInput(draft: SubagentDraft): UserSubagentInput {
+  return {
+    name: draft.name.trim(),
+    description: draft.description.trim(),
+    body: draft.body,
+    tools: mergeSubagentToolGrant(draft.inheritTools, draft.tools),
+    skills: draft.skills ?? null,
+    model: draft.model.trim(),
+    fallbackModels: draft.fallbackModels.map((pin) => pin.trim()),
+    thinkingLevel: draft.thinkingLevel,
+    maxTokens: draft.maxTokens,
+    enabled: draft.enabled,
+    scope: draft.scope,
+  };
 }
 
 /**
@@ -138,6 +159,7 @@ export function emptySubagentDraft(): SubagentDraft {
     description: "",
     tools: [...DEFAULT_SUBAGENT_TOOLS],
     inheritTools: false,
+    skills: undefined,
     model: "",
     fallbackModels: [],
     thinkingLevel: "",
@@ -156,6 +178,7 @@ export function draftFromRecord(record: UserSubagentRecord, body: string): Subag
     description: record.description ?? "",
     tools: grant.tools,
     inheritTools: grant.inheritTools,
+    skills: record.skills === undefined ? undefined : [...record.skills],
     model: record.model ?? "",
     fallbackModels: [...(record.fallbackModels ?? [])],
     thinkingLevel: record.thinkingLevel ?? "",
@@ -180,6 +203,7 @@ export function draftFromDefinition(definition: SubagentDefinition): SubagentDra
     description: definition.description,
     tools: grant.tools,
     inheritTools: grant.inheritTools,
+    skills: definition.skills === undefined ? undefined : [...definition.skills],
     model: definition.model
       ? `${definition.model.providerId}/${definition.model.modelId}`
       : "",
@@ -243,6 +267,9 @@ export function subagentDraftError(draft: SubagentDraft): string | null {
   if (!draft.description.trim()) return "extensions.subagents.errorDescription";
   if (!draft.inheritTools && draft.tools.length === 0) {
     return "extensions.subagents.errorTools";
+  }
+  if (draft.skills !== undefined) {
+    try { normalizeSubagentSkills(draft.skills); } catch { return "extensions.subagents.errorSkills"; }
   }
   // `provider/model` is the only shape the runtime can resolve; a bare model id
   // has no provider to look up, so it would be dropped with a diagnostic nobody
@@ -552,11 +579,9 @@ function AdvancedFields({
 /**
  * Create/edit sheet for one subagent definition.
  *
- * The tool grant sits above the prompt because it is the only field with a
- * safety consequence: a delegate that declares `Bash`, `Edit` or `Write` can
- * change the workspace on its own (ADR 0062), and a checkbox group makes that
- * choice explicit instead of hiding it in frontmatter the user has to remember
- * to write.
+ * Tool grants and skill selection sit above the prompt so the delegate's
+ * capabilities are explicit without editing frontmatter. Skill instructions
+ * do not grant executable tools or permissions.
  */
 export function SubagentEditorSheet({
   draft,
@@ -752,6 +777,8 @@ export function SubagentEditorSheet({
               ))}
             </div>
           </div>
+
+          <SubagentSkillsField value={draft.skills} onChange={(skills) => set("skills", skills)} />
 
           <div className="ext-field-group">
             <div className="ext-field-label ext-field-label-row">

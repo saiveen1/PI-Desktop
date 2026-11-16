@@ -3009,6 +3009,13 @@ export const ptBR = {
       errorTooBig: "O documento ultrapassa o limite de tamanho."
     },
     subagents: {
+      skills: "Habilidades que pode carregar",
+      skillsInherit: "Herdar todas as habilidades disponíveis do agente principal (padrão)",
+      skillsHint: "Desative a herança para selecionar zero ou mais habilidades. As opções vêm do espaço de trabalho atual e se limitam às disponíveis ao iniciar. Não concede ferramentas de plugins ou MCP.",
+      skillsEmpty: "Nenhuma habilidade disponível no espaço de trabalho atual. Uma seleção vazia desativa o carregamento.",
+      skillsUnavailable: "{{id}} (indisponível aqui)",
+      skillsLoadFailed: "Não foi possível carregar as habilidades. Reabra o editor para tentar novamente; as seleções salvas não mudam.",
+      errorSkills: "Selecione até 256 habilidades com IDs de catálogo válidos (até 256 caracteres cada).",
       fallbackModels: "Modelos alternativos",
       fallbackModelsHint: "Tente os modelos na ordem indicada depois que as tentativas com o modelo atual falharem. Os resultados de ferramentas concluídas são mantidos; Parar cancela a tarefa inteira.",
       fallbackAdd: "Adicionar modelo alternativo",

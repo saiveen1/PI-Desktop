@@ -48,6 +48,8 @@ export type SubagentDefinition = {
    * and MCP tools the parent is allowed to call.
    */
   inheritTools?: boolean;
+  /** Omitted inherits all parent-available skills; an explicit list restricts them. */
+  skills?: string[];
   /** Provider/model this definition pins, when it pins one. */
   model?: SubagentModelPin;
   /** Ordered, definition-scoped alternatives after a provider failure. */
@@ -130,23 +132,56 @@ export const SUBAGENT_INHERIT_DENY_TOOLS: readonly string[] = [
  *   are still included so a definition can add Bash on top of inherit.
  */
 export function resolveSubagentToolNames(
-  definition: Pick<SubagentDefinition, "tools" | "inheritTools">,
+  definition: Pick<SubagentDefinition, "tools" | "inheritTools" | "skills">,
   parentToolNames: readonly string[],
+  availableSkillIds?: readonly string[],
 ): string[] {
+  const selected = definition.skills === undefined ? undefined : normalizeSubagentSkills(definition.skills);
+  const allowSkill = parentToolNames.includes("Skill") && (selected === undefined
+    || selected.some((id) => availableSkillIds === undefined || availableSkillIds.includes(id)));
   const declared = definition.tools.filter(
-    (name) => name !== SUBAGENT_INHERIT_TOKEN,
+    (name) => name !== SUBAGENT_INHERIT_TOKEN && (name !== "Skill" || allowSkill),
   );
   // Loading instructions must not require inheriting executable plugin/MCP tools.
-  if (parentToolNames.includes("Skill") && !declared.includes("Skill")) declared.push("Skill");
+  if (allowSkill && !declared.includes("Skill")) declared.push("Skill");
   if (!definition.inheritTools) return declared;
   const deny = new Set(SUBAGENT_INHERIT_DENY_TOOLS);
   const resolved: string[] = [];
+  if (!allowSkill) deny.add("Skill");
   for (const name of [...parentToolNames, ...declared]) {
     if (deny.has(name)) continue;
     if (resolved.includes(name)) continue;
     resolved.push(name);
   }
   return resolved;
+}
+
+export const MAX_SUBAGENT_SKILLS = 256;
+export const MAX_SUBAGENT_SKILL_ID_LENGTH = 256;
+
+/** Validate exact catalog IDs, never names or filesystem paths. Unknown IDs stay inert. */
+export function normalizeSubagentSkills(value: unknown): string[] {
+  if (!Array.isArray(value) || value.length > MAX_SUBAGENT_SKILLS) {
+    throw new Error(`skills must be a list of at most ${MAX_SUBAGENT_SKILLS} IDs`);
+  }
+  const ids: string[] = [];
+  for (const entry of value) {
+    if (typeof entry !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$/.test(entry.trim())) {
+      throw new Error(`skill IDs must be 1–${MAX_SUBAGENT_SKILL_ID_LENGTH} characters using letters, digits, dots, underscores, colons, slashes or dashes`);
+    }
+    const id = entry.trim();
+    if (!ids.includes(id)) ids.push(id);
+  }
+  return ids;
+}
+
+/** Intersect with the parent's live catalog; a selection never manufactures a skill. */
+export function resolveSubagentSkills<T extends { id: string }>(
+  definition: Pick<SubagentDefinition, "skills">,
+  parentSkills: readonly T[],
+): T[] {
+  const selected = definition.skills === undefined ? undefined : new Set(normalizeSubagentSkills(definition.skills));
+  return parentSkills.filter((skill) => selected === undefined || selected.has(skill.id));
 }
 
 /** Tools that can change the workspace; declaring one makes a delegate
@@ -417,6 +452,15 @@ export function parseSubagentDefinition(
     }
   }
 
+  let skills: string[] | undefined;
+  if (frontmatter.has("skills")) {
+    try {
+      skills = normalizeSubagentSkills(asList(frontmatter.get("skills")));
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : "invalid skills selection");
+    }
+  }
+
   const model = parseModelPin(frontmatter, errors);
   const fallbackModels: SubagentModelPin[] = [];
   for (const value of asList(frontmatter.get("fallbackmodels"))) {
@@ -487,6 +531,7 @@ export function parseSubagentDefinition(
       description,
       tools,
       ...(inheritTools ? { inheritTools: true } : {}),
+      ...(skills !== undefined ? { skills } : {}),
       ...(model ? { model } : {}),
       ...(fallbackModels.length ? { fallbackModels } : {}),
       ...(thinkingLevel ? { thinkingLevel } : {}),

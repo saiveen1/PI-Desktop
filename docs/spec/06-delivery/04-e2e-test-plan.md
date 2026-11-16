@@ -9981,6 +9981,9 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
   3. Delegate `Task` to builtin `explorer` in the same session.
   4. Confirm `worker` cannot call `Task`, `ToolSearch`, `asktool`, or
      `new_context`.
+  5. Edit a personal role's Skills selection: leave inherit-all on, then select
+     one skill, then zero skills, saving/reopening and delegating after each.
+     Also try a saved unknown ID and a forged load of a different parent skill.
 - **Expected**:
   - Step 1 round-trips `tools: inherit`; the document does not disappear from
     `agents.active` and save does not rewrite it to `Read, Glob, Grep`.
@@ -9999,6 +10002,17 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
   - With an empty skill catalog, fixed-tool delegates receive neither `Skill`
     nor `# Skills`. If the Host denies a load, the child receives an attributed
     tool error, not a successful body or a filesystem fallback.
+  - Omitted `skills` preserves the entire parent-available catalog; explicit
+    selections restrict both the direct system prompt and loader. Empty and
+    unknown-only selections offer neither `Skill` nor the catalog, including
+    under `tools: inherit`. Mixed known/unknown IDs load only known selected IDs.
+    Out-of-selection loads fail before reaching the Host; selected loads still
+    honor Host denial. No executable tool inheritance is added by skill selection.
+  - The role editor defaults to inherit-all, permits zero-or-more choices from
+    the existing workspace composer source, and preserves unavailable saved IDs
+    as removable entries. Saving `null` restores inherit-all; omitted RPC input
+    preserves a list. Invalid or unbounded IDs are rejected without changing the
+    saved document. Existing documents need no rewrite.
 - **Specs linked**: `03-runtime/03-tools-and-permissions.md` §10.2,
   `03-runtime/02-agent-runtime.md` §5f/§7.2b, ADR 0246, issue #215
 - **Acceptance**: E (tools & permissions), Security
@@ -10007,7 +10021,11 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
   - The bounded Skill exception is additionally covered by
     `packages/agent-runtime/src/delegation-skills-user-path.test.ts`: real parent
     and child Agent loops with synthetic provider and Host boundaries cover all
-    five builtins, a fixed-tool user definition, empty catalogs and Host denial.
+    five builtins, a fixed-tool user definition, empty catalogs, selected subsets,
+    empty/unknown selections, forged loads, inheritance deny rules and Host denial.
+    `apps/desktop/test/subagent-skills.test.mjs` covers editor save/copy semantics
+    and visible inherit/selection controls; host-core `user_subagents` covers
+    create/update/document/record round-trips. The live UI journey remains Draft.
 
 #### E2E-145: Tool results read as structured blocks, never JSON
 

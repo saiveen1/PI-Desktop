@@ -1260,8 +1260,18 @@ instead of the session mode (§5f.1). `tools: inherit` (alone or with assignable
 extras) opts a definition into the parent session's live tool catalog minus a
 deny list (ADR 0246 / D415). Fixed-tool definitions, including builtins, also
 receive `Skill` when present in the parent catalog, without any other implicit
-tool inheritance. The matching skill index follows the resolved tool set;
-bodies still load through the Host on demand. `idle-timeout` and `max-duration`
+tool inheritance. Optional frontmatter `skills` restricts the direct child
+catalog and loader to the selected exact IDs intersected with the parent's
+available skills; omission inherits all and `skills: []` selects none, even
+with `tools: inherit`. Unknown IDs remain inert; malformed IDs/lists are
+rejected, IDs are trimmed/deduplicated, and selections are bounded to 256 IDs
+of 1–256 ASCII characters (letters/digits plus `._:/-`, starting alphanumeric).
+The executor refuses non-selected or no-longer-available IDs before the Host
+load. Settings reuses the workspace-scoped composer skill source, keeps missing
+saved IDs removable, and saves `skills: null` to restore omission; absent RPC
+input preserves the list on update. Skill allocation never grants executable
+plugin/MCP tools or bypasses Host checks (ADR 0246). Bodies load on demand.
+`idle-timeout` and `max-duration`
 still parse for compatibility but no longer kill a run
 (D328). Only builtin and user definitions may declare a permission scope —
 both express a choice the user already made, whereas a project definition

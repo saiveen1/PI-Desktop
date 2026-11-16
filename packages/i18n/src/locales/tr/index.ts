@@ -3075,6 +3075,13 @@ importConfirm: "İçe aktarılan uzantılar ajan sürecinde, ajanın kendi araç
       errorTooBig: "Belge boyut sınırının üzerinde.",
     },
     subagents: {
+      skills: "Yükleyebileceği beceriler",
+      skillsInherit: "Üst ajanın kullanılabilir tüm becerilerini devral (varsayılan)",
+      skillsHint: "Sıfır veya daha fazla beceri seçmek için devralmayı kapatın. Seçenekler geçerli çalışma alanından gelir ve başlangıçta üst ajanın kullanabildikleriyle sınırlanır. Eklenti veya MCP araçları vermez.",
+      skillsEmpty: "Geçerli çalışma alanında kullanılabilir beceri yok. Boş seçim beceri yüklemeyi kapatır.",
+      skillsUnavailable: "{{id}} (burada kullanılamıyor)",
+      skillsLoadFailed: "Beceriler yüklenemedi. Yeniden denemek için düzenleyiciyi açın; kayıtlı seçimler değişmez.",
+      errorSkills: "Geçerli katalog kimlikleriyle en fazla 256 beceri seçin (her biri en fazla 256 karakter).",
       fallbackModels: "Yedek modeller",
       fallbackModelsHint: "Model yeniden denemeleri başarısız olursa sırayla denenir. Tamamlanan araç sonuçları korunur; Durdur tüm görevi iptal eder.",
       fallbackAdd: "Yedek model ekle",

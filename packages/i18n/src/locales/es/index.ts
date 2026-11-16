@@ -3045,6 +3045,13 @@ sklm: {
       "errorTooBig": "El documento supera el límite de tamaño."
     },
     "subagents": {
+      skills: "Habilidades que puede cargar",
+      skillsInherit: "Heredar todas las habilidades disponibles del agente principal (predeterminado)",
+      skillsHint: "Desactiva la herencia para elegir cero o más habilidades. Las opciones provienen del espacio de trabajo actual y se limitan a las disponibles al iniciar. No concede herramientas de plugins ni MCP.",
+      skillsEmpty: "No hay habilidades disponibles en el espacio de trabajo actual. Una selección vacía desactiva su carga.",
+      skillsUnavailable: "{{id}} (no disponible aquí)",
+      skillsLoadFailed: "No se pudieron cargar las habilidades. Abre de nuevo el editor para reintentar; las selecciones guardadas no cambian.",
+      errorSkills: "Selecciona como máximo 256 habilidades con ID de catálogo válidos (hasta 256 caracteres cada uno).",
       fallbackModels: "Modelos de respaldo",
       fallbackModelsHint: "Se prueban en orden cuando fallan los reintentos. Se conservan los resultados de herramientas; Detener cancela toda la tarea.",
       fallbackAdd: "Añadir modelo de respaldo",
