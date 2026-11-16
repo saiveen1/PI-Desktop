@@ -739,12 +739,25 @@ async function main() {
       });
       const ids = (messages) => messages.map((message) => message.id);
 
-      // One live branch, archived twice: the second archive must refresh the
-      // reference, not mint a variant.
+      // Only a real regenerate creates revision history; pager fields alone
+      // do not own a branch. Seed through the same Host path as the renderer.
+      const original = randomUUID();
+      const originalAnswer = randomUUID();
+      await append(user(original, "original prompt"));
+      await append(assistant(originalAnswer, "original answer"));
+      const ordinary = await host.call("session.saveActiveRevision", { sessionId });
+      const initialRegenerate = await host.call("session.truncateFrom", {
+        sessionId,
+        fromMessageId: original,
+      });
+
+      // One live regenerated branch, archived twice: the second archive must
+      // refresh the reference, not mint a variant.
       const first = randomUUID();
       const firstAnswer = randomUUID();
       const laterAnswer = randomUUID();
-      await append(user(first, "first prompt", first, 1, 1));
+      const initialStamp = initialRegenerate.revision;
+      await append(user(first, "first prompt", initialStamp.rootUserId, initialStamp.revisionCount, initialStamp.activeRevision));
       await append(assistant(firstAnswer, "first answer"));
       const archived = await host.call("session.saveActiveRevision", { sessionId });
       await append(assistant(laterAnswer, "a later answer on the same branch"));
@@ -753,46 +766,58 @@ async function main() {
       const references = readRevisions().filter((line) => line.type === "revision_live");
       const listed = await host.call("session.listRevisions", {
         sessionId,
-        rootUserId: first,
+        rootUserId: original,
       });
       const restored = await host.call("session.activateRevision", {
         sessionId,
-        rootUserId: first,
-        revisionIndex: 1,
-        prefix: [],
-      });
-
-      // A regenerate of that prompt discards the second turn, which takes the
-      // branch out of the transcript: it has to be stored in full first.
-      const second = randomUUID();
-      const secondAnswer = randomUUID();
-      await append(user(second, "second prompt", first, 2, 2));
-      await append(assistant(secondAnswer, "second answer"));
-      await host.call("session.saveActiveRevision", { sessionId });
-      const truncated = await host.call("session.truncateFrom", {
-        sessionId,
-        fromMessageId: second,
-      });
-      const storedForSecond = readRevisions().filter(
-        (line) => line.type === "revision" && line.revisionIndex === 2,
-      );
-      const backToFirst = await host.call("session.activateRevision", {
-        sessionId,
-        rootUserId: first,
-        revisionIndex: 1,
-        prefix: [],
-      });
-      const backToSecond = await host.call("session.activateRevision", {
-        sessionId,
-        rootUserId: first,
+        rootUserId: original,
         revisionIndex: 2,
         prefix: [],
       });
 
+      // Regeneration materializes the live branch before removing it. A later
+      // revision switch must also materialize the newly generated branch.
+      const truncated = await host.call("session.truncateFrom", {
+        sessionId,
+        fromMessageId: first,
+      });
+      const second = randomUUID();
+      const secondAnswer = randomUUID();
+      const nextStamp = truncated.revision;
+      await append(user(second, "second prompt", nextStamp.rootUserId, nextStamp.revisionCount, nextStamp.activeRevision));
+      await append(assistant(secondAnswer, "second answer"));
+      await host.call("session.saveActiveRevision", { sessionId });
+      const storedForFirst = readRevisions().filter(
+        (line) => line.type === "revision" && line.revisionIndex === 2,
+      );
+      const backToFirst = await host.call("session.activateRevision", {
+        sessionId,
+        rootUserId: original,
+        revisionIndex: 2,
+        prefix: [],
+      });
+      const storedForSecond = readRevisions().filter(
+        (line) => line.type === "revision" && line.revisionIndex === 3,
+      );
+      const backToSecond = await host.call("session.activateRevision", {
+        sessionId,
+        rootUserId: original,
+        revisionIndex: 3,
+        prefix: [],
+      });
+      const backToOriginal = await host.call("session.activateRevision", {
+        sessionId,
+        rootUserId: original,
+        revisionIndex: 1,
+        prefix: [],
+      });
+
       const checks = {
-        "archives the live branch as revision 1": archived.saved?.activeRevision === 1,
+        "ordinary turn completion creates no regenerate history": ordinary.saved === null,
+        "regenerate archives the original branch": initialRegenerate.discardedCount === 2 && initialStamp.activeRevision === 2,
+        "archives the live branch as revision 2": archived.saved?.activeRevision === 2 && archived.saved?.archived === true,
         "a second archive refreshes instead of minting": refreshed.saved?.archived === false,
-        "still one variant after the refresh": refreshed.saved?.revisionCount === 1,
+        "still two variants after the refresh": refreshed.saved?.revisionCount === 2,
         "the live branch was written as a reference": references.length >= 2,
         "the reference carries no payload": references.every(
           (line) => !("messages" in line) && !("turns" in line),
@@ -800,18 +825,23 @@ async function main() {
         "the reference does not grow with the branch": references.every(
           (line) => JSON.stringify(line).length < 200,
         ),
-        "one variant is listed": listed.revisions.length === 1,
-        "it counts the whole live branch": listed.revisions[0]?.messageCount === 3,
+        "both variants are listed": listed.revisions.length === 2,
+        "it counts the whole live branch": listed.revisions.find((revision) => revision.revisionIndex === 2)?.messageCount === 3,
         "the reference resolves to the branch as it stands": ids(restored.messages).join() ===
           [first, firstAnswer, laterAnswer].join(),
-        "the regenerate discarded the second turn": truncated.discardedCount === 2,
-        "the branch that left is stored in full": storedForSecond.some(
+        "regenerate discards the grown branch": truncated.discardedCount === 3,
+        "regenerate stores the grown branch in full": storedForFirst.some(
+          (line) => (line.messages ?? []).length === 3,
+        ),
+        "revision switching stores the new branch in full": storedForSecond.some(
           (line) => (line.messages ?? []).length === 2,
         ),
-        "variant 2 restores its own messages":
+        "variant 3 restores its own messages":
           ids(backToSecond.messages).join() === [second, secondAnswer].join(),
-        "variant 1 restores the grown branch":
+        "variant 2 restores the grown branch":
           ids(backToFirst.messages).join() === [first, firstAnswer, laterAnswer].join(),
+        "the original answer still restores":
+          ids(backToOriginal.messages).join() === [original, originalAnswer].join(),
       };
       const failed = Object.entries(checks)
         .filter(([, ok]) => !ok)
@@ -820,7 +850,7 @@ async function main() {
         "E2E-SESSION-revision-round-trip",
         failed.length === 0,
         failed.length === 0
-          ? `refs=${references.length} stored=${storedForSecond.length} v1=3 v2=2`
+          ? `refs=${references.length} v1=2 v2=3 v3=2`
           : `failed: ${failed.join("; ")}`,
       );
     }

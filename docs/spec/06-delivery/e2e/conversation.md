@@ -2433,6 +2433,13 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
 - **Milestone**: M5
 - **Status**: Unit-covered (`sessions::tests::save_and_activate_message_revision`, schema v4 migration); full scenario Draft
 
+- **Protocol smoke**: `scripts/e2e-smoke.mjs` creates history through
+  `session.truncateFrom`, preserves the original answer, grows a live branch,
+  regenerates again, and restores all three variants. Turn completion before
+  the first regeneration returns `saved: null`; pager fields alone are not a
+  substitute for Host-owned revision records. This covers the Host round trip,
+  not the renderer pager interaction.
+
 ## E2E-094: Active turns keep the lower transcript surface clear
 
 - **Preconditions**: A deterministic agent can emit thinking, tool start/end,
