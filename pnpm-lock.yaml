@@ -445,6 +445,9 @@ importers:
       '@pi-desktop/shared':
         specifier: workspace:*
         version: link:../shared
+      '@silvia-odwyer/photon-node':
+        specifier: 0.3.4
+        version: 0.3.4
       jiti:
         specifier: 2.7.0
         version: 2.7.0

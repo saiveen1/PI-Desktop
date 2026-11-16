@@ -109,6 +109,19 @@ folder/mixed-selection behavior. No system clipboard contents are changed.
   restoration, revision/fork, missing anchors and duplicate operation retries.
 - Unit/process gates also cover old-format files/outbox, corrupted references,
   failed conversion/drain, late callbacks and real sidecar restore errors.
+- Image-integrity regression: return a synthetic complete PNG, PNGs truncated
+  after IHDR/inside IDAT/inside IEND, corrupt pixels in a complete container, and
+  valid base64 that is not an image through Read, MCP and plugin results. Invalid
+  candidates give explicit `IMAGE_INVALID` diagnostics, live Read is an error,
+  and no invalid image block reaches model content. Replay corrupt user/tool
+  history without changing the original records. Complete JPEG/GIF/WebP remain
+  byte-identical; byte/pixel and vision limits remain in force. Repeated history
+  projections reuse bounded digest verdicts. Coverage: `image-admission.test.ts`,
+  `tool-image-input.test.ts`, `delegation-history.test.ts`; provider fetch is
+  stubbed, with no real model, private image, Desktop or profile access.
+- Packaged integrity decoding shares the existing Photon asset. The offline
+  `scripts/bundle-assets.test.mjs` builds outside the checkout, verifies WASM in
+  entry/chunk locations and loads the sidecar with only an unknown-method probe.
 - The original Windows incident did not identify the failed RPC method; this
   deterministic regression does not claim to recover that missing evidence.
 

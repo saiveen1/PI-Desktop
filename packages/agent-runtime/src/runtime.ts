@@ -3911,7 +3911,8 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
             ...(normalized.imageInput ? { imageInput: normalized.imageInput } : {}),
           };
         }
-        if (!result.ok) this.failedHostToolCalls.add(toolCallId);
+        const invalidImage = normalized.imageInput?.issues.some((issue) => issue.code === "IMAGE_INVALID") === true;
+        if (!result.ok || invalidImage) this.failedHostToolCalls.add(toolCallId);
         // A visualization fragment gets one cheap static check in its Write
         // result, so a broken card is fixed in one Edit instead of left blank.
         if (
@@ -3927,7 +3928,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           content: [{ type: "text", text }, ...imageBlocks],
           details,
           ...(terminateAfterMutationFailure ? { terminate: true } : {}),
-          isError: result.isError === true || result.ok === false,
+          isError: result.isError === true || result.ok === false || invalidImage,
         };
       };
       return {

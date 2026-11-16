@@ -15,7 +15,7 @@ const resizeWorkerBanner = [
   "const require = __piCreateRequire(import.meta.url);",
   "const __dirname = __piDirname(__piFileURLToPath(import.meta.url));",
 ].join(" ");
-const banner = "import { createRequire as __piCreateRequire } from 'node:module'; const require = __piCreateRequire(import.meta.url);";
+const banner = resizeWorkerBanner;
 
 async function bundleImageResizeAssets(directory) {
   const codingAgentEntry = fileURLToPath(
@@ -34,10 +34,10 @@ async function bundleImageResizeAssets(directory) {
     outfile: join(chunksDirectory, "image-resize-worker.js"),
     banner: { js: resizeWorkerBanner },
   });
-  await copyFile(
-    join(dirname(photonEntry), "photon_rs_bg.wasm"),
-    join(chunksDirectory, "photon_rs_bg.wasm"),
-  );
+  // Admission can live in the entry or a shared chunk; both need Photon's WASM.
+  for (const target of [directory, chunksDirectory]) {
+    await copyFile(join(dirname(photonEntry), "photon_rs_bg.wasm"), join(target, "photon_rs_bg.wasm"));
+  }
 }
 
 export async function writeBundlePackageManifest(directory) {

@@ -14245,7 +14245,7 @@ describe("DesktopAgentRuntime summary conversation key", () => {
 
 describe("toolResultFromUi image restoration (issue #1073)", () => {
   const timestamp = 1;
-  const IMAGE_DATA = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==";
+  const IMAGE_DATA = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAEElEQVR4AQEFAPr/AP8AAP8FAAH/+lyI0QAAAABJRU5ErkJggg==";
 
   const pngBase64 = (width: number, height: number): string => {
     const bytes = Buffer.alloc(33);

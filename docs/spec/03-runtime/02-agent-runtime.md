@@ -59,10 +59,19 @@ the transcript/UI; binary bytes are never stringified into model text.
 
 Every candidate image is admitted at the shared provider boundary: recognized
 PNG/JPEG/GIF/WebP bytes with matching MIME, the 10 MB byte ceiling, the 8000 px
-longest-edge ceiling, and the selected model's image-input capability. The
-model-visible content retains only admitted image blocks; malformed, oversized,
-and text-only-model candidates become an explicit text omission notice without
-failing the tool. A result that had candidates records
+longest-edge ceiling, complete raster decoding, and the selected model's
+image-input capability. Photon (the already pinned Rust/WASM decoder) validates
+pixels after byte/dimension checks; complete container boundaries also prevent
+permissive decoding of a truncated final chunk. Original bytes are never repaired,
+re-encoded, or replaced. A process-local cache holds at most 128 MIME/byte SHA-256
+digests and verdicts, not image data or decoded pixels, to avoid decoding the same
+history on every request. Successful decoder allocations are freed immediately.
+The model-visible content retains only admitted image blocks. Invalid or incomplete
+images produce `IMAGE_INVALID` and make a live tool result an error; oversized and
+text-only-model candidates retain their existing explicit omission behavior.
+Restored user/tool history is checked again at the final request projection with
+an explicit invalid-image notice, without rewriting or deleting stored content.
+No image block with invalid bytes is sent. A result that had candidates records
 `details.imageInput: { imageCount, includedCount, issues }`, where each issue
 is `{ index, code: "MODEL_NO_VISION" | "IMAGE_TOO_LARGE" | "IMAGE_INVALID", message }`.
 `index` is the zero-based candidate order and `includedCount` means prepared for

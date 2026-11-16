@@ -10,7 +10,7 @@ import { convertToLlm } from "./pi-runtime-messages.js";
 import { normalizeToolResultContent } from "./tool-result-content.js";
 import { activeToolSupportsImages, withToolImageCapability } from "./tool-image-context.js";
 
-const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==";
+const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAEElEQVR4AQEFAPr/AP8AAP8FAAH/+lyI0QAAAABJRU5ErkJggg==";
 const image = { type: "image" as const, data: PNG, mimeType: "image/png" };
 const raw = { path: "sample.png", text: "Image file sample.png", images: [image] };
 const cost = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
@@ -20,7 +20,7 @@ function model<A extends Api>(api: A, vision: boolean): Model<A> {
     input: vision ? ["text", "image"] : ["text"], reasoning: false, contextWindow: 128000, maxTokens: 1024, cost };
 }
 
-function runtime(vision: boolean) {
+function runtime(vision: boolean, source: unknown = raw) {
   return new DesktopAgentRuntime({
     sessionId: "image-fixture", mode: "agent", thinkingLevel: "off", onEvent() {},
     commandShell: { id: "bash", label: "Bash", dialect: "posix", available: true, isDefault: true },
@@ -34,7 +34,7 @@ function runtime(vision: boolean) {
         "provider.delegationSnapshot": undefined,
         "session.appendMessage": undefined,
         "todos.get": { sessionId: "image-fixture", todos: [] },
-        "tools.execute": { ok: true, content: raw },
+        "tools.execute": { ok: true, content: source },
       };
       if (!(method in values)) throw new Error(`Unexpected Host RPC: ${method}`);
       return values[method] as T;
@@ -72,6 +72,35 @@ describe("tool image input contract", () => {
         imageInput: { imageCount: 1, includedCount: 1, issues: [] } });
       expect(restored(JSON.parse(JSON.stringify(result))).content).toContainEqual(image);
     } finally { await owner.dispose(); }
+  });
+
+  it.each([true, false])("returns an explicit Read error for truncated PNG with vision=%s", async (vision) => {
+    const broken = { ...image, data: Buffer.from(PNG, "base64").subarray(0, 45).toString("base64") };
+    const source = { ...raw, images: [broken] };
+    const owner = runtime(vision, source);
+    try {
+      const result = await readTool(owner).execute("broken_read", { path: "sample.png" });
+      expect(result.isError).toBe(true);
+      const { agent } = owner as unknown as { agent: {
+        afterToolCall(context: { toolCall: { id: string } }): Promise<{ isError?: boolean } | undefined>;
+      } };
+      await expect(agent.afterToolCall({ toolCall: { id: "broken_read" } })).resolves.toEqual({ isError: true });
+      await expect(agent.afterToolCall({ toolCall: { id: "broken_read" } })).resolves.toBeUndefined();
+      expect(result.content.some((block) => block.type === "image")).toBe(false);
+      expect(result.content).toContainEqual({ type: "text", text: expect.stringContaining("image input is invalid") });
+      expect(result.details).toMatchObject({ images: [broken], imageCount: 0,
+        imageInput: { includedCount: 0, issues: [{ index: 0, code: "IMAGE_INVALID" }] } });
+      expect(source.images).toEqual([broken]);
+      expect(convertToLlm([restored(result)]).some((message) => Array.isArray(message.content) && message.content.some((block) => block.type === "image"))).toBe(false);
+    } finally { await owner.dispose(); }
+  });
+
+  it.each(["host", "mcp", "plugin"])("keeps corrupt %s tool images out of model content", (shape) => {
+    const broken = { ...image, data: Buffer.from(PNG, "base64").subarray(0, 45).toString("base64") };
+    const source = shape === "host" ? { images: [broken] } : shape === "mcp" ? { content: [broken] } : [broken];
+    const result = normalizeToolResultContent(source, true);
+    expect(result.content.some((block) => block.type === "image")).toBe(false);
+    expect(result.imageInput).toMatchObject({ includedCount: 0, issues: [{ code: "IMAGE_INVALID" }] });
   });
 
   it.each([true, false])("uses the delegate's capability instead of a %s-vision parent's", async (parentVision) => {

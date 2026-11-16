@@ -50,11 +50,33 @@ it("bundles a runnable image-resize worker and its Photon WASM asset", { timeout
   const bundle = join(root, "bundle");
 
   try {
+    console.info("Building isolated sidecar and image decoder assets");
     await bundleAgentRuntime(bundle);
+    console.info("Bundle complete; checking decoder loading and resize worker");
 
     const workerPath = join(bundle, "chunks", "image-resize-worker.js");
     const wasm = await readFile(join(bundle, "chunks", "photon_rs_bg.wasm"));
     expect(wasm.byteLength).toBeGreaterThan(8);
+    expect(await readFile(join(bundle, "photon_rs_bg.wasm"))).toEqual(wasm);
+
+    // Loading the emitted entry exercises eager admission-decoder initialization
+    // with no node_modules, session creation, profile reads or provider calls.
+    const sidecar = new Worker(join(bundle, "sidecar.js"), {
+      stdin: true, stdout: true, stderr: true,
+      env: { ...process.env, PI_DESKTOP_PROXY_JSON: "" },
+    });
+    try {
+      const output = once(sidecar.stdout, "data");
+      sidecar.stdin.end('{"jsonrpc":"2.0","id":1,"method":"imageIntegrityFixtureUnknown"}\n');
+      const [response] = await Promise.race([
+        output,
+        once(sidecar, "error").then(([error]) => { throw error; }),
+        once(sidecar, "exit").then((result) => { throw new Error(`Sidecar exited before responding: ${result}`); }),
+      ]);
+      expect(JSON.parse(String(response))).toMatchObject({ id: 1, error: { code: -32601 } });
+    } finally {
+      await sidecar.terminate();
+    }
 
     const worker = new Worker(workerPath);
     try {

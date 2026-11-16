@@ -13,6 +13,7 @@ import {
   omittedImageNotice,
   probeBase64ImageDimensions,
 } from "@pi-desktop/shared";
+import { imageDecodesCompletely } from "./image-integrity.js";
 
 export type ImageInputIssueCode =
   | "MODEL_NO_VISION"
@@ -65,7 +66,7 @@ function imageMimeTypeFromBase64(data: string): string | undefined {
 /**
  * Admit one untrusted image candidate at the same boundary every provider
  * request crosses. It accepts only recognized PNG, JPEG, GIF, and WebP headers
- * with a matching raster MIME type, then applies the shared byte and pixel limits.
+ * with a matching raster MIME type, then applies byte/pixel limits and full decoding.
  */
 export function admitImageInput(
   candidate: unknown,
@@ -111,6 +112,9 @@ export function admitImageInput(
         message: omittedImageNotice(dimensions),
       },
     };
+  }
+  if (!imageDecodesCompletely(data, mimeType, dimensions)) {
+    return { issue: { code: "IMAGE_INVALID", message: IMAGE_INVALID_NOTICE } };
   }
   if (!supportsVision) {
     return { issue: { code: "MODEL_NO_VISION", message: MODEL_NO_VISION_NOTICE } };

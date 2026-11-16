@@ -1002,7 +1002,7 @@ describe("rebuildChainsFromTranscript settled copies and replay (ADR 0279)", () 
 describe("chainRowsToMessages tool result content", () => {
   // A real PNG keeps restore parity meaningful: image bytes must remain on a
   // provider image block rather than becoming JSON text.
-  const imageData = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==";
+  const imageData = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAEElEQVR4AQEFAPr/AP8AAP8FAAH/+lyI0QAAAABJRU5ErkJggg==";
 
   function resumedToolResult(row: UiMessage) {
     const messages = chainRowsToMessages(
