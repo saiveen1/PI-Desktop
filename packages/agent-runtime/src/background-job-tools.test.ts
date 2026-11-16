@@ -106,6 +106,37 @@ describe("session job controls", () => {
     expect(delegates.stop.execute).not.toHaveBeenCalled();
   });
 
+  it.each([["other"], ["process"], null, "process"].map(delegationIds => ({ delegationIds })))(
+    "keeps an explicit Bash target authoritative over irrelevant delegation selectors (%j)", async ({ delegationIds }) => {
+      const { wait, stop, dispatch, delegates, snapshot } = fixture();
+      const args = { job: snapshot.job, delegationIds };
+      for (const tool of [wait, stop]) {
+        expect(tool.prepareArguments?.(args)).toEqual({ job: snapshot.job });
+        await tool.execute("explicit-bash", args);
+      }
+      expect(dispatch).toHaveBeenCalledWith("backgroundJobs.wait", { sessionId: "owner", id: "process", timeoutMs: 0 });
+      expect(dispatch).toHaveBeenCalledWith("backgroundJobs.stop", { sessionId: "owner", id: "process", timeoutMs: 1000 });
+      expect(delegates.wait.execute).not.toHaveBeenCalled();
+      expect(delegates.stop.execute).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["all", "any"])("normalizes redundant Bash %s defaults without changing the source arguments", mode => {
+    const { wait, snapshot } = fixture();
+    const args = { job: snapshot.job, delegationIds: [], mode, minCompleted: 1, timeoutSeconds: 12 };
+    expect(wait.prepareArguments?.(args)).toEqual({ job: snapshot.job, timeoutSeconds: 12 });
+    expect(args).toEqual({ job: snapshot.job, delegationIds: [], mode, minCompleted: 1, timeoutSeconds: 12 });
+  });
+
+  it("does not dispatch an already aborted stop with redundant Bash selectors", async () => {
+    const { stop, dispatch, snapshot } = fixture();
+    const controller = new AbortController();
+    controller.abort();
+    await expect(stop.execute("stop", { job: snapshot.job, delegationIds: [], mode: "all", minCompleted: 1 },
+      controller.signal)).rejects.toMatchObject({ errorCode: "TOOL_ABORTED" });
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
   it("returns running at the deadline and never requests a stop", async () => {
     vi.useFakeTimers();
     const { wait, dispatch, snapshot } = fixture();
@@ -120,6 +151,30 @@ describe("session job controls", () => {
     expect(dispatch.mock.calls.map(call => call[0])).not.toContain("backgroundJobs.stop");
   });
 
+  it.each(["capabilities", "stop"].flatMap(stalled => [undefined, "all", "any"].map(mode => ({ stalled, mode }))))(
+    "abandons pending $stalled with $mode defaults without dispatching stop again", async ({ stalled, mode }) => {
+      const { stop, dispatch, snapshot } = fixture();
+      let finishRpc!: () => void;
+      dispatch.mockImplementation(async method => method.endsWith(stalled)
+        ? new Promise((resolve, reject) => {
+          finishRpc = stalled === "capabilities"
+            ? () => resolve({ version: 1, supported: true })
+            : () => reject(new Error("late transport failure"));
+        })
+        : { version: 1, supported: true });
+      const controller = new AbortController();
+      const stopping = stop.execute("stop", { job: snapshot.job, ...(mode ? { delegationIds: [], mode, minCompleted: 1 } : {}) }, controller.signal);
+      const assertion = expect(stopping).rejects.toMatchObject({ errorCode: "TOOL_ABORTED" });
+      await vi.waitFor(() => expect(dispatch).toHaveBeenCalledWith(`backgroundJobs.${stalled}`, expect.anything()));
+      controller.abort();
+      await assertion;
+      finishRpc();
+      await new Promise<void>(resolve => setImmediate(resolve));
+      expect(dispatch.mock.calls.map(([method]) => method)).toEqual(stalled === "capabilities"
+        ? ["backgroundJobs.capabilities"] : ["backgroundJobs.capabilities", "backgroundJobs.stop"]);
+    },
+  );
+
   it("abandons an in-flight wait promptly without stopping, and observes a late failure", async () => {
     const { wait, dispatch, snapshot } = fixture();
     let fail: (error: Error) => void = () => {};
@@ -128,6 +183,37 @@ describe("session job controls", () => {
       : new Promise((_, reject) => { fail = reject; }));
     const controller = new AbortController();
     const result = wait.execute("wait", { job: snapshot.job }, controller.signal);
+    const assertion = expect(result).rejects.toMatchObject({ errorCode: "TOOL_ABORTED" });
+    await vi.waitFor(() => expect(dispatch).toHaveBeenCalledWith("backgroundJobs.wait", expect.anything()));
+    controller.abort();
+    await assertion;
+    fail(new Error("late transport failure"));
+    await Promise.resolve();
+    expect(dispatch.mock.calls.map(call => call[0])).not.toContain("backgroundJobs.stop");
+  });
+
+  it.each(["all", "any"])("redundant %s defaults preserve the wait deadline without stopping", async mode => {
+    vi.useFakeTimers();
+    const { wait, dispatch, snapshot } = fixture();
+    dispatch.mockImplementation(async method => {
+      if (method.endsWith("capabilities")) return { version: 1, supported: true };
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      return { ...snapshot, state: "running", exitCode: null };
+    });
+    const result = wait.execute("wait", { job: snapshot.job, delegationIds: [], mode, minCompleted: 1, timeoutSeconds: 2 });
+    await vi.advanceTimersByTimeAsync(2000);
+    expect((await result).details).toMatchObject({ status: "timeout", job: { state: "running", exitCode: null } });
+    expect(dispatch.mock.calls.map(call => call[0])).not.toContain("backgroundJobs.stop");
+  });
+
+  it.each(["all", "any"])("redundant %s defaults preserve cancellation and late-failure handling", async mode => {
+    const { wait, dispatch, snapshot } = fixture();
+    let fail: (error: Error) => void = () => {};
+    dispatch.mockImplementation(async method => method.endsWith("capabilities")
+      ? { version: 1, supported: true }
+      : new Promise((_, reject) => { fail = reject; }));
+    const controller = new AbortController();
+    const result = wait.execute("wait", { job: snapshot.job, delegationIds: [], mode, minCompleted: 1 }, controller.signal);
     const assertion = expect(result).rejects.toMatchObject({ errorCode: "TOOL_ABORTED" });
     await vi.waitFor(() => expect(dispatch).toHaveBeenCalledWith("backgroundJobs.wait", expect.anything()));
     controller.abort();

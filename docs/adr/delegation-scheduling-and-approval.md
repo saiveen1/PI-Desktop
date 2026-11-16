@@ -123,7 +123,7 @@ remain user-controlled, with no self-modifying ranking or claimed optimality.
 ## Verification
 
 The acceptance map is
-[E2E-DELEGATION-scheduling-and-model-approval](../spec/06-delivery/04-e2e-test-plan.md#e2e-delegation-scheduling-and-model-approval).
+[E2E-DELEGATION-scheduling-and-model-approval](../spec/06-delivery/e2e/plugins-and-extensions.md#e2e-delegation-scheduling-and-model-approval).
 Policy/contracts cover candidate authority, action shapes and saved defaults;
 runtime user paths cover steering during retry, one continuation/finalization,
 exact selection, current-policy admission, auto-only timeout and retained tools.

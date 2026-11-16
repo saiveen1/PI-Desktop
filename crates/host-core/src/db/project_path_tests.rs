@@ -87,7 +87,7 @@ fn assert_schema_combination_upgrade(version: i64, history_index: bool, repaired
         schema_combination_has_index(db.conn()),
         "schema {version} must gain the history index"
     );
-    assert_eq!(schema_combination_version(db.conn()), 30);
+    assert_eq!(schema_combination_version(db.conn()), SCHEMA_VERSION);
     assert_eq!(
         schema_combination_owners(db.conn(), "sessions"),
         vec![101, 101]
@@ -136,7 +136,7 @@ fn assert_schema_combination_upgrade(version: i64, history_index: bool, repaired
     drop(db);
     let bytes = std::fs::read(&backup_path).unwrap();
     let db = Database::open(&file).unwrap();
-    assert_eq!(schema_combination_version(db.conn()), 30);
+    assert_eq!(schema_combination_version(db.conn()), SCHEMA_VERSION);
     assert_eq!(
         std::fs::read(backup_path).unwrap(),
         bytes,
@@ -149,7 +149,28 @@ fn schema_combination_fresh_has_history_index() {
     let dir = tempfile::tempdir().unwrap();
     let db = Database::open_in_dir(dir.path()).unwrap();
     assert!(schema_combination_has_index(db.conn()));
-    assert_eq!(schema_combination_version(db.conn()), 30);
+    assert_eq!(schema_combination_version(db.conn()), SCHEMA_VERSION);
+}
+
+#[test]
+fn schema_combination_upstream_v30_or_newer_gains_history_index() {
+    for version in [30, 31, SCHEMA_VERSION] {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("pi.sqlite");
+        let db = Database::open(&path).unwrap();
+        db.conn()
+            .execute_batch("DROP INDEX idx_messages_task_history;")
+            .unwrap();
+        db.conn()
+            .pragma_update(None, "user_version", version)
+            .unwrap();
+        drop(db);
+        for _ in 0..2 {
+            let db = Database::open(&path).unwrap();
+            assert_eq!(schema_combination_version(db.conn()), SCHEMA_VERSION);
+            assert!(schema_combination_has_index(db.conn()));
+        }
+    }
 }
 
 #[test]

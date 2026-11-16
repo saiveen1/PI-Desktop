@@ -1,6 +1,6 @@
-# Configurable provider transport idle policy
+# ADR: Configurable provider transport idle policy
 
-Status: Accepted for personal beta implementation, 2026-11-12.
+- Status: Accepted for personal beta implementation, 2026-11-12.
 
 ## Context
 

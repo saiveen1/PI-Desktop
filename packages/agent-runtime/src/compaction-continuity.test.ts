@@ -4,6 +4,7 @@ import type { AssistantMessage, ToolResultMessage, UserMessage } from "@earendil
 import { selectActiveTurnTail } from "./compaction-continuity.js";
 import { estimateContextTokens, estimateTokens } from "./pi-runtime-estimates.js";
 import { replayRetainedTail } from "./compaction-tail.js";
+import { estimateOutputCapInputTokens } from "./output-cap.js";
 
 const user = (content: string): UserMessage => ({ role: "user", content, timestamp: 1 });
 const assistant = (ids: string[], text = "Apply once"): AssistantMessage => ({
@@ -84,6 +85,21 @@ describe("selectActiveTurnTail", () => {
     expect(JSON.stringify(tail[0])).toContain("goal-start");
     expect(JSON.stringify(tail[0])).toContain("goal-end");
     expect(JSON.stringify(tail)).toContain("APPLIED receipt=17");
+  });
+
+  it.each(["中文", "かな", "한글"])("bounds %s goals and execution receipts using the request estimate", text => {
+    const messages = [user(`goal-start ${text.repeat(10_000)} goal-end`), assistant(["applied"]),
+      result("applied", `receipt-start ${text.repeat(10_000)} APPLIED receipt=17`)];
+    const tail = selectActiveTurnTail(messages, 2_000, 20_000);
+    const requestTail = tail.map(message => ({
+      role: message.role, content: "content" in message ? message.content : undefined,
+    }));
+    expect(estimateOutputCapInputTokens({ messages: requestTail })).toBeLessThanOrEqual(2_000);
+    expect(cost(tail)).toBeLessThanOrEqual(2_000);
+    expect(tail.map(message => message.role)).toEqual(["user", "assistant", "toolResult"]);
+    expect(JSON.stringify(tail[0])).toContain("goal-end");
+    expect(JSON.stringify(tail[2])).toContain("APPLIED receipt=17");
+    expect(replayRetainedTail(JSON.parse(JSON.stringify(tail)))).toEqual(tail);
   });
 
   it("preserves recent evidence through a second checkpoint without duplicate calls", () => {

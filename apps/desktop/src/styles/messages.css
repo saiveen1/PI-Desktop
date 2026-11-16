@@ -2085,6 +2085,13 @@
    `--ds-tile` card belongs only to `.tool-activity-group.has-subagents`
    (D319) and the nested `.subagent-run`. */
 
+.message-output-notice {
+  margin: 12px 0 0;
+  color: var(--ds-warning);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
 .message-error {
   /* The message column owns the dynamic chat width; do not add a second cap. */
   width: 100%;
@@ -2553,7 +2560,6 @@
     padding-inline-start: 42px;
   }
 }
-
 
 /* A tool row claims the conversation column whatever its parent displays as:
    the disclosure header is the row's only width-bearing box. */

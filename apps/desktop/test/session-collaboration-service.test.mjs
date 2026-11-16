@@ -20,7 +20,9 @@ function load(relative, imports) {
   return module.exports;
 }
 
-const shared = { ...await import("@pi-desktop/shared"), ...load("../../../packages/shared/src/delegation-policy.ts", {}) };
+const shared = { ...await import("@pi-desktop/shared"), ...load("../../../packages/shared/src/delegation-policy.ts", {
+  "./delegation-limits.js": load("../../../packages/shared/src/delegation-limits.ts", {}),
+}) };
 // The real model helpers, not a stub: the opt-in flag has to survive the whole
 // way from `providers.list` through the plugin model list into the spawn
 // decision, and a hand-written stub would prove only the last step.

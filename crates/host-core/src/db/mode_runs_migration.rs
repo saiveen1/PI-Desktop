@@ -82,6 +82,7 @@ fn reconcile_v29_tx(tx: &Transaction<'_>) -> Result<()> {
     tx.execute_batch(MODE_RUNS_SCHEMA)?;
     super::project_path_migration::reconcile_project_paths(tx, None)?;
     tx.execute_batch(super::delegation_history_migration::DDL)?;
+    super::mode_run_elapsed_migration::initialize(tx)?;
     tx.pragma_update(None, "user_version", 30i64)?;
     Ok(())
 }
@@ -160,7 +161,7 @@ mod tests {
 
         let db = Database::open(&path).unwrap();
         assert_eq!(version(db.conn()), SCHEMA_VERSION);
-        assert_eq!(SCHEMA_VERSION, 30);
+        assert_eq!(SCHEMA_VERSION, 32);
         assert!(has_column(db.conn(), "sessions", "mode_snapshot_hash"));
         for table in ["mode_snapshots", "mode_runs", "mode_gate_results"] {
             assert!(has_table(db.conn(), table), "{table}");
@@ -344,7 +345,7 @@ mod tests {
 
             for _ in 0..2 {
                 let db = Database::open(&path).unwrap();
-                assert_eq!(version(db.conn()), 30);
+                assert_eq!(version(db.conn()), SCHEMA_VERSION);
                 assert!(has_history_index(db.conn()));
                 assert!(has_column(db.conn(), "sessions", "mode_snapshot_hash"));
                 let kv: Vec<(String, String, String)> = db

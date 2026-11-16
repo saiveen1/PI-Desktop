@@ -2,6 +2,18 @@ import type { ChangelogEntry } from "./changelog.js";
 
 export const trEntries: ChangelogEntry[] = [
   {
+    version: "0.23.0",
+    highlights: [
+      "OpenAI Fast modunu model başına açın ve öncelikli hizmet istemek için konuşmada /fast kullanın; bu, abonelik limitlerini daha hızlı tüketebilir veya token başına maliyeti artırabilir.",
+      "Satır içi görselleştirmeler yeniden kullanılabilir grafik yardımcılarıyla daha hızlı yüklenir; başarısız betikler artık boş kartlar yerine düzeltmeye yardımcı olacak hatalar gösterir.",
+      "MCP sunucularını seçili projenin klasöründe test edin; başarılı bir testten sonra proje oturumları boşta kalan başarısız bağlantıları kurtarabilir.",
+      "Aracı çalışma zamanı yeniden oluşturulduğunda konuşma geçmişi, sağlayıcının akıl yürütme içeriğini ve Gemini işlev çağrısı imzalarını sonraki istek için korur.",
+      "Elle veya otomatik bağlam sıkıştırması tamamlanır tamamlanmaz bağlam halkası sıkıştırılmış tahmini gösterir.",
+      "Çince IME kullanırken eğik çizgi komutları, taslağı koruyarak metin girişinin tamamlanmasını bekler ve yinelenen eğik çizgiyi önler.",
+      "Yeniden oluşturulan istemler, arşivleri yüklenen geçmişin dışında tamamlandığında en son yanıttan sonraki doğru konumlarında kalır.",
+    ],
+  },
+  {
     version: "0.22.0",
     date: "2026-11-05",
     highlights: [
@@ -17,6 +29,15 @@ export const trEntries: ChangelogEntry[] = [
       "Yüklü uygulamaları çalışma panelinden başlatın: gruplanmış, aranabilir bir ızgara; sabitlenebilir kutucuklar ve eksiksiz çevrilmiş etiketler.",
       "OpenAI'nin öncelikli hizmet katmanı için /fast gönderin ve zamanlanmış görev özelliği varsayılan olarak açık gelsin.",
       "Ajan yeniden denemeleri artık faturalandırma, kota ve API anahtarı hatalarını doğru sınıflandırır; temsilci araç görsellerini ve MCP kaynaklarını korur ve bozuk araç çağrılarından sonra oturumu kurtarır.",
+      "Pi 1.5 aracı motorunu kullanın ve kullanım alanlarında tur ile oturum maliyetlerini inceleyin.",
+      "Daha güvenli bağlam sıkıştırma, görüntü işleme ve araç yürütmeyle uzun konuşmaları kararlı tutun.",
+      "Proje düzenini ve zamanlanmış görev düzenleyicilerini güvenilir biçimde kurtarın; MCP yapılandırmalarını seçili projeye kaydedin.",
+      "Açık izinler ve görünür imleçle bilgisayar kullanımı üzerinden masaüstü uygulamalarını aracıya kontrol ettirin.",
+      "Yüklü uygulamaları ve eklenti komutlarını tek, gruplandırılmış başlatıcıdan açın; sık kullandıklarınızı sabitleyin.",
+      "Tamamlanan etkinlikleri daraltın; eski geçmiş yüklenirken en yeni iletilere daha akıcı biçimde dönün.",
+      "Klasörleri Composer'a dizin referansları olarak yapıştırın ve dizin bağlantılarını doğrudan dosya yöneticisinde açın.",
+      "Yeniden tasarlanan iki panelli model seçicisinde model seçin ve sağlayıcı ayarlarına doğrudan geçin.",
+      "@agent etiketiyle bir istemi adlandırılmış bir alt ajana yönlendirin.",
     ],
   },
   {

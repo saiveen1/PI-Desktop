@@ -12,6 +12,7 @@ import { subagentTaskDeclaration } from "./delegation-tool.js";
 import { parseSubagentTerminalDiagnostics } from "./subagent-terminal.js";
 import { buildDelegationModelTool } from "./delegation-model-tool.js";
 import { resolveDelegationRunPolicy, describeDelegationRunPolicy, isDelegationRunPolicySnapshot, type DelegationRunPolicy, type DelegationSettings, type DelegationApprovalDecision, DelegationRequestError, resolveUnknownUpstreamRetryLimit } from "@pi-desktop/shared";
+import { appendLocalFileReferenceContext } from "@pi-desktop/shared";
 import { buildJobTools } from "./background-job-tools.js";
 import {
   mutationFailureKey, mutationTerminationAdvice, mutationTerminationMessage, mutationTerminationCode,
@@ -393,9 +394,10 @@ function promptText(input: RuntimePrompt): string {
   const references = (input.attachments ?? [])
     .map((attachment) => sessionReferenceBlock(attachment))
     .filter((block): block is string => block !== null);
-  return references.length
+  const text = references.length
     ? `${input.text}\n\n${references.join("\n\n")}`.trim()
     : input.text;
+  return appendLocalFileReferenceContext(text, input.attachments ?? []);
 }
 
 /** One provider image block for an attachment whose bytes crossed this turn. */
@@ -451,6 +453,7 @@ function runtimeAttachmentFromMessage(
     kind: attachment.kind,
     ...(attachment.mimeType ? { mimeType: attachment.mimeType } : {}),
     ...(attachment.size !== undefined ? { size: attachment.size } : {}),
+    ...(attachment.localReference ? { localReference: attachment.localReference } : {}),
     ...(attachment.text ? { text: attachment.text } : {}),
     // Recorded placement: the message content names this image at that spot, so
     // the restored prompt keeps the block there too.
@@ -2122,7 +2125,7 @@ export class DesktopAgentRuntime {
 
     this.transcriptHistory = [...(opts.history ?? [])];
     this.delegationRecovery = new DelegationRecovery(this.transcriptHistory);
-    this.fullEntries = this.historyToEntries(this.transcriptHistory);
+    this.fullEntries = this.historyToEntries(this.transcriptHistory, opts.compaction?.throughMessageId);
     this.uniqueToolCalls = createToolCallIdentity(this.fullEntries.map((entry) => entry.message));
     this.activeCompaction = opts.compaction;
     this.delegationChains.hydrate(
@@ -3170,7 +3173,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
    * turns after a restart. Losing either (the pre-D120 tool behavior)
    * collapsed a reseeded session to bare chat text. Failed assistant turns
    * stay transcript-only. */
-  private historyToEntries(history: UiMessage[]): MessageEntry[] {
+  private historyToEntries(history: UiMessage[], compactionThroughMessageId?: string): MessageEntry[] {
     const api = apiBindingForProviderModel(this.provider).api;
     const deepSeekCompletionsReplay =
       api === "openai-completions" &&
@@ -3198,7 +3201,16 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     let toolCarrier: AssistantMessage | undefined;
     // Function-call signatures of the carrier's row, restored by call id.
     let carrierToolSignatures = new Map<string, string>();
+    let compactedCarrier: AssistantMessage | undefined;
+    let previousRowId: string | undefined;
     for (const m of orderSystemRows(history)) {
+      // A carrier before this boundary is removed by context compaction. Tool
+      // rows after it must reconstruct their calls on a surviving carrier.
+      if (compactionThroughMessageId && previousRowId === compactionThroughMessageId) {
+        compactedCarrier = toolCarrier;
+        toolCarrier = undefined;
+      }
+      previousRowId = m.id;
       // Subagent rows belong to the transcript and to review, never to the
       // parent's model context (ADR 0062): the parent only ever saw the `Task`
       // report, and replaying a delegate's messages would both contradict that
@@ -3212,6 +3224,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
         append(m.id, this.systemJournal.restore(m));
       } else if (m.role === "user") {
         toolCarrier = undefined;
+        compactedCarrier = undefined;
         const attachments = (m.attachments ?? []).map((attachment) =>
           runtimeAttachmentFromMessage(
             attachment,
@@ -3231,6 +3244,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
         append(m.id, { role: "user", content, timestamp });
       } else if (m.role === "assistant") {
         toolCarrier = undefined;
+        compactedCarrier = undefined;
         // Failed provider responses belong in the transcript for diagnosis,
         // but must never become model context on the next turn.
         if (m.status === "error" || m.isError || m.error) continue;
@@ -3296,15 +3310,16 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           toolCarrier = {
             role: "assistant",
             content: [],
-            api,
-            provider: this.model.provider,
-            model: this.model.id,
+            api: compactedCarrier?.api ?? api,
+            provider: compactedCarrier?.provider ?? this.model.provider,
+            model: compactedCarrier?.model ?? this.model.id,
             usage: usageToPi(undefined),
             stopReason: "toolUse",
             timestamp,
           };
           append(`${m.id}:carrier`, toolCarrier);
-          carrierToolSignatures = new Map();
+          if (!compactedCarrier) carrierToolSignatures = new Map();
+          compactedCarrier = undefined;
         }
         const thoughtSignature = carrierToolSignatures.get(m.toolCallId);
         toolCarrier.content.push({
@@ -3320,6 +3335,8 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     }
     return entries.filter(
       (entry) =>
+        // An empty call-only boundary still anchors the persisted checkpoint.
+        entry.id === compactionThroughMessageId ||
         entry.message.role !== "assistant" || entry.message.content.length > 0,
     );
   }
@@ -4436,6 +4453,13 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       // a graceful Stop does.
       endTurn: () => {
         this.gracefulStopRequested = true;
+      },
+      failTurn: (failure) => {
+        this.terminateParentTurn();
+        this.gracefulStopRequested = true;
+        const error = { ...classifyAgentError(new Error(failure.message)), code: failure.code, retriable: false };
+        this.finalizeCurrentAssistant("error", error);
+        this.emit({ type: "error", error });
       },
     });
   }
@@ -9272,6 +9296,10 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
             modelId: this.provider.modelId,
             providerId: this.provider.id,
             responseModelId: concreteResponseModel(event.message, this.provider.modelId),
+            // Tool-call truncation is recovered by Pi; annotate only a visible
+            // text answer, without turning the settled run into an error.
+            outputTruncated: !failed && !aborted && stopReason === "length" &&
+              Boolean(responseText.trim()) && !messageRequestsTools(event.message) || undefined,
             ...(usage ? { usage } : {}),
             ...(responseDurationMs !== undefined ? { responseDurationMs } : {}),
             ...(streamMs !== undefined ? { modelStreamDurationMs } : {}),

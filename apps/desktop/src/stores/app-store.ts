@@ -183,6 +183,7 @@ export const useAppStore = create<AppState>((set, get) => {
     messageErrorFromUnknown,
     assistantErrorMessage,
     materializeDraftSession: materializeDraftSessionInternal,
+    flushPendingSessionConfiguration,
   }),
 
   ...createTranscriptSlice({

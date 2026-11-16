@@ -31,6 +31,8 @@ mod harness_regression_tests;
 pub mod hashline;
 pub mod ignore_rules;
 mod image_dimensions;
+#[cfg(any(unix, test))]
+mod process_group;
 #[cfg(all(windows, test))]
 mod runner_encoding_tests;
 mod runner_environment;
@@ -233,19 +235,9 @@ impl ProcessOwnership {
 
     #[cfg(unix)]
     fn terminate(&self, pid: u32) -> Result<(), String> {
-        if pid == 0 {
-            return Err("shell runner has no process group".into());
-        }
-        let result = unsafe { libc::killpg(pid as libc::pid_t, libc::SIGKILL) };
-        if result == 0 {
-            return Ok(());
-        }
-        let error = io::Error::last_os_error();
-        if error.raw_os_error() == Some(libc::ESRCH) {
-            Ok(())
-        } else {
-            Err(format!("killpg failed for the shell runner: {error}"))
-        }
+        process_group::signal(pid, libc::SIGKILL)
+            .map(|_| ())
+            .map_err(|error| format!("killpg failed for the shell runner: {error}"))
     }
 
     #[cfg(all(not(windows), not(unix)))]
@@ -264,6 +256,30 @@ impl ProcessOwnership {
 
     #[cfg(not(windows))]
     fn close_now(&mut self) {}
+
+    /// On macOS distinguish a delivered stop from an already absent group.
+    pub(crate) fn request_background_stop(&mut self, pid: u32) -> Result<bool, String> {
+        #[cfg(target_os = "macos")]
+        {
+            process_group::signal(pid, libc::SIGKILL)
+                .map_err(|error| format!("killpg failed for the shell runner: {error}"))
+        }
+        #[cfg(not(target_os = "macos"))]
+        self.terminate_fail_closed(pid).map(|()| true)
+    }
+
+    pub(crate) async fn cleanup_after_stopped_exit(&mut self, pid: u32) -> Result<(), String> {
+        #[cfg(target_os = "macos")]
+        {
+            process_group::confirm_cleanup(process_group::signal(pid, libc::SIGKILL), || {
+                process_group::signal(pid, 0)
+            })
+            .await
+            .map_err(|error| format!("killpg failed for the shell runner: {error}"))
+        }
+        #[cfg(not(target_os = "macos"))]
+        self.terminate_fail_closed(pid)
+    }
 
     pub(crate) fn terminate_fail_closed(&mut self, pid: u32) -> Result<(), String> {
         match self.terminate(pid) {

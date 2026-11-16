@@ -1,5 +1,4 @@
-# 04. Data Storage (Schema v30)
-
+# 04. Data Storage (Schema v32)
 
 ### Project path aliases (#2148)
 
@@ -68,11 +67,16 @@ missing mode tables, `sessions.mode_snapshot_hash` and history index, and repeat
 project-path reconciliation in one transaction before stamping version 30.
 Existing mode snapshots, runs, gates, approvals, delegation policy/history,
 project/session groups and transcript bytes are preserved. A failed step rolls
-back its DDL, ownership and version; its backup remains. Reopening version 30
-does not repeat migration or replace backups. Older schemas follow the existing
-versioned chain, including the lossless tool-image marker at version 26.
-Fresh databases have both shapes at version 30; newer schemas fail closed.
-An older app cannot open schema 30; downgrade requires a compatible backup.
+back its DDL, ownership and version; its backup remains. Older schemas follow
+the existing versioned chain, including the lossless image marker at version 26.
+The current schema is 32. Upstream used v30 for elapsed/queued-Goal columns;
+local v30 reconciliation predates those columns. Before the v31 completion-report
+migration, missing elapsed and Goal-intent columns are therefore reconciled in
+the same transaction. Existing values are preserved. The delegation-history
+index is idempotently ensured at every supported version, including upstream
+v29–32 databases. Reopening schema 32 does not repeat versioned migrations or
+replace backups; newer schemas fail closed and downgrade requires a compatible
+backup rather than deleting user data.
 
 Run history reads indexed candidates and bounded canonical JSONL windows;
 it does not create a second execution ledger. Source sessions marked deleted
@@ -2273,12 +2277,64 @@ Gate results record the stage, action, outcome and bounded evidence. At most
 one open run exists per session. Restart clears in-flight claims and pauses
 those runs without replaying work. Deleting a session cascades its run records.
 
-Host-started turns evaluate Auto as Accept edits. A run's original snapshot
-remains authoritative even when its source file changes.
-
 Session configuration writes mode, snapshot hash, model/thinking/permission/fast
 settings and optional delegation model keys/approval overrides atomically.
 Omitted delegation patches preserve saved policy; null keys restore inheritance
 and clear approvals, while null approvals clear only overrides. Compatibility
 configurators retain their signatures; builtin configuration clears the snapshot.
 Delegation-only edits retain session ordering, but a changed snapshot updates it.
+Host-started custom modes evaluate Auto as Accept edits; builtin Goal retains
+the selected session permission. A run's original snapshot remains authoritative
+even when its source file changes or its input preference returns to Agent.
+
+### Active elapsed time and queued Goal intent (schema 30)
+
+The backed-up, transactional v29-to-v30 migration adds `mode_runs.elapsed_ms`
+(nonnegative safe integer, default 0), `mode_runs.active_since_ms` (nullable epoch
+milliseconds), and `turn_queue.start_goal` (boolean integer, default 0). The v31
+migration also ensures these columns before adding reports, so existing personal
+v30 databases receive the same definitions without resetting existing clock or
+queue data. Old timestamps are never interpreted as active work.
+
+Run saves checkpoint the persisted clock under the same revision CAS. Running
+time accumulates; waiting, pause, budget exhaustion, completion and stop freeze
+it. Repeated settlement cannot charge twice. Startup pauses Running rows even
+between claims, clears active intervals, keeps only checkpointed elapsed time,
+and does not count offline time or replay execution.
+
+`start_goal` is explicit new-Goal input intent, not an execution permission.
+It round-trips with the existing queue identity and participates in idempotency;
+legacy queue rows remain ordinary input. Restored work is still held until a
+controller attaches. Replacement preserves old run accounting independently.
+
+### Structured completion reports (schema 31)
+
+A backed-up transactional v30-to-v31 migration adds nullable
+`mode_runs.completion_report_json`. Fresh databases and upgrades through earlier
+mode migrations use the same structure; an already-present column is retained.
+Existing elapsed time, Goal queue intent, accounting and immutable snapshots
+are preserved. The migration backup precedes the column and version stamp.
+The existing wait-reason CHECK is widened transactionally by a lossless table
+replacement. All columns, indexes, triggers and child gate rows are retained;
+foreign keys are checked and enforcement restored, including on rollback.
+
+The optional wire `completionReport` retains the last bounded model-submitted
+criterion outcomes, evidence, remaining work and blocker reason. It is not an
+independent verification of their truth. Missing legacy reports remain absent.
+The report is saved under the existing run revision CAS with its gate/state
+transition. A blocked report stores `waiting/blocked`, not `finished`; settlement
+releases the claim without autonomous continuation. Startup retains that wait
+and report rather than replaying work. A completed report never bypasses gates.
+
+### Custom session mode identifiers (schema 32)
+
+The backed-up transactional v31-to-v32 migration removes a retained builtin-only
+`sessions.mode` CHECK so upgraded databases accept the same validated custom mode
+ids as fresh databases. It preserves the actual table's other columns and checks,
+all session data, indexes, triggers, views, and referencing child records. Foreign
+keys are checked before commit; connection settings are restored on success or
+rollback. An already-unconstrained table is not rebuilt, and reopening schema 32
+does not repeat the migration. Earlier supported mode schemas upgrade through
+their existing migrations first. Host mode-id, snapshot, and permission validation
+is unchanged. Older binaries reject schema 32; rollback uses the retained
+`pi.sqlite.v31.bak` rather than deleting user data.

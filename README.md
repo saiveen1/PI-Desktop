@@ -1,6 +1,6 @@
 # PI-Desktop · Personal Edition
 
-> **Current release line: 0.22.x (beta).**
+> **Current release line: 0.23.x.**
 
 An independently maintained, local-first AI agent workspace focused on
 **execution-harness hardening, multi-agent collaboration, and everyday usability**.
@@ -17,8 +17,9 @@ The highlights below describe **local increments to the upstream foundation**, n
 the upstream feature catalog. They cover current source, which may be newer than
 [recorded releases](CHANGELOG.md). The [provenance map](docs/maintenance/personal-edition-provenance.md)
 records the compared revisions, originating commits, implementation evidence, and
-excluded upstream features. Recent flows still need broader integration validation;
-beta is not a stability or installed-upgrade guarantee.
+excluded upstream features. Current source version is `0.23.0`; broader integration
+validation remains necessary. A version label is not a stability, published-release
+or installed-upgrade guarantee.
 
 ### Execution-harness hardening
 
@@ -84,8 +85,9 @@ This edition strengthens the existing framework rather than replacing it.
 - **More accurate completion and recovery.** Do not treat an old progress message
   or truncated ending as a final report; coalesce duplicate recovery requests
   and support resuming work interrupted by a parent failure on the next user turn.
-  Fixed-tool delegates can load available skills without inheriting unrelated
-  plugin/MCP execution tools.
+  Fixed-tool delegates can load skills without inheriting unrelated plugin/MCP
+  execution tools. Each role can inherit available skills, select specific IDs,
+  or select none; this does not grant the tools or permissions a skill describes.
   Recorded authorization, provider attempts, execution end and report delivery
   can be inspected separately without opening raw logs.
 

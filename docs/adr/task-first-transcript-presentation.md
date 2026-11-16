@@ -119,7 +119,7 @@ localized light/dark layout cases. Pure/SSR regression covers stable task identi
 and the latest resumed handle. The base is `0f7552494`, with uncommitted changes.
 No daily profile, live provider, full Desktop launch, installation or upgrade was
 tested. Build and broader regression results are reported separately. See
-[E2E-CHAT-task-first-reading](../spec/06-delivery/04-e2e-test-plan.md#e2e-chat-task-first-reading).
+[E2E-CHAT-task-first-reading](../spec/06-delivery/e2e/conversation.md#e2e-chat-task-first-reading).
 
 This ADR is the current development record. A release entry follows the requested
 release workflow; do not append to the retired unreleased scratchpad or fabricate

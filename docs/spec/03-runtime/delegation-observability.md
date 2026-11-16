@@ -93,7 +93,7 @@ separate manual verification; isolated tests verify delivery calls and controls.
 
 ## Acceptance
 
-See [delegation observation and sound scenarios](../06-delivery/04-e2e-test-plan.md#e2e-delegation-observations-and-approval-sound).
+See [delegation observation and sound scenarios](../06-delivery/e2e/plugins-and-extensions.md#e2e-delegation-observations-and-approval-sound).
 Use real runtime loops with synthetic model transport, isolated Host data and
 production renderer components. No installed profile or real provider is a
 default test environment. Results are reported separately from installed-app

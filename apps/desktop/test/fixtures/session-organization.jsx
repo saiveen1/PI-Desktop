@@ -249,11 +249,18 @@ window.organizationProbe = async () => {
   check(!chosen().includes("project-10") && !chosen().includes("project-11"), "unloaded history selected");
   check(chosen().length === 14, "visible selection count differs");
   click(checkbox("Select visible", toolbar()));
+  const renderedOrder = [...new Set([...document.querySelectorAll("[data-sidebar-session-row]")]
+    .map(node => node.dataset.sidebarSessionRow))];
+  const anchorIndex = renderedOrder.indexOf("alpha");
+  const endIndex = renderedOrder.indexOf("native");
+  check(anchorIndex >= 0 && endIndex >= 0, "Shift range endpoints are not rendered");
+  const expectedRange = renderedOrder.slice(Math.min(anchorIndex, endIndex), Math.max(anchorIndex, endIndex) + 1).sort();
+  check(expectedRange.includes("beta"), "Shift fixture must span an intermediate row");
   click(row("alpha").querySelector(".thread-item-main"));
   flushSync(() => row("native").querySelector(".thread-item-main").dispatchEvent(new MouseEvent("click", { bubbles: true, shiftKey: true })));
-  check(chosen().sort().join() === "alpha,beta,native", "Shift range did not follow rendered order");
+  check(chosen().sort().join() === expectedRange.join(), "Shift range did not follow rendered order: " + JSON.stringify({ expectedRange, actual: chosen() }));
   flushSync(() => row("beta").querySelector(".thread-item-main").dispatchEvent(new MouseEvent("click", { bubbles: true, ctrlKey: true })));
-  check(chosen().sort().join() === "alpha,native", "Ctrl click did not toggle selected row");
+  check(chosen().sort().join() === expectedRange.filter(id => id !== "beta").join(), "Ctrl click did not toggle selected row");
   await done();
 
   // Enter multi-selection through the actual row menu as well as its toolbar.

@@ -57,16 +57,18 @@ function response(content: AssistantMessage["content"], stopReason: "stop" | "to
 }
 const finalResponse = () => response([{ type: "text", text: "Finished the requested work." }]);
 const runtimes: DesktopAgentRuntime[] = [];
-// The runtime refreshes the session delegation policy before every request.
-// An older Host without this RPC answers undefined and the launch policy stands.
-const hostCall = async (method: string, params?: unknown): Promise<unknown> => (
-  method === "provider.delegationSnapshot" ? undefined : { ok: true, content: {} }
-);
+const hostCall = async (method: string, _params?: unknown): Promise<unknown> => {
+  if (method === "tools.fileBatchCapabilities") return { version: 1, supported: false };
+  if (method === "provider.delegationSnapshot" || method === "session.appendMessage") return undefined;
+  if (method === "todos.get") return { sessionId: "delegate-boundaries", todos: [] };
+  return { ok: true, content: {} };
+};
 function fixture(call = vi.fn(hostCall)) {
   const events: AgentEventEnvelope[] = [];
   const runtime = new DesktopAgentRuntime({
     host: { call, onNotification: () => () => {} } as never,
     sessionId: "delegate-boundaries", mode: "agent", thinkingLevel: "off", provider,
+    workspaceRoot: "D:/fixture/session-worktree",
     commandShell: { id: "bash", label: "Bash", dialect: "posix", available: true, isDefault: true },
     subagents: [definition("inherited")],
     onEvent: (event) => events.push(event),
@@ -96,7 +98,23 @@ describe("Parent Stop waits for every delegate", () => {
     "aborts every child and waits for their retirement while the parent is %s",
     async (phase) => {
       const streams = new Map<string, { signal?: AbortSignal; finish: () => void }>();
-      const { runtime, internal } = fixture();
+      const cleanups = new Map<string, { entered: ReturnType<typeof deferred<void>>; release: ReturnType<typeof deferred<void>> }>();
+      const call = vi.fn(async (method: string, params?: unknown) => {
+        if (method === "worktree.delegate.create" || method === "worktree.delegate.settle") {
+          const { delegationId } = params as { delegationId: string };
+          if (method === "worktree.delegate.create") {
+            cleanups.set(delegationId, { entered: deferred<void>(), release: deferred<void>() });
+            return {};
+          }
+          const cleanup = cleanups.get(delegationId);
+          if (!cleanup) throw new Error("Settlement has no fixture worktree");
+          cleanup.entered.resolve();
+          await cleanup.release.promise;
+          return { settlement: { status: "kept" } };
+        }
+        return hostCall(method, params);
+      });
+      const { runtime, internal } = fixture(call);
       let parentRequests = 0;
       transport.mockImplementation((_model, context, options) => {
         const isParent = context.messages.some((message) => message.role === "user" && JSON.stringify(message.content).includes("Start both workers."));
@@ -115,6 +133,7 @@ describe("Parent Stop waits for every delegate", () => {
           stream.push({ type: "error", reason: "aborted", error: aborted });
           stream.end(aborted);
         };
+        options?.signal?.addEventListener("abort", finish, { once: true });
         streams.set(key, { signal: options?.signal, finish });
         return stream;
       });
@@ -124,20 +143,28 @@ describe("Parent Stop waits for every delegate", () => {
         await vi.waitFor(() => {
           expect(parentRequests).toBe(2);
           expect(streams.size).toBe(phase === "waiting-model" ? 3 : 2);
+          expect(cleanups.size).toBe(2);
+          expect(runtime.getStatus().activity?.phase).toBe(phase);
         });
         let acknowledged = false;
         const cancellation = runtime.abort();
         expect(runtime.abort()).toBe(cancellation);
         stopping = cancellation.then(() => { acknowledged = true; });
         expect([...streams.values()].every((stream) => stream.signal?.aborted)).toBe(true);
-        streams.get("parent")?.finish();
-        const children = [...streams.entries()].filter(([key]) => key !== "parent").map(([, stream]) => stream);
-        children[0].finish();
+        // Production retirement awaits Host worktree cleanup, not the raw stream.
+        const children = [...cleanups.values()];
+        await promptly(Promise.all(children.map(child => child.entered.promise)));
+        expect(internal.runningDelegations()).toHaveLength(2);
+        expect(runtime.getStatus().isRunning).toBe(true);
+        expect(acknowledged).toBe(false);
+        expect(call.mock.calls.filter(([method]) => method === "worktree.delegate.settle").map(([, params]) => params))
+          .toEqual([...cleanups.keys()].map(delegationId => ({ sessionId: "delegate-boundaries", delegationId, merge: false })));
+        children[0].release.resolve();
         await vi.waitFor(() => expect(internal.runningDelegations()).toHaveLength(1));
         expect(runtime.getStatus().isRunning).toBe(true);
         expect(acknowledged).toBe(false);
         await expect(runtime.prompt("Too soon.")).rejects.toMatchObject({ errorCode: "AGENT_BUSY" });
-        children[1].finish();
+        children[1].release.resolve();
         await promptly(Promise.all([running, stopping]));
         expect(runtime.getStatus().isRunning).toBe(false);
         expect(internal.runningDelegations()).toHaveLength(0);
@@ -145,6 +172,7 @@ describe("Parent Stop waits for every delegate", () => {
         transport.mockImplementation(finalResponse);
         await promptly(runtime.prompt("Safe follow-up."));
       } finally {
+        for (const cleanup of cleanups.values()) cleanup.release.resolve();
         for (const stream of streams.values()) stream.finish();
         await promptly(Promise.allSettled([running, stopping ?? runtime.abort()]));
       }

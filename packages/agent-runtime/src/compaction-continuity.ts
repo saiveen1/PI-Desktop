@@ -3,13 +3,16 @@ import type { ToolResultMessage, UserMessage } from "@earendil-works/pi-ai";
 import { isRecord, truncateMessageText, truncateTextWithMarker, usageToPi } from "./agent-messages.js";
 import { CHECKPOINT_TRUNCATION_MARKER } from "./compaction-tail.js";
 import { ESTIMATED_TEXT_CHARS_PER_TOKEN, estimateTokens } from "./pi-runtime-estimates.js";
+import { estimateOutputCapInputTokens } from "./output-cap.js";
 import { dedupeToolCallMessages } from "./tool-call-dedupe.js";
 
 // Leave ample room for the summary/system journal in the Host's 64 MiB frame.
 const MAX_RETAINED_TAIL_BYTES = 16 * 1024 * 1024;
 const droppedStops = new Set(["error", "aborted", "deferred"]);
 const tokens = (messages: AgentMessage[]) => messages.reduce(
-  (sum, message) => sum + Math.ceil(estimateTokens(message)), 0,
+  (sum, message) => sum + Math.max(Math.ceil(estimateTokens(message)),
+    estimateOutputCapInputTokens({ messages: [{ role: message.role,
+      content: (message as { content?: unknown }).content }] })), 0,
 );
 const bytes = (messages: AgentMessage[]) => Buffer.byteLength(JSON.stringify(messages), "utf8");
 

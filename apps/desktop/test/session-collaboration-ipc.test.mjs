@@ -22,7 +22,9 @@ function load(relative, imports, globals = {}) {
   return module.exports;
 }
 
-const shared = { ErrorCodes, IPC, IPC_WHITELIST, ...load("../../../packages/shared/src/delegation-policy.ts", {}) };
+const shared = { ErrorCodes, IPC, IPC_WHITELIST, ...load("../../../packages/shared/src/delegation-policy.ts", {
+  "./delegation-limits.js": load("../../../packages/shared/src/delegation-limits.ts", {}),
+}) };
 const collaboration = load("../electron/main/services/session-collaboration.ts", {
   "node:crypto": crypto,
   "../agent-host-bridge": {},

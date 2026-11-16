@@ -149,6 +149,8 @@ impl Database {
                 tx.execute_batch(WORKTREE_DDL)?;
                 tx.execute_batch(super::delegation_history_migration::DDL)?;
                 tx.execute_batch(super::MODE_RUNS_SCHEMA)?;
+                super::mode_run_elapsed_migration::initialize(&tx)?;
+                super::completion_report_migration::initialize(&tx)?;
                 tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
                 tx.commit()?;
             }
@@ -218,7 +220,7 @@ impl Database {
             26 => {
                 migrate_v26_to_v27(&conn, path)?;
             }
-            27..=29 => {}
+            27..=31 => {}
             legacy @ 1..=6 => {
                 let _ = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
                 drop(conn);
@@ -293,6 +295,14 @@ impl Database {
         }
         if migrated_version == 29 {
             super::mode_runs_migration::migrate(&conn, path)?;
+        }
+        let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+        if version == 30 {
+            super::completion_report_migration::migrate(&conn, path)?;
+        }
+        let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+        if version == 31 {
+            super::session_mode_migration::migrate(&conn, path)?;
         }
         let db = Self { conn, data_dir };
         db.boot_maintenance()?;

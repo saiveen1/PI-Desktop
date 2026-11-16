@@ -16,6 +16,11 @@ Each ADR includes:
 - Consequences
 - Alternatives (optional)
 
+Keep records short: state the decision and its main consequences, not the
+implementation log or validation evidence. Behavior lives in the code, specs,
+and tests. Superseded records keep only a stub; the long-form originals stay in
+git history.
+
 ## Index
 
 
@@ -139,7 +144,7 @@ Each ADR includes:
 | 0076 | Capture the Windows-reserved plugin launcher chord in host-core | Accepted |
 | 0077 | Add an interactive multi-question asktool | Accepted for implementation |
 | 0078 | Cross-platform tray-resident minimize | Accepted for implementation (amended by 0117, 0123, and tray-session-shortcuts) |
-| 0079 | Use VitePress for the bilingual documentation site | Accepted |
+| 0079 | Use VitePress for the bilingual documentation site | Accepted; Chinese mirror scope amended by ADR chinese-docs-entry-points-only |
 | 0080 | Prewarm the global plugin launcher after boot | Accepted |
 | 0081 | Host-owned cross-platform plugin panel chrome | Accepted |
 | 0082 | Localized and page-adaptive plugin panel chrome | Accepted |
@@ -428,3 +433,8 @@ Each ADR includes:
 | 0346 | [`@agent` mentions route a turn to a named subagent](0346-composer-agent-mentions.md) | Accepted (issue #986; extends 0024 / 0062) |
 | runtime-owned-context-compaction | [Runtime-owned context compaction initiation](runtime-owned-context-compaction.md) | Accepted (amends ADR 0064 / D203) |
 | compaction-execution-continuity | [Preserve execution continuity across successful compaction](compaction-execution-continuity.md) | Accepted (amends successful active-turn retention in ADR 0064 / ADR 0136; reuses ADR 0302's replay marker) |
+| provider-stream-idle-policy | [Configurable provider transport idle policy](provider-stream-idle-policy.md) | Accepted for personal implementation |
+| composer-local-file-references | [Pasted local files are live references](composer-local-file-references.md) | Accepted (issue #2314) |
+| chinese-docs-entry-points-only | [Chinese documentation keeps entry points only](chinese-docs-entry-points-only.md) | Accepted; amends ADR 0079 |
+| windows-native-snap-without-frame-insets | [Restore Windows snapping without Electron frame insets](windows-native-snap-without-frame-insets.md) | Accepted (issue #2330; amends ADR 0317) |
+| plan-approval-session-permission | [Plan approval defaults to the owning Session's permission](plan-approval-session-permission.md) | Accepted; amends ADR 0053 and ADR 0158 |

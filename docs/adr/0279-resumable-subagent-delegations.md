@@ -12,80 +12,46 @@
   [ADR 0165](0165-withdraw-a2a-peer-stack.md) ·
   [03-runtime/02-agent-runtime.md](../spec/03-runtime/02-agent-runtime.md) §5f
 - Amends: ADR 0062 (the `Task` tool contract) and ADR 0089 (the delegation
-  lifecycle). Both are preserved — every existing boundary still holds; this
-  adds one opt-in parameter and one piece of bookkeeping.
+  lifecycle). Both are preserved; this adds one opt-in parameter and one piece
+  of bookkeeping.
 - Tracking: #513
 
 ## Context
 
-Delegation as built by ADR 0062 and ADR 0089 spawns one `SubagentRun` per `Task`
-call. Each run starts with `messages: []` (`packages/agent-runtime/src/subagent.ts`)
-and is single-use. A delegate's transcript rows are persisted — they carry
-`parentToolCallId` and `agentName` and land in the session transcript — but
-nothing ever reads them back into a delegate, and the session runtime skips them
-when it rebuilds model context (`runtime.ts`, `if (m.parentToolCallId) continue;`).
-
-That makes every `Task` call a cold start even when the parent delegates the
-same subagent for the same files twice. The context the first run bought —
-which files it read, what it found, what it already changed — is discarded, and
-the second run pays for it again, or worse, works from a stale file version it
-never re-reads.
-
-The pieces to do better are already in place: the rows are persisted with
-enough fidelity for a full rebuild (tool call/result pairs, thinking blocks, and
-the original `Task` arguments on the tool row), and the session runtime already
-contains a `UiMessage[] → AgentMessage[]` converter that produces well-formed
-provider messages including synthesized carriers for orphan tool rows.
+ADR 0062 and ADR 0089 spawn one single-use `SubagentRun` per `Task` call,
+starting from `messages: []`. A delegate's rows persist with `parentToolCallId`
+and `agentName`, but nothing reads them back into a delegate and the session
+runtime skips them when rebuilding model context, so every `Task` call is a cold
+start even when the parent delegates the same subagent for the same files twice.
 
 ## Decision
 
-Add an opt-in `resume` parameter to the `Task` tool. When present, the new
-delegation is seeded with the prior delegation's reconstructed context instead
-of starting empty.
+`Task` gains an opt-in `resume` parameter; when present the new delegation is
+seeded with the prior delegation's reconstructed context instead of starting
+empty.
 
 ### 1. `Task` gains `resume?: delegationId`
 
-Resolution is by `delegationId` only — the id the `Task` result already returns
-and `TaskWait` already accepts. A second, stable internal key
-(`delegateSessionId`) exists solely to chain the runs; it never appears in a
-tool parameter, tool result, or prompt. The runtime keeps a reverse map from
-every `delegationId` issued on a live chain to that chain, so an id from the
-middle of a chain resolves too.
+Resolution is by `delegationId` only, the id `Task` already returns and
+`TaskWait` accepts, with a stable internal `delegateSessionId` chaining runs and a
+reverse map that also resolves ids from the middle of a chain.
 
 ### 2. Chains, not records, are the unit of resumability
 
-A **chain** is one `delegateSessionId` plus the ordered `Task` toolCallIds that
-belong to it. Each `resume` appends the new toolCallId. Child transcript rows
-are keyed by `parentToolCallId`, so reconstructing a chain's context means
-selecting every row whose `parentToolCallId` is in the chain and whose
-`agentName` matches.
-
-`DelegationRecord` gains `delegateSessionId`, plus `resumedFrom` and
-`modelChangedFrom` on a run that continues a chain. Read tracking lives on the
-chain, not the record: the registry keeps one entry per `delegateSessionId` and a
-secondary index from every `delegationId` on that chain to it.
+A chain is one `delegateSessionId` plus its ordered `Task` toolCallIds, and
+reconstruction selects every child row whose `parentToolCallId` is in the chain
+with a matching `agentName`. `DelegationRecord` gains `delegateSessionId`, plus
+`resumedFrom` and `modelChangedFrom` when a run continues a chain.
 
 ### 3. Context reconstruction is a pure function
 
-A new module (`packages/agent-runtime/src/delegation-history.ts`) owns:
-
-- selecting the chain's rows from the session transcript,
-- synthesizing the original `task` as the first user message from the first
-  `Task` tool row's persisted arguments,
-- converting to `AgentMessage[]` with the delegate's own provider/model binding
-  (a pinned delegation model is not the session model). Assistant transport
-  identity is `model.provider` / `model.id` — the same values live requests
-  use — not the account row id. When `vendorKey` is set, `model.provider`
-  differs from `provider.id`; tagging restored history with the account id
-  makes pi-ai treat same-model reasoning as foreign and empty
-  `reasoning_content` on resume,
-- a read-file / line-count budget gate.
-
-`SubagentRun` gains `initialMessages?: AgentMessage[]`; when present it seeds
-`initialState.messages` instead of `[]`. The run is otherwise a completely
-normal run: it occupies a `MAX_SUBAGENT_CONCURRENCY` slot, inherits the
-definition's permission scope, and settles through the existing
-`settleDelegation` path with its own `delegationId`, report, and counters.
+`packages/agent-runtime/src/delegation-history.ts` selects the chain's rows,
+synthesizes the original `task` as the first user message from the first `Task`
+row's arguments, converts with the delegate's own binding, and gates on a read
+budget. Transport identity is `model.provider` / `model.id`, not the account row
+id, which would make restored same-model reasoning look foreign; `SubagentRun`
+gains `initialMessages?` and is otherwise a normal run under
+`MAX_SUBAGENT_CONCURRENCY` with its own `delegationId`, report, and counters.
 
 ### 4. Validation is visible, never thrown
 
@@ -150,14 +116,11 @@ run after settlement. It never forks a chain or creates overlapping workers.
 
 ### 7. Resumable chains are bounded, LRU, per agent name
 
-`MAX_RESUMABLE_CHAINS_PER_AGENT = 2`. Chains are exempt from the existing
-`pruneFinishedDelegations` oldest-first sweep. Exceeding the bound evicts the
-least-recently-used whole chain when a delegation settles — registry entry and
-every reverse-map entry together. A chain whose latest run is still working is
-never evicted: dropping it would strand the delegate writing into it, so the
-bound counts reusable chains and a live chain may momentarily push the group over
-it. Tombstones are unnecessary: `delegationId` is a random UUID, so an evicted id
-cannot collide with a future one.
+`MAX_RESUMABLE_CHAINS_PER_AGENT = 2`, chains are exempt from
+`pruneFinishedDelegations`, and exceeding the bound evicts the least-recently-used
+whole chain at settlement, registry entry and reverse-map entries together. A
+chain whose latest run still works is never evicted, and no tombstones are needed
+because `delegationId` is a random UUID.
 
 ### 8. Bound the replay context rather than rejecting large chains
 
@@ -170,61 +133,36 @@ file lists remain telemetry, and the two-chain LRU retention limit is unchanged.
 
 ### 9. The parent discovers a resumable list through `TaskList`
 
-`TaskList` reports the current resumable chains: agent name, delegation id, the
-one-line objective, and the files the chain has read (capped at 8, truncated).
-Only settled, in-budget chains appear — a running chain is never listed, so the
-parent is not lured into resuming one.
-
-The list deliberately stays out of the system prompt. It changes on every
-settlement, and rewriting instructions mid-session invalidates the request
-prefix providers cache on; ADR 0337 records that trade-off and supersedes the
-earlier "compose the list into the prompt" decision. A failed resume still names
-the reusable ids in its own tool error, so discovery never depends on the parent
-having listed first.
-
-The `resume` parameter's own schema description carries the rule that reuse
-requires the id; prose alone does not resume anything.
+`TaskList` reports agent name, delegation id, objective, and files read, listing
+only settled reusable chains. The list stays out of the system prompt because it
+changes on every settlement and would invalidate the cached request prefix
+(ADR 0337), and a failed resume names the reusable ids in its own error.
 
 ### 10. Same session only
 
-`resume` resolves only against the current session's transcript. There is no
-cross-session addressing; sharing facts between conversations stays in the
-prompt, as ADR 0165 concluded when it withdrew the peer stack.
+`resume` resolves only against the current session's transcript; sharing facts
+across conversations stays in the prompt (ADR 0165).
 
 ### 11. Definition edits take effect on resume, with a diagnostic
 
-A definition edited between two delegations is applied as-is on resume — the
-same "editing takes effect on the next prompt" semantics the catalog already
-has — and the change is recorded in the delegation's lifecycle details. No
-definition snapshot is stored; snapshots would need new persistent state and
-would contradict the existing semantics.
+An edited definition applies as-is on resume, matching the catalog's "editing
+takes effect on the next prompt" semantics, and the change is recorded in the
+delegation lifecycle details without storing a snapshot.
 
 ### 12. Chain index is rebuilt from the transcript on startup
 
-The chain registry is in memory, but the chain relationship is recoverable:
-`Task` tool rows are persisted with their arguments, including `resume`. At
-session launch the runtime scans the transcript's `Task` rows, groups them by
-their `resume` links into chains, and rehydrates the secondary index. Restart
-does not lose resumability.
-
-Two details make a rebuilt chain behave like a live one. Agent names are
-normalized on rebuild (`Explorer` and `explorer.md` both mean `explorer`), so the
-rebuilt chain still selects its own rows and still matches `Task.agent`. And each
-call carries the status its own `Task` row recorded: the settlement projection
-rewrites that row in place, so a chain knows whether its last run was `completed`
-or `failed`. A run the app closed while it still worked never settled: its row
-still says `running`, which rebuilds as `interrupted` and is explicitly
-resumable, rather than staying open forever. A row that records no status at all is trusted as
-settled, because every `Task` row this app writes carries one. The model binding
-itself is not persisted as a key, so a rebuilt chain is matched to a configured
-binding by model id; two accounts offering the same model id are
-indistinguishable at that point.
+Persisted `Task` arguments carry resume links. Launch rescans and rehydrates the
+chain index, normalizes names (`Explorer` / `explorer.md` → `explorer`) and uses
+each settled Task row's recorded status. A row still `running` after shutdown
+rebuilds as explicitly resumable `interrupted`, never a live worker. Legacy rows
+without status remain settled. Restored bindings use recorded model identity
+and the authorized resolution rules in §4; restart supplies no new consent.
 
 ### 13. The transcript renders a chain as one continuous conversation
 
-A resumed delegation's card shows the whole chain's rows as consecutive turns
-(task → reply → task → reply) with no special "resumed" badge. The new run's
-counters start at zero; `details.resumedFrom` keeps the link auditable.
+A resumed card shows the chain's rows as consecutive task and reply turns with no
+"resumed" badge, counters start at zero, and `details.resumedFrom` keeps the link
+auditable.
 
 ### 14. Durable progress before enforcing a work budget
 
@@ -295,11 +233,10 @@ on failure/boot. Wire shapes and storage versions are unchanged.
 
 ## Consequences
 
-- `Task`'s parameter schema widens by one optional field. Every existing call is
-  unchanged: `resume` omitted is exactly today's behavior.
-- The delegate→parent context boundary is untouched. Reconstructed rows seed the
-  delegate's own context only; the parent still receives nothing but reports
-  through `TaskWait`, and `parentToolCallId` rows are still skipped when the
+- `Task`'s schema widens by one optional field, and `resume` omitted is exactly
+  today's behavior.
+- The delegate→parent boundary is untouched: reconstructed rows seed only the
+  delegate's context, and `parentToolCallId` rows are still skipped when the
   parent's context is rebuilt.
 - No new storage schema, tables, or event types. Chain identity, read tracking,
   and the model binding live on the in-memory chain; `resumedFrom` and
@@ -308,8 +245,8 @@ on failure/boot. Wire shapes and storage versions are unchanged.
   slot, same permission scope, same fallback models, same abort sources.
 - Large histories use bounded seeding; partial results remain explicit and resumable.
 
-## Out of scope (二期)
+## Out of scope
 
-- In-chain compaction or placeholder substitution for old tool results.
-- Task queuing / work append on a running delegation.
-- Cross-session resumption.
+- Cross-session resumption or automatic replay of interrupted side effects.
+- Queuing model-originated Task/resume calls on an already running chain; explicit
+  user follow-up uses the separate direct-input contract in §6.

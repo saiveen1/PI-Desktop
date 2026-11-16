@@ -27,6 +27,12 @@ application tests or establish installed-upgrade, performance, or security claim
 Source links to the personal fork use the published snapshot `58c8ef37b`.
 Documentation and supported source-asset links remain site-relative.
 
+The [0.23.0 upstream integration record](upstream-integration-29043af.md)
+compares personal `c1d9e306ff473f82d513b7e7a4650177714d8b9c` with upstream
+`29043af3371122e256bf265db31651da125d38e3`, records preservation decisions
+(including saved role-level skills) and distinguishes documentation reconciliation
+from executable validation. The historical audit boundary above is unchanged.
+
 ## Local harness and delegation increments
 
 The main-model identity addition starts from personal source `d0f4fd890`,
@@ -65,8 +71,9 @@ integrity (`4da7b50ef`) with bounded runtime observations and consumer-delivery
 metadata; it does not claim to originate delegation or token accounting.
 See the [recorded-facts contract](../spec/03-runtime/delegation-observability.md),
 [observer](../../packages/agent-runtime/src/subagent-observability.ts),
-[Host projection](../../crates/host-core/src/delegation_history_observation.rs)
-and [production diagnostics](../../apps/desktop/src/components/workpanel/SubagentObservationSummary.tsx).
+Host projection `crates/host-core/src/delegation_history_observation.rs`,
+and production diagnostics `apps/desktop/src/components/workpanel/SubagentObservationSummary.tsx`.
+These two paths identify repository source, not documentation-site pages.
 The sound increment is draft-volume preview and refresh/reopen hydration
 deduplication on top of the existing core notification preferences, not a new
 notification subsystem. Source-level tests and isolated fixtures do not establish

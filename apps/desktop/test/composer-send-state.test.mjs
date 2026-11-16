@@ -67,7 +67,7 @@ test("composer send/stop button follows draft content and the visible session's 
   assert.match(composer, /const runActive = isRunning \|\| executionActive;/);
   assert.match(composer, /const isRunning = useAppStore\(\(s\) => s\.isRunning\);/);
   assert.match(submitSlot, /stopGenerating/);
-  assert.match(submitSlot, /onClick=\{\(\) => void abort\(\)\}/);
+  assert.match(submitSlot, /onClick=\{\(\) => void abort\(\)\.catch/);
   assert.doesNotMatch(composerRight, /\{runActive \? \(/);
   const modelIndex = composerRight.indexOf("<ComposerModelPicker");
   const transformIndex = composerRight.indexOf("composerTransforms.map");
@@ -297,7 +297,7 @@ test("mode slash prefixes send the trailing prompt and retain failed drafts", ()
   assert.match(
     sendPrompt,
     // The prompt call carries the submitted content and attachment mapping.
-    /await api\.prompt\(\{[\s\S]*?sessionId,[\s\S]*?content,[\s\S]*?attachments:[\s\S]*?promptAttachmentsFromDraft\(draft\.fileReferences\)[\s\S]*?\}\);[\s\S]*?onAccepted\?\.\(startedIn\);\s*return true/,
+    /await api\.prompt\(\{[\s\S]*?sessionId,[\s\S]*?content,[\s\S]*?attachments:[\s\S]*?promptAttachmentsFromDraft\(draft\.fileReferences\)[\s\S]*?\}\);[\s\S]*?onAccepted\?\.\(startedIn\);\s*get\(\)\.raiseSession\(startedIn\);\s*return true/,
   );
   assert.match(
     sendPrompt,

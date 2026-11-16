@@ -6,6 +6,9 @@ const TASK_RUNS_KEEP: i64 = 100;
 impl Database {
     pub(crate) fn boot_maintenance(&self) -> Result<()> {
         let now = now_ms();
+        // Upstream v30+ skips the local v29 index migration; this addition is idempotent.
+        self.conn
+            .execute_batch(super::delegation_history_migration::DDL)?;
         let _ = self.conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_turns_ended_at ON turns(ended_at DESC)",
             [],

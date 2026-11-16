@@ -65,6 +65,18 @@ function messageKind(value: unknown): "task" | "message" {
   return value;
 }
 
+/**
+ * Delivery order for one send. `queue` is the historical behaviour: the message
+ * appends behind whatever the target already queued. `immediate` promotes it so a
+ * busy target runs it at the next turn boundary (ADR 0265). It never preempts a
+ * running turn, because steering stays restricted to a paired caller.
+ */
+function deliveryMode(value: unknown): "queue" | "immediate" {
+  if (value === undefined) return "queue";
+  if (value !== "queue" && value !== "immediate") fail("INVALID_ARGUMENT", "delivery must be queue or immediate");
+  return value;
+}
+
 function errorCode(error: unknown): string | undefined {
   if (!error || typeof error !== "object") return undefined;
   const value = error as { code?: string; errorCode?: string; data?: { errorCode?: string } };
@@ -187,7 +199,11 @@ export function createSessionCollaborationService(deps: SessionCollaborationDepe
     return { pluginId: context.pluginId, sourceSessionId: context.sessionId, sourceTurnId: context.turnId };
   }
 
-  async function dispatch(message: SessionCollaborationMessage, signal?: AbortSignal): Promise<SessionCollaborationDelivery> {
+  async function dispatch(
+    message: SessionCollaborationMessage,
+    signal?: AbortSignal,
+    delivery_: "queue" | "immediate" = "queue",
+  ): Promise<SessionCollaborationDelivery> {
     const existing = dispatching.get(message.id);
     if (existing) return existing;
     const operation = (async () => {
@@ -208,7 +224,7 @@ export function createSessionCollaborationService(deps: SessionCollaborationDepe
         if (!deps.isPluginLoaded(current.pluginId)) fail("ABORTED", "The sending plugin is no longer enabled");
         // The Agent Host callback rechecks delegation at execution, including durable queue replay.
         if (signal) dispatchSignals.set(current.id, signal);
-        await bridge.agentHost.startTurn(DESKTOP_PRINCIPAL, {
+        const started = await bridge.agentHost.startTurn(DESKTOP_PRINCIPAL, {
           sessionId: current.targetSessionId,
           input: { text: current.content, sessionMessageId: current.id },
           admission: "queue",
@@ -216,6 +232,23 @@ export function createSessionCollaborationService(deps: SessionCollaborationDepe
           context: { requestId: `session-message:${current.id}` },
         });
         checkCurrent(host);
+        // A worker's report is not user input that was queued a minute ago, and a
+        // caller may ask for one specific follow-up to jump the queue the same way
+        // (`delivery: "immediate"`, ADR 0265). Either way a busy target runs it at
+        // the very next turn boundary; a turn that already started, or a queue move
+        // that lost a race, is not an error.
+        const promote = delivery_ === "immediate" || current.kind === "completion";
+        if (promote && started.turn.status === "queued") {
+          await bridge.queue.prioritize(started.turn.id).catch((error: unknown) => {
+            if (errorCode(error) !== "CONFLICT") {
+              deps.log("Session completion delivery could not be prioritized", {
+                messageId: current.id,
+                turnId: started.turn.id,
+                error: String(error),
+              });
+            }
+          });
+        }
         const accepted = (await host.call<{ message: SessionCollaborationMessage }>(
           "session.collaboration.message", { messageId: current.id },
         )).message;
@@ -354,6 +387,10 @@ export function createSessionCollaborationService(deps: SessionCollaborationDepe
           const content = text(data, spawn ? "task" : "content");
           const notify = data.notifyOnCompletion;
           if (notify !== undefined && typeof notify !== "boolean") fail("INVALID_ARGUMENT", "notifyOnCompletion must be a boolean");
+          // Delivery order belongs to the follow-up a caller sends; a spawn's first
+          // task always takes the normal queue.
+          if (spawn && data.delivery !== undefined) fail("INVALID_ARGUMENT", "delivery is only valid for send");
+          const deliveryHint = spawn ? "queue" : deliveryMode(data.delivery);
           let model: { providerId: string; modelId: string } | null = null;
           let approvedPolicy: string | undefined;
           if (spawn) {
@@ -413,7 +450,7 @@ export function createSessionCollaborationService(deps: SessionCollaborationDepe
               : { sessionId: text(data, "sessionId"), kind: messageKind(data.kind) }),
           });
           if (spawn && model && approvedPolicy) spawnApprovals.set(response.message.id, { ...model, policy: approvedPolicy, task: content! });
-          return dispatch(response.message, input.signal);
+          return dispatch(response.message, input.signal, deliveryHint);
         }
         default: fail("NOT_FOUND", "Unknown session collaboration operation");
       }
