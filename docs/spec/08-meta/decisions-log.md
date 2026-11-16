@@ -5473,3 +5473,16 @@ See ADR 0344.
   under infinite retry. Ordinary network/provider recovery remains unchanged.
 - The additive settings/status contract and compatibility boundaries are recorded
   in [the decision](../../adr/provider-stream-idle-policy.md).
+
+## Read inspection previews stay in tool details
+
+Ordinary `Read` images are process inputs, not delivered artifacts. Render their
+previews and image-input diagnostics only inside manually expanded tool details;
+collapsing the row removes its preview and viewer. Apply the same placement to
+live/restored history, standalone rows, all display modes and subagent turns.
+Generated-result contracts and other tools' image outputs retain their existing
+turn-level cards. Do not mutate image bytes, model input or stored tool records.
+This supersedes the personal edition's adjacent-Read footer gallery, which echoed
+user input and stayed visible after the process was folded. See
+[image inspection](../03-runtime/21-image-generation.md#tool-image-inspection-results)
+and `E2E-IMAGES-tool-inspection` in the conversation scenario catalog.

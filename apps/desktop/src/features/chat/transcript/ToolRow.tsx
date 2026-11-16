@@ -4,6 +4,7 @@ import { PlanHistoryCard } from "./PlanHistoryCard";
 import { planSubmission } from "../../../lib/plan-history";
 import { reviewChangeFromMessage } from "../../../lib/workspace-review";
 import { ToolResultImages } from "./ToolResultImages";
+import { toolImagesInDetails } from "../../../lib/tool-image-groups";
 import "../../../styles/generated-images.css";
 import { memo, useCallback, useId, useLayoutEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
@@ -74,7 +75,7 @@ type ToolRowProps = {
   message: UiMessage;
   /** Rows the delegate produced, when this row is a `Task` call (ADR 0062). */
   delegate?: SubagentRun;
-  /** The containing turn renders image results outside its process disclosure. */
+  /** The containing turn renders delivered images outside its process disclosure. */
   imagesInTurn?: boolean;
   /** Claims the containing activity group when this row is manually used. */
   onUserInteraction?: () => void;
@@ -127,6 +128,7 @@ function HostToolRow({
   const action = getToolAction(message.toolName);
   // Classify the result once; execution and persisted statuses stay untouched.
   const toolStatus = getToolStatus(message);
+  const imagesInDetails = toolImagesInDetails(message);
   const neutralStatus = toolStatus.kind === "skipped" || toolStatus.kind === "interrupted" || toolStatus.kind === "context-required";
   const notStarted = delegationWasPreempted(message);
   // A tool call never opens itself: the payload waits for the user, and a
@@ -332,17 +334,18 @@ function HostToolRow({
             </button>
           ) : null}
         </div>
-      {blocks && blocks.length > 0 ? (
+      {open && (blocks && blocks.length > 0 || imagesInDetails) ? (
         <div className="tool-row-body" id={detailsId} ref={disclosure.bodyRef} {...disclosure.bodyEvents}>
           <DisclosureCollapseRail
             label={t("chat.collapseToolOutput")}
             onCollapse={collapseRow}
           />
           {action === "delegate" && !lifecycle ? <DelegationSelectionSummary payload={toolResultPayload(message)} /> : null}
-          <ToolDetailBlocks blocks={blocks} plain={runHead} streaming={status === "running"} />
+          {blocks ? <ToolDetailBlocks blocks={blocks} plain={runHead} streaming={status === "running"} /> : null}
+          {imagesInDetails ? <ToolResultImages message={message} /> : null}
         </div>
       ) : null}
-      {!imagesInTurn && <ToolResultImages message={message} />}
+      {!imagesInTurn && !imagesInDetails && <ToolResultImages message={message} />}
       {open && delegate ? (
         <SubagentRunRows
           run={delegate}

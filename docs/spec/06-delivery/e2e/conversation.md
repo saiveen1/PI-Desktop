@@ -5107,20 +5107,22 @@ Build two actual runtimes with identical configuration and different scratch dir
   image, a missing original file, clipped legacy mirrors and invalid/unsafe refs.
   Open thumbnails, navigate with left/right, close with Escape, switch sessions
   with identical message IDs, and open process details. Return six consecutive
-  successful Read images; collapse/reopen the combined gallery, navigate across
-  source calls, append a result while viewing, and repeat in a subagent turn.
-  Insert narrative, other tools and failed/input-warning calls between reads.
-  Check horizontal layout and wrapping at 280 pixels in light/dark themes.
+  successful Read images and confirm none is promoted outside process details.
+  Expand a Read, view its image, collapse it and switch sessions with its viewer
+  open. Repeat live/restored, in all display modes, standalone and subagent rows.
+  Return a six-image MCP output; collapse/reopen its gallery, navigate and append
+  an image while viewing. Check wrapping at 280 pixels in light/dark themes.
   Repeat with missing refs and a generated-image batch containing successes and failures.
 - **Expected:** Image bytes reach a compatible model; unsupported/invalid/oversize
   images produce explicit omission feedback without claiming analysis. Compact
   thumbnails remain associated with the originating call and appear only once.
-  Adjacent successful Read calls share one ordered gallery and heading, with
-  readable filename/call tooltips, horizontal wrapping, shared collapse and
-  keyboard navigation across calls. Appending preserves selection, zoom and
-  pending decode/navigation without remounting the viewer.
-  Narrative, non-image tools, diagnostic/error calls and delegation boundaries
-  remain separate. Main and subagent views agree; session switches close viewers.
+  Read previews appear only inside manually expanded tool details, never as
+  delivered images at the turn footer. Collapsing Read removes the preview and
+  viewer without changing stored image content. Main, standalone and subagent
+  views agree in live and restored history across all display modes.
+  MCP/plugin output galleries retain accessible filenames, horizontal wrapping,
+  collapse, keyboard navigation and call attribution. Appending preserves
+  selection, zoom and pending decode/navigation; session switches close viewers.
   Persisted inline bytes are viewable without the source file. Keyboard selection,
   download targets, focus restoration and session isolation work. Missing resources
   display an unavailable state without a download. Tool details contain no typed
@@ -5134,7 +5136,7 @@ Build two actual runtimes with identical configuration and different scratch dir
 - **Acceptance:** Discoverable local image reads and honest, recoverable image history.
 - **Milestone:** Personal-edition maintenance.
 - **Status:** Rust `bounded_image_preview`, binary-storage and bounded-history
-  regressions; runtime request/content tests, desktop parser and grouping tests;
+  regressions; runtime request/content tests, desktop parser and placement tests;
   `apps/desktop/test/tool-result-images-user-path.test.mjs` exercises production
   React components in isolated Chromium with API-boundary fixtures. This is not
   a live-provider analysis test or an installed-build verification.

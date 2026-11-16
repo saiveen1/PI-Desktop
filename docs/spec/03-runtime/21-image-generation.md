@@ -146,15 +146,17 @@ one compact presentation. Generated-result contracts retain their existing card,
 download, setup navigation and partial-failure behavior.
 
 Inspection results show a localized image count, the originating tool and
-80-pixel thumbnails outside the turn's process disclosure. Consecutive successful
-`Read` image results in the same turn and delegation scope share one collapsible
-horizontal gallery, wrapping without shrinking thumbnails at narrow widths.
-Narrative/reasoning/search entries, other tools, failed reads and image-input
-warnings break adjacency. Expanding tool details does not duplicate the gallery
-or dump typed Base64 image fields. Mirrored copies inside one result are displayed
-once; separate calls are never deduplicated against one another. Each thumbnail
-retains its source message/call identity and filename, with source information in
-its accessible tooltip. Subagent turns use the same grouping and viewer.
+80-pixel thumbnails. Ordinary `Read` results are input/process context: their
+images and image-input diagnostics render only inside the manually expanded
+tool details, never as a turn-level delivered-image gallery. Collapsing the row
+removes its preview and viewer. This applies to live and restored messages,
+standalone rows, all transcript display modes and subagent turns. Generated
+result contracts remain outside process details even if their tool is named
+`Read`; MCP/plugin image outputs retain their existing turn-level galleries.
+Expanding details never duplicates a delivered gallery or dumps typed Base64.
+Mirrored copies inside one result are displayed once; separate calls are never
+deduplicated against one another. Thumbnails retain source message/call identity
+and accessible filenames, wrapping without shrinking at narrow widths.
 
 The count means images returned by the tool, not model analysis completed. Image
 input diagnostics explicitly distinguish unsupported vision, invalid data and
@@ -167,8 +169,8 @@ without rereading the source file. File references use the existing session-boun
 contained image reader; no network URLs or arbitrary text paths are inferred as
 images. Missing/unreadable previews have a visible unavailable state. Viewer
 selection is tied to the owning session and source call/image identity. Appending
-an adjacent Read preserves the selected image, zoom and pending decode/navigation;
-switching sessions closes the viewer. A gallery never merges underlying tool
+images to an output preserves selection, zoom and pending decode/navigation;
+switching sessions closes the viewer. Presentation never merges underlying tool
 messages or provider content.
 
 History uses the existing lossless tool-result storage and decoded image blocks;

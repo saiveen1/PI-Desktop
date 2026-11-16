@@ -10,7 +10,7 @@ import { repositoryRoot, resolveElectronBinary } from "../../../scripts/e2e/boot
 
 const root = repositoryRoot();
 const { build } = createRequire(join(root, "packages/agent-runtime/package.json"))("esbuild");
-const stages = ["open", "next", "previous", "close", "keyboard-open", "close-again", "restore", "states", "turn", "group", "group-next", "group-close", "group-boundaries", "generated", "snapshot-light", "snapshot-dark", "finish"];
+const stages = ["open", "next", "previous", "close", "keyboard-open", "close-again", "restore", "states", "read-disclosure", "turn", "group", "group-next", "group-close", "group-boundaries", "generated", "snapshot-light", "snapshot-dark", "finish"];
 
 async function runFixture(temp) {
   const entry = join(temp, "main.cjs");
@@ -49,7 +49,7 @@ async function runFixture(temp) {
   } finally { clearTimeout(timeout); }
 }
 
-test("tool images support grouped previews, keyboard viewing, history, session isolation and generation", {
+test("Read details and output galleries preserve keyboard viewing, history, session isolation and generation", {
   skip: process.platform === "linux" && !process.env.DISPLAY ? "Electron requires a display" : false,
 }, async () => {
   const temp = await mkdtemp(join(process.env.PI_SCRATCH_DIR || tmpdir(), "pi-tool-images-ui-"));

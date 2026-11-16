@@ -5,6 +5,7 @@ import { I18nextProvider } from "react-i18next";
 import { catalogs } from "@pi-desktop/i18n";
 import type { UiMessage } from "@pi-desktop/shared";
 import { ToolResultImages } from "../../src/features/chat/transcript/ToolResultImages";
+import { ToolRow } from "../../src/features/chat/transcript/ToolRow";
 import { AssistantTurn } from "../../src/features/chat/transcript/AssistantTurn";
 import { SubagentTurnContent } from "../../src/features/chat/transcript/SubagentTurnContent";
 import { TranscriptDisclosureProvider } from "../../src/features/chat/transcript/disclosure";
@@ -40,23 +41,28 @@ const original = message("mcp", { content: [red, blue], details: { content: [red
 const groupedReads = Array.from({ length: 6 }, (_, index) => message(`read-${index}`, {
   path: `capture-${index}.png`, images: [index % 2 ? blue : red],
 }));
+const galleryImages = ["red", "blue", "green", "orange", "purple", "cyan"].map((color, index) => ({
+  ...image(color), path: `capture-${index}.png`,
+}));
+const gallery = message("gallery", { images: galleryImages }, "mcp_screenshot");
 const reads: Array<{ ref: string; sessionId?: string }> = [];
 api.fsReadImageDataUrl = async (ref, _mimeType, sessionId) => {
   reads.push({ ref, sessionId });
   return ref === "missing.png" ? { kind: "missing" } : { kind: "image", dataUrl: ref === "blue.png" ? blueUrl : redUrl };
 };
 useAppStore.setState({ activeSessionId: "unrelated-active-session" });
-const render = (messages: UiMessage[], sessionId = "session-a", turn: boolean | "subagent" = false) => {
+const render = (messages: UiMessage[], sessionId = "session-a", turn: boolean | "subagent" | "row" = false, active = false) => {
   const entries = buildTranscriptEntries([
     { id: "user", role: "user", content: "Inspect pictures", createdAt: "2026-11-08T00:00:00Z" },
     ...messages,
-    { id: "answer", role: "assistant", content: "Result", status: "complete", createdAt: "2026-11-08T00:00:00Z" },
+    ...(active ? [] : [{ id: "answer", role: "assistant", content: "Result", status: "complete", createdAt: "2026-11-08T00:00:00Z" } as UiMessage]),
   ]).entries;
   const entry = entries.find((item) => item.kind === "assistant-turn");
   flushSync(() => view.render(<I18nextProvider i18n={i18n}><SlotSessionProvider sessionId={sessionId}>
-    <TranscriptDisclosureProvider sessionId={sessionId}>
-      {turn === "subagent" ? <SubagentTurnContent id="child" rows={messages.map((message) => ({ kind: "tool" as const, message }))} active={false} />
-        : turn && entry?.kind === "assistant-turn" ? <AssistantTurn entry={entry} isActive={false} />
+    <TranscriptDisclosureProvider key={turn ? sessionId : "gallery"} sessionId={sessionId}>
+      {turn === "subagent" ? <SubagentTurnContent id="child" rows={messages.map((message) => ({ kind: "tool" as const, message }))} active={active} />
+        : turn === "row" ? messages.map((item) => <ToolRow key={item.id} message={item} />)
+        : turn && entry?.kind === "assistant-turn" ? <AssistantTurn entry={entry} isActive={active} />
         : messages.map((item) => <ToolResultImages key={item.id} message={item} />)}
     </TranscriptDisclosureProvider>
   </SlotSessionProvider></I18nextProvider>));
@@ -64,6 +70,19 @@ const render = (messages: UiMessage[], sessionId = "session-a", turn: boolean | 
 const thumb = () => document.querySelector<HTMLButtonElement>(".tool-result-image-thumb")!;
 const dialog = () => document.querySelector<HTMLDialogElement>("dialog.generated-image-viewer");
 const selectedImage = () => document.querySelector<HTMLImageElement>(".generated-image-viewer-viewport img");
+const waitForSelectedImage = async (src: string) => {
+  await new Promise<void>((resolve, reject) => {
+    const observer = new MutationObserver(checkSelection);
+    const timer = setTimeout(() => { observer.disconnect(); reject(new Error("Viewer did not select the expected image")); }, 2000);
+    function checkSelection() {
+      if (selectedImage()?.src !== src) return;
+      clearTimeout(timer); observer.disconnect(); resolve();
+    }
+    observer.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["src"] });
+    checkSelection();
+  });
+  await selectedImage()?.decode();
+};
 const decodeThumbnails = async () => {
   await Promise.all([...document.querySelectorAll<HTMLImageElement>(".tool-result-image-thumb img, .generated-image-thumb img")].map((img) => img.decode()));
 };
@@ -82,7 +101,7 @@ Object.assign(window, { toolImagesProbe: async (stage: string) => {
     check(dialog()?.open && selectedImage()?.src === redUrl, "Click did not open original image");
     check(document.querySelector<HTMLAnchorElement>("dialog a[download]")?.href === redUrl, "Download does not match selected bytes");
   } else if (stage === "next" || stage === "previous") {
-    await frame(); await selectedImage()?.decode();
+    await waitForSelectedImage(stage === "next" ? blueUrl : redUrl);
     check(selectedImage()?.src === (stage === "next" ? blueUrl : redUrl), "Keyboard selection used wrong image");
   } else if (stage === "keyboard-open") {
     await frame();
@@ -127,36 +146,67 @@ Object.assign(window, { toolImagesProbe: async (stage: string) => {
     await i18n.changeLanguage("zh-CN"); render([warning]);
     check(document.body.textContent?.includes("图片未送入模型"), "Image feedback is not localized");
     await i18n.changeLanguage("en");
+  } else if (stage === "read-disclosure") {
+    const settings = useAppStore.getState().settings;
+    for (const mode of ["flat", "command-first", "fully-folded"] as const) {
+      useAppStore.setState({ settings: { ...settings!, transcriptDisplayMode: mode } });
+      for (const owner of [true, "subagent", "row"] as const) for (const active of [false, true]) {
+        const input: UiMessage = JSON.parse(JSON.stringify(message("input-read", { path: "sample.png", images: [red] })));
+        const before = JSON.stringify(input);
+        const session = `read-${mode}-${owner}-${active}`;
+        render([input], session, owner, active);
+        check(!document.querySelector(".tool-result-images"), `${session}: collapsed Read echoes input`);
+        const process = document.querySelector<HTMLButtonElement>(".turn-process > .tool-activity-header");
+        if (process?.getAttribute("aria-expanded") === "false") flushSync(() => process.click());
+        const row = document.querySelector<HTMLButtonElement>('[data-message-id="input-read"] .tool-row-header')!;
+        check(row && row.getAttribute("aria-expanded") === "false", "Read must start collapsed");
+        flushSync(() => row.click()); await decodeThumbnails();
+        check(document.querySelectorAll(".tool-result-image-thumb").length === 1, "Opening Read lost or duplicated its image");
+        check(thumb().closest(".tool-row-body"), "Read image must belong to its tool details");
+        flushSync(() => thumb().click());
+        check(dialog()?.open, "Read detail image no longer opens");
+        flushSync(() => row.click());
+        check(!dialog() && !document.querySelector(".tool-result-image-thumb"), "Collapsing Read leaves a hanging image or viewer");
+        check(JSON.stringify(input) === before, "Read disclosure mutated stored input");
+        flushSync(() => row.click()); await decodeThumbnails();
+        flushSync(() => thumb().click());
+        render([input], `${session}-switched`, owner, active);
+        check(!dialog() && !document.querySelector(".tool-result-image-thumb"), `${session}: Read preview leaked across sessions`);
+        console.log(`READ_DISCLOSURE_CASE ${session} passed`);
+      }
+    }
+    useAppStore.setState({ settings });
   } else if (stage === "turn") {
     render([original, message("read", { path: "sample.png", images: [red] })], "session-a", true);
     await decodeThumbnails();
-    check(document.querySelectorAll(".tool-result-images").length === 2, "Parent turn lost or duplicated image results");
-    check(document.querySelectorAll(".tool-result-image-thumb").length === 3, "Images are associated with the wrong tool call");
+    check(document.querySelectorAll(".tool-result-images").length === 1, "Turn promotes an inspection image or loses MCP output");
+    check(document.querySelectorAll(".tool-result-image-thumb").length === 2, "Images are associated with the wrong tool call");
     const details = document.querySelector<HTMLButtonElement>(".turn-process button");
     if (details) flushSync(() => details.click());
-    check(document.querySelectorAll(".tool-result-images").length === 2, "Opening process details duplicates images");
+    check(document.querySelectorAll(".tool-result-images").length === 1, "Opening process details duplicates images");
   } else if (stage === "group") {
     document.getElementById("root")!.style.cssText = "width:280px;margin:24px";
-    render(groupedReads, "session-a", true); await decodeThumbnails(); await frame();
-    check(document.querySelectorAll(".tool-result-images").length === 1, "Adjacent Read results must share one gallery");
-    check(document.querySelectorAll(".tool-result-image-thumb").length === 6, "Grouping lost images from separate calls");
-    check(document.body.textContent?.includes("Returned 6 images"), "Grouped count does not include every call");
+    render([gallery], "session-a", true); await decodeThumbnails(); await frame();
+    check(document.querySelectorAll(".tool-result-images").length === 1, "Multi-image output must share one gallery");
+    check(document.querySelectorAll(".tool-result-image-thumb").length === 6, "Gallery lost images");
+    check(document.body.textContent?.includes("Returned 6 images"), "Gallery count does not include every image");
     const thumbs = [...document.querySelectorAll<HTMLButtonElement>(".tool-result-image-thumb")];
     const boxes = thumbs.map((item) => item.getBoundingClientRect());
-    check(boxes[0].top === boxes[1].top && boxes[1].left > boxes[0].left, "Grouped images are not horizontal");
-    check(boxes[3].top > boxes[0].top && boxes.every((box) => box.width === 80), "Narrow group must wrap without shrinking thumbnails");
-    check(thumbs.every((item, index) => item.parentElement?.dataset.toolCallId === `call-read-${index}`), "Grouped thumbnail lost source call");
-    check(thumbs[1].getAttribute("aria-label")?.includes("capture-1.png") && thumbs[1].getAttribute("aria-label")?.includes("call-read-1"), "Source filename/call is not accessible");
+    check(boxes[0].top === boxes[1].top && boxes[1].left > boxes[0].left, "Images are not horizontal");
+    check(boxes[3].top > boxes[0].top && boxes.every((box) => box.width === 80), "Narrow gallery must wrap without shrinking thumbnails");
+    check(thumbs.every((item) => item.parentElement?.dataset.toolCallId === "call-gallery"), "Thumbnail lost source call");
+    check(thumbs[1].getAttribute("aria-label")?.includes("capture-1.png"), "Source filename is not accessible");
     const heading = document.querySelector<HTMLButtonElement>(".tool-result-images-heading")!;
     flushSync(() => heading.click());
-    check(!document.querySelector(".tool-result-image-thumb") && heading.getAttribute("aria-expanded") === "false", "Group collapse is not shared");
+    check(!document.querySelector(".tool-result-image-thumb") && heading.getAttribute("aria-expanded") === "false", "Gallery collapse failed");
     flushSync(() => heading.click()); await decodeThumbnails();
     trigger = document.querySelectorAll<HTMLButtonElement>(".tool-result-image-thumb")[1];
     flushSync(() => trigger.click()); await frame(); await selectedImage()?.decode();
-    check(dialog()?.open && selectedImage()?.src === blueUrl, "Grouped click opened the wrong call");
+    check(dialog()?.open && selectedImage()?.src === blueUrl, "Gallery click opened the wrong image");
   } else if (stage === "group-next") {
-    await frame(); await selectedImage()?.decode();
-    check(selectedImage()?.src === redUrl && document.querySelector("dialog strong")?.textContent === "capture-2.png", "Keyboard did not cross to the next Read call");
+    const selectedUrl = `data:image/png;base64,${galleryImages[2].data}`;
+    await waitForSelectedImage(selectedUrl);
+    check(selectedImage()?.src === selectedUrl && document.querySelector("dialog strong")?.textContent === "capture-2.png", "Keyboard did not select the next image");
     const openDialog = dialog()!;
     const zoomIn = [...openDialog.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.getAttribute("aria-label") === i18n.t("menu.zoomIn"))!;
     flushSync(() => zoomIn.click());
@@ -166,24 +216,23 @@ Object.assign(window, { toolImagesProbe: async (stage: string) => {
     let resolveDecode!: () => void;
     pendingImage.decode = () => new Promise<void>((resolve) => { resolveDecode = resolve; });
     flushSync(() => openDialog.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })));
-    render([...groupedReads, message("appended", { path: "later.png", images: [blue] })], "session-a", true);
+    render([{ ...gallery, toolResult: { images: [...galleryImages, { ...image("magenta"), path: "later.png" }] } }], "session-a", true);
     await frame(); await selectedImage()?.decode();
-    check(dialog() === openDialog && openDialog.querySelector("output")?.textContent === zoom, "Appending a result remounted the viewer or reset zoom");
-    check(selectedImage()?.src === redUrl && document.querySelector("dialog strong")?.textContent === "capture-2.png", "Appending a result changed the selected call");
+    check(dialog() === openDialog && openDialog.querySelector("output")?.textContent === zoom, "Appending an image remounted the viewer or reset zoom");
+    check(selectedImage()?.src === selectedUrl, "Appending an image changed the selection");
     resolveDecode(); await frame(); await selectedImage()?.decode();
-    check(selectedImage()?.src === blueUrl && document.querySelector("dialog strong")?.textContent === "capture-3.png", "Appending discarded pending image navigation");
+    check(document.querySelector("dialog strong")?.textContent === "capture-3.png", "Appending discarded pending image navigation");
   } else if (stage === "group-close") {
     await frame();
-    check(!dialog() && document.activeElement === trigger, "Closing grouped viewer lost originating thumbnail focus");
+    check(!dialog() && document.activeElement === trigger, "Closing viewer lost originating thumbnail focus");
   } else if (stage === "group-boundaries") {
-    const narrative: UiMessage = { id: "between", role: "assistant", content: "Inspect another state", createdAt: "2026-11-08T00:00:00Z" };
-    render([groupedReads[0], groupedReads[1], narrative, groupedReads[2], message("bash", { text: "done" }, "Bash"), groupedReads[3], groupedReads[4]], "session-a", true);
-    check(document.querySelectorAll(".tool-result-images").length === 3, "Group crossed narrative or other-tool boundaries");
-    render(groupedReads, "session-a", "subagent"); await decodeThumbnails();
-    check(document.querySelectorAll(".tool-result-images").length === 1 && document.querySelectorAll(".tool-result-image-thumb").length === 6, "Subagent uses different image grouping");
+    render(groupedReads, "read-batch", true);
+    check(!document.querySelector(".tool-result-images"), "Consecutive Reads still echo input images");
+    render([gallery, ...groupedReads], "child-output", "subagent"); await decodeThumbnails();
+    check(document.querySelectorAll(".tool-result-images").length === 1 && document.querySelectorAll(".tool-result-image-thumb").length === 6, "Subagent loses output or promotes Reads");
     flushSync(() => thumb().click()); await frame();
-    render(groupedReads.map((item) => ({ ...item, toolResult: { images: [blue] } })), "session-b", "subagent"); await decodeThumbnails();
-    check(!dialog(), "Grouped viewer leaked across owning sessions");
+    render([{ ...gallery, toolResult: { images: [blue] } }], "session-b", "subagent"); await decodeThumbnails();
+    check(!dialog(), "Viewer leaked across owning sessions");
   } else if (stage === "generated") {
     const generated = message("generated", { details: { kind: "generated-images", results: [
       { status: "succeeded", path: "red.png", mimeType: "image/png" },
@@ -206,7 +255,7 @@ Object.assign(window, { toolImagesProbe: async (stage: string) => {
     document.documentElement.dataset.theme = stage.endsWith("light") ? "light" : "dark";
     document.getElementById("root")!.style.cssText = "width:280px;margin:24px";
     await i18n.changeLanguage("zh-CN");
-    render(groupedReads, "session-a", true); await decodeThumbnails(); await frame();
+    render([gallery], "session-a", true); await decodeThumbnails(); await frame();
     await Promise.all(document.getAnimations().map((animation) => animation.finished.catch(() => undefined)));
     await frame(); await frame();
     const rootBox = document.getElementById("root")!.getBoundingClientRect();
