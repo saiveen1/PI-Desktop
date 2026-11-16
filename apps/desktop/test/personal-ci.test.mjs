@@ -7,16 +7,15 @@ import test from "node:test";
 import { buildPersonal, prepareBuild } from "../../../scripts/build-personal-release.mjs";
 import { personalCiIdentity, prepareCiRelease, stageCiArtifacts, verifyCiDelivery } from "../../../scripts/personal-ci.mjs";
 import { renderBuildNotes, loadReleaseHistory } from "../../../scripts/personal-release-notes.mjs";
-import { fixture, fixtureGit, read, syntheticBuild, version, write } from "./helpers/personal-release-fixture.mjs";
+import { candidate, fixture, fixtureGit, read, syntheticBuild, version, write } from "./helpers/personal-release-fixture.mjs";
 
-const candidate = version.replace(/-beta\.(\d+)$/, (_all, n) => `-beta.${Number(n) + 1}`);
 const envFor = (sha, release = false) => ({
   GITHUB_REPOSITORY: "saiveen1/PI-Desktop", GITHUB_REF: "refs/heads/main", GITHUB_SHA: sha,
   GITHUB_EVENT_NAME: release ? "workflow_dispatch" : "push", PERSONAL_RELEASE_VERSION: release ? candidate : "",
 });
 
-async function built(t, release = false) {
-  const f = fixture(t);
+async function built(t, release = false, fixtureVersion = version) {
+  const f = fixture(t, fixtureVersion);
   const context = release ? prepareBuild({ root: f.root, env: f.env, platform: "win32", arch: "x64", releaseVersion: candidate }) : f.context;
   const result = await buildPersonal(context, { run: syntheticBuild(context) });
   const identity = personalCiIdentity(envFor(result.source.commit, release));
@@ -53,9 +52,9 @@ test("only the personal fork main push or explicit manual beta is accepted", () 
   ]) assert.throws(() => personalCiIdentity({ ...valid, ...patch }));
 });
 
-test("push build stages exactly four checked files without changing version or history", async (t) => {
-  const f = await built(t);
-  assert.equal(f.result.version, version);
+test("push build stages a stable-version build without changing version or history", async (t) => {
+  const f = await built(t, false, "0.23.0");
+  assert.equal(f.result.version, "0.23.0");
   assert.equal(loadReleaseHistory(f.root).releases.length, 0);
   assert.deepEqual(readdirSync(f.delivery.directory).sort(), [...f.delivery.files].sort());
   assert.equal(fixtureGit(f.root, "status", "--porcelain"), "");

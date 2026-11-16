@@ -5,9 +5,8 @@ import test from "node:test";
 import { buildPersonal, parsePersonalBuildArgs, prepareBuild, runCommand } from "../../../scripts/build-personal-release.mjs";
 import { assertNewBeta, captureGitSource, gitChanges } from "../../../scripts/personal-build-source.mjs";
 import { loadReleaseHistory, renderChangelog } from "../../../scripts/personal-release-notes.mjs";
-import { fixture, fixtureGit, syntheticBuild, version, write } from "./helpers/personal-release-fixture.mjs";
+import { candidate, fixture, fixtureGit, syntheticBuild, version, write } from "./helpers/personal-release-fixture.mjs";
 
-const candidate = version.replace(/-beta\.(\d+)$/, (_all, number) => "-beta." + (Number(number) + 1));
 const releaseContext = ({ root, env }) => prepareBuild({ root, env, platform: "win32", arch: "x64", releaseVersion: candidate });
 const versionPaths = ["package.json", "apps/desktop/package.json", "docs/package.json", "packages/shared/package.json", "packages/shared/src/protocol.ts", "Cargo.toml", "Cargo.lock", "README.md", "README.zh-CN.md", "docs/releases/history.json", "CHANGELOG.md"];
 const snapshot = (root) => versionPaths.map((path) => readFileSync(join(root, path), "utf8"));
@@ -70,6 +69,17 @@ test("candidate selection refuses dirty sources, non-beta labels, downgrades and
   write(join(f.root, "README.md"), "uncommitted source change");
   const later = candidate.replace(/(\d+)$/, (number) => String(Number(number) + 1));
   assert.throws(() => prepareBuild({ root: f.root, env: f.env, platform: "win32", arch: "x64", releaseVersion: later }), /clean source checkout/);
+});
+
+test("beta candidates compare correctly against a stable current version", (t) => {
+  const f = fixture(t);
+  const history = loadReleaseHistory(f.root);
+  assert.doesNotThrow(() => assertNewBeta(f.root, "0.23.0", "0.23.1-beta.1", history));
+  for (const candidate of ["0.23.0-beta.1", "0.22.9-beta.99", "0.23.0", "0.23.1-beta.01"]) {
+    assert.throws(() => assertNewBeta(f.root, "0.23.0", candidate, history), /beta|newer/);
+  }
+  assert.doesNotThrow(() => assertNewBeta(f.root, "0.23.1-beta.1", "0.23.1-beta.2", history));
+  assert.throws(() => assertNewBeta(f.root, "0.23.1-beta.2", "0.23.1-beta.1", history), /newer/);
 });
 
 test("Git-derived categories preserve commit evidence and never invent dirty-file feature text", async (t) => {

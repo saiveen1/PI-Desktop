@@ -46,7 +46,7 @@ export async function verifyCiDelivery(directory, identity) {
   const manifest = join(directory, manifests[0]);
   regularFile(manifest);
   const result = json(manifest);
-  assert.match(result.version ?? "", beta, "Artifact version must be beta.");
+  assert.match(result.version ?? "", identity.release ? beta : /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-beta\.(0|[1-9]\d*))?$/, "Invalid artifact version for build mode.");
   if (identity.version) assert.equal(result.version, identity.version, "Artifact version differs from the requested release.");
   assert.equal(result.release, identity.release, "Build/release mode mismatch.");
   assert.equal(result.source?.commit, identity.sourceCommit, "Artifact source differs from this workflow.");

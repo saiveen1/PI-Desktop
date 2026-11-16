@@ -8,6 +8,9 @@ import { prepareBuild } from "../../../../scripts/build-personal-release.mjs";
 export const repo = fileURLToPath(new URL("../../../../", import.meta.url));
 export const read = (path) => readFileSync(join(repo, path), "utf8");
 export const version = JSON.parse(read("apps/desktop/package.json")).version;
+export const candidate = version.includes("-beta.")
+  ? version.replace(/-beta\.(\d+)$/, (_all, number) => `-beta.${Number(number) + 1}`)
+  : version.replace(/\.(\d+)$/, (_all, patch) => `.${Number(patch) + 1}-beta.1`);
 export const write = (file, content) => { mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, content); };
 export function fixtureGit(root, ...args) {
   return execFileSync("git", ["-c", "core.autocrlf=false", "-c", "core.hooksPath=" + join(root, ".git/hooks"), ...args], {
@@ -18,19 +21,19 @@ export function fixtureGit(root, ...args) {
   }).trim();
 }
 
-export function fixture(t) {
+export function fixture(t, fixtureVersion = version) {
   const root = mkdtempSync(join(tmpdir(), "pi-personal-build-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const desktop = join(root, "apps/desktop");
-  write(join(root, "package.json"), JSON.stringify({ version }));
-  write(join(desktop, "package.json"), read("apps/desktop/package.json"));
+  write(join(root, "package.json"), JSON.stringify({ version: fixtureVersion }));
+  write(join(desktop, "package.json"), JSON.stringify({ ...JSON.parse(read("apps/desktop/package.json")), version: fixtureVersion }));
   write(join(desktop, "electron-builder.personal.cjs"), read("apps/desktop/electron-builder.personal.cjs"));
   write(join(desktop, "electron/main/updater.ts"), read("apps/desktop/electron/main/updater.ts"));
-  write(join(root, "docs/package.json"), JSON.stringify({ version }));
-  write(join(root, "packages/shared/package.json"), JSON.stringify({ version }));
-  write(join(root, "packages/shared/src/protocol.ts"), `export const APP_VERSION = "${version}";\n`);
-  write(join(root, "Cargo.toml"), `[workspace.package]\nversion = "${version}"\n`);
-  write(join(root, "Cargo.lock"), `[[package]]\nname = "host-core"\nversion = "${version}"\n`);
+  write(join(root, "docs/package.json"), JSON.stringify({ version: fixtureVersion }));
+  write(join(root, "packages/shared/package.json"), JSON.stringify({ version: fixtureVersion }));
+  write(join(root, "packages/shared/src/protocol.ts"), `export const APP_VERSION = "${fixtureVersion}";\n`);
+  write(join(root, "Cargo.toml"), `[workspace.package]\nversion = "${fixtureVersion}"\n`);
+  write(join(root, "Cargo.lock"), `[[package]]\nname = "host-core"\nversion = "${fixtureVersion}"\n`);
   write(join(root, "README.md"), "Current release line: 0.22.x\n");
   write(join(root, "README.zh-CN.md"), "当前发布线：0.22.x\n");
   write(join(root, "docs/releases/history.json"), '{"schemaVersion":1,"baseline":null,"releases":[]}\n');

@@ -40,8 +40,10 @@ filename, metadata and packaged `piBuildId`. Repacking a version preserves its
 previous installers. Build identifiers are not updater version precedence.
 
 An explicit `--release <version>` requires a clean source checkout and a beta
-version newer than the current version and recorded personal releases. A
-locally existing `v<version>` tag is refused. No remote is contacted. Preflight
+version newer than the current version and recorded personal releases. A stable
+current version is valid as a comparison baseline; a beta of that same version
+is older and is rejected. A locally existing `v<version>` tag is refused. No
+remote is contacted. Preflight
 shows the exact proposed version files and Git-derived change list. It does
 not allocate a build identifier, reserve a version, or write a release.
 
@@ -152,8 +154,9 @@ profile access, Git tags and remote publication require separate authorization.
 [Personal Windows](../../../.github/workflows/personal-windows.yml) is restricted
 to `saiveen1/PI-Desktop`, branch `main`. Code pushes build the current version;
 documentation-only pushes do not. Manual dispatch with an empty `release_version`
-also builds without publishing. The Windows job installs locked dependencies on
-the clean hosted runner and calls the same `pnpm dist:personal` entry, with offline
+also builds without publishing. Ordinary builds accept a stable or beta current
+version; explicit publication remains beta-only. The Windows job installs locked
+dependencies on the clean hosted runner and calls the same `pnpm dist:personal` entry, with offline
 release/policy regression, Desktop typecheck and lint. It never installs or
 launches Desktop. No signing credential or personal access token is required for
 this unsigned personal lane.

@@ -54,10 +54,13 @@ export function assertNewBeta(root, current, requested, history) {
   const next = parts(requested);
   if (!next) throw new Error("Explicit personal releases require X.Y.Z-beta.N with no leading zeroes.");
   for (const value of [current, ...history.releases.map((entry) => entry.version)]) {
-    const previous = parts(value);
-    if (!previous) throw new Error(`Unsupported current beta version: ${value}`);
-    const position = next.findIndex((number, i) => number !== previous[i]);
-    if (position < 0 || next[position] < previous[position]) throw new Error(`Release version must be newer than ${value}.`);
+    const stable = value.match(/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/)?.slice(1).map(BigInt);
+    const previous = parts(value) ?? stable;
+    if (!previous) throw new Error(`Unsupported current version: ${value}`);
+    const position = next.slice(0, 3).findIndex((number, i) => number !== previous[i]);
+    if (position >= 0 ? next[position] < previous[position] : stable || next[3] <= previous[3]) {
+      throw new Error(`Release version must be newer than ${value}.`);
+    }
   }
   if (localGit(root, ["tag", "--list", `v${requested}`]).trim()) throw new Error(`Release version v${requested} is already tagged locally; select a new candidate explicitly.`);
 }
