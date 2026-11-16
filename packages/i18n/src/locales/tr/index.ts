@@ -1,3 +1,4 @@
+import { outputGuard } from "../output-guard.js";
 import { subagentControls } from "./subagent-controls.js";
 import { approvalCenter } from "./delegation-approval.js";
 import { delegationReliabilitySettings, delegationDiagnostics } from "./delegation-reliability.js";
@@ -5,6 +6,7 @@ import { sessionLabels, sessionGroups, sessionDelegation, delegationDetails } fr
 import { en, type EnglishCatalog } from "../en/index.js";
 
 export const tr = {
+  outputGuard: outputGuard.tr,
   toolObserver: en.toolObserver,
   toolImages: {
     title: "Araç görselleri", image: "Görsel {{index}}", returned: "{{count}} görsel döndürüldü",
@@ -1813,7 +1815,7 @@ sklm: {
     infiniteProviderRetry: "Başarılı olana kadar yeniden dene",
     infiniteProviderRetryDesc: "Ağ ve geçici sağlayıcı hataları istek başarılı olana kadar yeniden denenir. Çalışmayı yine durdurabilirsiniz; açıkken API kullanımı sürebilir.",
     autoContinueUnfinishedTodos: "Yarım görevleri otomatik sürdür",
-    autoContinueUnfinishedTodosDesc: "Bir yanıt, bu çalışmanın TodoWrite listesinde hâlâ tamamlanmamış maddeler varken biterse, görevin kapanabilmesi için otomatik olarak tek bir devam isteği gönderilir. Kullanıcı çalışması başına bir kez olur ve asla döngüye girmez; Durdur çalışmayı yine bitirir ve değişiklik sonraki çalışmadan itibaren geçerli olur. Devam istekleri ek model isteklerine yol açabilir.",
+    autoContinueUnfinishedTodosDesc: outputGuard.tr.checklistDesc,
     smoothStreaming: "Düzgün akış",
     smoothStreamingDesc: "Akan metni daktilo efekti için karakter karakter gösterir. Sistem hareket azaltmayı tercih ettiğinde otomatik devre dışı kalır.",
     inlineVisualizations: "Satır içi görselleştirmeler",

@@ -1,4 +1,5 @@
 import { isProviderStreamIdleTimeoutMinutes, resolveProviderStreamIdleTimeoutMinutes } from "@pi-desktop/shared";
+import { isAgentOutputGuardSettings, resolveAgentOutputGuardSettings } from "@pi-desktop/shared";
 import type { CoreNotificationRequest, NotificationDeliveryResult, NotificationTarget } from "@pi-desktop/shared";
 import type { DelegationApprovalSnapshot, DelegationApprovalActionRequest, DelegationApprovalActionResult, DelegationApprovalExtendRequest, DelegationApprovalChangedEvent } from "@pi-desktop/shared";
 import type { DelegationRunHistoryQuery, DelegationRunHistoryPage, DelegationApprovalHistory, DelegationApprovalHistoryMarkRead } from "@pi-desktop/shared";
@@ -476,6 +477,7 @@ export function normalizeSettings(settings: AppSettings): AppSettings {
     autoContinueUnfinishedTodos:
       (settings as { autoContinueUnfinishedTodos?: unknown })
         .autoContinueUnfinishedTodos !== false,
+    agentOutputGuard: resolveAgentOutputGuardSettings(settings.agentOutputGuard),
     jevEnabled: (settings as { jevEnabled?: unknown }).jevEnabled === true,
     defaultCommandShell: isCommandShellId(
       (settings as { defaultCommandShell?: unknown }).defaultCommandShell,
@@ -498,6 +500,10 @@ export function normalizeSettings(settings: AppSettings): AppSettings {
 }
 
 export function validateSettingsWrite(settings: AppSettings): AppSettings {
+  if (Object.prototype.hasOwnProperty.call(settings, "agentOutputGuard") &&
+      !isAgentOutputGuardSettings(settings.agentOutputGuard)) {
+    throw Object.assign(new Error("agentOutputGuard is invalid"), { errorCode: "INVALID_PARAMS" });
+  }
   if (
     settings.thinkingDisplayMode !== undefined &&
     settings.thinkingDisplayMode !== "detailed" &&

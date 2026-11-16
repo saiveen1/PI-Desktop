@@ -212,7 +212,10 @@ it("preserves the newest run diagnostic snapshot through delta projection and co
     transientRetries: 0, retryWaitMs: 0, lastEventAt: 1100 };
   const original = assistant({ id: "diagnostics", content: "a", runDiagnostics: diagnostics });
   const first = toWireMessageUpdate({ type: "message_update", message: original, deltaText: "a" });
-  const newer = { ...diagnostics, attemptCount: 2, retryCount: 1, lastEventAt: 1200 };
+  const newer = { ...diagnostics, attemptCount: 2, retryCount: 1, lastEventAt: 1200,
+    termination: { messageId: original.id, stopReason: "stop" as const,
+      reasonSource: "normalized" as const, earlyEnd: "suspected" as const,
+      outputTokens: 45, recoveryAttempts: 0 } };
   const second = toWireMessageUpdate({ type: "message_update",
     message: { ...original, content: "ab", runDiagnostics: newer }, deltaText: "b" });
   const merged = mergeMessageUpdates(first, second);
@@ -222,4 +225,6 @@ it("preserves the newest run diagnostic snapshot through delta projection and co
   expect(streamingMessageIdentity(original).runDiagnostics).toEqual(diagnostics);
   const legacyDelta = { ...second, message: { ...second.message, runDiagnostics: undefined } };
   expect(applyMessageUpdate(restored, legacyDelta).runDiagnostics).toEqual(newer);
+  expect(restored.runDiagnostics?.termination?.messageId).toBe(original.id);
+  expect(restored.runDiagnostics?.termination?.earlyEnd).toBe("suspected");
 });

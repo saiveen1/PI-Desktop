@@ -1,4 +1,5 @@
-import type { AgentRunDiagnostics } from "@pi-desktop/shared";
+import type { AgentResponseTermination, AgentRunDiagnostics } from "@pi-desktop/shared";
+import { normalizedStopReason } from "./run-diagnostics.js";
 
 export type RunDiagnosticsProviderEvent = {
   kind: "thinking" | "text" | "search" | "tool" | "other";
@@ -22,6 +23,7 @@ type RequestStart = {
   at: number;
   inputTokens?: number;
   contextWindow?: number;
+  maxOutputTokens?: number;
 };
 
 const SAFE_CODE = /^[A-Z][A-Z0-9_]{0,79}$/;
@@ -54,6 +56,7 @@ export class RunDiagnosticsTracker {
   private retryWaitStartedAt?: number;
   private settledRetryWaitMs = 0;
   private activeAttempt = 0;
+  private maxOutputTokens?: number;
 
   constructor({ turnId, startedAt, infiniteRetry }: TrackerOptions) {
     this.diagnostics = {
@@ -70,8 +73,10 @@ export class RunDiagnosticsTracker {
     };
   }
 
-  startRequest({ at, inputTokens, contextWindow }: RequestStart): void {
+  startRequest({ at, inputTokens, contextWindow, maxOutputTokens }: RequestStart): void {
     if (this.diagnostics.endedAt !== undefined) return;
+    this.maxOutputTokens = nonNegativeInt(maxOutputTokens);
+    delete this.diagnostics.termination;
     this.activeAttempt += 1;
     this.settleRetryWait(at);
     this.diagnostics.requestCount += 1;
@@ -163,6 +168,26 @@ export class RunDiagnosticsTracker {
     if (this.diagnostics.endedAt === undefined) this.diagnostics.phase = "tool";
   }
 
+  setOutputLimit(maxOutputTokens?: number): void {
+    if (this.diagnostics.endedAt === undefined) this.maxOutputTokens = nonNegativeInt(maxOutputTokens);
+  }
+  settleResponse(messageId: string, message: { stopReason?: unknown; usage?: { output?: number } }, recoveryAttempts: number): void {
+    if (this.diagnostics.endedAt !== undefined) return;
+    const outputTokens = nonNegativeInt(message.usage?.output);
+    this.diagnostics.termination = {
+      messageId, stopReason: normalizedStopReason(message.stopReason), reasonSource: "normalized", recoveryAttempts,
+      ...(outputTokens !== undefined ? { outputTokens } : {}),
+      ...(this.maxOutputTokens !== undefined ? { maxOutputTokens: this.maxOutputTokens } : {}),
+    };
+  }
+
+  annotateEarlyEnd(messageId: string, earlyEnd: NonNullable<AgentResponseTermination["earlyEnd"]>, recoveryAttempts: number): boolean {
+    const termination = this.diagnostics.termination;
+    if (this.diagnostics.endedAt !== undefined || termination?.messageId !== messageId || termination.stopReason !== "stop") return false;
+    this.diagnostics.termination = { ...termination, earlyEnd, recoveryAttempts };
+    return true;
+  }
+
   stopRetryWait(at: number): void {
     this.settleRetryWait(at);
   }
@@ -183,6 +208,7 @@ export class RunDiagnosticsTracker {
       ...this.diagnostics,
       retryWaitMs: this.settledRetryWaitMs + activeRetryWait,
       ...(this.diagnostics.lastRetry ? { lastRetry: { ...this.diagnostics.lastRetry } } : {}),
+      ...(this.diagnostics.termination ? { termination: { ...this.diagnostics.termination } } : {}),
     };
   }
 

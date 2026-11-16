@@ -6,6 +6,7 @@ import {
   isCommandShellCatalog,
   isUnknownUpstreamRetryLimit,
   resolveProviderStreamIdleTimeoutMinutes,
+  resolveAgentOutputGuardSettings,
   JEV_API_KEY_SECRET_REF,
   imageGenerationBindings,
   isImageGenerationModel,
@@ -768,6 +769,7 @@ export function createSessionLaunchRuntime({
           ? settings.unknownUpstreamRetryLimit : UNKNOWN_UPSTREAM_RETRY_LIMIT_DEFAULT,
         providerStreamIdleTimeoutMinutes: resolveProviderStreamIdleTimeoutMinutes(settings.providerStreamIdleTimeoutMinutes),
         autoContinueUnfinishedTodos: settings.autoContinueUnfinishedTodos !== false,
+        agentOutputGuard: resolveAgentOutputGuardSettings(settings.agentOutputGuard),
         // The session `/fast` switch only reaches a model the user allowed it
         // for in model settings (ADR 0334).
         fastMode: session.fastMode === true && storedModel?.fastModeAllowed === true,

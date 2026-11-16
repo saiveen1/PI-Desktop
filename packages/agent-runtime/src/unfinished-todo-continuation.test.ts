@@ -34,7 +34,7 @@ function fixture(steps: Step[], options: { enabled?: boolean; mode?: "agent" | "
       if (input.toolName === "Read") return { ok: false, content: "File read failed", error: { code: "NOT_FOUND", message: "File read failed" } };
       throw new Error(`Unexpected tool ${input.toolName}`);
     }
-    if (method === "session.appendMessage" || method === "project.instructions.resolve") return undefined;
+    if (method === "session.appendMessage" || method === "provider.delegationSnapshot" || method === "project.instructions.resolve") return undefined;
     throw new Error(`Unexpected host method ${method}`);
   });
   vi.stubGlobal("fetch", vi.fn(async (_url: unknown, init: RequestInit) => {

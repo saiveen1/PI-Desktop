@@ -95,14 +95,15 @@ export type AppSettings = {
   /** Transport silence timeout in minutes; 0 disables cancellation, absent defaults to 10. */
   providerStreamIdleTimeoutMinutes?: number;
   /**
-   * Keep the current task going once per user turn when the model finishes its
-   * reply while the TodoWrite checklist for that turn still has unfinished
-   * items. One automatic continuation is sent; it is never an endless loop and
-   * Stop still ends the turn. Absent and `true` both mean enabled, so the
-   * safeguard is on until the user turns it off. A change applies from the next
-   * turn. Continuations can cost extra model requests.
+   * Keep the current task going when its current-turn TodoWrite checklist has
+   * unfinished items, within agentOutputGuard.recoveryLimit (default one).
+   * Stop still ends the turn. Absent and true both mean this path is enabled;
+   * a zero shared allowance prevents automatic corrective continuations.
+   * Changes apply from the next turn. Continuations can cost extra requests.
    */
   autoContinueUnfinishedTodos?: boolean;
+  /** Configurable local end-of-turn and repetitive-output guards; no reviewer model. */
+  agentOutputGuard?: import("../agent-output-guard.js").AgentOutputGuardSettings;
   /** Allow Agent mode to call TypeSafe Jev for explicit structured classifications. */
   jevEnabled?: boolean;
   /** Prevent idle system sleep while this desktop app runs; off when absent. */

@@ -22,7 +22,7 @@ import {
 } from "./thinking-level.js";
 import { captureProviderResponse, carriesRetryDelayHeaders, createProviderRetryStream, type ProviderRetryController } from "./provider-retry.js";
 import type { AgentOptions } from "@earendil-works/pi-agent-core";
-import type { SubagentThinkingLevel } from "@pi-desktop/shared";
+import type { AgentOutputGuardSettings, SubagentThinkingLevel } from "@pi-desktop/shared";
 import type { ClassifiedAgentError } from "./agent-errors.js";
 import type { ProviderFetchFailure } from "./provider-transport-recovery.js";
 import type { AssistantMessageEventStream } from "@earendil-works/pi-ai";
@@ -43,6 +43,7 @@ export function subagentModelBinding(opts: {
   thinkingLevel: SubagentThinkingLevel;
   sessionId: string;
   maxTokens?: number;
+  agentOutputGuard?: AgentOutputGuardSettings;
   onUsage?: UsageObserver;
   uniqueToolCalls?: ReturnType<typeof createToolCallIdentity>;
   observeStream?: (createStream: () => AssistantMessageEventStream) => AssistantMessageEventStream;
@@ -132,7 +133,7 @@ export function subagentModelBinding(opts: {
             nativeCost: opts.provider.modelConfig?.nativeCost,
             onUsage: opts.onUsage,
           });
-        }),
+        }, opts.agentOutputGuard),
         {
           allowOutputLimitRepair: retry.allowOutputLimitRepair,
           onRetry: retry.onRetry,

@@ -13,11 +13,13 @@ import { isGenUiRemoteOwner } from "../gen-ui/gen-ui-source";
 import { ActivityGroup } from "./ActivityGroup";
 import { AssistantErrorMessage } from "./shared";
 import { useRenderBlocks, type RenderBlock } from "./render-blocks";
+import { earlyEndAdvisory } from "../../../lib/output-guard-advisory";
 
 /** Message bubble that optionally applies smooth text release. */
-const SmoothMessageBubble = memo(function SmoothMessageBubble({ message, streaming }: {
+const SmoothMessageBubble = memo(function SmoothMessageBubble({ message, streaming, turnActive }: {
   message: UiMessage;
   streaming: boolean;
+  turnActive: boolean;
 }) {
   const { t } = useTranslation();
   const smoothStreaming = useAppStore((s) => s.settings?.smoothStreaming !== false);
@@ -34,6 +36,7 @@ const SmoothMessageBubble = memo(function SmoothMessageBubble({ message, streami
   const remote = useAppStore((s) =>
     isGenUiRemoteOwner(sessionId, s.sessions.find((session) => session.id === sessionId)),
   );
+  const advisory = earlyEndAdvisory(message, streaming || turnActive);
   return (
     <div
       className={`message-bubble assistant-turn-fragment${streaming ? " streaming" : ""}${showCursor ? " smooth-cursor" : ""}`}
@@ -43,6 +46,9 @@ const SmoothMessageBubble = memo(function SmoothMessageBubble({ message, streami
       <GenUiCards references={genUi.references} sessionId={sessionId} remote={remote} />
       {message.outputTruncated ? (
         <p className="message-output-notice" role="status">{t("chat.outputTruncated")}</p>
+      ) : null}
+      {advisory ? (
+        <p className="message-output-notice" role="status">{t(`outputGuard.${advisory}`)}</p>
       ) : null}
       {message.error ? <AssistantErrorMessage message={message} /> : null}
     </div>
@@ -104,6 +110,7 @@ const TurnPartBlock = memo(function TurnPartBlock({
       key={part.message.id}
       message={part.message}
       streaming={isActive && part.message.status === "streaming"}
+      turnActive={isActive}
     />
   ))}</>;
 });

@@ -4997,6 +4997,36 @@ Build two actual runtimes with identical configuration and different scratch dir
   settings interaction, persistence, and launch contract tests. Electron
   end-to-end execution is not claimed by these isolated tests.
 
+## E2E-RUNTIME-configurable-output-guards
+- **Title:** Ordinary Agent early endings are advisory or boundedly corrected.
+- **Preconditions:** Synthetic provider and Host boundaries, isolated test state,
+  no live model, installed Desktop or real profile.
+- **Steps:** In Behavior settings exercise Off/Warn/Continue, recovery limits
+  0/1/2/3, repetition switches and numeric threshold validation. Save partial
+  settings and confirm sibling values survive. Use a reused runtime for the
+  next turn. Return an immediate action promise after actual task progress but
+  without a current-turn checklist. Repeat with discussion-only requests,
+  optional next-step suggestions, completed reports, questions/blockers,
+  failed or uncertain tool outcomes, length/error/abort, steering and Stop.
+  Chain different corrective paths and observe their common ceiling. Inspect
+  settled and streaming messages carrying matching and mismatched diagnostic IDs.
+- **Expected:** Warn adds no provider request; Continue uses retained receipts
+  and a temporary system correction within the configured allowance. No tool
+  action or user request is replayed; no reviewer model or permanent prompt is
+  added. No continuation on the excluded paths. One final terminal lifecycle is
+  retained; budget exhaustion is not reset by another successful tool. Normalized
+  termination evidence survives message updates and is not misrepresented as raw
+  provider frames. Warnings appear only on the appropriate settled message;
+  truncated and failed answers retain their own semantics.
+- **Specs:** `03-runtime/02-agent-runtime.md` §5e.3;
+  `03-runtime/09-logging-and-observability.md` §7a;
+  `04-ux/06-settings-ia.md` Behavior / Output guards.
+- **Acceptance:** C / E / Quality; safety against duplicate actions and unwanted
+  continuation takes priority over exhaustive semantic detection.
+- **Milestone:** Maintenance.
+- **Status:** Offline unit, runtime user-path and settings/renderer fixtures;
+  real-model accuracy and installed-application verification are not claimed.
+
 ## E2E-CHAT-task-first-reading
 - **Preconditions:** Production renderer components with synthetic recorded/live
   messages, a stub Host boundary, and isolated Electron BrowserWindow state; no

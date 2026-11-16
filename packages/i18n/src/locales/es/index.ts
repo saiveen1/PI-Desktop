@@ -1,3 +1,4 @@
+import { outputGuard } from "../output-guard.js";
 import { subagentControls } from "./subagent-controls.js";
 import { approvalCenter } from "./delegation-approval.js";
 import { delegationReliabilitySettings, delegationDiagnostics } from "./delegation-reliability.js";
@@ -5,6 +6,7 @@ import { sessionLabels, sessionGroups, sessionDelegation, delegationDetails } fr
 import { en, type EnglishCatalog } from "../en/index.js";
 
 export const es = {
+  outputGuard: outputGuard.es,
   toolObserver: en.toolObserver,
   toolImages: {
     title: "Imágenes de la herramienta", image: "Imagen {{index}}", returned: "{{count}} imágenes devueltas",
@@ -1811,7 +1813,7 @@ sklm: {
     "infiniteProviderRetry": "Reintentar hasta tener éxito",
     "infiniteProviderRetryDesc": "Reintenta los errores de red y temporales hasta que la solicitud tenga éxito. Puedes detener el turno; el uso de la API puede continuar.",
     "autoContinueUnfinishedTodos": "Continuar tareas sin terminar",
-    "autoContinueUnfinishedTodosDesc": "Si una respuesta termina mientras la lista TodoWrite de este turno aún tiene puntos pendientes, se envía automáticamente una sola continuación para que la tarea pueda cerrarse. Ocurre una vez por turno del usuario y nunca entra en bucle; Detener sigue terminando el turno, y un cambio se aplica desde el turno siguiente. Las continuaciones pueden generar solicitudes adicionales al modelo.",
+    "autoContinueUnfinishedTodosDesc": outputGuard.es.checklistDesc,
     "smoothStreaming": "Transmisión suave",
     "smoothStreamingDesc": "Libera el texto transmitido carácter por carácter para un efecto de máquina de escribir. Se desactiva automáticamente cuando el sistema prefiere movimiento reducido.",
     "inlineVisualizations": "Visualizaciones en línea",

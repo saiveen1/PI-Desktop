@@ -1901,6 +1901,18 @@ storage but compose into one assistant turn until the next user message.
 - Historical messages and persisted text are not rewritten or deleted. Runtime
   repetition detection is separate: see the agent runtime specification.
 
+### 7.4b Early-end advisories
+
+An assistant bubble may show a localized `role="status"` output notice for
+`runDiagnostics.termination.earlyEnd` of `suspected` or `exhausted`. Its
+`messageId` must match the bubble, the normalized stop reason must be `stop`,
+and the reply must be settled and non-error/
+non-aborted, and active recovery must not present a premature warning. The
+notice is advisory, not an assertion that a task failed or succeeded, and
+directs the user to review before choosing a follow-up. No automatic-send or
+whole-task replay action is added. Existing output-limit notices remain
+distinct. Missing historical diagnostic metadata creates no new warning.
+
 ### 7.5 Accessibility
 
 - `role="log"` container

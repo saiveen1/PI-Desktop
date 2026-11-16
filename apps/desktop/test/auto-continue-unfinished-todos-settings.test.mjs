@@ -150,7 +150,7 @@ test("the row is indexed in Settings → Behavior beside the provider retry swit
   );
 });
 
-test("the English and Chinese copy explains the one-shot continuation and its cost", () => {
+test("the English and Chinese copy explains the shared continuation allowance and its cost", () => {
   const en = catalogs.en.settings;
   const zh = catalogs["zh-CN"].settings;
   assert.equal(en.autoContinueUnfinishedTodos, "Auto-continue unfinished tasks");
@@ -160,16 +160,16 @@ test("the English and Chinese copy explains the one-shot continuation and its co
     assert.match(desc, /TodoWrite/);
     assert.ok(desc.trim().length > 0);
   }
-  // One continuation per turn, stoppable, applies next turn, extra requests.
-  assert.match(en.autoContinueUnfinishedTodosDesc, /once per user turn/);
-  assert.match(en.autoContinueUnfinishedTodosDesc, /never loops/);
+  // Shared default-one allowance, stoppable, applies next turn, extra requests.
+  assert.match(en.autoContinueUnfinishedTodosDesc, /shared correction allowance/);
+  assert.match(en.autoContinueUnfinishedTodosDesc, /default one/);
   assert.match(en.autoContinueUnfinishedTodosDesc, /Stop still ends the turn/);
-  assert.match(en.autoContinueUnfinishedTodosDesc, /from the next turn/);
+  assert.match(en.autoContinueUnfinishedTodosDesc, /next turn/);
   assert.match(en.autoContinueUnfinishedTodosDesc, /extra model requests/);
-  assert.match(zh.autoContinueUnfinishedTodosDesc, /只续跑一次/);
+  assert.match(zh.autoContinueUnfinishedTodosDesc, /共享纠正额度.*默认一次/);
   assert.match(zh.autoContinueUnfinishedTodosDesc, /仍可随时停止/);
   assert.match(zh.autoContinueUnfinishedTodosDesc, /下一轮/);
-  assert.match(zh.autoContinueUnfinishedTodosDesc, /额外的模型请求/);
+  assert.match(zh.autoContinueUnfinishedTodosDesc, /额外(?:的)?模型请求/);
   // Every shipped catalog carries the pair, so no locale falls back silently.
   for (const [id, catalog] of Object.entries(catalogs)) {
     assert.equal(

@@ -401,7 +401,8 @@ are not diagnosed. This is a conservative format diagnostic, not a general
 markup parser or a semantic task-completion judge.
 
 For a normal main-Agent `stop` with diagnosed text and no structured tool
-calls, `finishTurn` permits one correction in the same durable user turn.
+calls, `finishTurn` permits a correction in the same durable user turn,
+subject to the configurable shared allowance in §5e.3 (default one).
 A replaceable system section explains that the text executed no action,
 asks for a valid structured call within the original scope and permissions,
 and forbids repeating successful actions or guessing missing arguments. It
@@ -409,8 +410,8 @@ expires on the following request; summary compaction retains the active task whi
 the correction is pending. No synthetic user message or new turn is created.
 
 The allowance is not replenished by successful tools, provider retries or
-steering. A second diagnosed text-only stop is terminal even if a checklist
-is unfinished, leaving the diagnostic available for manual retry. Cancellation,
+steering. Once the shared allowance is spent, a further diagnosed text-only stop
+is terminal even if a checklist is unfinished, leaving manual recovery available. Cancellation,
 graceful stop, mode closeout, pending steering/delegation work, non-Agent modes,
 and provider errors/aborts/length stops do not trigger this correction. Approved
 Plan execution uses the Agent rule; its progress-only heuristic does not add
@@ -422,12 +423,26 @@ is spent.
 ### Repetitive model-output circuit breaker
 
 Desktop main-Agent and delegated provider streams inspect text and thinking
-incrementally before forwarding deltas to the agent loop. A contiguous run of
+incrementally before forwarding deltas to the agent loop. Settings → Behavior
+exposes `agentOutputGuard`; shared defaults/validation own all configurable
+thresholds. `repetitiveOutputEnabled` defaults to true. A contiguous run of
 whitespace (including common invisible separators), punctuation and symbols
-trips at 4,096 characters with 512 newlines,
-or 8,192 characters without a newline requirement. Meaningful characters reset
-the run. Markdown fenced code is excluded; this is a conservative runaway-output
-guard, not a semantic judge of repetitive prose, code, logs, or task completion.
+trips at `symbolMinChars` (default 4,096) with `symbolMinLines` (default 512),
+or at `symbolSingleLineChars` (default 8,192) without a newline requirement.
+Meaningful characters reset the run. Markdown fenced code is excluded.
+
+`repeatedParagraphsEnabled` (default true) adds exact consecutive narrative
+paragraph comparison after whitespace normalization. It requires both
+`repeatedParagraphMinRepeats` (default 4) and `repeatedParagraphMinChars`
+(default 1,200). The original output is never normalized or rewritten. Samples
+are bounded to 8,192 characters per paragraph; longer paragraphs, fenced or
+indented code, tables, lists, quotes, short items and machine-oriented lines
+are not prose candidates. Changed content resets the streak. The final
+unterminated paragraph is checked once. Turning off the master switch disables
+both detectors; disabling only paragraphs retains symbol protection.
+
+This is not a semantic judge of answer quality or task completion. Deliberately
+repeated narrative can trigger it; alternating or rephrased loops may be missed.
 Tool-call arguments and tool results are never inspected or rewritten.
 
 Each request owns its detector and abort controller. Detection cancels only
@@ -608,7 +623,8 @@ call whose visible text has a clear forward-looking action signal such as
 "Writing the remaining note" or "the next step is ...". A normal completion
 report such as "Implemented the approved plan" is terminal and is not nudged.
 
-The recovery is bounded to one attempt per approved execution. The progress
+The recovery is bounded to one attempt per approved execution and the shared
+correction allowance in §5e.3. The progress
 text remains in the current assistant bubble, while its assistant message is
 removed from model context before `continue()` so the provider never receives
 an invalid assistant-to-assistant transcript. The first attempt's
@@ -641,8 +657,8 @@ the existing task within its original scope and permissions, keep checklist
 states truthful, and ask for user input or explain a concrete blocker when
 necessary. The reminder expires on the following provider request.
 
-There is at most one checklist continuation per user turn, even if further
-tool calls update the list. A new user turn resets this allowance and requires
+Checklist corrections consume the shared user-turn allowance in §5e.3 (default
+one), even if further tools update the list. A new user turn resets it and requires
 its own successful checklist write; a stale persisted list alone cannot trigger
 execution. Empty, completed, and cancelled lists do not trigger it. Failed or
 aborted responses, truncated output, a failed latest tool batch, explicit Stop,
@@ -656,6 +672,40 @@ emits `agent_end`.
 This can add model requests and cost. It does not guarantee task completion
 when the model stops again, and it cannot infer unfinished work without a
 checklist written in that turn. See E2E-RUNTIME-unfinished-todo-continuation.
+
+### 5e.3. Configurable local early-end guard and shared correction budget
+
+`agentOutputGuard.earlyEndMode` offers `off`, `warn` (default), and `continue`.
+An ordinary Agent task can end with an immediate action promise but no structured
+tool call, even without a current-turn checklist. A conservative local check
+combines the current task and execution evidence with the final response. Explicit
+discussion-only requests, completed/optional-follow-up reports, waiting for user
+input, blockers, unsafe tool outcomes and cancellation/steering/delegation states
+do not authorize continuation. Text is never converted into executable arguments.
+
+Warn mode annotates the matching settled message without an additional model
+request. Continue mode may add a short, temporary system correction to advance the
+same task using retained receipts, or explain a concrete blocker. It adds no
+synthetic user message and does not replay completed tools. The normal path has
+no additional model instructions, tools or reviewer request. This heuristic is
+advisory and may miss ambiguous early stops; it does not prove completion.
+
+`agentOutputGuard.recoveryLimit` is a shared user-turn ceiling (integer 0-3,
+default 1) for early-end, checklist, text-tool-protocol and approved-execution
+progress corrections. Existing eligibility rules remain, as does the legacy
+approved-execution one-shot limit; tool activity never replenishes the allowance. Zero
+disables these automatic corrections. It does not disable transport recovery or
+make a repetitive-output failure retryable. The existing checklist toggle still
+controls whether its path is eligible. Budget exhaustion remains visible rather
+than permitting another guard to restart the same work.
+
+The settings apply on the next user turn, including runtime reuse. No provider
+name is hard-coded and no third-party assessor is needed. Optional normalized
+termination facts ride on existing `runDiagnostics.termination`: message ID,
+stop reason and its `normalized` source, available token figures, early-end
+warning/recovery state and correction count. Old rows remain valid without this
+field; raw provider reasons are not fabricated from normalized values. See
+[the decision](../../adr/configurable-local-output-guards.md).
 
 ### 5.1 Context checkpoint protection (D158/D203, ADR 0030/0049/0061/0064)
 

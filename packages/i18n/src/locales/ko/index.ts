@@ -1,3 +1,4 @@
+import { outputGuard } from "../output-guard.js";
 import { subagentControls } from "./subagent-controls.js";
 import { approvalCenter } from "./delegation-approval.js";
 import { delegationReliabilitySettings, delegationDiagnostics } from "./delegation-reliability.js";
@@ -5,6 +6,7 @@ import { sessionLabels, sessionGroups, sessionDelegation, delegationDetails } fr
 import { en, type EnglishCatalog } from "../en/index.js";
 
 export const ko = {
+  outputGuard: outputGuard.ko,
   toolObserver: en.toolObserver,
   toolImages: {
     title: "도구 이미지", image: "이미지 {{index}}", returned: "이미지 {{count}}개 반환됨",
@@ -1819,7 +1821,7 @@ sklm: {
     infiniteProviderRetry: "성공할 때까지 재시도",
     infiniteProviderRetryDesc: "네트워크 및 일시적인 제공자 오류가 성공할 때까지 계속 재시도됩니다. 언제든 중지할 수 있지만 API 사용량이 계속 발생할 수 있습니다.",
     autoContinueUnfinishedTodos: "미완료 작업 자동 이어하기",
-    autoContinueUnfinishedTodosDesc: "이번 실행의 TodoWrite 목록에 아직 끝나지 않은 항목이 있는 상태에서 응답이 끝나면, 작업을 마무리할 수 있도록 자동으로 한 번만 이어서 요청합니다. 사용자 실행당 한 번이며 반복되지 않고, 중지로 언제든 실행을 끝낼 수 있으며 변경 사항은 다음 실행부터 적용됩니다. 이어하기는 추가 모델 요청을 발생시킬 수 있습니다.",
+    autoContinueUnfinishedTodosDesc: outputGuard.ko.checklistDesc,
     smoothStreaming: "부드러운 스트리밍",
     smoothStreamingDesc: "스트리밍 텍스트를 한 글자씩 타자기 효과로 표시합니다. 시스템에서 동작 줄이기를 선호하면 자동으로 비활성화됩니다.",
     inlineVisualizations: "인라인 시각화",

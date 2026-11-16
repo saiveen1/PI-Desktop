@@ -34,11 +34,14 @@ import { requestExtensionUi } from "./extensions/ui-request.js";
 import { readLocalRequestErrorDetails } from "./local-request-errors.js";
 import { isValidToolCall, recoverMalformedToolCalls } from "./tool-call-recovery.js";
 import { textToolCallDiagnostic } from "./text-tool-call.js";
-import { TextToolCallRecovery } from "./text-tool-call-recovery.js";
+import { TurnCorrectionPolicy } from "./turn-correction-policy.js";
+import { PROGRESS_TURN_NUDGE, isProgressOnlyAssistantTurn } from "./progress-turn.js";
+export { isProgressOnlyAssistantTurn } from "./progress-turn.js";
+import { diagnosticsForMessage, runDiagnosticsProviderEvent } from "./run-diagnostics.js";
+import type { AgentOutputGuardSettings } from "@pi-desktop/shared";
 import { computerUseDescription, computerUseParameters } from "./computer-use/tool.js";
 import { imageGenerationDescription, imageGenerationParameters } from "./image-generation/tool.js";
 import { todoWriteDescription, todoWriteParameters } from "./todo-tool.js";
-import { UnfinishedTodoContinuation } from "./unfinished-todo-continuation.js";
 import { createJevClassifierTool } from "./jev-classifier-tool.js";
 import { scheduledToolParameters, scheduledToolDescriptions } from "./scheduled-tools.js";
 import { withPiFileOpToolNames } from "./pi-file-ops.js";
@@ -70,7 +73,6 @@ import {
   toToolDeclaration,
   type Api,
   type AssistantMessage,
-  type AssistantMessageEvent,
   type ImageContent,
   type Model,
   type Models,
@@ -157,7 +159,6 @@ import {
 import { createStreamCoalescer, type StreamCoalescer } from "./stream-coalescer.js";
 import {
   RunDiagnosticsTracker,
-  type RunDiagnosticsProviderEvent,
 } from "./run-diagnostics-tracker.js";
 import { checkGenUiFragment, genUiFragmentCheckNote, isGenUiFragmentPath } from "./gen-ui-fragment-check.js";
 import type { RuntimeHost } from "./host-client.js";
@@ -924,20 +925,6 @@ const SILENT_TURN_NUDGE = [
   "</no_output_recovery>",
 ].join("\n");
 
-/**
- * Autonomous plan/goal execution: collaboration prompts ask the model to
- * narrate progress ("Writing it now.") then call a tool. Models often emit
- * that narration as a finished assistant message with `finish_reason: stop`
- * and no toolCall, so the runtime treats it as the final answer and ends the
- * run mid-task (#43). One automatic continue with this nudge, then stop.
- */
-const PROGRESS_TURN_NUDGE = [
-  "<progress_only_recovery>",
-  "Your last message announced next steps but contained no tool call, so the autonomous run would have stopped mid-task.",
-  "Continue the approved plan now: either call the tools for the work you just described, or write the final self-contained completion report.",
-  "Do not announce intent without a tool call in the same message.",
-  "</progress_only_recovery>",
-].join("\n");
 
 /**
  * Some OpenAI-style models emit their internal parallel-call wrapper as
@@ -1072,6 +1059,7 @@ export type AgentRuntimeOptions = {
   providerStreamIdleTimeoutMinutes?: number;
   /** Continue once when this task's committed checklist remains unfinished. On unless false. */
   autoContinueUnfinishedTodos?: boolean;
+  agentOutputGuard?: AgentOutputGuardSettings;
   /**
    * Fast mode for main turns, already resolved by the launcher from the
    * session `/fast` switch and the model binding's opt-in (ADR 0334).
@@ -1201,53 +1189,6 @@ function messageRequestsTools(message: unknown): boolean {
   );
 }
 
-function runDiagnosticsProviderEvent(event: AssistantMessageEvent): RunDiagnosticsProviderEvent {
-  switch (event.type) {
-    case "thinking_start":
-    case "thinking_delta":
-    case "thinking_end":
-      return { kind: "thinking" };
-    case "text_start":
-    case "text_end":
-      return { kind: "text" };
-    case "text_delta":
-      return { kind: "text", hasNewText: event.delta.length > 0 };
-    case "hosted_search_update":
-      return { kind: "search" };
-    case "toolcall_start":
-    case "toolcall_delta":
-    case "toolcall_end":
-      return { kind: "tool" };
-    default:
-      return { kind: "other" };
-  }
-}
-
-const PROGRESS_FORWARD_INTENT_PATTERNS = [
-  /\b(?:about to|going to|will|next|then|still(?: need| have to)?|remaining|left to|working on|writing|reading|updating|implementing|checking|running|creating|fixing|reviewing|proceed(?:ing)?|continu(?:e|ing)|starting|moving on)\b/i,
-  /(?:接下来|下一步|还需要|仍需|剩下|正在|将要|继续|开始)/i,
-];
-const PROGRESS_TERMINAL_LEAD =
-  /^(?:done|all done|complete(?:d)?|finished|implemented|resolved|verified|successful(?:ly)?|the (?:approved )?(?:plan|goal) is complete)\b/i;
-
-function hasProgressForwardIntent(text: string): boolean {
-  return PROGRESS_FORWARD_INTENT_PATTERNS.some((pattern) => pattern.test(text));
-}
-
-/** Clearly forward-looking visible assistant text without a toolCall. */
-export function isProgressOnlyAssistantTurn(message: unknown): boolean {
-  if (!isRecord(message) || message.role !== "assistant") return false;
-  if (messageRequestsTools(message)) return false;
-  const content = isRecord(message) ? message.content : undefined;
-  const text = assistantContent(content).text.trim();
-  if (!text || !hasProgressForwardIntent(text)) return false;
-  if (!PROGRESS_TERMINAL_LEAD.test(text)) return true;
-
-  // A report can mention a completed step and still announce the next one.
-  // Only recover a terminal-looking lead when a later clause carries the
-  // forward intent that distinguishes it from a normal final report.
-  return hasProgressForwardIntent(text.replace(PROGRESS_TERMINAL_LEAD, ""));
-}
 
 function boundedText(value: string, maxChars: number): string {
   const text = value.trim();
@@ -1957,8 +1898,7 @@ export class DesktopAgentRuntime {
   private providerRateLimitRetryAttempt = 0;
   /** Opt-in mode removes only the retry-count ceiling; abort and backoff stay intact. */
   private infiniteProviderRetry = false;
-  private readonly unfinishedTodoContinuation: UnfinishedTodoContinuation;
-  private readonly textToolCallRecovery = new TextToolCallRecovery();
+  private readonly turnCorrections: TurnCorrectionPolicy;
   private fastMode = false;
   private jevApiKey?: string;
   private computerUseEnabled = false;
@@ -2078,8 +2018,8 @@ export class DesktopAgentRuntime {
     this.computerUseEnabled = opts.computerUseEnabled === true;
     this.host = opts.host;
     this.batchPlanner = new BatchPlanner(this.host, this.sessionId);
-    this.unfinishedTodoContinuation = new UnfinishedTodoContinuation(
-      this.host, this.sessionId, opts.autoContinueUnfinishedTodos !== false,
+    this.turnCorrections = new TurnCorrectionPolicy(
+      this.host, this.sessionId, opts.autoContinueUnfinishedTodos !== false, opts.agentOutputGuard,
     );
     this.onDiagnostic = opts.onDiagnostic ?? (() => undefined);
     this.hostCloseUnsubscribe = this.host.onClose?.(() => {
@@ -2286,6 +2226,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
             at: requestAt,
             inputTokens: estimateOutputCapInputTokens(requestContext, m),
             contextWindow: effectiveModelContextWindow(m),
+            maxOutputTokens: attemptOptions.maxTokens,
           });
         }
         const usageTurnId = this.turnId;
@@ -2296,6 +2237,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           attemptOptions,
           (retryOptions) => {
             const attempt = diagnosticAttempt;
+            if (diagnostics === this.runDiagnostics) diagnostics?.setOutputLimit(retryOptions.maxTokens);
             return withModelOutputGuard(m, retryOptions, guardedOptions => withProviderStreamIdleTimeout(m, guardedOptions,
               streamIdleTimeoutMs(this.providerStreamIdleTimeoutMinutes), timedOptions => accountModelStream(m, () =>
               this.thinkingLevel === "omit"
@@ -2312,7 +2254,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
               }), since => {
                 if (!this.disposed && !this.runCancelled && diagnostics === this.runDiagnostics)
                   this.setAgentActivity({ phase: "waiting-model", since, slow: true });
-              }));
+              }), this.turnCorrections.settings);
           },
           {
             claim: (error, phase) => this.claimProviderRetry(error, phase),
@@ -2366,8 +2308,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       prepareRequest: async ({ context }) => {
         const changed = await this.prepareDelegationCatalog();
         const prepared = this.prepareToolDeclarations(context, changed);
-        const todoContext = this.unfinishedTodoContinuation.prepareRequest(prepared.context ?? context);
-        return { ...prepared, context: this.textToolCallRecovery.prepareRequest(todoContext) };
+        return { ...prepared, context: this.turnCorrections.prepareRequest(prepared.context ?? context) };
       },
       // Extensions see every provider request, including the first one of a
       // run, which `prepareNextTurn` never reaches (spec 16 §6, issue #1838).
@@ -2404,10 +2345,13 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           this.mode === "agent" && !this.disposed && !this.runCancelled && !this.turnHadError &&
           !this.modeState.closeoutExhausted() &&
           !this.gracefulStopRequested && this.acceptingSteering && !this.pendingSteering.size &&
-          !this.pendingProgressTurnRerun && !this.pendingSilentTurnRerun && !this.keepTurnOpenForDelegates();
-        const correction = this.textToolCallRecovery.finishTurn(turn, this.toolCatalog, canContinue(), signal);
-        if (correction) return correction;
-        return this.unfinishedTodoContinuation.finishTurn(turn, canContinue, signal);
+          !this.pendingProgressTurnRerun && !this.pendingSilentTurnRerun && !this.pendingOverflow &&
+          !this.pendingProviderRetry && !this.keepTurnOpenForDelegates();
+        const response = this.runDiagnosticMessage;
+        return this.turnCorrections.finishTurn(turn, this.toolCatalog, canContinue, (state, attempts) => {
+          if (response && this.runDiagnostics?.annotateEarlyEnd(response.id, state, attempts))
+            this.emit({ type: "message_update", message: response });
+        }, signal, this.autonomousExecution);
       },
     });
 
@@ -2453,7 +2397,12 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
 
   setAutoContinueUnfinishedTodos(enabled: boolean): void {
     if (this.disposed) throw new Error("runtime disposed");
-    this.unfinishedTodoContinuation.setEnabled(enabled);
+    this.turnCorrections.todos.setEnabled(enabled);
+  }
+
+  setAgentOutputGuard(settings?: AgentOutputGuardSettings): void {
+    if (this.disposed) throw new Error("runtime disposed");
+    this.turnCorrections.setSettings(settings);
   }
 
   /** Apply the session `/fast` switch to the next turn of a reused runtime. */
@@ -5275,6 +5224,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
             provider,
             infiniteProviderRetry: this.infiniteProviderRetry,
             unknownUpstreamRetryLimit: this.unknownUpstreamRetryLimit,
+            agentOutputGuard: this.turnCorrections.settings,
             onProgress: ({ turns }) => {
               if (record.status !== "running") return;
               record.turns = turns;
@@ -7038,8 +6988,8 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     if ((event.type === "message_start" || event.type === "message_update" || event.type === "message_end") &&
       event.message.role === "assistant" && !event.message.parentToolCallId) {
       const diagnostics = this.runDiagnostics?.snapshot(ts);
-      if (diagnostics?.turnId === owner) {
-        event = { ...event, message: { ...event.message, runDiagnostics: diagnostics } };
+      if (diagnostics && diagnostics.turnId === owner) {
+        event = { ...event, message: { ...event.message, runDiagnostics: diagnosticsForMessage(diagnostics, event.message.id) } };
         this.runDiagnosticMessage = event.message;
       }
     }
@@ -7240,8 +7190,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
    * following turn ends invisibly even though nothing went wrong in it.
    */
   private resetRunRecoveryState(): void {
-    this.unfinishedTodoContinuation.reset();
-    this.textToolCallRecovery.reset();
+    this.turnCorrections.reset();
     this.pendingOverflow = false;
     this.overflowRecoveryAttempted = false;
     this.overflowRecoveryInProgress = false;
@@ -7744,8 +7693,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     }
 
     const retentionMode: CompactionRetentionMode =
-      this.unfinishedTodoContinuation.pending ||
-      this.textToolCallRecovery.pending ||
+      this.turnCorrections.pending ||
       (turn.toolResults?.length ?? 0) > 0 ||
       turn.message?.stopReason === "toolUse"
         ? "active_turn"
@@ -8991,6 +8939,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
             // says next answers the user, not a completion notice, so the
             // ordinary response contract applies again.
             this.allowSilentCompletion = false;
+            this.turnCorrections.setTask(assistantContent(event.message.content).text, true);
           } else {
             this.pendingUserMessageId = undefined;
           }
@@ -9003,6 +8952,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
         }
         if (this.currentAssistant && event.message.role === "assistant") {
           const assistantId = this.currentAssistant.id;
+          this.runDiagnostics?.settleResponse(assistantId, event.message, this.turnCorrections.attempts);
           const content = assistantContent((event.message as any).content);
           // pi-agent-core encodes stream failures in the final message
           // (stopReason "error"/"aborted" + errorMessage) and resolves the
@@ -9168,19 +9118,20 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           // Autonomous plan/goal: clearly forward-looking text without a tool
           // call is probably progress, not a final answer. Nudge once (#43).
           const progressOnlyTurn =
-            !failed &&
-            !aborted &&
+            stopReason === "stop" && !failed && !aborted && this.turnCorrections.progressSafe &&
             canRecoverTurn &&
             !silentTurn &&
             !textCallDiagnostic &&
             this.autonomousExecution &&
             !this.silentTurnRerunAttempted &&
-            !this.progressTurnRerunAttempted &&
+            !this.runCancelled && !this.disposed && !this.gracefulStopRequested && !this.pendingSteering.size &&
+            !this.keepTurnOpenForDelegates() &&
             isProgressOnlyAssistantTurn(event.message);
-          if (progressOnlyTurn) {
+          if (progressOnlyTurn && !this.progressTurnRerunAttempted && this.turnCorrections.claimLegacyProgress()) {
             this.progressTurnRerunAttempted = true;
             this.pendingProgressTurnRerun = true;
             this.suppressProgressTurnRunEnd = true;
+            this.runDiagnostics?.annotateEarlyEnd(assistantId, "recovering", this.turnCorrections.attempts);
             this.currentAssistant = {
               ...this.currentAssistant,
               content: nextText,
@@ -9199,6 +9150,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
             this.streamStartedAt = undefined;
             break;
           }
+          if (progressOnlyTurn) this.runDiagnostics?.annotateEarlyEnd(assistantId, "exhausted", this.turnCorrections.attempts);
           const canRecoverOverflow =
             this.compactionEnabled &&
             canRecoverTurn &&
@@ -9770,6 +9722,8 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     this.pathInstructionClaims.clear();
     this.pendingUserMessageId = userMessageId;
     this.resetRunRecoveryState();
+    this.turnCorrections.setTask(typeof input === "string" ? input :
+      input.sessionMessage || (input.modeTurn && input.modeTurn.origin !== "user") ? "" : input.text);
     this.autonomousExecution = false;
     const recovered = recoverMalformedToolCalls(this.agent.state.messages);
     if (recovered !== this.agent.state.messages) this.setAgentMessages(recovered);

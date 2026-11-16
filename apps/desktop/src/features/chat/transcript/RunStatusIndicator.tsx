@@ -142,6 +142,13 @@ export function RunStatusIndicator({
     rows.push([t("chat.runDetails.answerUpdate"), age(diagnostics.lastTextAt)]);
     if (diagnostics.inputTokens !== undefined) rows.push([t("chat.runDetails.context"), t("chat.runDetails.estimated", { tokens: number.format(diagnostics.inputTokens) })]);
     if (diagnostics.contextWindow !== undefined) rows.push([t("chat.runDetails.window"), number.format(diagnostics.contextWindow)]);
+    if (diagnostics.termination) {
+      const termination = diagnostics.termination;
+      rows.push([t("outputGuard.normalizedReason"), t(`outputGuard.reason.${termination.stopReason}`)]);
+      if (termination.outputTokens !== undefined) rows.push([t("outputGuard.outputTokens"), number.format(termination.outputTokens)]);
+      if (termination.maxOutputTokens !== undefined) rows.push([t("outputGuard.maxOutputTokens"), number.format(termination.maxOutputTokens)]);
+      if (termination.recoveryAttempts !== undefined) rows.push([t("outputGuard.recoveryAttempts"), number.format(termination.recoveryAttempts)]);
+    }
     if (diagnostics.lastRetry) rows.push([t("chat.runDetails.lastFailure"), [diagnostics.lastRetry.code,
       diagnostics.lastRetry.providerStatus !== undefined ? `HTTP ${diagnostics.lastRetry.providerStatus}` : undefined,
       diagnostics.lastRetry.networkCode].filter(Boolean).join(" · ")]);

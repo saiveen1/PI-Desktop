@@ -1,6 +1,7 @@
 import type { AgentContext, AgentTurnContext } from "@earendil-works/pi-agent-core";
 import { getCurrentSystemMessage } from "@earendil-works/pi-ai";
 import { textToolCallDiagnostic } from "./text-tool-call.js";
+import type { CorrectiveBudget } from "./corrective-budget.js";
 
 const SECTION = "text_tool_call_recovery";
 const REMINDER = [
@@ -8,19 +9,21 @@ const REMINDER = [
   "Your last reply contained tool-call markup as ordinary text, not an executable structured tool call. Nothing was executed from that text.",
   "Continue the existing task within its original scope and permissions. Preserve completed tool results and do not repeat successful actions. Inspect uncertain effects before retrying any action.",
   "If an action is still needed, emit a valid structured tool call using the available tools; do not print tool protocol markup or guess missing arguments. Discover on-demand tools with ToolSearch when needed.",
-  "If the task is complete, blocked, or needs user input, report that accurately instead. This is the only automatic text-call correction for this user turn, not a new user request.",
+  "If the task is complete, blocked, or needs user input, report that accurately instead. This is a bounded correction for this user turn, not a new user request.",
   "</text_tool_call_recovery>",
 ].join("\n");
 
 /** Recover protocol leakage, not semantic incompleteness, inside the existing loop. */
 export class TextToolCallRecovery {
-  private attempted = false;
   private pendingReminder = false;
+
+  constructor(private readonly budget: CorrectiveBudget) {}
 
   get pending(): boolean { return this.pendingReminder; }
 
+  cancelPending(): void { this.pendingReminder = false; }
+
   reset(): void {
-    this.attempted = false;
     this.pendingReminder = false;
   }
 
@@ -35,8 +38,7 @@ export class TextToolCallRecovery {
     const text = message.content.flatMap((block) => block.type === "text" ? [block.text] : []).join("\n");
     if (!textToolCallDiagnostic(text, toolNames)) return;
     // Do not let an unfinished checklist add another nudge to the same failure.
-    if (this.attempted) return { action: "end" };
-    this.attempted = true;
+    if (!this.budget.claim()) return { action: "end" };
     this.pendingReminder = true;
     return { action: "continue" };
   }

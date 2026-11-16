@@ -502,10 +502,25 @@ Card order is **Session defaults → Execution → Computer use**.
   normal due-time admission without replaying missed occurrences.
   Unfinished-task continuation (`autoContinueUnfinishedTodos`) is on by default.
   An Agent ending with unfinished checklist items written in the current task
-  is continued automatically once per user turn. It may add model requests and
+  is continued within the shared correction allowance (default once per turn).
+  It may add model requests and
   cost; Stop still works. The preference saves immediately and applies from
   the next user turn, including a reused runtime. Turning it off preserves
   ordinary completion. Settings search routes its title and explanation to Behavior.
+- **Output guards** in Behavior stores optional `agentOutputGuard`. The early-end
+  selector offers Off, Warn only (default), and Continue. The shared correction
+  allowance is an integer 0-3 (default 1); zero prevents automatic corrective
+  continuations, not transport retries. The existing checklist switch retains
+  its own eligibility and consumes this shared allowance.
+  Repetitive-output protection defaults on, with an independently selectable
+  exact-paragraph extension (also on). Numeric controls use shared bounds for
+  symbol characters/newlines/single-line characters and repeated paragraph
+  characters/count. Partial saves preserve sibling preferences; invalid writes
+  fail, and historical missing values use defaults. All controls are searchable
+  under Behavior and take effect on the next user turn, including runtime reuse.
+  Help distinguishes no-extra-model local detection from potentially billed
+  continuations, and explains that these heuristics do not guarantee completion.
+  Warnings and diagnostic counters do not become main-Agent prompt context.
 - **Computer use** card: last on the page. It omits card/row explanatory copy
   and the static scope note; controls, platform and permission status, errors,
   and the missing-model hint remain unchanged.

@@ -13,6 +13,7 @@ import { useTranslation } from "react-i18next";
 import { SegmentedControl, SettingsToggle } from "../../../components/ui";
 import { SettingsMenuSelect } from "../../../components/settings/SettingsMenuSelect";
 import { AutoContinueUnfinishedTodosRow } from "../../../components/settings/AutoContinueUnfinishedTodosRow";
+import { AgentOutputGuardSettings } from "../../../components/settings/AgentOutputGuardSettings";
 import { ComputerUseSettings } from "../computer-use/ComputerUseSettings";
 import { GoalBudgetSettingsRow } from "../../modes/GoalBudgetSettingsRow";
 import { CommandShellRow, SettingsCard, SettingsRow } from "../primitives";
@@ -116,6 +117,8 @@ export function AgentBehaviorSettings({
           />
         </SettingsRow>
       </SettingsCard>
+
+      <AgentOutputGuardSettings settings={settings} saveSettings={saveSettings} />
 
       <ComputerUseSettings t={t} settings={settings} saveSettings={saveSettings} />
     </div>

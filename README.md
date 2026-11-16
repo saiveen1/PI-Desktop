@@ -44,15 +44,17 @@ This edition strengthens the existing framework rather than replacing it.
   positions, and correct background wait/stop target handling without relaxing
   file-version, context, or authorization checks. Foreground workspace switches
   no longer discard background sessions' recorded read ranges.
-- **Bounded correction instead of silent early completion.** When a main Agent
-  prints a tool call as ordinary text, prompt it to issue a real call at most once
-  per user turn—never execute that text directly. A separate, configurable
-  unfinished-checklist continuation can also advance current-turn work once.
-  These may add model usage and do not guarantee completion.
-- **Degenerate-output protection.** Interrupt detected long whitespace/symbol
-  runs in model text or thinking, retain partial results, and avoid automatic
-  replay. Large-output previews are bounded. This is not a general detector of
-  repetitive prose or poor answers.
+- **Configurable correction instead of silent early completion.** Local checks
+  can warn when an ordinary Agent promises its next action but stops without a
+  tool call, or continue within a selected shared correction allowance. Checklist
+  and printed-tool-call corrections use the same ceiling rather than stacking
+  fresh budgets. Normal checks add no model context or reviewer call; actual
+  continuations may add usage and never guarantee completion.
+- **Configurable degenerate-output protection.** Interrupt long whitespace/symbol
+  runs or sustained exact narrative-paragraph repetition in model text/thinking.
+  Behavior settings expose switches and thresholds; partial results are retained
+  without automatic replay. Code and structured samples are excluded from prose
+  comparison. This is not a general judge of repetitive prose or answer quality.
 - **Explicit waiting and context control.** Main-session model requests gain a
   configurable transport-idle policy rather than treating every output pause as
   a broken request to replay. Local idle termination leaves retry to the user.

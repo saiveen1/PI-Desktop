@@ -1,3 +1,4 @@
+import { outputGuard } from "../output-guard.js";
 import { subagentControls } from "./subagent-controls.js";
 import { approvalCenter } from "./delegation-approval.js";
 import { delegationReliabilitySettings, delegationDiagnostics } from "./delegation-reliability.js";
@@ -5,6 +6,7 @@ import { sessionLabels, sessionGroups, sessionDelegation, delegationDetails } fr
 import { en, type EnglishCatalog } from "../en/index.js";
 
 export const ptBR = {
+  outputGuard: outputGuard["pt-BR"],
   toolObserver: en.toolObserver,
   toolImages: {
     title: "Imagens da ferramenta", image: "Imagem {{index}}", returned: "{{count}} imagens retornadas",
@@ -1782,7 +1784,7 @@ export const ptBR = {
     infiniteProviderRetry: "Tentar novamente até obter sucesso",
     infiniteProviderRetryDesc: "Continua tentando indefinidamente em caso de falhas temporárias de rede ou do provedor. Ainda é possível interromper a rodada; enquanto esta opção estiver ativada, o consumo e os custos da API podem continuar.",
     autoContinueUnfinishedTodos: "Continuar tarefas inacabadas",
-    autoContinueUnfinishedTodosDesc: "Quando uma resposta termina e a lista TodoWrite desta rodada ainda tem itens inacabados, uma única continuação é enviada automaticamente para a tarefa poder ser concluída. Isso acontece uma vez por rodada do usuário e nunca entra em repetição; Parar ainda encerra a rodada, e uma alteração vale a partir da próxima rodada. As continuações podem gerar solicitações extras ao modelo.",
+    autoContinueUnfinishedTodosDesc: outputGuard["pt-BR"].checklistDesc,
     smoothStreaming: "Exibição gradual",
     smoothStreamingDesc: "Exibe o texto recebido caractere por caractere, criando um efeito de máquina de escrever. É desativada automaticamente quando o sistema está configurado para reduzir animações.",
     inlineVisualizations: "Visualizações embutidas",

@@ -35,6 +35,20 @@ from executable validation. The historical audit boundary above is unchanged.
 
 ## Local harness and delegation increments
 
+The configurable local output guards start from personal base `722bdf630`,
+compared read-only with locally recorded upstream
+`aa35fee4b15c354303bb5a0c77c9c33a731d097f` (no fetch). At that revision the
+`progressOnlyTurn` branch still requires `autonomousExecution`; the personal
+`model-output-repetition.ts`, `unfinished-todo-continuation.ts` and new shared
+`agent-output-guard.ts` are absent. The increment is ordinary-Agent advisory/
+bounded correction, shared correction accounting, user-configurable thresholds,
+exact-paragraph detection and normalized termination evidence. Existing Agent
+loops, transport recovery, settings storage and transcript diagnostics remain
+foundations. See [the decision](../adr/configurable-local-output-guards.md).
+The independently developed Observer plugin is outside this repository and is
+not bundled or required by these guards. Offline fixture results do not establish
+live-model accuracy, installed behavior or support for un-fetched upstream.
+
 The local tool observer was implemented on personal base `2dea25a27` and checked
 against locally recorded upstream `aa35fee4b15c354303bb5a0c77c9c33a731d097f`
 without fetching. At that revision, `developer-sections.tsx` contains the developer

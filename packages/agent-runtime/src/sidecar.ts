@@ -45,6 +45,7 @@ import {
 } from "@pi-desktop/shared";
 import type {
   AgentEventEnvelope,
+  AgentOutputGuardSettings,
   AskToolResolution,
   SubagentDefinition,
   ContextCompactionRecord,
@@ -123,6 +124,7 @@ type RuntimeParams = {
   unknownUpstreamRetryLimit?: number;
   providerStreamIdleTimeoutMinutes?: number;
   autoContinueUnfinishedTodos?: boolean;
+  agentOutputGuard?: AgentOutputGuardSettings;
   /** Session `/fast` switch AND the model's opt-in, resolved by main (ADR 0334). */
   fastMode?: boolean;
   /** Opt-in TypeSafe classifier credential resolved by Electron main. */
@@ -290,6 +292,7 @@ async function runtimeFor(
     reusable.setUnknownUpstreamRetryLimit(unknownUpstreamRetryLimit);
     reusable.setProviderStreamIdleTimeoutMinutes(params.providerStreamIdleTimeoutMinutes);
     reusable.setAutoContinueUnfinishedTodos(params.autoContinueUnfinishedTodos !== false);
+    reusable.setAgentOutputGuard(params.agentOutputGuard);
     reusable.setFastMode(params.fastMode === true);
     reusable.setMode(mode, modeDefinition);
     return reusable;
@@ -345,6 +348,7 @@ async function runtimeFor(
     unknownUpstreamRetryLimit,
     providerStreamIdleTimeoutMinutes: params.providerStreamIdleTimeoutMinutes,
     autoContinueUnfinishedTodos: params.autoContinueUnfinishedTodos !== false,
+    agentOutputGuard: params.agentOutputGuard,
     fastMode: params.fastMode === true,
     jevApiKey: params.jevApiKey,
     history,

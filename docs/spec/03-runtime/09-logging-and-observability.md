@@ -216,6 +216,15 @@ Host-core audit rows may retain the existing permission and execution timing
 fields for forensic inspection. They are structured audit data, not a separate
 `timing.log` stream.
 
+Settled replies may retain `runDiagnostics.termination` with the owning message
+ID, normalized stop reason, `reasonSource: normalized`, available token figures,
+early-end advisory state and corrective-continuation count. These bounded facts
+do not contain prompts or provider prose and are not added to the model context.
+The message ID prevents a turn-level snapshot from attaching a warning to a
+different bubble. Missing historical values remain unknown. A normalized reason
+does not establish the raw wire `finish_reason` or whether an adapter received
+every terminal frame; neither is fabricated. A normal stop is not task success.
+
 ## 8. User-facing diagnostics
 
 MVP provides:

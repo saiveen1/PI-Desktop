@@ -1,4 +1,5 @@
 import { isNotificationSettings, type AppSettings, type NotificationSettings } from "@pi-desktop/shared";
+import { isAgentOutputGuardSettings, resolveAgentOutputGuardSettings } from "@pi-desktop/shared";
 
 type Boundary = {
   read(): Promise<AppSettings>;
@@ -19,7 +20,18 @@ export function createSettingsWriter(boundary: Boundary) {
     return operation;
   };
   return {
-    save: (patch: Partial<AppSettings>) => update(latest => ({ ...latest, ...patch })),
+    save: (patch: Partial<AppSettings>) => {
+      if (Object.prototype.hasOwnProperty.call(patch, "agentOutputGuard") && !isAgentOutputGuardSettings(patch.agentOutputGuard)) {
+        return Promise.reject(new Error("agentOutputGuard is invalid"));
+      }
+      return update(latest => ({
+        ...latest,
+        ...patch,
+        ...(patch.agentOutputGuard === undefined ? {} : {
+          agentOutputGuard: { ...resolveAgentOutputGuardSettings(latest.agentOutputGuard), ...patch.agentOutputGuard },
+        }),
+      }));
+    },
     notifications(value: NotificationSettings, scope: "global" | "delegation") {
       if (!isNotificationSettings(value)) return Promise.reject(new Error("Invalid notification preferences"));
       return update(latest => {

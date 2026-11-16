@@ -1,9 +1,11 @@
+import { outputGuard } from "../output-guard.js";
 import { toolObserver } from "./tool-observer.js";
 import { subagentControls } from "./subagent-controls.js";
 import { approvalCenter } from "./delegation-approval.js";
 import { delegationReliabilitySettings, delegationDiagnostics } from "./delegation-reliability.js";
 import { sessionLabels, sessionGroups, sessionDelegation, delegationDetails } from "./session-management.js";
 export const en = {
+  outputGuard: outputGuard.en,
   toolObserver,
   toolImages: {
     title: "Tool images", image: "Image {{index}}", returned: "Returned {{count}} images",
@@ -1824,7 +1826,7 @@ sklm: {
     infiniteProviderRetry: "Retry until success",
     infiniteProviderRetryDesc: "Keep retrying network and transient provider failures until the request succeeds. You can still stop the turn; API usage may continue while enabled.",
     autoContinueUnfinishedTodos: "Auto-continue unfinished tasks",
-    autoContinueUnfinishedTodosDesc: "When a reply ends while this turn's TodoWrite checklist still has unfinished items, one continuation is sent automatically so the task can finish. It happens once per user turn and never loops; Stop still ends the turn, and a change applies from the next turn. Continuations may incur extra model requests.",
+    autoContinueUnfinishedTodosDesc: outputGuard.en.checklistDesc,
     smoothStreaming: "Smooth streaming",
     smoothStreamingDesc: "Release streamed text character by character for a typewriter effect. Automatically disabled when the system prefers reduced motion.",
     inlineVisualizations: "Inline visualizations",

@@ -1,3 +1,4 @@
+import { outputGuard } from "../output-guard.js";
 import { toolObserver } from "./tool-observer.js";
 import { subagentControls } from "./subagent-controls.js";
 import { approvalCenter } from "./delegation-approval.js";
@@ -6,6 +7,7 @@ import { sessionLabels, sessionGroups, sessionDelegation, delegationDetails } fr
 import { en, type EnglishCatalog } from "../en/index.js";
 
 export const zhTW = {
+  outputGuard: outputGuard["zh-TW"],
   toolObserver,
   toolImages: {
     title: "工具圖像", image: "圖像 {{index}}", returned: "已傳回 {{count}} 張圖像",
@@ -1804,7 +1806,7 @@ sklm: {
     infiniteProviderRetry: "無盡重試",
     infiniteProviderRetryDesc: "網路或暫時性服務故障會持續重試直到成功。仍可隨時停止，但開啟後可能持續消耗 API 用量。",
     autoContinueUnfinishedTodos: "未完成任務自動續跑",
-    autoContinueUnfinishedTodosDesc: "當本輪回覆結束時，TodoWrite 清單仍有未完成事項，會自動再續跑一次，讓目前任務收尾。每個使用者輪次只續跑一次，不會循環；仍可隨時停止，修改從下一輪開始生效。續跑可能產生額外的模型請求。",
+    autoContinueUnfinishedTodosDesc: outputGuard["zh-TW"].checklistDesc,
     smoothStreaming: "平滑串流顯示",
     smoothStreamingDesc: "將串流文字逐字釋放，產生打字機效果。系統開啟「減少動態效果」時自動停用。",
     inlineVisualizations: "聊天內嵌視覺化",

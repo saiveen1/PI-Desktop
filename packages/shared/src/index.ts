@@ -79,6 +79,7 @@ export * from "./racp.js";
 export * from "./trusted-extensions.js";
 export * from "./provider-retry.js";
 export * from "./provider-stream-settings.js";
+export * from "./agent-output-guard.js";
 export * from "./message-stream.js";
 export * from "./session-collaboration.js";
 export * from "./session-presentation.js";

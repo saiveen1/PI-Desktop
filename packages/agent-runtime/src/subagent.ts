@@ -198,6 +198,7 @@ export type SubagentRunOptions = {
   /** Inherited session policy for retrying transient provider failures. */
   infiniteProviderRetry?: boolean;
   unknownUpstreamRetryLimit?: number;
+  agentOutputGuard?: import("@pi-desktop/shared").AgentOutputGuardSettings;
   thinkingLevel: SubagentThinkingLevel;
   /** User-owned definition pins only, in configured order. Missing bindings fail visibly. */
   fallbackModels?: Array<{ key: string; provider?: RuntimeProviderConfig }>;
@@ -600,6 +601,7 @@ export class SubagentRun {
       thinkingLevel,
       sessionId: this.opts.sessionId,
       maxTokens: this.opts.definition.maxTokens,
+      agentOutputGuard: this.opts.agentOutputGuard,
       onUsage: usage => this.recordUsage(usage),
       observeStream: createStream => this.observer.observeStream(`${provider.id}/${provider.modelId}`, createStream),
       uniqueToolCalls: this.uniqueToolCalls,

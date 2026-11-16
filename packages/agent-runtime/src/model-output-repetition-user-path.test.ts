@@ -7,7 +7,7 @@ const junk = ":\n\n".repeat(3000);
 afterEach(() => vi.unstubAllGlobals());
 
 describe("repetitive model output user path", () => {
-  it("stops a delegated runaway response without a retry or completion report", async () => {
+  it.each([true, false])("honors the delegated repetitive-output setting enabled=%s without hidden retries", async (enabled) => {
     const events: AgentEventEnvelope[] = [];
     const fetch = vi.fn(async () => new Response(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { role: "assistant", content: junk }, finish_reason: "stop" }] })}\n\ndata: [DONE]\n\n`, {
       headers: { "content-type": "text/event-stream" },
@@ -16,13 +16,15 @@ describe("repetitive model output user path", () => {
     const child = new SubagentRun({
       definition: { name: "fixture", description: "Report", prompt: "Report", source: "builtin", tools: [] },
       sessionId: "repetition-child", parentToolCallId: "task-1", task: "Report briefly.", systemPrompt: "Report briefly.", tools: [], thinkingLevel: "off", infiniteProviderRetry: true,
+      agentOutputGuard: { repetitiveOutputEnabled: enabled },
       provider: { id: "fixture", name: "Fixture", modelId: "fixture-model", baseUrl: "http://provider.invalid/v1", apiKey: "fixture-only", apiStyle: "chat_completions", supportsReasoning: false, supportedThinkingLevels: ["off"] },
       onEvent: (event) => events.push(event),
     });
     const result = await child.run();
-    expect(result.status).toBe("failed");
+    expect(result.status).toBe(enabled ? "failed" : "completed");
     expect(fetch).toHaveBeenCalledTimes(1);
-    expect(events).toContainEqual(expect.objectContaining({ event: expect.objectContaining({ type: "message_end", message: expect.objectContaining({ status: "error", error: expect.objectContaining({ code: "MODEL_OUTPUT_REPETITION" }) }) }) }));
+    if (enabled) expect(events).toContainEqual(expect.objectContaining({ event: expect.objectContaining({ type: "message_end", message: expect.objectContaining({ status: "error", error: expect.objectContaining({ code: "MODEL_OUTPUT_REPETITION" }) }) }) }));
+    else expect(events.some(({ event }) => event.type === "message_end" && event.message.error?.code === "MODEL_OUTPUT_REPETITION")).toBe(false);
   });
 
   it.each(["content", "reasoning_content"])("stops runaway %s without replaying successful tools or executing siblings", async (field) => {
@@ -66,6 +68,34 @@ describe("repetitive model output user path", () => {
       await runtime.prompt("Give a short answer.", "user-2", "turn-2");
       expect(requests).toBe(3);
       expect(events.filter(({ event }) => event.type === "agent_end")).toHaveLength(2);
+    } finally { await runtime.dispose(); }
+  });
+
+  it("applies the master switch to the next prompt of a reused main runtime", async () => {
+    const events: AgentEventEnvelope[] = [];
+    const fetch = vi.fn(async () => new Response(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { role: "assistant", content: junk }, finish_reason: "stop" }] })}\n\ndata: [DONE]\n\n`, { headers: { "content-type": "text/event-stream" } }));
+    vi.stubGlobal("fetch", fetch);
+    const runtime = new DesktopAgentRuntime({
+      sessionId: "repetition-settings", mode: "agent", thinkingLevel: "off",
+      provider: { id: "fixture", name: "Fixture", modelId: "fixture-model", baseUrl: "http://provider.invalid/v1", apiKey: "fixture-only", apiStyle: "chat_completions", supportsReasoning: false, supportedThinkingLevels: ["off"] },
+      commandShell: { id: "bash", label: "Bash", dialect: "posix", available: true, isDefault: true },
+      host: { async call<T>(method: string): Promise<T> {
+        let value: unknown;
+        if (method === "tools.fileBatchCapabilities") value = { version: 1, supported: false };
+        else if (method === "todos.get") value = { sessionId: "repetition-settings", todos: [] };
+        else if (!["provider.delegationSnapshot", "session.appendMessage", "project.instructions.resolve"].includes(method)) throw new Error(`Unexpected Host method: ${method}`);
+        return value as T;
+      } },
+      onEvent: event => events.push(event),
+    });
+    try {
+      await runtime.prompt("Reply once.", "u1", "t1");
+      const ended = () => events.flatMap(({ event }) => event.type === "message_end" && event.message.role === "assistant" ? [event.message] : []);
+      expect(ended().at(-1)?.error?.code).toBe("MODEL_OUTPUT_REPETITION");
+      runtime.setAgentOutputGuard({ repetitiveOutputEnabled: false });
+      await runtime.prompt("Reply once again.", "u2", "t2");
+      expect(ended().at(-1)).toMatchObject({ status: "complete", content: junk });
+      expect(fetch).toHaveBeenCalledTimes(2);
     } finally { await runtime.dispose(); }
   });
 });

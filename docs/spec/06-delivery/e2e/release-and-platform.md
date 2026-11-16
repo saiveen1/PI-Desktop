@@ -1473,6 +1473,10 @@ Use synthetic Darwin x64/arm64 uname responses through production SSH bootstrap,
   with chunk boundaries inside the pattern, only a final snapshot, infinite
   retry enabled, stale HTTP 429 metadata, and user Stop. Send a new prompt.
   Include ordinary prose, lists, tables, fenced code and repetitive tool JSON.
+  Repeat with exact long narrative paragraphs, custom character/count thresholds,
+  disabled paragraph detection and a disabled master switch. Include a final
+  paragraph with no trailing newline, multi-byte/CRLF chunk boundaries, long
+  excluded paragraphs, and distinct new content between repeated samples.
 - **Expected:** One `MODEL_OUTPUT_REPETITION` failure terminates only the
   current request. Received partial text is preserved, previous tools are not
   replayed, unfinished tools never execute, and no automatic continuation or
@@ -1480,6 +1484,10 @@ Use synthetic Darwin x64/arm64 uname responses through production SSH bootstrap,
   arguments remain unchanged. A new explicit prompt can complete normally.
 - **Coverage:** `model-output-guard.test.ts`,
   `model-output-repetition-user-path.test.ts`, shared error-code contract tests.
+  Extended deterministic coverage: `model-output-paragraph.test.ts` and shared
+  `agent-output-guard.test.ts`. Settings are captured per request; off preserves
+  output and existing cancellation semantics. Deliberate repeated prose can
+  trigger the heuristic; semantic rephrasing and arbitrary quality are not judged.
 - **Specs:** Runtime spec §Repetitive model-output circuit breaker; error codes §3.2.
 - **Acceptance:** Offline real-adapter/Agent-loop and unit checks.
 - **Milestone:** Maintenance.

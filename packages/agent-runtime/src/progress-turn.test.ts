@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isProgressOnlyAssistantTurn } from "./runtime";
+import { isProgressOnlyAssistantTurn } from "./progress-turn.js";
 
 describe("isProgressOnlyAssistantTurn", () => {
   it("detects forward-looking text without tool calls", () => {

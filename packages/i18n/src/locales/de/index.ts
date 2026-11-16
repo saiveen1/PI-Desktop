@@ -1,3 +1,4 @@
+import { outputGuard } from "../output-guard.js";
 import { subagentControls } from "./subagent-controls.js";
 import { approvalCenter } from "./delegation-approval.js";
 import { delegationReliabilitySettings, delegationDiagnostics } from "./delegation-reliability.js";
@@ -5,6 +6,7 @@ import { sessionLabels, sessionGroups, sessionDelegation, delegationDetails } fr
 import { en, type EnglishCatalog } from "../en/index.js";
 
 export const de = {
+  outputGuard: outputGuard.de,
   toolObserver: en.toolObserver,
   toolImages: {
     title: "Werkzeugbilder", image: "Bild {{index}}", returned: "{{count}} Bilder zurückgegeben",
@@ -1811,7 +1813,7 @@ sklm: {
     "infiniteProviderRetry": "Bis zum Erfolg wiederholen",
     "infiniteProviderRetryDesc": "Netzwerk- und vorübergehende Anbieterfehler werden bis zum Erfolg wiederholt. Du kannst den Lauf weiterhin stoppen; der API-Verbrauch kann fortlaufen.",
     "autoContinueUnfinishedTodos": "Unfertige Aufgaben automatisch fortsetzen",
-    "autoContinueUnfinishedTodosDesc": "Endet eine Antwort, während die TodoWrite-Liste dieses Laufs noch offene Punkte hat, wird automatisch genau eine Fortsetzung gesendet, damit die Aufgabe zu Ende kommt. Das geschieht einmal pro Nutzerlauf und wiederholt sich nicht; Stopp beendet den Lauf weiterhin, und eine Änderung gilt ab dem nächsten Lauf. Fortsetzungen können zusätzliche Modellanfragen verursachen.",
+    "autoContinueUnfinishedTodosDesc": outputGuard.de.checklistDesc,
     "smoothStreaming": "Sanftes Streaming",
     "smoothStreamingDesc": "Gibt gestreamten Text zeichenweise aus, um einen Schreibmaschineneffekt zu erzeugen. Wird automatisch deaktiviert, wenn das System reduzierte Bewegung bevorzugt.",
     "inlineVisualizations": "Inline-Visualisierungen",

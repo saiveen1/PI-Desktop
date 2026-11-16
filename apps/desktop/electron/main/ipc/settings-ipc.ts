@@ -1,4 +1,5 @@
 import { IPC, type UpdatePreference } from "@pi-desktop/shared";
+import { resolveAgentOutputGuardSettings } from "@pi-desktop/shared";
 import type { AgentSidecar } from "../agent-sidecar";
 import type { HostProcess } from "../host-process";
 import type { IpcRegistrar } from "./types";
@@ -54,6 +55,7 @@ export function registerSettingsIpc({
 }: SettingsIpcDependencies): void {
   let host: HostProcess | null = null;
   let sidecar: AgentSidecar | null = null;
+  let settingsWriteTail: Promise<unknown> = Promise.resolve();
   const handle = (channel: string, fn: (...args: any[]) => Promise<any>) => {
     registrar.handle(channel, async (...args) => {
       host = getHost();
@@ -72,10 +74,18 @@ export function registerSettingsIpc({
     return testNetworkProxy(settings);
   });
 
-  handle(IPC.invoke.settingsSet, async (settings: unknown) => {
+  const writeSettings = async (settings: unknown) => {
+    const host = getHost();
+    const sidecar = getSidecar();
     if (!host) throw new Error("host unavailable");
-    const validatedSettings = validateSettingsWrite(settings);
+    const incoming = validateSettingsWrite(settings);
     const currentSettings = await host.call<AppSettings>("settings.get");
+    const guardPatch = incoming && typeof incoming === "object" && !Array.isArray(incoming)
+      ? (incoming as Partial<AppSettings>).agentOutputGuard : undefined;
+    const validatedSettings = guardPatch === undefined ? incoming : {
+      ...incoming,
+      agentOutputGuard: { ...resolveAgentOutputGuardSettings(currentSettings.agentOutputGuard), ...guardPatch },
+    };
     const prospectiveSettings = validatedSettings && typeof validatedSettings === "object" && !Array.isArray(validatedSettings)
       ? { ...currentSettings, ...(validatedSettings as Partial<AppSettings>) }
       : currentSettings;
@@ -127,6 +137,11 @@ export function registerSettingsIpc({
     );
     applyDeveloperMode(validatedSettings as { developerMode?: unknown } | null);
     return result;
+  };
+  handle(IPC.invoke.settingsSet, (settings: unknown) => {
+    const operation = settingsWriteTail.then(() => writeSettings(settings));
+    settingsWriteTail = operation.then(() => undefined, () => undefined);
+    return operation;
   });
 
   handle(IPC.invoke.commandShellList, async () => resolveEffectiveCommandShell());

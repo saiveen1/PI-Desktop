@@ -3,6 +3,7 @@ import {
   type Api, type Model, type AssistantMessage, type AssistantMessageEventStream, type SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
 import { markOutputRepetition, RepetitiveOutputDetector, type OutputRepetitionDetails } from "./model-output-repetition.js";
+import { resolveAgentOutputGuardSettings, type AgentOutputGuardSettings } from "@pi-desktop/shared";
 
 type ObservedBlock = { source: string; detector: RepetitiveOutputDetector };
 
@@ -11,7 +12,9 @@ export function withModelOutputGuard(
   model: Model<Api>,
   options: SimpleStreamOptions,
   createStream: (options: SimpleStreamOptions) => AssistantMessageEventStream,
+  preferences?: AgentOutputGuardSettings,
 ): AssistantMessageEventStream {
+  const settings = resolveAgentOutputGuardSettings(preferences);
   const outer = createAssistantMessageEventStream();
   const abort = new AbortController();
   const signal = options.signal ? AbortSignal.any([options.signal, abort.signal]) : abort.signal;
@@ -50,13 +53,13 @@ export function withModelOutputGuard(
     if (!previous || terminal || source.length < previous.source.length ||
       (source.length === previous.source.length && source !== previous.source) ||
       source.slice(Math.max(0, previous.source.length - 32), previous.source.length) !== previous.source.slice(-32)) {
-      previous = { source: "", detector: new RepetitiveOutputDetector() };
+      previous = { source: "", detector: new RepetitiveOutputDetector(settings) };
       blocks.set(index, previous);
     }
-    let result = previous.detector.push(source.slice(previous.source.length));
+    let result = previous.detector.push(source.slice(previous.source.length), terminal);
     if (result && !terminal && previous.source.length > 0) {
-      previous.detector = new RepetitiveOutputDetector();
-      result = previous.detector.push(source);
+      previous.detector = new RepetitiveOutputDetector(settings);
+      result = previous.detector.push(source, terminal);
     }
     previous.source = source;
     return result ? { channel: block.type, ...result } : undefined;

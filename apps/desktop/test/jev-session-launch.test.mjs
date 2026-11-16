@@ -1,30 +1,19 @@
 import assert from "node:assert/strict";
-import { createRequire } from "node:module";
+import { register } from "node:module";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
 import test from "node:test";
-import { pathToFileURL } from "node:url";
-import { repositoryRoot } from "../../../scripts/e2e/boot.mjs";
 
-const root = repositoryRoot();
-const { build } = createRequire(join(root, "packages/agent-runtime/package.json"))("esbuild");
+register(new URL("./helpers/ts-import-hooks.mjs", import.meta.url));
+const { createSessionLaunchRuntime } = await import("../electron/main/runtime/session-launch.ts");
 
 test("session launch resolves Jev credentials only for opted-in Agent mode", async () => {
-  const temp = await mkdtemp(join(root, "apps/desktop/.jev-launch-test-"));
+  const temp = await mkdtemp(join(process.env.PI_SCRATCH_DIR ?? tmpdir(), "jev-launch-test-"));
   const priorHome = process.env.HOME;
   process.env.HOME = temp;
   try {
-    const bundle = join(temp, "session-launch.mjs");
-    await build({
-      entryPoints: [join(root, "apps/desktop/electron/main/runtime/session-launch.ts")],
-      outfile: bundle,
-      bundle: true,
-      platform: "node",
-      format: "esm",
-      packages: "external",
-      nodePaths: [join(root, "apps/desktop/node_modules")],
-    });
-    const { createSessionLaunchRuntime } = await import(pathToFileURL(bundle).href);
+    // Load the actual launch entry through the Node TypeScript fixture hook.
     const provider = {
       id: "fixture-provider",
       name: "Fixture provider",
@@ -120,6 +109,14 @@ test("session launch resolves Jev credentials only for opted-in Agent mode", asy
     assert.equal(continuationOff.sidecarParams.autoContinueUnfinishedTodos, false);
     const continuationOn = await launch("agent", false, { autoContinueUnfinishedTodos: true });
     assert.equal(continuationOn.sidecarParams.autoContinueUnfinishedTodos, true);
+    const guards = await launch("agent", false, { agentOutputGuard: { earlyEndMode: "continue", recoveryLimit: 2, symbolMinChars: 6000 } });
+    assert.equal(guards.sidecarParams.agentOutputGuard.earlyEndMode, "continue");
+    assert.equal(guards.sidecarParams.agentOutputGuard.recoveryLimit, 2);
+    assert.equal(guards.sidecarParams.agentOutputGuard.symbolMinChars, 6000);
+    assert.equal(guards.sidecarParams.agentOutputGuard.repeatedParagraphsEnabled, true);
+    const malformed = await launch("agent", false, { agentOutputGuard: { recoveryLimit: 99, repetitiveOutputEnabled: false } });
+    assert.equal(malformed.sidecarParams.agentOutputGuard.recoveryLimit, 1);
+    assert.equal(malformed.sidecarParams.agentOutputGuard.repetitiveOutputEnabled, false);
 
     // The visualization directory follows the visualize skill (D671): a
     // disabled skill must not leave the prompt pointing at it.

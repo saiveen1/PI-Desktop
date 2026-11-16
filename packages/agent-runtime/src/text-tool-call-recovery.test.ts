@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createAssistantMessageEventStream, type AssistantMessage, type Context, type ToolCall } from "@earendil-works/pi-ai";
-import type { AgentEventEnvelope, SessionTodo } from "@pi-desktop/shared";
+import type { AgentEventEnvelope, AgentOutputGuardSettings, SessionTodo } from "@pi-desktop/shared";
 import { DesktopAgentRuntime } from "./runtime.js";
 
 const dsml = [
@@ -17,6 +17,7 @@ type Step = { content: AssistantMessage["content"]; stopReason?: Exclude<Assista
 
 function fixture(steps: Step[], options: {
   mode?: "agent" | "plan";
+  settings?: AgentOutputGuardSettings;
   onReply?: (runtime: DesktopAgentRuntime, index: number) => void;
 } = {}) {
   const requests: Context[] = [];
@@ -36,6 +37,7 @@ function fixture(steps: Step[], options: {
   const runtime = new DesktopAgentRuntime({
     sessionId: "text-recovery-fixture", mode: options.mode ?? "agent", thinkingLevel: "off",
     compactionStrategy: "summary",
+    agentOutputGuard: options.settings,
     provider: { id: "fixture", name: "Fixture", modelId: "fixture-model", apiKey: "", authKind: "none", baseUrl: "http://provider.invalid/v1", supportsReasoning: false, supportedThinkingLevels: ["off"] },
     commandShell: { id: "bash", label: "Bash", dialect: "posix", available: true, isDefault: true },
     host: { async call<T>(method: string, params?: unknown): Promise<T> { return await hostCall(method, params) as T; } },
@@ -242,6 +244,26 @@ describe("text tool-call recovery user path", () => {
       await f.runtime.prompt("Propose a plan.");
       expect(f.requests).toHaveLength(1);
       expect(executions(f)).toHaveLength(0);
+    } finally { await f.runtime.dispose(); }
+  });
+
+  it.each([0, 1, 2])("shares recoveryLimit=%s between protocol and ordinary progress even after successful tools", async recoveryLimit => {
+    const f = fixture([
+      { content: text(dsml) }, { content: tool("first") },
+      { content: text("I will run the remaining check.") }, { content: tool("second") },
+      { content: text(dsml) },
+    ], { settings: { earlyEndMode: "continue", recoveryLimit } });
+    try {
+      await f.runtime.prompt("Run both checks.");
+      expect(f.requests).toHaveLength(recoveryLimit === 0 ? 1 : recoveryLimit === 1 ? 3 : 5);
+      expect(executions(f)).toHaveLength(recoveryLimit);
+      if (recoveryLimit > 0) expect(JSON.stringify(f.requests[1])).toContain("text_tool_call_recovery");
+      if (recoveryLimit === 2) expect(JSON.stringify(f.requests[3])).toContain("early_end_recovery");
+      const messages = f.events.flatMap(({ event }) =>
+        (event.type === "message_end" || event.type === "message_update") && event.message.status !== "streaming" ? [event.message] : []);
+      expect(messages.at(-1)?.runDiagnostics?.termination?.recoveryAttempts).toBe(recoveryLimit);
+      if (recoveryLimit === 1) expect(messages.at(-1)?.runDiagnostics?.termination?.earlyEnd).toBe("exhausted");
+      else expect(messages.at(-1)?.error?.code).toBe("TOOL_CALL_NOT_EXECUTED");
     } finally { await f.runtime.dispose(); }
   });
 });
