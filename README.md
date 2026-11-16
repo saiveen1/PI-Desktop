@@ -17,7 +17,7 @@ The highlights below describe **local increments to the upstream foundation**, n
 the upstream feature catalog. They cover current source, which may be newer than
 [recorded releases](CHANGELOG.md). The [provenance map](docs/maintenance/personal-edition-provenance.md)
 records the compared revisions, originating commits, implementation evidence, and
-excluded upstream features. Current source version is `0.23.0`; broader integration
+excluded upstream features. Current source version is `0.23.1-beta.1`; broader integration
 validation remains necessary. A version label is not a stability, published-release
 or installed-upgrade guarantee.
 
@@ -173,8 +173,9 @@ before using it; `start-local.cmd -CheckOnly` checks prerequisites without launc
 
 The personal packaging path targets **Windows 10/11 x64** and produces an NSIS
 installer with official automatic updates disabled. Each build has a unique ID,
-source metadata, Git-derived change notes, and a SHA-256 checksum. Build cleanup
-removes intermediates, not previous installers.
+source metadata, Git-derived change notes, and a SHA-256 checksum. Main bundles
+retain the Photon decoder WASM needed at startup, and the installer gate rejects
+a missing or invalid copy. Build cleanup removes intermediates, not previous installers.
 
 ```bash
 pnpm dist:personal --check  # Preview the build plan without building

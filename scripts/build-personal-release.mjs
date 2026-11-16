@@ -133,6 +133,8 @@ export function verifyPackage(context) {
   if (pkg.piBuildId !== context.buildId || pkg.piSourceCommit !== context.source.commit) throw new Error("Packaged source/build identity is incorrect.");
   const runtime = json(join(unpacked, "resources/agent-runtime/package.json"));
   if (runtime.type !== "module") throw new Error("Packaged runtime must retain its ESM package manifest.");
+  const wasm = context.asar.extractFile(join(unpacked, "resources/app.asar"), join("out", "main", "photon_rs_bg.wasm"));
+  if (!WebAssembly.validate(wasm)) throw new Error("Packaged Main photon_rs_bg.wasm is invalid.");
   const installer = join(context.staging, context.installerName);
   nonempty(installer);
   if (statSync(installer).size < 1024 * 1024) throw new Error("Installer is too small; refusing to deliver a stub.");
@@ -171,7 +173,7 @@ export async function buildPersonal(context, { run = runCommand, now = () => new
     mkdirSync(context.staging, { recursive: true });
     for (const [index, stage] of context.stages.entries()) {
       if (stage.name === "NSIS installer only") {
-        for (const required of ["target/release/pi-desktop-host-core.exe", "packages/agent-runtime/dist-bundle/sidecar.js", "packages/agent-runtime/dist-bundle/package.json", "apps/desktop/out/main/index.js", "apps/desktop/out/renderer/index.html"]) nonempty(join(context.root, required));
+        for (const required of ["target/release/pi-desktop-host-core.exe", "packages/agent-runtime/dist-bundle/sidecar.js", "packages/agent-runtime/dist-bundle/package.json", "apps/desktop/out/main/index.js", "apps/desktop/out/main/photon_rs_bg.wasm", "apps/desktop/out/renderer/index.html"]) nonempty(join(context.root, required));
       }
       const heading = `[${index + 1}/${context.stages.length}] ${stage.name}\n`;
       console.log(heading.trim());

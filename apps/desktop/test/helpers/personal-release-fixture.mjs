@@ -2,6 +2,7 @@ import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync
 import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
+import { finished } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
 import { prepareBuild } from "../../../../scripts/build-personal-release.mjs";
 
@@ -54,6 +55,7 @@ export function fixture(t, fixtureVersion = version) {
 
 export function buildInputs(context) {
   for (const file of ["target/release/pi-desktop-host-core.exe", "packages/agent-runtime/dist-bundle/sidecar.js", "apps/desktop/out/main/index.js", "apps/desktop/out/renderer/index.html"]) write(join(context.root, file), "synthetic build output");
+  write(join(context.root, "apps/desktop/out/main/photon_rs_bg.wasm"), Buffer.from("0061736d01000000", "hex"));
   write(join(context.root, "packages/agent-runtime/dist-bundle/package.json"), '{"type":"module"}');
 }
 
@@ -61,8 +63,10 @@ export async function packageOutput(context, metadata = {}) {
   const unpacked = join(context.staging, "win-unpacked");
   const source = join(context.root, "synthetic-asar");
   write(join(source, "package.json"), JSON.stringify({ version: context.version, piSelfManaged: true, piDistribution: "installed", piBuildId: context.buildId, piSourceCommit: context.source.commit, ...metadata }));
+  write(join(source, "out/main/photon_rs_bg.wasm"), readFileSync(join(context.root, "apps/desktop/out/main/photon_rs_bg.wasm")));
   mkdirSync(join(unpacked, "resources"), { recursive: true });
-  await context.asar.createPackage(source, join(unpacked, "resources/app.asar"));
+  // asar 3 returns its output stream before the final bytes have flushed.
+  await finished(await context.asar.createPackage(source, join(unpacked, "resources/app.asar")));
   write(join(unpacked, "PI-Desktop.exe"), "synthetic executable; never run");
   for (const [from, to] of [
     ["target/release/pi-desktop-host-core.exe", "bin/pi-desktop-host-core.exe"],

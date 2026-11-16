@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
+import { finished } from "node:stream/promises";
 import test from "node:test";
 import { buildEnvironment, buildPersonal, prepareBuild, runCommand } from "../../../scripts/build-personal-release.mjs";
 import { cleanPersonalRelease as cleanStandalone } from "../../../scripts/clean-personal-release.mjs";
@@ -92,6 +93,37 @@ test("missing dist-bundle stops before electron-builder, not after shipping a br
   assert.ok(!invoked.includes("NSIS installer only"));
   assert.ok(!existsSync(join(context.output, context.installerName)));
 });
+
+test("missing Main WASM stops before electron-builder", async (t) => {
+  const { context } = fixture(t);
+  const invoked = [];
+  await assert.rejects(buildPersonal(context, { run: async (stage) => {
+    invoked.push(stage.name);
+    if (stage.name === "Desktop production build") {
+      buildInputs(context);
+      rmSync(join(context.root, "apps/desktop/out/main/photon_rs_bg.wasm"));
+    }
+  } }), /Required build output missing:.*photon_rs_bg\.wasm/);
+  assert.ok(!invoked.includes("NSIS installer only"));
+});
+
+for (const missing of [true, false]) {
+  test(`a package with ${missing ? "missing" : "invalid"} Main WASM cannot be delivered`, async (t) => {
+    const { context } = fixture(t);
+    await assert.rejects(buildPersonal(context, { run: async (stage) => {
+      if (stage.name === "Desktop production build") buildInputs(context);
+      if (stage.name === "NSIS installer only") {
+        await packageOutput(context);
+        const source = join(context.root, "synthetic-asar");
+        const wasm = join(source, "out/main/photon_rs_bg.wasm");
+        if (missing) rmSync(wasm);
+        else write(wasm, "corrupt decoder");
+        await finished(await context.asar.createPackage(source, join(context.staging, "win-unpacked/resources/app.asar")));
+      }
+    } }), /photon_rs_bg\.wasm/);
+    assert.ok(!existsSync(join(context.output, context.installerName)));
+  });
+}
 
 for (const metadata of [{ piSelfManaged: false }, { piDistribution: "portable" }, { version: "99.0.0" }]) {
   test(`invalid package metadata cannot be delivered: ${JSON.stringify(metadata)}`, async (t) => {

@@ -366,6 +366,11 @@
   resolves from inside Rollup shared chunks (`out/main/chunks/*.js`), so the
   renderer entry, preloads, and the forked plugin host keep their authored
   relative paths instead of resolving one level too deep (black screen).
+  Photon WASM ships beside its Main loader in both entry and shared-chunk
+  layouts; decoding a real image from a standalone build succeeds. The personal
+  installer gate rejects missing or invalid decoder WASM. A packaged Windows
+  boot probe uses isolated home/application data and `--user-data-dir` and reaches
+  the main window and IPC without repository dependencies or a daily profile.
 - **Specs linked**: `03-runtime/07-process-model.md`, `04-ux/01-ui-ia.md`,
   `03-runtime/09-logging-and-observability.md`
 - **Acceptance**: A (app startup)
@@ -374,8 +379,10 @@
   dependency build contract; `update-timeout.test.mjs` and
   `auto-update.test.mjs` cover the bounded auto-check contract;
   `main-module-path.test.mjs` covers the Main output-root contract from the
-  entry bundle and from inside `out/main/chunks/`; Electron window
-  launch remains Draft)
+  entry bundle and from inside `out/main/chunks/`; `main-wasm-assets.test.mjs`
+  covers standalone decoder loading; `personal-release.test.mjs` covers the
+  missing/corrupt-WASM gate; `scripts/e2e-electron-boot.mjs` covers isolated
+  packaged startup when explicitly authorized)
 
 ## E2E-002: IPC bridge is functional
 

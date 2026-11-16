@@ -10,7 +10,7 @@
  * (target/debug or target/release, or PI_DESKTOP_HOST_BIN) are required.
  */
 import { spawn } from "node:child_process";
-import { rmSync, existsSync, readFileSync } from "node:fs";
+import { rmSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import {
   createTempDataDir,
@@ -53,12 +53,22 @@ for (const preloadPath of packagedExecutable ? [] : [
 }
 
 const dataDir = createTempDataDir("pi-desktop-boot-");
+const home = join(dataDir, "home");
+mkdirSync(home);
 const env = { ...process.env };
 delete env.ELECTRON_RUN_AS_NODE;
-const child = spawn(executable, packagedExecutable ? [] : ["."], {
+delete env.NODE_OPTIONS;
+const child = spawn(executable, [...(packagedExecutable ? [] : ["."]), `--user-data-dir=${join(dataDir, "chromium")}`], {
   cwd: appDir,
   env: {
     ...env,
+    // Native Pi discovery must not import the operator's sessions or MCP config.
+    HOME: home,
+    USERPROFILE: home,
+    XDG_CONFIG_HOME: join(home, ".config"),
+    PI_DESKTOP_AGENTS_DIR: join(home, ".agents"),
+    PI_CODING_AGENT_DIR: join(home, ".pi", "agent"),
+    PI_CODING_AGENT_SESSION_DIR: join(home, ".pi", "agent", "sessions"),
     PI_DESKTOP_DATA_DIR: dataDir,
     PI_DESKTOP_BOOT_PROBE: "1",
     PI_DESKTOP_START_MAXIMIZED: process.platform === "darwin" ? "0" : "1",

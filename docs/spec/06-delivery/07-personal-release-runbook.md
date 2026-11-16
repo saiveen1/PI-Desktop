@@ -81,7 +81,8 @@ not allocate a build identifier, reserve a version, or write a release.
 6. Bundle the Node agent runtime and build Desktop Main/preload/renderer.
 7. Run the offline updater regression tests, then installed electron-builder once
    with `--win nsis --x64 --publish never --config electron-builder.personal.cjs`.
-8. Verify the ASAR/resource metadata, version, unique build ID and source commit;
+8. Require Main's `photon_rs_bg.wasm` before packaging and validate the copy in
+   the final ASAR. Verify resource metadata, version, unique build ID and source commit;
    verify source has not changed, hash the installer, and write its audit files.
 9. Only for an explicit release, update the tracked history and generated
    changelog. Update the latest-build pointer after successful delivery.
@@ -139,7 +140,7 @@ blindly restart, increase timeouts or kill unrelated processes.
 Relevant offline checks for this workflow:
 
 ```bash
-node --test apps/desktop/test/personal-release.test.mjs apps/desktop/test/personal-release-history.test.mjs apps/desktop/test/workspace-version.test.mjs apps/desktop/test/auto-update.test.mjs apps/desktop/test/updater-controller.test.mjs
+node --test apps/desktop/test/personal-release.test.mjs apps/desktop/test/personal-release-history.test.mjs apps/desktop/test/workspace-version.test.mjs apps/desktop/test/main-wasm-assets.test.mjs apps/desktop/test/auto-update.test.mjs apps/desktop/test/updater-controller.test.mjs
 pnpm check:agent-policy
 pnpm dist:personal --check
 ```

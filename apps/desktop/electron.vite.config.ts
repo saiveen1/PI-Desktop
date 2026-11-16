@@ -1,4 +1,6 @@
-import { resolve } from "node:path";
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { dirname, posix, resolve } from "node:path";
 import { defineConfig } from "electron-vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
@@ -55,6 +57,27 @@ const AGENT_RUNTIME_ANCHOR = resolve(
   "../../packages/agent-runtime/package.json",
 );
 
+function bundlePhotonWasm(): Plugin {
+  return {
+    name: "pi-photon-wasm",
+    apply: "build",
+    generateBundle(_options, bundle) {
+      const require = createRequire(AGENT_RUNTIME_ANCHOR);
+      const source = readFileSync(resolve(dirname(require.resolve("@silvia-odwyer/photon-node")), "photon_rs_bg.wasm"));
+      const directories = new Set(["."]);
+      // Photon reads beside its bundled module, which may be a shared chunk.
+      for (const output of Object.values(bundle)) {
+        if (output.type === "chunk" && Object.keys(output.modules).some((id) =>
+          id.replaceAll("\\", "/").includes("/@silvia-odwyer/photon-node/"),
+        )) directories.add(posix.dirname(output.fileName));
+      }
+      for (const directory of directories) {
+        this.emitFile({ type: "asset", fileName: posix.join(directory, "photon_rs_bg.wasm"), source });
+      }
+    },
+  };
+}
+
 function dedupeMainPackages(): Plugin {
   const pattern = new RegExp(
     `^(?:${MAIN_SHARED_PACKAGES.map((name) => name.replace(/[/.]/g, "\\$&")).join("|")})(?:/|$)`,
@@ -79,7 +102,7 @@ function dedupeMainPackages(): Plugin {
 
 export default defineConfig({
   main: {
-    plugins: [dedupeMainPackages()],
+    plugins: [dedupeMainPackages(), bundlePhotonWasm()],
     // `ws` loads its optional native accelerators (bufferutil, utf-8-validate)
     // inside `require` + try/catch and falls back to its own JavaScript
     // implementation when they are absent. A bundle cannot fail a require, and

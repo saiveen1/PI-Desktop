@@ -23,6 +23,14 @@ PI-Desktop.app
 
 ## 3. Boot order
 
+Main bundles that include the Photon image decoder ship `photon_rs_bg.wasm`
+beside its JavaScript loader, including when Rollup moves that loader into a
+shared chunk. The asset comes from the agent runtime's pinned Photon package.
+Missing it aborts module initialization before the application logger, tray,
+Host, or main window exists; it is a packaging failure, not a profile failure.
+Personal packaging checks the build output and validates the WASM inside the
+final ASAR before delivering the installer.
+
 Boot begins with a single-instance lock. One data directory admits exactly one
 app process: host-core owns `pi.sqlite` exclusively (D002), Electron main owns
 the persistence outbox and the log tree beside it, and the tray, the global
