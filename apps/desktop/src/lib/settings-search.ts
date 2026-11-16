@@ -432,6 +432,8 @@ export const SETTINGS_NAV: SettingsNavEntry[] = [
       "settings.developer",
       "settings.developerMode",
       "settings.devTools",
+      "toolObserver.title",
+      "toolObserver.description",
     ],
   },
 ];

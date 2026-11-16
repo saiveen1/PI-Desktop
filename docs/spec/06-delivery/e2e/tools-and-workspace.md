@@ -2850,3 +2850,32 @@ session data is used.
 - **Acceptance:** C / E / Data safety / Quality. **Milestone:** maintenance.
 - **Status:** Candidate checks are reported with delivery; source tests do not
   establish acceptance by an older installed Desktop.
+
+## E2E-TOOL-OBSERVER: Local observations and explicit draft reference
+
+- **Preconditions**: Isolated data directory; developer mode available; synthetic
+  successful/nonzero/error/interrupted tool results and settled background jobs.
+- **Steps**: Open Settings → Info → Developer options; enable developer mode;
+  inspect 1/7/30-day reports; refresh and select a group. With an existing local
+  conversation draft containing text and an attachment, reference the group.
+  Repeat with no active session, a pending prefill, a changed session/workspace,
+  developer mode off, a stale query response, empty/malformed/oversized logs,
+  and a log-directory link outside the profile. Do not use real user logs.
+- **Expected**: Safe structured metadata only; nested nonzero exits are visible;
+  successful stderr text does not imply failure. A background launch is not a
+  completed success and is not counted twice after settlement. Coverage and
+  unknown results stay explicit. Stale/unauthorized reads cannot return data.
+  Reference preserves draft text/chips, is bounded and deduplicated, and sends
+  nothing automatically. No secret, command, output or arbitrary path is exposed.
+- **Specs linked**: `03-runtime/09-logging-and-observability.md` §10,
+  `03-runtime/01-ipc-protocol.md`, `03-runtime/06-host-rpc-protocol.md`,
+  `04-ux/08-component-spec.md`; ADR `local-tool-observer`.
+- **Acceptance criterion**: E (tools and permissions), H (diagnostics).
+- **Milestone**: Post-MVP personal edition.
+- **Status**: Partially automated. Node tests cover capture/report/IPC and offline
+  React handlers/store/cache; Rust tests cover terminal notifications. Installed
+  Desktop DOM, focus and cross-process UI verification remain separately gated.
+- **Tests**: `apps/desktop/test/tool-observations.test.mjs`,
+  `apps/desktop/test/tool-observer.test.mjs`,
+  `apps/desktop/test/tool-observer-ui.test.mjs`, and
+  `background_tasks::settled_tests` in host-core.

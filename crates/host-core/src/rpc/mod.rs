@@ -439,6 +439,19 @@ pub async fn serve(state: Arc<Mutex<AppState>>) -> Result<()> {
     // chord. Keep the native fallback beside the host transport so it remains
     // active even when PI-Desktop is unfocused.
     crate::keyboard::start(tx.clone());
+    let background_settled_callback: Arc<background_tasks::BackgroundTaskSettledCallback> = {
+        let tx = tx.downgrade();
+        Arc::new(move |summary| {
+            if let Some(tx) = tx.upgrade() {
+                send_notification(&tx, "backgroundTasks.settled", json!(summary));
+            }
+        })
+    };
+    state
+        .lock()
+        .await
+        .background_tasks
+        .set_on_settled(Arc::downgrade(&background_settled_callback));
     // Fan background-task state changes out to the renderer. The supervisors
     // bump a static counter (no AppState lock involved); this loop watches it
     // and emits `backgroundTasks.changed` so the composer bar stays current.

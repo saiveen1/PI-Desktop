@@ -1,8 +1,10 @@
+import { toolObserver } from "./tool-observer.js";
 import { subagentControls } from "./subagent-controls.js";
 import { approvalCenter } from "./delegation-approval.js";
 import { delegationReliabilitySettings, delegationDiagnostics } from "./delegation-reliability.js";
 import { sessionLabels, sessionGroups, sessionDelegation, delegationDetails } from "./session-management.js";
 export const en = {
+  toolObserver,
   toolImages: {
     title: "Tool images", image: "Image {{index}}", returned: "Returned {{count}} images",
     returned_one: "Returned {{count}} image", returned_other: "Returned {{count}} images",

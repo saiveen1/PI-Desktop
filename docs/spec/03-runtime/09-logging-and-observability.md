@@ -239,7 +239,44 @@ There is no remote telemetry pipeline or cloud crash analytics in the MVP.
 
 Session transcripts are user data and are not deleted by log rotation.
 
-## 10. Acceptance
+## 10. Local tool observer
+
+The developer section in Settings exposes a read-only view of retained tool
+observations (see [the decision](../../adr/local-tool-observer.md)). Collection
+reuses normal `app/tool` records and does not inject context or call a model.
+`data.observation` contains only known tool/shell identifiers, correlation IDs,
+Desktop platform, application version, outcome, numeric exit/duration and
+truncation status. It does not contain command arguments, output, file contents,
+paths, environment values, or free-text error messages. Unknown extension names
+and unrecognized codes are not copied into the report.
+
+Structured `details` scalars are inspected without parsing text blocks. Outcomes
+separate success, command nonzero, tool error, timeout, cancellation,
+interruption, background launch and unknown. Native-session events are observed
+without changing their canonical transcript ownership. Host background jobs emit
+a distinct terminal notification after authoritative settlement; launch/terminal
+records are correlated by task and session so the report counts one settled job.
+No outcome alone establishes a harness defect or successful recovery.
+
+`diagnostics/toolObservations` accepts only `{ days: 1 | 7 | 30 }`. Main checks
+developer mode before and after reading. It opens only `app/tool.log`,
+`app/tool.1.log`, and `app/tool.2.log` within its own data root, rejects redirected
+log paths, and bounds each file to 5 MiB + 64 KiB and the scan to 20,000 nonempty
+lines. The report deduplicates observation IDs, preserves success counts,
+returns at most 100 issue groups, five examples per group and 200 recent records.
+Partial lines, limits, malformed/legacy records and read errors are visible in
+coverage metadata. Missing old metadata is never invented; the requested time
+window is not a retention guarantee. Concurrent identical reads are coalesced.
+
+Settings provides day selection, refresh, loading/error/empty states and bounded
+examples. A reference action appends a selected sanitized snapshot to the active
+eligible conversation draft, preserves existing content/attachments, and returns
+to chat without sending. Unavailable sessions and pending draft replacement are
+not silently overridden. Report references are facts for review, not execution
+authorization. No new stored setting, database schema, telemetry upload, automatic
+retry or model observer is added.
+
+## 11. Acceptance
 
 1. Failed and interrupted tool calls can be traced by `toolCallId` across key
    logs, with one outcome record per normal execution.

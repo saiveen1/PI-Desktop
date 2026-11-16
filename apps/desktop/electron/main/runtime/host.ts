@@ -1,3 +1,5 @@
+import { app } from "electron";
+import { observeBackgroundResult } from "../tool-observation";
 import { ErrorCodes, IPC, type AgentEventEnvelope, type PlanExecutionFinishStatus, type Risk } from "@pi-desktop/shared";
 import { assertLinuxGlibcSupported } from "../linux-glibc";
 import { HostProcess } from "../host-process";
@@ -102,6 +104,17 @@ export function createHostRuntime({
     // here decides anything: the request's own answer is still the outcome.
     if (method === "plugin.installProgress") {
       sendToRenderer(IPC.event.pluginInstallProgress, params);
+      return;
+    }
+    if (method === "backgroundTasks.settled") {
+      const observation = observeBackgroundResult({
+        timestamp: Date.now(), desktopPlatform: process.platform, appVersion: app.getVersion(),
+      }, params);
+      if (observation) logger.app("tool", "info", "background task settled", {
+        event: "tool.background.settled", sessionId: observation.sessionId,
+        data: { observation },
+      });
+      else logger.app("diagnostics", "warn", "invalid background task observation");
       return;
     }
     if (method === "backgroundTasks.changed") {

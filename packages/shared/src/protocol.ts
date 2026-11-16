@@ -461,6 +461,7 @@ export const IPC = {
     commandPaletteSearch: "pi-desktop/commandPalette/search",
     commandPaletteExecute: "pi-desktop/commandPalette/execute",
     logOpenFolder: "pi-desktop/log/openFolder",
+    toolObservationsRead: "pi-desktop/diagnostics/toolObservations",
     startupAnimationStatus: "pi-desktop/startupAnimation/status",
     startupAnimationOpenFolder: "pi-desktop/startupAnimation/openFolder",
     devtoolsToggle: "pi-desktop/devtools/toggle",

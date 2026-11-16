@@ -5,6 +5,7 @@ import { useAppStore } from "../../stores/app-store";
 import { api } from "../../lib/api";
 import { Button, SegmentedControl, SettingsToggle } from "../../components/ui";
 import { SettingsCard, SettingsRow } from "./primitives";
+import { ToolObserverSection } from "./ToolObserverSection";
 
 export function DeveloperSection({
   settings,
@@ -26,26 +27,29 @@ export function DeveloperSection({
   };
 
   return (
-    <SettingsCard title={t("settings.developer")}>
-      <SettingsRow
-        title={t("settings.developerMode")}
-        description={t("settings.developerModeDesc")}
-      >
-        <SettingsToggle
-          checked={enabled}
-          label={t("settings.developerMode")}
-          onChange={() => void saveSettings({ developerMode: !enabled })}
-        />
-      </SettingsRow>
-      <SettingsRow
-        title={t("settings.devTools")}
-        description={enabled ? undefined : t("settings.devToolsDisabledHint")}
-      >
-        <Button variant="secondary" disabled={!enabled} onClick={() => void openConsole()}>
-          {t("settings.openDevTools")}
-        </Button>
-      </SettingsRow>
-    </SettingsCard>
+    <>
+      <SettingsCard title={t("settings.developer")}>
+        <SettingsRow
+          title={t("settings.developerMode")}
+          description={t("settings.developerModeDesc")}
+        >
+          <SettingsToggle
+            checked={enabled}
+            label={t("settings.developerMode")}
+            onChange={() => void saveSettings({ developerMode: !enabled })}
+          />
+        </SettingsRow>
+        <SettingsRow
+          title={t("settings.devTools")}
+          description={enabled ? undefined : t("settings.devToolsDisabledHint")}
+        >
+          <Button variant="secondary" disabled={!enabled} onClick={() => void openConsole()}>
+            {t("settings.openDevTools")}
+          </Button>
+        </SettingsRow>
+      </SettingsCard>
+      {enabled ? <ToolObserverSection /> : null}
+    </>
   );
 }
 /**

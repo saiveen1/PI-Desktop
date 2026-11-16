@@ -12,7 +12,7 @@
 //! every running task, so an application exit never leaves orphans behind.
 
 use std::collections::{HashMap, VecDeque};
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use std::time::{Duration, Instant};
 
 pub(crate) mod jobs;
@@ -124,6 +124,21 @@ pub struct BackgroundTaskSummary {
     pub exit_code: Option<i32>,
 }
 
+/// Safe terminal telemetry, separate from command/output-bearing snapshots.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct BackgroundTaskSettled {
+    pub task_id: String,
+    pub session_id: String,
+    pub command_shell_id: String,
+    pub state: BackgroundTaskState,
+    pub exit_code: Option<i32>,
+    pub duration_ms: u64,
+    pub truncated: bool,
+}
+
+pub(crate) type BackgroundTaskSettledCallback = dyn Fn(BackgroundTaskSettled) + Send + Sync;
+
 #[derive(Default, Debug)]
 pub struct BackgroundTaskRegistry {
     pub(crate) tasks: HashMap<String, BackgroundTask>,
@@ -131,6 +146,8 @@ pub struct BackgroundTaskRegistry {
     order: Vec<String>,
     /// Reserved before spawn; the RAII owner releases synchronously on cancellation.
     pending: Arc<std::sync::Mutex<HashMap<String, PendingSpawnEntry>>>,
+    /// The RPC transport owns the callback; neither registry nor supervisor prolongs it.
+    on_settled: Option<Weak<BackgroundTaskSettledCallback>>,
 }
 
 #[derive(Debug)]
@@ -168,6 +185,10 @@ pub fn change_counter() -> u64 {
 }
 
 impl BackgroundTaskRegistry {
+    pub(crate) fn set_on_settled(&mut self, callback: Weak<BackgroundTaskSettledCallback>) {
+        self.on_settled = Some(callback);
+    }
+
     /// A snapshot is a `try_lock` on a short critical section; a contended
     /// cell reports "running" so a concurrent read never hides a live task.
     fn snapshot(task: &BackgroundTask) -> (BackgroundTaskState, Option<i32>) {
@@ -450,7 +471,13 @@ fn register_spawned_task(
     registry.order.push(task.id.clone());
     registry.tasks.insert(task.id.clone(), task.clone());
     registry.prune_finished();
-    tokio::spawn(supervise(task.clone(), runner, stop_rx, on_changed));
+    tokio::spawn(supervise(
+        task.clone(),
+        runner,
+        stop_rx,
+        on_changed,
+        registry.on_settled.clone(),
+    ));
     task
 }
 
@@ -462,6 +489,7 @@ async fn supervise(
     mut runner: tools::SpawnedToolRunner,
     mut stop_rx: watch::Receiver<bool>,
     on_changed: Arc<dyn Fn() + Send + Sync>,
+    on_settled: Option<Weak<BackgroundTaskSettledCallback>>,
 ) {
     let stdout_pipe = runner.stdout.take();
     let stderr_pipe = runner.stderr.take();
@@ -553,16 +581,30 @@ async fn supervise(
         (Some(0), false, false) => BackgroundTaskState::Exited,
         _ => BackgroundTaskState::Failed,
     };
-    {
+    let summary = {
         let mut shared = task.shared.lock().await;
         let stdout_dropped = shared.push_stdout(&stdout_decoder.finish());
         let stderr_dropped = shared.push_stderr(&stderr_decoder.finish());
         shared.truncated |= stdout_dropped || stderr_dropped;
         shared.state = state;
         shared.exit_code = exit_code;
-        task.settled.send_replace(Some(task.started_at.elapsed()));
-    }
+        let duration = task.started_at.elapsed();
+        task.settled.send_replace(Some(duration));
+        BackgroundTaskSettled {
+            task_id: task.id.clone(),
+            session_id: task.session_id.clone(),
+            command_shell_id: task.command_shell_id.clone(),
+            state,
+            exit_code,
+            duration_ms: duration.as_millis() as u64,
+            truncated: shared.truncated,
+        }
+    };
     on_changed();
+    // Emit once, only after reaping, draining, and releasing the task lock.
+    if let Some(callback) = on_settled.and_then(|callback| callback.upgrade()) {
+        callback(summary);
+    }
 }
 
 async fn drain_pipe<R>(
@@ -659,6 +701,9 @@ mod windows_tests;
 
 #[cfg(test)]
 mod admission_tests;
+
+#[cfg(test)]
+mod settled_tests;
 
 #[cfg(test)]
 mod tests {

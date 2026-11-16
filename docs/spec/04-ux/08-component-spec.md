@@ -4868,3 +4868,22 @@ The bundled File Manager validates each create/rename name before filesystem wri
 ### Native Pi file references (#1853)
 
 User-initiated file reads, directory listings, reference resolution and file search use the native session's sidecar-projected project path. Native identities never query Desktop session storage or fall back to the selected workspace. Missing/replaced sources fail closed. Existing local file containment and explicit external-file rules still apply; this grants no model tools or attachments. Native sessions have no Desktop scratch directory.
+
+## Local tool observer (Settings → Info)
+
+The existing developer section exposes the local tool observer only while
+developer mode is enabled. It offers 1/7/30-day windows, explicit refresh,
+loading/error/empty states, outcome counts, grouped non-success facts and bounded
+examples. Coverage warns about rotated/bounded logs, legacy records, malformed
+lines and read failures. Desktop platform is labeled as the observer's platform,
+not a claim about a remote execution host. Nonzero exits and cancellations are
+not presented as confirmed defects.
+
+Selecting a group reveals its safe metadata and a Reference in conversation
+action. The action requires a current editable local Desktop conversation in the
+same workspace, no pending draft replacement and no session-selection race.
+It appends a bounded JSON snapshot to the cached draft, preserves existing text
+and file/image references, and returns to chat without sending. Repeated clicks
+do not duplicate the same reference. Query/ownership changes discard stale reads
+and selection. No automatic model analysis, retry or transcript read occurs.
+See [logging](../03-runtime/09-logging-and-observability.md#10-local-tool-observer).

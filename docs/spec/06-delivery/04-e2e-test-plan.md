@@ -441,3 +441,9 @@ Historical US-UI topology captures are not the current flat task-reading UI;
 the task-first and read-only-role regression contracts remain in their owning
 catalogs. Scenario presence or historical automation status is not a current
 integration test result.
+
+### Local tool-observer traceability
+
+| Scenario | Acceptance | Specification | Coverage |
+| --- | --- | --- | --- |
+| [E2E-TOOL-OBSERVER](e2e/tools-and-workspace.md#e2e-tool-observer-local-observations-and-explicit-draft-reference) | E, H | Logging §10; diagnostics IPC; background settlement; developer settings | Node capture/report/IPC and offline UI handlers; Rust lifecycle. Installed UI not run by these tests. |

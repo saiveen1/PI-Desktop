@@ -777,6 +777,14 @@ active typed cancellation by session and call id.
 - `backgroundTasks.stop`
 - `backgroundTasks.changed` notification carrying `{ version }`, emitted when a
   task starts, exits, or is stopped
+- `backgroundTasks.settled` notification carrying only
+  `{ taskId, sessionId, commandShellId, state, exitCode, durationMs, truncated }`.
+  `state` is `exited`, `failed`, or `stopped`; `exitCode` is an integer or null.
+  The supervisor emits it once after terminal publication and final output drain,
+  outside the task mutex. The weak observer callback does not keep the registry
+  or notification transport alive. This additive telemetry does not replace the
+  coalesced changed notification or alter task lifecycle behavior. It contains
+  no command, display name, workspace path, output, or error prose.
 
 A `tools.execute` call with `runInBackground: true` starts a `Bash` command the
 host owns instead of the turn: the call resolves immediately with a

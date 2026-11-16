@@ -5,6 +5,7 @@ import { sessionLabels, sessionGroups, sessionDelegation, delegationDetails } fr
 import { en, type EnglishCatalog } from "../en/index.js";
 
 export const ko = {
+  toolObserver: en.toolObserver,
   toolImages: {
     title: "도구 이미지", image: "이미지 {{index}}", returned: "이미지 {{count}}개 반환됨",
     returned_one: "이미지 {{count}}개 반환됨", returned_other: "이미지 {{count}}개 반환됨",

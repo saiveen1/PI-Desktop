@@ -438,3 +438,4 @@ git history.
 | chinese-docs-entry-points-only | [Chinese documentation keeps entry points only](chinese-docs-entry-points-only.md) | Accepted; amends ADR 0079 |
 | windows-native-snap-without-frame-insets | [Restore Windows snapping without Electron frame insets](windows-native-snap-without-frame-insets.md) | Accepted (issue #2330; amends ADR 0317) |
 | plan-approval-session-permission | [Plan approval defaults to the owning Session's permission](plan-approval-session-permission.md) | Accepted; amends ADR 0053 and ADR 0158 |
+| local-tool-observer | [Local tool observation and developer review](local-tool-observer.md) | Accepted; additive diagnostics only |

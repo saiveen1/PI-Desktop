@@ -1,3 +1,4 @@
+import { toolObserver } from "./tool-observer.js";
 import { subagentControls } from "./subagent-controls.js";
 import { approvalCenter } from "./delegation-approval.js";
 import { delegationReliabilitySettings, delegationDiagnostics } from "./delegation-reliability.js";
@@ -5,6 +6,7 @@ import { sessionLabels, sessionGroups, sessionDelegation, delegationDetails } fr
 import { en, type EnglishCatalog } from "../en/index.js";
 
 export const zhTW = {
+  toolObserver,
   toolImages: {
     title: "工具圖像", image: "圖像 {{index}}", returned: "已傳回 {{count}} 張圖像",
     returned_one: "已傳回 {{count}} 張圖像", returned_other: "已傳回 {{count}} 張圖像",

@@ -1725,6 +1725,8 @@ export const api = {
   executeCommand: (commandId: string) =>
     invoke(IPC.invoke.commandPaletteExecute, commandId),
   openLogs: () => invoke(IPC.invoke.logOpenFolder),
+  getToolObservations: (query: import("@pi-desktop/shared").ToolObservationQuery) =>
+    invoke<import("@pi-desktop/shared").ToolObservationReport>(IPC.invoke.toolObservationsRead, query),
   /** What the next launch would play as its boot animation (D679). */
   startupAnimationStatus: () =>
     invoke<StartupAnimationStatus>(IPC.invoke.startupAnimationStatus),

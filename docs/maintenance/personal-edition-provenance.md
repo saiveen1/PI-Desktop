@@ -35,6 +35,17 @@ from executable validation. The historical audit boundary above is unchanged.
 
 ## Local harness and delegation increments
 
+The local tool observer was implemented on personal base `2dea25a27` and checked
+against locally recorded upstream `aa35fee4b15c354303bb5a0c77c9c33a731d097f`
+without fetching. At that revision, `developer-sections.tsx` contains the developer
+mode/DevTools controls, and `diagnostics-ipc.ts` contains log-folder and DevTools
+handlers, but neither contains this report/view/reference capability. Existing
+Logger and tool events remain inherited foundations. The increment consists of
+allowlisted result observations, background settlement telemetry, a bounded log
+report reader, developer-mode-gated UI and a user-initiated draft reference. See
+[the decision](../adr/local-tool-observer.md); this source claim does not establish
+installed behavior, complete error detection, or support for un-fetched upstream.
+
 The [2026-11-16 compatibility verification](../testing/harness-compatibility-2026-11-16.md)
 compares personal base `cee401bd4` with upstream
 `29043af3371122e256bf265db31651da125d38e3`. The local increment accepts blank

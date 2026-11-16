@@ -26,6 +26,11 @@ or installed-upgrade guarantee.
 The harness is the layer that controls agent execution, tool calls, and recovery.
 This edition strengthens the existing framework rather than replacing it.
 
+- **Local tool observations.** Developer options summarize retained tool outcomes
+  and background completions from bounded local logs. Inspect grouped facts and
+  append a sanitized report to a conversation draft without automatic sending,
+  model calls, or command replay. Coverage limits and unknown results stay visible.
+
 - **Broader repeated-failure protection.** Extend the existing Edit/patch guard to
   Write and repeated identical Bash failures. Successful file changes allow a
   meaningful retest; new, complete context feedback gets limited recovery room.

@@ -5,6 +5,7 @@ import { sessionLabels, sessionGroups, sessionDelegation, delegationDetails } fr
 import { en, type EnglishCatalog } from "../en/index.js";
 
 export const de = {
+  toolObserver: en.toolObserver,
   toolImages: {
     title: "Werkzeugbilder", image: "Bild {{index}}", returned: "{{count}} Bilder zurückgegeben",
     returned_one: "{{count}} Bild zurückgegeben", returned_other: "{{count}} Bilder zurückgegeben",

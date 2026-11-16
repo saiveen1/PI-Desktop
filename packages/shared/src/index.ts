@@ -97,4 +97,5 @@ export * from "./event-usage.js";
 export * from "./storage.js";
 export * from "./notification-settings.js";
 export * from "./run-diagnostics.js";
+export * from "./tool-observations.js";
 export { appendLocalFileReferenceContext } from "./local-file-references.js";

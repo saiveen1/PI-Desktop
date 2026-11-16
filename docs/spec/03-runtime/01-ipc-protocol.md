@@ -2353,6 +2353,18 @@ live window exists. The same stored flag gates F12 on all platforms,
 Ctrl+Shift+I on Windows/Linux, and the macOS View-menu role. Disabling the flag
 closes an already-open developer-tools window.
 
+```ts
+diagnostics/toolObservations({ days: 1 | 7 | 30 }) -> ToolObservationReport
+```
+
+This additive Main-owned, developer-mode-gated channel returns bounded safe
+metadata from fixed local tool logs, never arbitrary files or transcript bodies.
+The developer gate is checked both before and after the asynchronous read. The
+shared `ToolObservationReport` contract describes counts, grouped facts, bounded
+examples and coverage limits. No persistence migration is required. See
+[logging and observability](09-logging-and-observability.md#10-local-tool-observer)
+and [the decision](../../adr/local-tool-observer.md).
+
 `window/control` accepts the exported `WINDOW_CONTROL_ACTIONS` tuple:
 
 ```ts

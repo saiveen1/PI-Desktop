@@ -4,6 +4,8 @@ import { join } from "node:path";
 import { IPC } from "@pi-desktop/shared";
 import type { BrowserWindow } from "electron";
 import type { IpcRegistrar } from "./types";
+import type { ToolObservationReport } from "@pi-desktop/shared";
+import { parseToolObservationQuery, readToolObservations } from "../tool-observation-report";
 
 export type DiagnosticsIpcDependencies = {
   registrar: IpcRegistrar;
@@ -24,6 +26,23 @@ export function registerDiagnosticsIpc({
   const handle = (channel: string, fn: (...args: any[]) => Promise<any>) => {
     registrar.handle(channel, fn);
   };
+  const reports = new Map<number, Promise<ToolObservationReport>>();
+  registrar.handle(IPC.invoke.toolObservationsRead, async (input: unknown) => {
+    if (!isDeveloperMode()) throw new Error("developer mode is disabled");
+    const query = parseToolObservationQuery(input);
+    let pending = reports.get(query.days);
+    if (!pending) {
+      pending = readToolObservations(dataDir, query);
+      reports.set(query.days, pending);
+    }
+    try {
+      const report = await pending;
+      if (!isDeveloperMode()) throw new Error("developer mode is disabled");
+      return report;
+    } finally {
+      if (reports.get(query.days) === pending) reports.delete(query.days);
+    }
+  });
   handle(IPC.invoke.logOpenFolder, async () => {
     const logs = join(dataDir, "logs");
     mkdirSync(logs, { recursive: true });

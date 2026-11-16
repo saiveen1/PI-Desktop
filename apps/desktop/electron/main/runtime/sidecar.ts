@@ -1,3 +1,5 @@
+import { app } from "electron";
+import { observeToolResult } from "../tool-observation";
 import { IPC, isDelegationSettings, type AppSettings, type DelegationApprovalRequest, type DelegationApprovalDecision, type AgentEventEnvelope, type ComputerGrantView, type UiMessage } from "@pi-desktop/shared";
 import type { DelegationPolicySnapshot } from "@pi-desktop/shared";
 import {
@@ -205,13 +207,7 @@ export function createSidecarRuntime({
   s.setDelegationSnapshotResolver(delegationSnapshot);
 
   s.onNotification((method, params) => {
-    if (method === "native.agent.event") {
-      // Native AgentSession already persisted the event to its canonical Pi
-      // JSONL. It owns neither the Desktop outbox nor Host queue/turn state.
-      sendToRenderer(IPC.event.agentMessage, params as AgentEventEnvelope);
-      return;
-    }
-    if (method === "agent.event") {
+    if (method === "agent.event" || method === "native.agent.event") {
       const envelope = params as AgentEventEnvelope;
       const event = envelope.event;
       if (event.type === "tool_start") {
@@ -255,9 +251,20 @@ export function createSidecarRuntime({
                 ? Math.max(0, envelope.ts - started.startedAt)
                 : undefined,
               result,
+              observation: observeToolResult({
+                timestamp: envelope.ts, desktopPlatform: process.platform, appVersion: app.getVersion(),
+                sessionId: envelope.sessionId, turnId: envelope.turnId ?? started?.turnId,
+                toolCallId: event.toolCallId,
+                durationMs: started ? Math.max(0, envelope.ts - started.startedAt) : undefined,
+              }, started?.toolName ?? "unknown", event.result, event.isError === true),
             },
           },
         );
+      }
+      if (method === "native.agent.event") {
+        // Native sessions own their JSONL; observe without Desktop persistence.
+        sendToRenderer(IPC.event.agentMessage, envelope);
+        return;
       }
       emitAgentEvent(envelope);
       const persistedMessage = persistAgentEvent(envelope);
@@ -328,6 +335,11 @@ export function createSidecarRuntime({
           reason: "agent_sidecar_exit",
           exitCode: code,
           signal,
+          observation: observeToolResult({
+            timestamp: Date.now(), desktopPlatform: process.platform, appVersion: app.getVersion(),
+            sessionId: tool.sessionId, turnId: tool.turnId, toolCallId: tool.toolCallId,
+            durationMs: Math.max(0, Date.now() - tool.startedAt),
+          }, tool.toolName, {}, true, true),
         },
       });
     }
