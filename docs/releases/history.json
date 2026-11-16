@@ -208,6 +208,577 @@
   },
   "releases": [
     {
+      "version": "0.23.1-beta.1",
+      "sourceCommit": "e83aa74b1f6b16334b39c483e6ec212fa3ddff18",
+      "sourceFingerprint": "2f915dbc274aae4209d656213a7c029932a0c93f8ae44208f5b4ba5e215b7081",
+      "versionOverride": {
+        "from": "0.23.0",
+        "to": "0.23.1-beta.1"
+      },
+      "buildId": "20261116T095313558Z-ge83aa74b1f6b-8fe51204",
+      "builtAt": "2026-11-16T10:02:26.882Z",
+      "sha256": "c3fa89648abd9eca23249d76865236939904205cdcaed436750c41ca5ea99995",
+      "artifact": "PI-Desktop-Personal-Setup-0.23.1-beta.1-20261116T095313558Z-ge83aa74b1f6b-8fe51204.exe",
+      "changes": [
+        {
+          "commit": "e83aa74b1f6b16334b39c483e6ec212fa3ddff18",
+          "subject": "fix(release): accept stable baselines for beta builds",
+          "category": "Fixed"
+        },
+        {
+          "commit": "7990e86f8d629150dc76f9c2095ae6048659cc07",
+          "subject": "fix(harness): preserve edit provenance and Git Bash arguments",
+          "category": "Fixed"
+        },
+        {
+          "commit": "c1d9e306ff473f82d513b7e7a4650177714d8b9c",
+          "subject": "feat(subagents): preserve role-level skill selection",
+          "category": "Added"
+        },
+        {
+          "commit": "d5736010d9779e024979cf22d0c140914d692cbe",
+          "subject": "docs(adr): rewrite the decision records by hand",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "b1882735080ad5f8d9d47b067a4bc248a12c2a27",
+          "subject": "docs: slim the documentation tree",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "c9f74ae229004e40a4d35265f766a082431684b2",
+          "subject": "docs(plugin-center): drop Vercel from the service architecture",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "c88cf311f582f9f4f08c5fa33e4b8fd2aa5481f0",
+          "subject": "chore(docs): remove the Vercel documentation-site deployment",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "1d4914d9d30c7d632b8f6a7da2e6f9b72c64ab51",
+          "subject": "docs(readme): drop the Early Preview label",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "438a1a364bbb8a13c63e922df931faa69a4ec8fa",
+          "subject": "fix(plugins): restore the Open panel button on installed cards",
+          "category": "Fixed"
+        },
+        {
+          "commit": "2b20dc8a32db2fb8b4cb737d5e308be99e8189ca",
+          "subject": "fix(agent-ipc): refuse duplicate compaction and keep ownership of the guard",
+          "category": "Fixed"
+        },
+        {
+          "commit": "f75d2c27e5408bf537796f7016b566fc4b52f3e1",
+          "subject": "fix(session-ipc): refuse to delete a session with a running turn",
+          "category": "Fixed"
+        },
+        {
+          "commit": "bf22dbf3f0de6ed6c704e7b762f8e3bf756467db",
+          "subject": "fix(agent-ipc): guard compaction admission without blocking Stop",
+          "category": "Fixed"
+        },
+        {
+          "commit": "d03fd1f27cc53857eb16d3d7bee7110b0c4f14ae",
+          "subject": "fix(agent-runtime): treat Volcengine AccountOverdueError wording as terminal",
+          "category": "Fixed"
+        },
+        {
+          "commit": "683f3dbda44d56a1cac14549a050ce52787b06ce",
+          "subject": "fix(agent-runtime): read Perplexity and MiniMax max_tokens ceilings",
+          "category": "Fixed"
+        },
+        {
+          "commit": "524b0265c91bcd367fcdfa1da3e7f71eb3869bca",
+          "subject": "fix(mods): migrate legacy session mode constraints",
+          "category": "Fixed"
+        },
+        {
+          "commit": "a3d0610ce1c73b7430e68d188dcfcca33dce9d70",
+          "subject": "fix(sessions): baseline the stale-read guard before workspace alignment",
+          "category": "Fixed"
+        },
+        {
+          "commit": "80e25f37f1a97875b2e6e3d6cc7307b0b23435ef",
+          "subject": "fix(sessions): catch cold-read idle edits with a plain cache-reference compare",
+          "category": "Fixed"
+        },
+        {
+          "commit": "951a1ad780b4c198e1e48c5d8a69e2fb4a74c4ca",
+          "subject": "fix(sessions): keep selectSession from reverting edits made during its detail read",
+          "category": "Fixed"
+        },
+        {
+          "commit": "73da9a375c3c357413f4673424125e30cff94cca",
+          "subject": "fix(git-clone): wait for the killed clone to exit before cleaning up",
+          "category": "Fixed"
+        },
+        {
+          "commit": "6dadeebbd466a6565b86dc5d610487086f5cdf57",
+          "subject": "fix(git-clone): clean up the half-built destination after a timeout",
+          "category": "Fixed"
+        },
+        {
+          "commit": "77d5b7a03603eb4c9a13fa29243a5d6f8b51af4d",
+          "subject": "feat(session-collaboration): send the report as readable text, not JSON",
+          "category": "Added"
+        },
+        {
+          "commit": "a28bc2eb1ad0e5b808ae1e54dea982622420464c",
+          "subject": "feat(session-collaboration): let a send choose immediate or queued delivery",
+          "category": "Added"
+        },
+        {
+          "commit": "6828ff8f3dabd0c10172107b1f78efe37d4d9f6d",
+          "subject": "feat(session-collaboration): run a worker's report at the next turn boundary",
+          "category": "Added"
+        },
+        {
+          "commit": "d519ac2f667c35a99dafb7f7a54685d5d65354c4",
+          "subject": "chore(release): prepare v0.23.0-beta.1",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "ecb25d2bb742b397257e64ac095822ef93cd9ea4",
+          "subject": "fix(mods): preserve stale closeout cancellation ordering",
+          "category": "Fixed"
+        },
+        {
+          "commit": "652c4067e1d691404272f46ae979111c5720dc30",
+          "subject": "fix(mods): restore reliable Goal run lifecycle and completion",
+          "category": "Fixed"
+        },
+        {
+          "commit": "1e7239640fe8f3e8b44a875ed08752820d44143f",
+          "subject": "fix(chat): align delegation connectors with actual card centers",
+          "category": "Fixed"
+        },
+        {
+          "commit": "9ad666512565a30d275e672f7748db5c98fec4bc",
+          "subject": "fix(desktop): stop the todo shimmer once the session is idle",
+          "category": "Fixed"
+        },
+        {
+          "commit": "2ddd1997a2029b6576c3d78dd914b046e5f81179",
+          "subject": "test(plan): qualify session permissions through native approval",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "914559a2b0b3257a2c96dba8aca4d74821bd2c24",
+          "subject": "perf(host-core): keep per-turn revision saves off the full transcript",
+          "category": "Improved"
+        },
+        {
+          "commit": "820ad643e50ca0d925ab2573dd2d1a2e8da3fe88",
+          "subject": "fix(runtime): preserve explicit zero cache usage",
+          "category": "Fixed"
+        },
+        {
+          "commit": "6dad8f87c9bb159abd665175b024881a5b14fa3f",
+          "subject": "feat(session-collaboration): let the orchestrating plugin own worker concurrency",
+          "category": "Added"
+        },
+        {
+          "commit": "3e1808cf0fd1c1781035875553f1e99126506f0b",
+          "subject": "docs(window): clarify native scenario isolation",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "e1b71f6880849953d22f1996a925de9357a9b5f2",
+          "subject": "test(window): isolate keyboard restore from native resize history",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "7c25180ab3d4af8b4b1e758b504ea3e5ed788161",
+          "subject": "test(window): retain native keyboard restore bounds on failure",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "0f066a37c555021c8f4c3326968cffb34365bd0b",
+          "subject": "test(window): wait for native drag activation before sweeping",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "6de6df6f3935285bcd9b124329a43c3d962d338d",
+          "subject": "fix(transcripts): tolerate terminated torn encoded rows in storage verification",
+          "category": "Fixed"
+        },
+        {
+          "commit": "bcaeae6cc19b9c29d80582d9642a7bd01acb46c1",
+          "subject": "fix(desktop): keep each project's MCP servers when another project refreshes",
+          "category": "Fixed"
+        },
+        {
+          "commit": "5bfa4a2f91a602bd567eba8651bb4eed72d287f5",
+          "subject": "test(window): deliver each verified drag point to the input queue",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "1a7c5be18cd4e72c6d9bbfa0b29c77d3e4205d6f",
+          "subject": "test(window): verify native cursor movement during physical drags",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "92b56a56e63a019679887ee543aa20828b97d68d",
+          "subject": "test(window): provision native desktop geometry on hosted runners",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "e45ac351547f3cb0c448435c69524bbe78a3ee2a",
+          "subject": "test(window): publish clean-source native activation replay evidence",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "2b52999879a65d35ce7c29dc0dcf29047ee3a02d",
+          "subject": "fix(window): keep the border suppressed through activation changes",
+          "category": "Fixed"
+        },
+        {
+          "commit": "ed686dd4cefc6778d1d4736e29ba6174fc6874c1",
+          "subject": "fix(plugins): compare plugin storage names, not raw ids, on install",
+          "category": "Fixed"
+        },
+        {
+          "commit": "bf82fee871282e686b37360f96d2adc0c693b936",
+          "subject": "test(window): verify evidence and report desktop capability failures",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "f88f25cbb8a9e741416f1fb8d2bf37ed2080a0ec",
+          "subject": "test(window): build replay dependencies and retain early job failures",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "4eb55e781ab95c11ae0de116350f2e800798c55c",
+          "subject": "test(window): retain actual native Host replies and stderr",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "695732198d16b10b4180629fee142e71f3d9ef2e",
+          "subject": "test(window): retain DWM border attributes in native geometry evidence",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "16261e493ee0bd977023574dfbecf3c9bf16cb14",
+          "subject": "test(window): collect desktop metadata without a WMI dependency",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "049189c927490143e50d431d28c36992d7c0d16a",
+          "subject": "test(window): reindex the preserved native stream without conversion",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "19c1f79ab3f00cb1476da1b93ef4fb1d0ae285bc",
+          "subject": "test(window): preserve original native output bytes",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "ebf2800f7e8f4a637b2e664759c26cdf49835478",
+          "subject": "test(window): retain native evidence and add independent Windows replay",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "7b56da1365fc3e9f3d94ac59453eaf27d1b9bf9a",
+          "subject": "fix(agent-runtime): spell out required on nested tool-schema objects",
+          "category": "Fixed"
+        },
+        {
+          "commit": "c1970f15bf61331c6e66ae765d07e2a43c7202d4",
+          "subject": "fix(agent-runtime): treat Anthropic credit-balance and DashScope Arrearage wording as terminal",
+          "category": "Fixed"
+        },
+        {
+          "commit": "f9ff833c252f01a0500d6c431a64c993d9198ba4",
+          "subject": "fix(agent-runtime): bound retained CJK text to the token budget",
+          "category": "Fixed"
+        },
+        {
+          "commit": "38c5a5bd77ef910849ce3c1bc5f5d8577dad1a71",
+          "subject": "docs(window): record native snap reproduction and Windows qualification",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "f1f6a44aa778ecd5144d30c4c141592d01ba99c1",
+          "subject": "test(window): avoid sharing violations in native probe state exchange",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "8343132a3c9a7e8fb4f4ab3ff1c709ae4f54aec6",
+          "subject": "test(window): publish native probe commands atomically",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "463a025d46af5a796e3df63a65efcb1f4ea87033",
+          "subject": "fix(window): restore native Windows snapping without frame insets",
+          "category": "Fixed"
+        },
+        {
+          "commit": "4534e9fe981a7ddbc85f53ac9aa6cd6926905e8a",
+          "subject": "fix(transcripts): classify torn prefixes by typed EOF, not Display text",
+          "category": "Fixed"
+        },
+        {
+          "commit": "9fef3ba4da9a0e25d1a554f0719259c419577780",
+          "subject": "fix(markdown): render CJK punctuation emphasis",
+          "category": "Fixed"
+        },
+        {
+          "commit": "9e9b95a482fe0cd725731c44daa8f2d23b4981c5",
+          "subject": "docs(plan): satisfy the ADR catalog format",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "7a7827727091eee51f8d4a95cda7e77f8fcb95f5",
+          "subject": "fix(plan): preserve the owning session permission on approval",
+          "category": "Fixed"
+        },
+        {
+          "commit": "1def4c58dcb5f6e4f41cca9efb516dba7da6ef88",
+          "subject": "perf(desktop): shrink packaged app and load transcription natively",
+          "category": "Improved"
+        },
+        {
+          "commit": "c2a58a855604950a4e3c974b6b2f36fee6ea3280",
+          "subject": "Revert \"Merge pull request #2322 from vastsa/v0/settings-redesign\"",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "a2cfd932b77c03cf86d81ea8c3df0504a1ce4828",
+          "subject": "Redesign settings layout: grouped panels, centered column, lighter header",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "c01177006d148dcaeef2b8d15b1be3553472c316",
+          "subject": "fix(plugins): refuse plugin ids that alias another plugin's directory",
+          "category": "Fixed"
+        },
+        {
+          "commit": "05a023b2256799c577ec26caf8ed29aecbba0454",
+          "subject": "Restore ripple running mark in sidebar session rows",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "a86aa4e6922f7cd1e997259e835208cb667bb279",
+          "subject": "Simplify sidebar project run badge and activity rail",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "e63a181e98903545be7be7b27dc0a4203c18f109",
+          "subject": "Redesign sidebar session status marks and project run badge",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "047748de868b58f336a6a9d8ffe2eebe94c19fd4",
+          "subject": "fix(composer): restore preview focus after the selection",
+          "category": "Fixed"
+        },
+        {
+          "commit": "7740cba792a9da9adc3188c50300f1a9787cd9eb",
+          "subject": "test(composer): validate file references through Electron and restart",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "852911aef80f67b961f88f12c63dafb9a2b16814",
+          "subject": "chore(composer): complete file reference validation gates",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "46c6788c888b66141ccbc79c6190ea31e5403fac",
+          "subject": "fix(composer): reference pasted disk files with sizes",
+          "category": "Fixed"
+        },
+        {
+          "commit": "e9f88e2855b690b0097c5eb9ef1a59823567c76c",
+          "subject": "fix(plugins): preserve JSON setting strings across saves",
+          "category": "Fixed"
+        },
+        {
+          "commit": "e2e1105addde16d3f3e44a8973386e4c2c2abbb8",
+          "subject": "fix(plugins): refuse plugin ids that collide after sanitizing",
+          "category": "Fixed"
+        },
+        {
+          "commit": "4a663eaafb73a60c6219a2dfcefc5dbbc2732c02",
+          "subject": "fix(runtime): preserve restored tool pairs across compaction boundaries",
+          "category": "Fixed"
+        },
+        {
+          "commit": "a6864267592654ba959c91c1d4253c03e72c72bb",
+          "subject": "fix(models): retry failed model discovery with a backoff",
+          "category": "Fixed"
+        },
+        {
+          "commit": "fd88dccf8f501f78f371f39e335b04838cbeabeb",
+          "subject": "fix(composer): keep the turn running when Stop fails",
+          "category": "Fixed"
+        },
+        {
+          "commit": "62af05bad0de2f8f2fffc8c1f65c720a62bbebe7",
+          "subject": "fix(interactions): keep ask and permission cards when an answer fails",
+          "category": "Fixed"
+        },
+        {
+          "commit": "bb5eb41303cbc346f9d028647b5f61f68f8c724e",
+          "subject": "feat(delegation): add lifecycle observations and approval sound",
+          "category": "Added"
+        },
+        {
+          "commit": "f34f78a0f60a48571de3b3d719d0716a6deb3a76",
+          "subject": "feat(subagents): make role catalog and concurrency limits configurable",
+          "category": "Added"
+        },
+        {
+          "commit": "fa809a7550e8ae0a25558c9a79d7df7ab2f87003",
+          "subject": "chore(release): record personal beta.10 installer",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "fe68b42b40c52eab60fb4fc507c3833b30101515",
+          "subject": "fix(transcripts): skip terminated torn prefixes instead of failing every read",
+          "category": "Fixed"
+        },
+        {
+          "commit": "7e9b377a0f5bb0d728fedaf3c9c689a1cbc41e1a",
+          "subject": "fix(agent-runtime): thread the delegate's prior summary past the system row",
+          "category": "Fixed"
+        },
+        {
+          "commit": "4ac79d7f98ea5baa12ebb5a53e08e2fc491f37e5",
+          "subject": "fix(mcp-oauth): settle the login when the token exchange fails after the callback",
+          "category": "Fixed"
+        },
+        {
+          "commit": "be6c23393f0a669c971cd0fad421bb4e5e6b2d17",
+          "subject": "test(fs): wait for fallback IO after the mocked Git deadline",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "fbf975a3520e0bfa6a37cb362bd0e9ea089ce7d5",
+          "subject": "test(chat): verify latest ownership without discarding connected pages",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "7aa385a0e2513cb70d67175c53ac75dda77df4f0",
+          "subject": "fix(chat): preserve source-owned text across history layout repairs",
+          "category": "Fixed"
+        },
+        {
+          "commit": "d0e18ba45225db272c5b532b437bf8b970db0f39",
+          "subject": "test(chat): reproduce clamped and reconstructed reading anchors",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "49a3e2e703671b335172d930bf5e9a28d12d041c",
+          "subject": "fix(runtime): use proxy-safe headers for custom completions",
+          "category": "Fixed"
+        },
+        {
+          "commit": "84de669cf7d75206ad43a00df3e759ca587c54b0",
+          "subject": "fix(chat): show output-token truncation warnings",
+          "category": "Fixed"
+        },
+        {
+          "commit": "77b595be5df87ae067f9a0a735f2bf7b722b172d",
+          "subject": "ci: retry after runner network recovery",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "b629107c08888b01e96aef97c64bfd503855fe9c",
+          "subject": "ci: retry after runner network recovery",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "96f30f0aaae850544da97c6c98d83a578ad734f9",
+          "subject": "ci: retry after runner network recovery",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "7b706ce2658054f38cd22db44d0131b69bb9de2e",
+          "subject": "test(agent-runtime): retain plain Bash job lifecycle coverage",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "8667cdd1a86070302043b6de3f93c90219e99af0",
+          "subject": "ci: retry checks after Ubuntu mirror DNS failure",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "ceb7fa9612d2294ea596074ed235a15b98450620",
+          "subject": "ci: retry checks after Ubuntu mirror DNS failure",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "d05364e98cd7ca9dfba2225cdffb6f0d678400ee",
+          "subject": "ci: retry checks after Ubuntu mirror DNS failure",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "6cadb0e360847ddf2ac319300c41ee0b9dffda86",
+          "subject": "fix(host-core): confirm macOS stopped group disappearance",
+          "category": "Fixed"
+        },
+        {
+          "commit": "c9974f54266277b2f3b1a15f8bbcae5cfe7b4273",
+          "subject": "fix(host-core): retain identifiable background command prefixes",
+          "category": "Fixed"
+        },
+        {
+          "commit": "d5e81b94c1a0ce046375104c0f46e58658bff1fc",
+          "subject": "fix(agent-runtime): interrupt canceled TaskStop waits",
+          "category": "Fixed"
+        },
+        {
+          "commit": "f25a7e4be02f699b9664532e45437dee51b207ba",
+          "subject": "fix(modes): preserve approval transitions and create snapshots atomically",
+          "category": "Fixed"
+        },
+        {
+          "commit": "056ec3e4d29ea50524d9d0d9759ab725ca64cb66",
+          "subject": "fix(modes): claim persisted runs before catalog lookup",
+          "category": "Fixed"
+        },
+        {
+          "commit": "c671b12a224a20982893cdd33baaf4482a174cc8",
+          "subject": "fix(modes): retain snapshot-free Agent and Plan dispatch",
+          "category": "Fixed"
+        },
+        {
+          "commit": "953c2b5e6d3a5e0beefaabebff92856237f297e5",
+          "subject": "fix(modes): preserve definitions through session creation and dispatch",
+          "category": "Fixed"
+        },
+        {
+          "commit": "46569f99e22a7bcabbe693af187768d77419be8f",
+          "subject": "docs(e2e): describe Bash job default selector coverage",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "6b4c243931280b7d5c40b6632b357c5fff0e587a",
+          "subject": "docs(runtime): clarify explicit Bash job selector defaults",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "4115296fc1def23bc90f3212ae4ba56f07622ac2",
+          "subject": "test(runtime): exercise Bash defaults in background job E2E",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "0288807c12326ac4309a756b7b70cf0f3e8af1cd",
+          "subject": "test(agent-runtime): cover redundant Bash job selectors",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "67d9225a06da183f46f8a257c11e60c392278121",
+          "subject": "fix(agent-runtime): accept redundant Bash job defaults",
+          "category": "Fixed"
+        }
+      ],
+      "validation": "Offline package checks only; no profile compatibility or Authenticode claim."
+    },
+    {
       "version": "0.22.0-beta.10",
       "sourceCommit": "27b3fe481e2b3008795c886665d4c938306e4b3e",
       "sourceFingerprint": "a8ca988b977bdc1f71abd3156473d56040754bf90af761836e5c71a4b39250fb",
