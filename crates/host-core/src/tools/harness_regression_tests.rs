@@ -1,6 +1,9 @@
 //! Synthetic user-path regressions for Edit harness compatibility and runner environment.
 use super::*;
 
+#[path = "edit_compatibility_tests.rs"]
+mod edit_compatibility_tests;
+
 fn edit_fixture(input: &str) -> (tempfile::TempDir, PathBuf, String) {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("fixture.txt");

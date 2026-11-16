@@ -35,6 +35,15 @@ from executable validation. The historical audit boundary above is unchanged.
 
 ## Local harness and delegation increments
 
+The [2026-11-16 compatibility verification](../testing/harness-compatibility-2026-11-16.md)
+compares personal base `cee401bd4` with upstream
+`29043af3371122e256bf265db31651da125d38e3`. The local increment accepts blank
+optional tags only for supported legacy Edit replacements, keeps session read
+ranges across foreground workspace navigation, and preserves Windows Git Bash
+command bytes at the native argument boundary. Existing Edit guards and shell
+ownership remain inherited; the record separates red/green source tests from
+unperformed installed-application verification.
+
 The main-model identity addition starts from personal source `d0f4fd890`,
 compared read-only with locally recorded upstream
 `dd66ca037391da7378be25becb1a8bcb8054298f` (no fetch). That upstream's

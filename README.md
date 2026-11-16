@@ -35,9 +35,10 @@ This edition strengthens the existing framework rather than replacing it.
   capacity for completion/cancellation controls. Permission waiting no longer
   consumes the aggregate tool-request deadline; execution deadlines still apply.
 - **More recoverable tool arguments.** Accept supported legacy Edit replacements
-  with a tag or empty ops, explain conflicting insertion positions, and correct
-  background wait/stop target handling without relaxing file-version, context,
-  or authorization checks.
+  with a tag or blank optional tag/ops defaults, explain conflicting insertion
+  positions, and correct background wait/stop target handling without relaxing
+  file-version, context, or authorization checks. Foreground workspace switches
+  no longer discard background sessions' recorded read ranges.
 - **Bounded correction instead of silent early completion.** When a main Agent
   prints a tool call as ordinary text, prompt it to issue a real call at most once
   per user turn—never execute that text directly. A separate, configurable
@@ -139,7 +140,9 @@ This edition strengthens the existing framework rather than replacing it.
 - **Targeted Windows and file-reference fixes.** Resolve bare filenames under an
   explicitly stated Markdown directory, normalize references before worktree
   rebasing, and default runner-child Python standard streams to UTF-8 only when
-  no encoding preference is inherited.
+  no encoding preference is inherited. Git Bash command transport preserves
+  literal backslashes and quoted heredoc content across foreground/background
+  runners without changing the approved command or replaying failures.
 - **Relocation compatibility.** Preserve project capability overrides across
   Windows path normalization and remap local conversation-organization paths when
   moving the data directory, building on the existing migration workflow.

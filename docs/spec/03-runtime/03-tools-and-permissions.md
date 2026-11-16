@@ -126,7 +126,7 @@ See [ordered preparation](../../adr/parallel-read-batches.md) and
 | Local permission approval | No automatic deadline; explicit decision or cancellation required |
 | allow-session scope | toolName |
 | Bash style | non-interactive; selected host catalog shell with streamed output |
-| Edit contract | line-anchored ops + whole-file `tag`; no `old_string`/`new_string` (ADR 0087) |
+| Edit contract | line-anchored ops + whole-file `tag`; legacy replacement inputs lower to the same guarded path (ADR 0087, spec 18 §11) |
 | asktool | interactive multi-question tool; no validity deadline; skipped answers become empty output fields |
 
 ## 1. Goal
@@ -529,10 +529,13 @@ concurrently, but a session never has two in-flight mutations. The host holds
 the per-session mutation permit before consuming a global mutation slot, so a
 queued mutation cannot reserve capacity while it waits for an earlier edit.
 
-`Edit` names positions and supplies new content only; it never matches existing
-text. Every call carries the whole-file `tag` minted by whichever tool last
-displayed the content, and the host rejects a call whose tag does not hash the
-live file or whose anchors reference lines this session never displayed. The full
+`Edit` normally names positions and supplies new content only. Line-anchored calls
+carry a whole-file `tag`; the compatibility `old_string`/`new_string` form lowers
+to the same guarded apply path. For a complete legacy pair with omitted or blank
+`ops`, blank `tag` defaults are equivalent to omission; nonempty supplied tags
+remain checked. The host rejects stale versions and anchors outside the session's
+recorded read ranges. Foreground workspace navigation does not clear those
+session-owned ranges. The full
 contract — tag computation, the session snapshot store, the op grammar, block
 resolution, registers, and drift recovery — is
 [18-line-anchored-edit-contract](18-line-anchored-edit-contract.md); this section
@@ -542,6 +545,9 @@ keeps only the ordering and loop-guard rules. The agent mutation workflow is:
    advertised workspace.
 2. If a dedicated worktree is outside that root, perform one guarded edit in
    that worktree with Bash and verify the resulting diff.
+   For existing files, use Grep to locate the region, then Read the complete
+   intended edit span (including both sides of a merge conflict) before editing.
+   A whole-file tag returned by Grep does not mean every line was displayed.
 3. Classify a failed edit before recovering. For a stale tag or unseen lines,
    perform one fresh `Read` of the current target and regenerate the change once
    (a complete `EDIT_LINES_UNSEEN` reveal may be retried unchanged). For a
@@ -776,7 +782,14 @@ or executable path hash is accepted as shell identity.
   invocation contract and is never selected implicitly, so it cannot change an
   existing user's default shell. Resolution failure returns `SHELL_NOT_FOUND`
   naming the locations that were searched.
-- Git Bash uses the discovered Git for Windows executable.
+- Git Bash uses the discovered Git for Windows executable. At the Windows
+  process boundary, its catalog invocation uses MSYS-compatible argument quoting
+  rather than CRT quoting, preserving literal backslashes, quotes and heredoc
+  text. The original command/config remains unchanged for permission and audit;
+  no command is guessed, rewritten or replayed after failure. Foreground,
+  background and hidden-runner paths use the same encoder. The Windows command
+  length guard includes encoded UTF-16 quoting overhead. PowerShell, cmd and Unix
+  Bash argument handling remains unchanged.
 - Unix Bash uses an approved system Bash entry.
 - User abort and timeout terminate the complete process tree before returning.
 

@@ -150,10 +150,15 @@ distinction is deliberate and must not be collapsed.
 | Retained text per session | 8 MiB | LRU path eviction until under the ceiling |
 | Single-file retention | 2 MiB | file is hashed and tagged but its text is not retained; recovery is unavailable for it |
 
-The store lives in host-core process memory under the existing session state
-lock. It is dropped when the session is deleted, when the workspace is switched,
-and at process exit. It is never persisted: a tag from a previous run is
-unrecognized, which correctly forces a fresh `Read`.
+The store lives in host-core process memory and is keyed by session and canonical
+file path. Session deletion drops that session's records; rollback invalidates the
+affected file, and process exit drops the store. Foreground `workspace.set` and
+`workspace.clear` only change navigation: they must not clear another session's
+read evidence or even reset it when selecting the same workspace. Tool roots remain
+bound to their persisted session (or its isolated worktree/scratch), never to the
+foreground workspace. Read/Grep windows of unchanged content continue to union
+across navigation; no evidence is transferred between sessions. The store is never
+persisted, and the existing version/provenance checks and bounds remain in force.
 
 Eviction is safe by construction. Losing a snapshot loses the ability to
 *recover* from drift and the ability to *validate* provenance; both degrade to a
@@ -613,8 +618,10 @@ nonempty `ops` remain accepted. A model that half-migrated still echoes the
 schema's required `tag` alongside the legacy pair; that shape is accepted too,
 and the supplied `tag` remains the provenance gate, so a tag that does not hash
 the live file still fails with `EDIT_TAG_MISMATCH` / `EDIT_TAG_UNKNOWN` instead
-of applying blind. Only when no `tag` came along is the live tag used. Host core
-requires `old_string` to
+of applying blind. Only in a complete legacy replacement with omitted or blank
+`ops`, an omitted, empty, or whitespace-only `tag` uses the live tag. Nonempty
+malformed or stale tags are never discarded, and line-anchored edits still require
+a valid tag. Host core requires `old_string` to
 match exactly once in the normalized file (`EDIT_LEGACY_MATCH_FAILED`
 otherwise) and replaces exactly the matched text: text before the match on its
 first line and after the match on its last line is kept. The substring result
@@ -719,10 +726,16 @@ This is subprocess-only stdio configuration: no global environment mutation,
 
 Use isolated synthetic workspaces and Host data, with no provider/network call:
 
-- Read a file, then Edit with a matching tag, blank/whitespace `ops`, and a
-  unique legacy pair. Verify replacement, empty-string deletion, and a new tag.
-  Missing pairs, duplicate/missing matches, no-ops, stale tags and unseen lines
-  must preserve the file and retain their established errors/reveal metadata.
+- Read a file, then Edit with omitted/blank optional tag and ops defaults or a
+  matching supplied tag, and a unique legacy pair. Verify replacement,
+  empty-string deletion, and a new tag. Empty old text must not gain compatibility.
+  Missing pairs, duplicate/missing matches, no-ops, stale/malformed nonempty tags
+  and unseen lines must preserve the file and retain their established errors.
+- Fully or partially Read a session-bound file, navigate the foreground workspace
+  (including reselecting the same root, clearing it, or a rejected remote switch),
+  then Read/Grep a different region. Previously displayed anchors remain editable;
+  another session's unread anchors still fail. Same-named foreground files are
+  untouched. Also cover disjoint Read windows and all Grep output modes.
 - Reject populated legacy fields alongside nonempty ops; accept empty legacy
   defaults with ordinary ops.
 - Submit equivalent-gap inserts (`>99` / `<100`), repeated appends, and a

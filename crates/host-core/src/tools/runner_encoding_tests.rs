@@ -182,3 +182,179 @@ async fn python_encoding_child() {
     assert_eq!(result["stdout"], expected, "background {case}: {result}");
     assert_eq!(result["stderr"], expected, "background {case}: {result}");
 }
+
+const FIDELITY_PAYLOAD: &str = r#"console.log('a\\b'.replaceAll('\\','/'));
+single ' double " backtick ` dollar $HOME percent %PATH%
+regex /\\/g; path C:\temp\folder\ trailing\\
+中文😀
+"#;
+
+fn fidelity_command() -> String {
+    format!(
+        "cat <<'PI_FIDELITY'\n{FIDELITY_PAYLOAD}PI_FIDELITY\nprintf '%s\\n' 'fidelity-stderr' >&2\nexit 17"
+    )
+}
+
+#[tokio::test]
+async fn windows_git_bash_command_fidelity_foreground_and_background() {
+    // Unlike an argv-only assertion, the real shell parses a quoted heredoc and
+    // emits its literal bytes, so transport damage cannot be hidden by JSON.
+    let workspace = tempfile::tempdir().unwrap();
+    let data = tempfile::tempdir().unwrap();
+    let command = fidelity_command();
+    let result = tool_bash(
+        Some(workspace.path()),
+        Some(data.path()),
+        &json!({ "command": command }),
+        BashExecutionOptions::local(shell::GIT_BASH_ID.into(), Some(5_000)),
+    )
+    .await
+    .unwrap();
+    assert_eq!(result["exitCode"], 17, "foreground: {result}");
+    assert_eq!(result["stdout"], FIDELITY_PAYLOAD, "foreground: {result}");
+    assert_eq!(result["stderr"], "fidelity-stderr\n");
+
+    let state = Arc::new(tokio::sync::Mutex::new(
+        crate::state::AppState::open(data.path()).unwrap(),
+    ));
+    let session = {
+        let st = state.lock().await;
+        crate::sessions::create_session(
+            &st.db,
+            Some("fidelity fixture".into()),
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap()
+        .id
+    };
+    let mut options = BashExecutionOptions::local(shell::GIT_BASH_ID.into(), None);
+    options.session_id = session.clone();
+    options.run_in_background = true;
+    options.app_state = Some(state.clone());
+    let started = tool_bash(
+        Some(workspace.path()),
+        Some(data.path()),
+        &json!({ "command": command }),
+        options,
+    )
+    .await
+    .unwrap();
+    let task = {
+        let st = state.lock().await;
+        crate::background_tasks::jobs::find(
+            &st.background_tasks,
+            &session,
+            started["backgroundTaskId"].as_str().unwrap(),
+        )
+        .unwrap()
+    };
+    crate::background_tasks::jobs::wait(&task, 5_000).await;
+    let result = crate::background_tasks::jobs::snapshot(&task, true).await;
+    state.lock().await.shutdown();
+    assert_eq!(result["state"], "failed", "background: {result}");
+    assert_eq!(result["exitCode"], 17, "background: {result}");
+    assert_eq!(result["stdout"], FIDELITY_PAYLOAD, "background: {result}");
+    assert_eq!(result["stderr"], "fidelity-stderr\n");
+}
+
+#[tokio::test]
+async fn windows_git_bash_command_fidelity_hidden_runner() {
+    use tokio::io::AsyncWriteExt;
+
+    let workspace = tempfile::tempdir().unwrap();
+    let resolved = shell::resolve_shell(shell::GIT_BASH_ID).unwrap();
+    let invocation = shell::build_invocation_for_platform(
+        shell::ShellPlatform::Windows,
+        shell::GIT_BASH_ID,
+        resolved.program,
+        &fidelity_command(),
+    )
+    .unwrap();
+    let config = ToolRunnerStartConfig {
+        program: invocation.program,
+        args: invocation.args,
+        workspace: workspace.path().to_path_buf(),
+        scratch_dir: Some(workspace.path().to_path_buf()),
+        env_path: None,
+        extra_env: Vec::new(),
+    };
+    let frame = encode_runner_config(&config).unwrap();
+    let mut child = Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "tools::runner_encoding_tests::fidelity_hidden_runner_child",
+            "--ignored",
+            "--nocapture",
+            "--quiet",
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()
+        .unwrap();
+    child.stdin.take().unwrap().write_all(&frame).await.unwrap();
+    let output = tokio::time::timeout(Duration::from_secs(10), child.wait_with_output())
+        .await
+        .expect("hidden runner fidelity fixture exceeded its fixed budget")
+        .unwrap();
+    assert_eq!(output.status.code(), Some(17));
+    // The libtest child prints its test-count header before entering the real
+    // runner. process::exit below prevents any harness suffix from following it.
+    assert!(
+        output.stdout.ends_with(FIDELITY_PAYLOAD.as_bytes()),
+        "hidden runner stdout: {:?}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    assert_eq!(output.stderr, b"fidelity-stderr\n");
+}
+
+#[tokio::test]
+#[ignore = "invoked by windows_git_bash_command_fidelity_hidden_runner with framed config on stdin"]
+async fn fidelity_hidden_runner_child() {
+    let exit_code = run_internal_tool_runner().await.unwrap();
+    std::process::exit(exit_code);
+}
+
+#[tokio::test]
+async fn windows_git_bash_argument_transport_preserves_literal_text() {
+    let resolved = shell::resolve_shell(shell::GIT_BASH_ID).unwrap();
+    let mut payloads = vec![
+        String::new(),
+        "single ' double \" quotes".into(),
+        "line1\r\nline2\n\n".into(),
+        "tab\tspace 中文😀 $HOME `echo nope` %PATH%".into(),
+    ];
+    for count in 1..=6 {
+        let slashes = "\\".repeat(count);
+        payloads.push(format!("{slashes} before space {slashes}"));
+        payloads.push(format!("{slashes}\"{slashes}'{slashes}"));
+    }
+    for payload in payloads {
+        // Pass data as argv, not script source: Bash may intentionally ignore
+        // carriage returns while parsing source, independently of transport.
+        let command = r#"printf '%s' "$1""#;
+        let mut invocation = shell::build_invocation_for_platform(
+            shell::ShellPlatform::Windows,
+            shell::GIT_BASH_ID,
+            resolved.program.clone(),
+            command,
+        )
+        .unwrap();
+        assert_eq!(invocation.args[3], command);
+        invocation.args.extend(["fidelity".into(), payload.clone()]);
+        let mut child = Command::new(invocation.program);
+        shell::configure_command_arguments(&mut child, &invocation.args);
+        let output =
+            tokio::time::timeout(Duration::from_secs(5), child.kill_on_drop(true).output())
+                .await
+                .unwrap()
+                .unwrap();
+        assert!(output.status.success(), "{payload:?}: {output:?}");
+        assert_eq!(output.stdout, payload.as_bytes(), "payload: {payload:?}");
+        assert!(output.stderr.is_empty(), "{payload:?}: {output:?}");
+    }
+}

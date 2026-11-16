@@ -3383,17 +3383,29 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
   6. Restart the app, then emit an `Edit` with a tag from before the restart.
   7. Write a file through a path that a save hook reformats, then `Edit` using
      the tag the write returned.
+  8. Fully Read a file in A. Reselect the same foreground workspace, switch to
+     another workspace, clear it, or attempt an invalid remote workspace switch.
+     In A, Read only the first line or Grep one matched line, then Edit a different
+     previously displayed line. Keep a second session with only a partial Read
+     and verify its unseen-line Edit is still rejected.
+  9. In one session, Read an unchanged file in two disjoint windows or fully Read
+     then Grep in content/files/count modes; edit an anchor from the earlier Read.
 - **Expected**: Steps 1 and 2 fail — provenance is per reader, and no session
   hands another its tags. Steps 3, 4, and 6 fail with `EDIT_TAG_UNKNOWN` and an
   instruction to re-read, never with a wrong write. Step 5 applies anywhere in
   the union of the three windows without a fourth read. Step 7 applies, because
   the recorded tag describes the bytes that actually landed, and the drift is
-  reported as a one-line warning rather than a whole-file diff.
+  reported as a one-line warning rather than a whole-file diff. Steps 8 and 9
+  preserve the union of A's displayed lines and edit only A's session-bound
+  project. Navigation never grants another session read evidence; its unseen
+  anchor remains rejected and the foreground project's same-named file is unchanged.
 - **Specs linked**: `03-runtime/18-line-anchored-edit-contract.md` §4.2, §4.4,
   §5.4, §13.5, `03-runtime/02-agent-runtime.md` §5f, ADR 0087 §3
 - **Acceptance**: E (tools & permissions), Quality
 - **Milestone**: M5+
-- **Status**: Documented
+- **Status**: Documented; steps 8–9 have offline Host RPC/file-tool regression
+  coverage in `rpc/edit_provenance_tests.rs` and `tools/edit_compatibility_tests.rs`.
+  No installed Desktop/UI verification is implied.
 
 ## E2E-141: An exhausted retry budget ends the turn with a visible, retriable row
 

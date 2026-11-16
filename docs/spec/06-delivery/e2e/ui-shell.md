@@ -2544,6 +2544,9 @@
   4. Repeat step 1 on the CRLF file, then issue one legacy `Edit` whose
      `old_string` is not in the file.
   5. Compare every file on disk to the intended content byte for byte.
+  6. Repeat replacement and deletion with each omitted/empty/whitespace `tag`
+     and `ops` combination. Repeat with malformed/stale nonempty tags, duplicate
+     or missing old text, nonempty ops mixed with legacy fields, and unread anchors.
 - **Expected**: Each replacement succeeds and returns a new `tag`, and only the
   matched text changes: the line reads `let x = bar;`, the trailing comment
   survives, the multi-line match keeps the text before its start and after its
@@ -2551,7 +2554,10 @@
   touching its neighbours, and the CRLF file keeps CRLF endings. The missing
   `old_string` fails with `EDIT_LEGACY_MATCH_FAILED` and leaves the file
   unchanged. A replacement whose only effect would be toggling the terminal
-  newline fails with `EDIT_NO_CHANGE` and leaves the file unchanged.
+  newline fails with `EDIT_NO_CHANGE` and leaves the file unchanged. In step 6,
+  valid legacy blank defaults behave like omission; malformed/stale nonempty tags,
+  ambiguous/missing matches, mixed intents and unread anchors still reject before
+  writing. Complete unseen-line feedback can be reviewed and explicitly retried.
 - **Specs linked**: `03-runtime/18-line-anchored-edit-contract.md` §11
 - **Acceptance**: E (tools & permissions)
 - **Milestone**: M5+
@@ -2559,7 +2565,8 @@
   `edit_legacy_replacement_preserves_unmatched_bytes`,
   `edit_legacy_identical_replacement_leaves_file_unchanged`,
   `edit_legacy_terminal_newline_only_change_reports_no_change`,
-  `edit_accepts_legacy_old_string_new_string_shape`)
+  `edit_accepts_legacy_old_string_new_string_shape`; blank-default compatibility
+  and guard cases in `tools/edit_compatibility_tests.rs`)
 
 ## E2E-157: Global scrollbars stay quiet while remaining discoverable
 

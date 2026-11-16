@@ -265,12 +265,22 @@ pub fn build_invocation_for_platform(
     };
 
     if platform == ShellPlatform::Windows {
-        let units = program.to_string_lossy().encode_utf16().count()
-            + args
-                .iter()
-                .map(|arg| arg.encode_utf16().count())
-                .sum::<usize>()
-            + args.len();
+        let units = if shell_id == GIT_BASH_ID {
+            // Include MSYS quoting, executable quotes, separators and the NUL.
+            program.to_string_lossy().encode_utf16().count()
+                + 3
+                + args
+                    .iter()
+                    .map(|arg| quote_msys_argument(arg).encode_utf16().count() + 1)
+                    .sum::<usize>()
+        } else {
+            program.to_string_lossy().encode_utf16().count()
+                + args
+                    .iter()
+                    .map(|arg| arg.encode_utf16().count())
+                    .sum::<usize>()
+                + args.len()
+        };
         if units > MAX_WINDOWS_COMMAND_LINE_UNITS {
             return Err(format!(
                 "command line is too long for Windows ({units} UTF-16 code units; maximum is {MAX_WINDOWS_COMMAND_LINE_UNITS})"
@@ -279,6 +289,32 @@ pub fn build_invocation_for_platform(
     }
 
     Ok(ShellInvocation { program, args })
+}
+
+/// Append catalog shell arguments without applying CRT quoting to MSYS Bash.
+pub(super) fn configure_command_arguments(command: &mut tokio::process::Command, args: &[String]) {
+    #[cfg(windows)]
+    if args.len() >= 4 && args[0] == "--noprofile" && args[1] == "--norc" && args[2] == "-c" {
+        // This is the Git Bash invocation built above, including executable
+        // overrides. MSYS unescapes every quoted backslash pair, unlike CRT.
+        for arg in args {
+            command.raw_arg(quote_msys_argument(arg));
+        }
+        return;
+    }
+    command.args(args);
+}
+
+fn quote_msys_argument(argument: &str) -> String {
+    let mut quoted = String::from("\"");
+    for character in argument.chars() {
+        if matches!(character, '\\' | '"') {
+            quoted.push('\\');
+        }
+        quoted.push(character);
+    }
+    quoted.push('"');
+    quoted
 }
 
 fn default_for_platform(platform: ShellPlatform) -> &'static str {
@@ -923,6 +959,43 @@ mod tests {
             &long_command,
         );
         assert!(too_long.is_err());
+    }
+
+    #[test]
+    fn git_bash_windows_limit_includes_msys_argument_encoding() {
+        let command = "\\".repeat(20_000);
+        let result = build_invocation_for_platform(
+            ShellPlatform::Windows,
+            GIT_BASH_ID,
+            PathBuf::from("bash.exe"),
+            &command,
+        );
+        assert!(result.unwrap_err().contains("too long"));
+
+        let command = "\\\"😀".repeat(6_000);
+        let result = build_invocation_for_platform(
+            ShellPlatform::Windows,
+            GIT_BASH_ID,
+            PathBuf::from("bash.exe"),
+            &command,
+        );
+        assert!(result.unwrap_err().contains("too long"));
+    }
+
+    #[test]
+    fn other_shell_argument_transport_stays_unmodified() {
+        for args in [
+            vec!["-lc".into(), "printf '\\\\'".into()],
+            vec!["-Command".into(), "Write-Output '\\\\'".into()],
+            vec!["/C".into(), "echo \\\"hello\\\"".into()],
+        ] {
+            let mut command = tokio::process::Command::new("synthetic-shell");
+            configure_command_arguments(&mut command, &args);
+            assert_eq!(
+                command.as_std().get_args().collect::<Vec<_>>(),
+                args.iter().map(std::ffi::OsStr::new).collect::<Vec<_>>()
+            );
+        }
     }
 
     // Win32 FILE_ATTRIBUTE_* / IO_REPARSE_TAG_* values used by the PATH

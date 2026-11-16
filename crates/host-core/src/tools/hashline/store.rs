@@ -93,12 +93,6 @@ impl HashlineStore {
         }
     }
 
-    pub fn drop_all(&self) {
-        if let Ok(mut map) = self.inner.lock() {
-            map.clear();
-        }
-    }
-
     pub fn invalidate_path(&self, session_id: &str, canonical_path: &str) {
         let Ok(mut map) = self.inner.lock() else {
             return;

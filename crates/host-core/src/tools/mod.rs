@@ -498,8 +498,8 @@ pub async fn run_internal_tool_runner() -> Result<i32> {
         .map_err(|error| anyhow!(error))?;
 
     let mut command = Command::new(&config.program);
+    shell::configure_command_arguments(&mut command, &config.args);
     command
-        .args(&config.args)
         .current_dir(&config.workspace)
         .stdin(Stdio::null())
         .stdout(Stdio::inherit())
@@ -1869,11 +1869,10 @@ fn tool_edit(
         (Some(tag), Some(ops), _, _) => (tag.to_string(), ops.to_string()),
         (supplied_tag, None, Some(old), Some(new)) => {
             let file = hashline::normalize_file(&live);
-            // A model that half-migrated keeps the legacy pair but also echoes
-            // the schema's required `tag`. Honour that tag as the provenance
-            // gate instead of demanding `ops` it was never going to send; the
-            // live tag applies when no tag came along (#1217 follow-up).
+            // Empty optional defaults mean omission only in the legacy branch.
+            // Preserve nonempty supplied tags and all normal apply guards.
             let tag = supplied_tag
+                .filter(|tag| !valid_legacy_pair || !tag.trim().is_empty())
                 .map(|tag| tag.to_uppercase())
                 .unwrap_or_else(|| hashline::tag_of_lf_text(&file.text));
             let matches: Vec<_> = file
@@ -2564,7 +2563,8 @@ pub(crate) async fn spawn_tool_runner(
 
     #[cfg(test)]
     {
-        command.args(&config.args).current_dir(&config.workspace);
+        shell::configure_command_arguments(&mut command, &config.args);
+        command.current_dir(&config.workspace);
         runner_environment::apply(&mut command, config);
     }
 

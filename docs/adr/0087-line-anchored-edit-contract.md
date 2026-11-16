@@ -21,8 +21,11 @@ the edit path cannot consume them.
 
 ### 1. `Edit` becomes a line-anchored patch tool
 
-`Edit` takes `path`, `tag`, and `ops`; `old_string` / `new_string` are removed with
-no compatibility shim, no per-model variant, and no second write tool, so the
+`Edit` takes `path`, `tag`, and `ops`. The legacy `old_string` / `new_string`
+input is normalized into the same guarded line operations (spec 18 §11), not a
+second write tool or per-model variant. Omitted/blank optional `tag` and `ops`
+defaults are accepted only for a complete legacy replacement; nonempty supplied
+tags retain their validation. The
 permission matrix, review snapshots, artifacts, audit surface, and mutation
 serialization stay single-valued. The surface is the full `hashline` one — range
 replace (`PUT N.=M:`), gap insert (`PUT <N:` / `PUT >N:` / `PUT >$:`), block
@@ -46,7 +49,10 @@ full-file versions, each carrying its tag and the line numbers a producer
 displayed, which makes version drift and unread provenance rejectable instead of
 undetectable. It is distinct from ADR 0043's on-disk review snapshots and shares
 only the hashing primitive; `execute_tool_with_path_access` gains the session
-identity parameter it needs.
+identity parameter it needs. Foreground workspace selection/clearing is not a
+session lifecycle event: it must preserve background sessions' retained read
+ranges. Session deletion, rollback invalidation, process lifetime and the
+existing retention bounds still own cleanup.
 
 ### 4. Tree-sitter is added to host-core for block resolution
 

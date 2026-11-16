@@ -43,6 +43,14 @@ documented invocation form. Host-core streams stdout and stderr as separate
 ordered events, the final result stays bounded and records truncation, and no
 chunk may carry secrets or another session's output.
 
+On Windows, Git Bash/MSYS receives argument quoting matched to its native parser,
+not the C runtime parser used by other Windows programs. This encoding happens
+only at process spawn and leaves the approved command and framed runner config
+unchanged. The foreground, detached and hidden-runner paths share it; encoded
+UTF-16 length is checked before spawning. Other shells, permissions, process
+ownership, cancellation, output and exit-code semantics remain unchanged. This is
+transport fidelity, not syntax repair or automatic replay.
+
 ### 4. Timeout and cancellation
 
 Every execution has a mandatory default timeout with a host-validated override

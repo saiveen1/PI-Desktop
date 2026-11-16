@@ -1154,9 +1154,18 @@ journeys cover successful reads, saves and directory browsing.
   writes interleaved stdout and stderr chunks.
 - **Steps**: 1) Execute the command through `Bash`. 2) Observe host/RPC/UI
   output events. 3) Inspect the final bounded result and transcript row.
+  4) On Windows Git Bash, emit a quoted heredoc with literal backslash pairs,
+  quotes, dollar signs, backticks, Unicode and paths; print separate stderr and
+  exit 17. Repeat foreground, detached background and framed hidden-runner paths.
+  5) Verify the exact literal bytes, exit code and stderr, plus argument data with
+  CRLF and repeated trailing backslashes. Reject commands exceeding the Windows
+  limit after argument encoding.
 - **Expected**: stdout and stderr remain separate, ordered per tool call, and
   visible while the process runs. Final output preserves truncation metadata;
   no chunks cross sessions or turns and the Bash protocol name is unchanged.
+  Git Bash steps 4–5 preserve literal input bytes, stderr and exit 17 (background
+  state `failed`, not success); transport repair does not rewrite the command,
+  change another shell, or replay a failed execution.
 - **Specs linked**: `03-runtime/06-host-rpc-protocol.md`,
   `03-runtime/09-logging-and-observability.md`,
   `03-runtime/16-tool-result-limits.md`, `04-ux/09-interaction-patterns.md`, ADR 0054
@@ -1164,7 +1173,10 @@ journeys cover successful reads, saves and directory browsing.
 - **Milestone**: M6
 - **Status**: Automated (passed 2026-08-04): `test:e2e:plan` verifies distinct
   stdout/stderr notifications and final tool identity; host/runtime stream tests
-  cover bounded accumulation and session isolation
+  cover bounded accumulation and session isolation. Windows literal transport
+  is covered by `tools/runner_encoding_tests.rs` (foreground/background and the
+  production hidden-runner entry) and `tools/shell.rs` argument/length tests;
+  this does not establish installed Desktop validation.
 
 ## E2E-115: Bash timeout uses 60 seconds and a bounded override
 

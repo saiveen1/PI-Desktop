@@ -24,6 +24,8 @@ mod worktree_rpc;
 #[cfg(test)]
 mod delegation_settings_rpc_tests;
 #[cfg(test)]
+mod edit_provenance_tests;
+#[cfg(test)]
 mod notification_settings_rpc_tests;
 #[cfg(test)]
 mod session_mode_create_tests;
@@ -2416,7 +2418,6 @@ async fn handle_request(
                 .and_then(|v| v.as_str())
                 .ok_or_else(|| rpc_err(1002, "path required", "INVALID_PARAMS"))?;
             let mut st = state.lock().await;
-            st.hashline.drop_all();
             let ws = if path.starts_with(crate::db::REMOTE_PROJECT_PREFIX) {
                 let group = st
                     .db
@@ -2439,7 +2440,6 @@ async fn handle_request(
         }
         "workspace.clear" => {
             let mut st = state.lock().await;
-            st.hashline.drop_all();
             st.workspace.clear();
             st.db
                 .kv_delete("app", "currentProjectId")
