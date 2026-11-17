@@ -123,7 +123,11 @@ This edition strengthens the existing framework rather than replacing it.
   task rows and failure summaries, share parent/child detail presentation, and keep
   recorded file changes accessible during running, stopped, or failed turns.
 - **Expanded file actions.** Add Save as and supported text-content copying to chat
-  references, and extend Open with beyond HTML to default applications.
+  references, and extend Open with beyond HTML to default applications. In local
+  projects, ordinary disk files now use live references consistently across drag,
+  paste and the file picker, without copying the file or hitting transfer-size
+  limits. Images and generated clipboard content retain attachment handling;
+  references still require normal tool permissions and are not snapshots.
 - **Tool-image continuity.** Add generic tool-result galleries and preserve historical
   previews. Keep ordinary image Reads inside expanded tool details, rather than
   echoing input images as delivered output. Fix image retention and delivery across

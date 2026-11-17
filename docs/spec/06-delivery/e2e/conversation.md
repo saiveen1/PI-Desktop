@@ -3203,33 +3203,42 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
 - **Milestone**: M5
 - **Status**: Unit-covered (`runtime.test.ts`); full provider/UI journey Draft
 
-## E2E-COMPOSER-local-file-references: Native file paste keeps paths and sizes
+## E2E-COMPOSER-local-file-references: Native file intake keeps paths and sizes
 
 - **Preconditions**: Local project and synthetic disk files, including a sparse
   64 MiB + 1 byte file outside the project, a small text file and an image.
-- **Steps**: Copy each file in the OS file manager and paste into Composer;
-  also paste a mixed file/folder selection. Remove a card, switch sessions,
+- **Steps**: Add the same files by OS paste, drag/drop and the file picker;
+  also paste a mixed file/folder selection and a browser File fallback. Try a
+  forged File/path and a replayed selection token. Switch sessions/projects
+  while the picker is pending. Remove a card, switch sessions,
   restore input history, queue a prompt and restart before delivery. Modify,
   move, delete or replace a source with a symlink before sending. Separately
   paste a screenshot and a large text selection.
-- **Expected**: Native disk files retain original paths and exact byte sizes;
-  removable inline cards show human-readable size. No source contents cross
-  paste IPC or enter scratch/content-addressed snapshots. Small and large disk
-  files use the same reference flow; screenshots and generated text retain their
-  existing scratch/image behavior. Dispatch refreshes size, preserves metadata
+- **Expected**: Ordinary native disk files retain original paths and exact byte
+  sizes across all three entry points, without a mode choice or size threshold.
+  Removable inline cards show human-readable size. No ordinary source contents
+  cross paste IPC or enter scratch/content-addressed snapshots. Raster images,
+  screenshots and generated text retain bounded attachment/image behavior.
+  Dispatch refreshes size and preserves metadata
   through messages and model history, and clearly rejects unavailable or
-  redirected sources. Forged ids/paths, another project and remote contexts are
-  refused. Agent reads use normal permissions; referencing an external file does
-  not grant access. Metadata-only input history restores the live path and size.
+  redirected sources. Forged ids/paths, another project and remote metadata
+  references are refused. Automatic imports outside a local project retain copy
+  compatibility rather than granting local paths to a remote Agent. Agent reads
+  use normal permissions; referencing an external file does not grant access.
+  Metadata-only input history restores the live path and size. A pending picker
+  cannot overwrite a destination draft or create a session in a new project.
 - **Targeted coverage**: `composer-file-references.test.mjs`,
+  `composer-file-import.test.mjs`, `composer-native-file-selection.test.mjs`,
   `composer-directory-paste.test.mjs`, `composer-clipboard-directories.test.mjs`,
   draft/history tests and the host attachment roundtrip test. Native clipboard
   gestures and full provider delivery require a separate desktop E2E run.
 - **Electron coverage**: `node scripts/e2e-composer-paste.mjs --file-references-only`
-  drives real React hooks, native disk-backed `File` objects, preload IPC,
-  selection tokens, reference registration, prompt preparation and Composer
-  history. A sparse 64 MiB + 1 byte source and a small file outside the project
-  retain size cards without renderer byte reads or scratch writes. The fixture
+  bundles current preload source and drives real React hooks, native disk-backed
+  `File` objects, preload IPC, selection tokens, automatic import, prompt
+  preparation and Composer history. Paste, drop and picker all retain a sparse
+  64 MiB + 1 byte source and a small file outside the project as size cards without
+  renderer byte reads or scratch writes. The native dialog/clipboard source is
+  injected at the OS boundary, not replaced by renderer paths. The fixture
   edits the large source before send and verifies refreshed size in model context.
   A second Electron process recalls the stored metadata and dispatches through
   the persisted reference records. Native clipboard metadata and provider
@@ -3239,6 +3248,12 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
   Restore the saved selection before focusing the original control so selection
   updates cannot steal its final focus. Stale session/project previews restore
   neither focus nor selection (`composer-image-preview-focus.test.mjs`).
+- **Specs linked**: `03-runtime/01-ipc-protocol.md` Composer import/selection,
+  `04-ux/08-component-spec.md` §11.7, `composer-local-file-references` ADR amendment.
+- **Acceptance**: C (chat), F (persistence), H (permissions), Quality.
+- **Milestone**: M5.
+- **Status**: Targeted unit/integration and isolated Electron fixture; manual OS
+  gestures and live-provider delivery remain separate verification.
 
 ## E2E-COMPOSER-deep-file-mentions: `@` reaches deep files in a large workspace
 

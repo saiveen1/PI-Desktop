@@ -9,6 +9,7 @@ import type { TFunction } from "i18next";
 import { parseSessionLinks, sessionLinkSpans } from "@pi-desktop/shared";
 import { materializeDraftSession, useAppStore } from "../../../../stores/app-store";
 import { api } from "../../../../lib/api";
+import { importComposerBrowserFiles } from "../../../../lib/composer-file-import";
 import {
   HOME_DRAFT_KEY,
   deleteComposerDraft,
@@ -93,30 +94,57 @@ export function useComposerAttachments({
   const snapshotReferences = (sourceSessionId: string) =>
     draft.snapshotReferences(sourceSessionId);
 
+  const refreshAttachmentInsertion = (
+    sourceDraftKey: string,
+    sourceSessionId: string | null | undefined,
+    sourceRevision: number,
+    insertion: { sourceValue: string; selectionStart: number; selectionEnd: number; previousReferences: ComposerDraftSnapshot["fileReferences"] },
+  ) => {
+    const current = useAppStore.getState();
+    if (sourceSessionId && !current.sessions.some(session => session.id === sourceSessionId)) return null;
+    if (readComposerDraftRevision(sourceDraftKey) === sourceRevision) return insertion;
+    const editor = draft.ref.current;
+    if (current.activeSessionId === sourceSessionId && editor) {
+      const selection = editorSelectionRange(editor);
+      return { sourceValue: readEditorValue(editor), selectionStart: selection.start,
+        selectionEnd: selection.end, previousReferences: snapshotReferences(sourceSessionId ?? "") };
+    }
+    const latest = readComposerDraft(sourceDraftKey);
+    const sourceValue = latest?.text ?? insertion.sourceValue;
+    return { sourceValue, selectionStart: sourceValue.length, selectionEnd: sourceValue.length,
+      previousReferences: latest?.fileReferences ?? insertion.previousReferences };
+  };
+
   const pickAndAttach = async () => {
     // The ref closes the gap before React re-renders the disabled button.
     if (pickerInFlight.current || isInputBlocked) return;
     pickerInFlight.current = true;
     setPasting(true);
     try {
-      // The picker accepts regular files; the importer classifies images from
-      // MIME/extension metadata after selection.
-      const result = await api.pickFiles();
-      if (result.canceled || !result.token) return;
-
       const editor = draft.ref.current;
-      const sourceValue = editor ? readEditorValue(editor) : draft.valueRef.current;
-      const { start: selectionStart, end: selectionEnd } = editor
+      let sourceValue = editor ? readEditorValue(editor) : draft.valueRef.current;
+      let { start: selectionStart, end: selectionEnd } = editor
         ? editorSelectionRange(editor)
         : { start: sourceValue.length, end: sourceValue.length };
       const sourceSessionId = activeSessionId;
       const sourceDraftKey = draftKey;
-      const previousReferences = snapshotReferences(sourceSessionId ?? "");
-      // A picker action is real input, so a home draft gets a durable owner
-      // before native paths are copied into scratch.
+      let previousReferences = snapshotReferences(sourceSessionId ?? "");
+      const sourceRevision = readComposerDraftRevision(sourceDraftKey);
+      const sourceWorkspacePath = useAppStore.getState().workspace?.path ?? "";
+      // Capture the draft before the dialog yields; never borrow a destination draft.
+      const result = await api.pickFiles();
+      if (result.canceled || !result.token) return;
+      const current = useAppStore.getState();
+      if (!sourceSessionId && (current.activeSessionId || (current.workspace?.path ?? "") !== sourceWorkspacePath)) return;
+      if (sourceSessionId && !current.sessions.some(session => session.id === sourceSessionId)) return;
+      // A picker action needs a durable owner before registering references or images.
       const sessionId = sourceSessionId ?? (await materializeDraftSession());
       if (!sessionId) throw new Error("session unavailable");
       const imported = await api.importFiles(sessionId, result.token);
+      const insertion = refreshAttachmentInsertion(sourceDraftKey, sourceSessionId, sourceRevision,
+        { sourceValue, selectionStart, selectionEnd, previousReferences });
+      if (!insertion) return;
+      ({ sourceValue, selectionStart, selectionEnd, previousReferences } = insertion);
       const chips = imported.files.map((file) => {
         const token = nextChipToken();
         return {
@@ -124,6 +152,8 @@ export function useComposerAttachments({
           reference: createFileReference(file.path, file.name, sessionId, {
             kind: file.kind,
             mimeType: file.mimeType,
+            size: file.size,
+            localReference: file.localReference,
             token,
           }),
         };
@@ -251,21 +281,13 @@ export function useComposerAttachments({
       const sourceRevision = readComposerDraftRevision(sourceDraftKey);
       setPasting(true);
       try {
-        // 合成截图已有字节，无需启动系统目录探测进程；磁盘文件仍走原路径。
+        // Generated screenshots already have bytes; disk selections use native metadata.
         const native = !isLargeTextPaste && !screenshotPaste ? await api.readClipboardDirectories() : null;
         if (!native && !files.length && !isLargeTextPaste) {
           if (hasNativeFileTypes) throw new Error(t("chat.directoryPasteUnavailable"));
           return;
         }
-        const payload = native ? [] : files.length
-          ? await Promise.all(
-              files.map(async (file) => ({
-                name: file.name || undefined,
-                mimeType: file.type || undefined,
-                data: await file.arrayBuffer(),
-              })),
-            )
-          : (() => {
+        const payload = native || files.length ? [] : (() => {
               const bytes = new TextEncoder().encode(text);
               return [
                 {
@@ -289,29 +311,20 @@ export function useComposerAttachments({
 
         let result;
         if (native) {
-          const imported = native.token ? await api.importFiles(sessionId, native.token, true) : { files: [] };
+          const imported = native.token ? await api.importFiles(sessionId, native.token) : { files: [] };
           let index = 0;
           result = { files: native.items.map(item => item.kind === "directory"
             ? { path: item.path, name: item.name, kind: "directory" as const, mimeType: undefined, size: undefined, localReference: undefined }
             : imported.files[index++]) };
+        } else if (files.length) {
+          result = await importComposerBrowserFiles(sessionId, files, api);
         } else {
           result = await api.pasteFiles(sessionId, payload);
         }
-        if (native && readComposerDraftRevision(sourceDraftKey) !== sourceRevision) {
-          if (useAppStore.getState().activeSessionId === sourceSessionId) {
-            sourceValue = readEditorValue(editor);
-            const selection = editorSelectionRange(editor);
-            selectionStart = selection.start;
-            selectionEnd = selection.end;
-            previousReferences = snapshotReferences(sourceSessionId ?? "");
-          } else {
-            const latest = readComposerDraft(sourceDraftKey);
-            sourceValue = latest?.text ?? sourceValue;
-            selectionStart = selectionEnd = sourceValue.length;
-            previousReferences = latest?.fileReferences ?? previousReferences;
-          }
-        }
-        if (native && sourceSessionId && !useAppStore.getState().sessions.some(session => session.id === sourceSessionId)) return;
+        const insertion = refreshAttachmentInsertion(sourceDraftKey, sourceSessionId, sourceRevision,
+          { sourceValue, selectionStart, selectionEnd, previousReferences });
+        if (!insertion) return;
+        ({ sourceValue, selectionStart, selectionEnd, previousReferences } = insertion);
         const chips = result.files.map((file) => {
           const token = file.kind === "directory" ? undefined : nextChipToken();
           return {
@@ -395,13 +408,14 @@ export function useComposerAttachments({
   const attachDroppedItems = async (items: ComposerDropItem[]) => {
     if (isInputBlocked || items.length === 0) return;
     const editor = draft.ref.current;
-    const sourceValue = editor ? readEditorValue(editor) : draft.valueRef.current;
-    const { start: selectionStart, end: selectionEnd } = editor
+    let sourceValue = editor ? readEditorValue(editor) : draft.valueRef.current;
+    let { start: selectionStart, end: selectionEnd } = editor
       ? editorSelectionRange(editor)
       : { start: sourceValue.length, end: sourceValue.length };
     const sourceSessionId = activeSessionId;
     const sourceDraftKey = draftKey;
-    const previousReferences = snapshotReferences(sourceSessionId ?? "");
+    let previousReferences = snapshotReferences(sourceSessionId ?? "");
+    const sourceRevision = readComposerDraftRevision(sourceDraftKey);
     const fileItems = items.filter((item) => !item.isDirectory);
     setPasting(true);
     try {
@@ -410,19 +424,12 @@ export function useComposerAttachments({
       if (fileItems.length && !sessionId) throw new Error("session unavailable");
 
       const pasted = fileItems.length
-        ? await api
-            .pasteFiles(
-              sessionId!,
-              await Promise.all(
-                fileItems.map(async ({ file }) => ({
-                  name: file.name || undefined,
-                  mimeType: file.type || undefined,
-                  data: await file.arrayBuffer(),
-                })),
-              ),
-            )
-            .then((result) => result.files)
+        ? (await importComposerBrowserFiles(sessionId!, fileItems.map(item => item.file), api)).files
         : [];
+      const insertion = refreshAttachmentInsertion(sourceDraftKey, sourceSessionId, sourceRevision,
+        { sourceValue, selectionStart, selectionEnd, previousReferences });
+      if (!insertion) return;
+      ({ sourceValue, selectionStart, selectionEnd, previousReferences } = insertion);
       const chips = pasted.map((file) => {
         const token = nextChipToken();
         return {
@@ -430,6 +437,8 @@ export function useComposerAttachments({
           reference: createFileReference(file.path, file.name, sessionId ?? "", {
             kind: file.kind,
             mimeType: file.mimeType,
+            size: file.size,
+            localReference: file.localReference,
             token,
           }),
         };

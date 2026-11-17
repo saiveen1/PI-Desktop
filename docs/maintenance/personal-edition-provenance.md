@@ -135,6 +135,19 @@ physical audio, installed-app behavior or pure model-generation performance.
 
 ## Local interface, organization, and host fixes
 
+The automatic local-file intake amendment starts from personal source `a402d2cec`,
+compared read-only with recorded upstream `4d16de71a34b02fd8711c1102a288664b3d171c1`
+(no fetch). Both already contain `46c6788c8` and its native clipboard references.
+At that upstream revision, `useComposerAttachments.ts` still buffers dropped
+files with `arrayBuffer()` and imports picker selections with the copy default.
+The local increment unifies these entry points and the browser-File paste fallback
+under automatic reference/image classification, adds a preload-only File selection
+bridge, and preserves selection metadata and picker session ownership. The
+reference registry, draft/history support and image pipeline are inherited, not
+new local inventions. See the [amended decision](../adr/composer-local-file-references.md)
+and targeted Composer import/selection tests; source coverage does not establish
+installed-release or live-provider behavior.
+
 The historical-reply fork lookup amendment is based on personal source
 `d8f10f6ecc1e1d1e693d8717a3a2bf1f07af3ffe`, compared read-only with the
 locally recorded `upstream/main` revision

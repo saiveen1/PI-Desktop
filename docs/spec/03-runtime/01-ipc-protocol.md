@@ -16,7 +16,7 @@ See [native snapping ADR](../../adr/windows-native-snap-without-frame-insets.md)
 
 An additive main-window-only Electron channel accepting no source paths. During
 an explicit native file paste, main captures at most 20 paths / 1 MiB of native
-metadata, resolves file/directory metadata and returns null if no directory is
+metadata, resolves file/directory metadata and returns null if no native item is
 present. Otherwise it returns ordered items (`{kind: "directory", path, name}` or
 `{kind: "file", name}`) and an optional sender-bound one-shot token for regular
 files through `composer/importFiles`. MCP/plugin callers cannot invoke it.
@@ -2601,13 +2601,13 @@ renderer receives the token but never receives the selected absolute paths.
 ### composer/importFiles
 
 ```ts
-composer/importFiles({ sessionId, token, reference?: boolean }) -> {
+composer/importFiles({ sessionId, token, reference?: boolean | "auto" }) -> {
   files: ComposerPastedFile[];
 }
 ```
 
-Electron main consumes the sender-bound picker token, resolves each recorded
-path through `realpath`, requires an existing regular file, applies the same
+For legacy copy requests, Electron main consumes the sender-bound picker token,
+resolves each recorded path through `realpath`, requires an existing regular file, applies the same
 20-file / 64 MiB per file / 128 MiB total limits as clipboard byte transfer, and
 copies the bytes into `<data_dir>/scratch/<sessionId>/pasted/` under a
 UUID-backed sanitized name. The token is deleted before import starts, so it
@@ -2615,14 +2615,21 @@ cannot be replayed. The returned `ComposerPastedFile` records are the only
 paths the renderer stores or dispatches, so a picker selection cannot leave an
 external source path in the prompt or bypass the attachment-root boundary.
 
-For native clipboard files, `reference: true` consumes the same one-shot token
-but registers metadata instead of copying bytes. Main requires a local project,
-stores a durable UUID selection record, and returns the canonical original path,
-name, MIME, exact byte size and additive `localReference` id. Only the main window
-may invoke this flow. Ordinary file-only and mixed file/folder clipboard lists
-both use it; no `File.arrayBuffer()` is needed and transfer byte limits do not
-apply. The 20-item clipboard limit remains. Screenshots/generated payloads use
-`pasteFiles`; picker imports without `reference` retain the copy behavior above.
+The current renderer requests `reference: "auto"` for picker, clipboard and
+disk-backed File selections. Main resolves canonical paths and, in a local
+project, registers ordinary files as metadata references without reading or
+copying contents. Raster images retain the bounded copy/vision path. There is
+no size-based switch or new UI choice. Without a local project, or with a remote
+workspace, automatic import retains the bounded copy behavior above. The
+20-item selection limit applies to the whole batch, including mixed images and
+ordinary files. Screenshots/generated payloads continue through `pasteFiles`.
+
+Explicit `reference: true` retains the metadata-only behavior for all selected
+files, including images, and requires a local project. Explicit `false` or an
+omitted field retains the old copy contract. Main stores a durable UUID selection
+record and returns the canonical original path, name, MIME, exact byte size and
+`localReference` id. Transfer byte limits do not apply to metadata references.
+Only the main window may invoke these flows.
 
 Drafts, queue entries and message attachments retain `localReference` and `size`.
 On dispatch, main matches the id/path to the selection record and current local
@@ -2633,6 +2640,20 @@ tool access policy governs subsequent reads, including outside-project approval.
 Input history can restore the live reference into another session in the same
 project. Original contents can change and the reference can become unavailable.
 See [the decision record](../../adr/composer-local-file-references.md).
+
+### Preload-only native file selection
+
+`window.piDesktop.selectComposerFiles(files: File[]) -> Promise<string>` resolves
+disk-backed Files with `webUtils.getPathForFile` inside preload. Generated Files,
+plain objects and raw path strings are rejected; no bytes are read. Preload calls
+the private `pi-desktop/composer/nativeFileSelection` channel with the paths.
+Main checks the main-window sender and at most 20 nonempty absolute paths (no NUL,
+at most 32768 characters each), then returns a sender-bound one-shot picker token.
+This channel is deliberately absent from `IPC_WHITELIST` and MCP; the generic
+renderer invoke API cannot register arbitrary paths. Clipboard File fallback and
+drag/drop consume the token through the normal automatic import policy. Native
+clipboard metadata still handles selections Chromium exposes without File objects.
+Subsequent reference reads retain normal tool permissions.
 
 ### composer/pasteFiles
 

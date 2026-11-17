@@ -16,9 +16,10 @@ const require = createRequire(
 const { build } = require("esbuild");
 const { electronBinary } = resolveElectronBinary(root);
 const directoriesOnly = process.argv.includes("--directories-only");
-const temp = await mkdtemp(join(tmpdir(), "pi-composer-paste-"));
+const temp = await mkdtemp(join(process.env.PI_SCRATCH_DIR || tmpdir(), "pi-composer-paste-"));
 const fileReferencesOnly = process.argv.includes("--file-references-only");
 try {
+  console.log("COMPOSER_STAGE bundle-current-source");
   await build({
     entryPoints: [join(root, "scripts/e2e/composer-paste.tsx")],
     outfile: join(temp, "renderer.js"),
@@ -52,8 +53,9 @@ try {
   await build({
     entryPoints: {
       writer: join(root, "apps/desktop/electron/main/composer-paste.ts"),
+      importer: join(root, "apps/desktop/electron/main/composer-file-import.ts"),
+      selection: join(root, "apps/desktop/electron/composer-file-selection.ts"),
       directories: join(root, "apps/desktop/electron/main/composer-clipboard-directories.ts"),
-      references: join(root, "apps/desktop/electron/main/composer-file-references.ts"),
       picker: join(root, "apps/desktop/electron/main/composer-picker.ts"),
       prompt: join(root, "apps/desktop/electron/main/prompt-attachments.ts"),
       reader: join(root, "packages/host-runtime/src/workspace-files.ts"),
@@ -64,6 +66,10 @@ try {
     bundle: true,
     platform: "node",
     format: "cjs",
+  });
+  await build({
+    entryPoints: [join(root, "apps/desktop/electron/preload/index.ts")],
+    outfile: join(temp, "preload.cjs"), bundle: true, platform: "node", format: "cjs", external: ["electron"],
   });
   await writeFile(
     join(temp, "native-image.png"),
@@ -97,9 +103,10 @@ const { pathToFileURL } = require("node:url");
 const fs = require("node:fs/promises");
 const assert = require("node:assert/strict");
 const { saveComposerPasteFiles } = require("./writer.cjs");
+const { importComposerSelection } = require("./importer.cjs");
+const { COMPOSER_FILE_SELECTION_CHANNEL } = require("./selection.cjs");
 const { nativeClipboardPaths, readComposerClipboardDirectories } = require("./directories.cjs");
-const { referenceComposerFiles } = require("./references.cjs");
-const { rememberComposerPickerSelection, consumeComposerPickerSelection } = require("./picker.cjs");
+const { rememberComposerPickerSelection, consumeComposerPickerSelection, rememberComposerNativeFiles } = require("./picker.cjs");
 const { preparePromptAttachments, appendPromptFallbackPaths } = require("./prompt.cjs");
 const { readOpenableFile, readOpenableImage, resolveRealOpenablePath } = require("./reader.cjs");
 const { openableMp4Path } = require("./video.cjs");
@@ -112,6 +119,14 @@ let completeOpens;
 const opensDone = new Promise(resolve => { completeOpens = resolve; });
 let directoryPastePending = true;
 let referencePrompts = 0;
+let composerSenderId;
+ipcMain.handle(COMPOSER_FILE_SELECTION_CHANNEL, async (event, paths) => {
+  assert.equal(event.sender.id, composerSenderId);
+  return { ok: true, data: { token: rememberComposerNativeFiles(paths, event.sender.id) } };
+});
+ipcMain.handle("pi-desktop/composer/pickFiles", async event => ({ ok: true, data: {
+  token: rememberComposerPickerSelection(["large reference.bin", "native notes.txt"].map(name => path.join(__dirname, name)), event.sender.id),
+} }));
 ipcMain.handle("pi-desktop/composer/readClipboardDirectories", async (event) => {
   if (process.argv.includes("--file-references-only")) {
     const paths = ["large reference.bin", "native notes.txt"].map(name => path.join(__dirname, name));
@@ -119,7 +134,7 @@ ipcMain.handle("pi-desktop/composer/readClipboardDirectories", async (event) => 
       ? paths.map(source => pathToFileURL(source).href).join("\\r\\n") : "") };
     const data = await readComposerClipboardDirectories(clipboard,
       selected => rememberComposerPickerSelection(selected, event.sender.id),
-      () => nativeClipboardPaths(clipboard, "linux"));
+      () => nativeClipboardPaths(clipboard, process.platform, async () => paths));
     return { ok: true, data };
   }
   if (!directoryPastePending) return { ok: true, data: null };
@@ -138,17 +153,24 @@ ipcMain.handle("pi-desktop/composer/readClipboardDirectories", async (event) => 
   ));
   return { ok: true, data };
 });
-if (process.argv.includes("--file-references-only") || process.argv.includes("--file-references-history-check")) {
-  ipcMain.handle("pi-desktop/composer/importFiles", async (event, input) => {
-    assert.equal(input.reference, true);
-    assert.equal(input.sessionId, "paste-a");
-    const files = await referenceComposerFiles(__dirname, input.sessionId,
-      path.join(__dirname, "reference-project"), consumeComposerPickerSelection(input.token, event.sender.id));
+ipcMain.handle("pi-desktop/composer/importFiles", async (event, input) => {
+  assert.equal(event.sender.id, composerSenderId);
+  assert.equal(input.reference, "auto");
+  assert.equal(input.sessionId, "paste-a");
+  const referenceMode = process.argv.includes("--file-references-only");
+  if (referenceMode) await fs.truncate(path.join(__dirname, "large reference.bin"), 67108865);
+  const files = await importComposerSelection(__dirname, input.sessionId,
+    referenceMode ? path.join(__dirname, "reference-project") : undefined,
+    consumeComposerPickerSelection(input.token, event.sender.id));
+  if (referenceMode) {
     assert.equal(files[0].size, 67108865);
-    // Simulate a source edit after registration, before the user sends the draft.
     await fs.writeFile(path.join(__dirname, "large reference.bin"), "changed");
-    return { ok: true, data: { files } };
-  });
+  } else {
+    saved.push({ sessionId: input.sessionId, files, mimeTypes: files.map(file => file.mimeType) });
+  }
+  return { ok: true, data: { files } };
+});
+if (process.argv.includes("--file-references-only") || process.argv.includes("--file-references-history-check")) {
   ipcMain.handle("pi-desktop/agent/prompt", async (_event, input) => {
     assert.equal(input.attachments.length, 2);
     const prepared = await preparePromptAttachments(__dirname, input.sessionId,
@@ -160,7 +182,7 @@ if (process.argv.includes("--file-references-only") || process.argv.includes("--
     assert(context.includes("7 bytes"));
     assert(context.includes(large.fallbackPath));
     assert.equal(saved.length, 0, "disk references must not invoke the byte writer");
-    assert.equal((await fs.readdir(path.join(__dirname, "composer-file-references"))).length, 2);
+    assert.equal((await fs.readdir(path.join(__dirname, "composer-file-references"))).length, 6);
     referencePrompts++;
     return { ok: true, data: { accepted: true, turnId: "reference-turn" } };
   });
@@ -260,7 +282,7 @@ app.whenReady().then(async () => {
         saved.length = 0;
         // A never-shown window throttles animation frames; the probe waits on them.
         const window = new BrowserWindow({ show: true, webPreferences: {
-          preload: ${JSON.stringify(join(root, "apps/desktop/out/preload/index.cjs"))},
+          preload: path.join(__dirname, "preload.cjs"),
           sandbox: true, contextIsolation: true, nodeIntegration: false, backgroundThrottling: false,
         } });
         window.webContents.on("console-message", (event) => console.error(event.message));
@@ -290,7 +312,7 @@ app.whenReady().then(async () => {
   if (process.argv.includes("--history-check")) {
     try {
       const window = new BrowserWindow({ show: true, webPreferences: {
-        preload: ${JSON.stringify(join(root, "apps/desktop/out/preload/index.cjs"))},
+        preload: path.join(__dirname, "preload.cjs"),
         sandbox: true, contextIsolation: true, nodeIntegration: false, backgroundThrottling: false,
       } });
       window.webContents.on("console-message", (event) => {
@@ -318,9 +340,10 @@ app.whenReady().then(async () => {
   await fs.writeFile(path.join(__dirname, "attachments", "a".repeat(64)), Buffer.alloc(512 * 1024 + 1));
   await fs.writeFile(path.join(__dirname, "attachments", "b".repeat(64)), Buffer.from([0, 1, 2, 0]));
   const window = new BrowserWindow({ show: true, webPreferences: {
-    preload: ${JSON.stringify(join(root, "apps/desktop/out/preload/index.cjs"))},
+    preload: path.join(__dirname, "preload.cjs"),
     sandbox: true, contextIsolation: true, nodeIntegration: false, backgroundThrottling: false,
   } });
+  composerSenderId = window.webContents.id;
   window.webContents.on("console-message", (event) => console.error(event.message));
   try {
     await window.loadFile(path.join(__dirname, "index.html"));
@@ -427,6 +450,7 @@ app.whenReady().then(async () => {
   const env = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE;
   const runElectron = async (args = []) => {
+    console.log("COMPOSER_STAGE " + (args.join(" ") || "full-paste"));
     const child = spawn(electronBinary, [join(temp, "main.cjs"), ...args], {
       env,
       stdio: ["ignore", "pipe", "pipe"],

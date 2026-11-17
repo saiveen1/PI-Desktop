@@ -35,7 +35,7 @@ test("composer converts oversized text paste and materializes clipboard files", 
   assert.match(composer, /sourceValue\.slice\(0, selectionStart\) \+/);
   assert.match(composer, /writeComposerDraft\(sessionId, \{/);
   assert.match(composer, /if \(isLargeTextPaste \|\| files\.length \|\| nativeFilePaste\) \{/);
-  assert.match(composer, /file\.arrayBuffer\(\)/);
+  assert.match(composer, /importComposerBrowserFiles\(sessionId, files, api\)/);
   assert.match(
     composer,
     /createFileReference\(file\.path, file\.name, sessionId, \{[\s\S]*kind: file\.kind/,
@@ -101,7 +101,7 @@ test("paste IPC is a typed renderer-to-main bridge", () => {
   assert.match(protocol, /composerImportFiles: "pi-desktop\/composer\/importFiles"/);
   assert.match(api, /pasteFiles: \(sessionId: string, files: ComposerPasteFile\[\]\)/);
   assert.match(api, /pickFiles: \(\) =>[\s\S]*token: string \| null/);
-  assert.match(api, /importFiles: \(sessionId: string, token: string, reference = false\)/);
+  assert.match(api, /importFiles: \(sessionId: string, token: string, reference: boolean \| "auto" = "auto"\)/);
   assert.match(api, /IPC\.invoke\.composerPasteFiles/);
   assert.match(api, /recordClipboardPaste: \(text: string\)/);
   assert.match(api, /IPC\.invoke\.clipboardRecordPaste/);

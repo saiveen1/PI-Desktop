@@ -58,6 +58,7 @@ const sessions = [{ id: "paste-a" }, { id: "paste-b" }, { id: "history-created-s
 const noop = () => {};
 let controller: ComposerDraftController;
 let pastePending: Promise<unknown> | undefined;
+let attachmentController: ReturnType<typeof useComposerAttachments>;
 let submitted = 0;
 let rejectSubmission: () => Promise<void>;
 let historySendPrompt: AppState["sendPrompt"] = async () => false;
@@ -103,6 +104,7 @@ function Fixture({ sessionId, t, workspacePath }: { sessionId: string; t: TFunct
     t,
     draft,
   });
+  attachmentController = attachments;
   return (
     <div className="composer-stack">
       <div className="composer-shell">
@@ -268,6 +270,36 @@ globalThis.composerPasteProbe = async ({
         assert(files.length === 2 && files.every(file => api.getDroppedFilePath(file)), "native reference File paths missing");
         for (const file of files) file.arrayBuffer = () => { throw new Error("disk file bytes were read by the renderer"); };
         await dispatchPaste(controller.ref.current!, "", files);
+        const checkReferences = (entry: string) => {
+          assert(controller.fileReferences.length === 2, `${entry}: reference count ${controller.fileReferences.length}; text=${JSON.stringify(readEditorValue(controller.ref.current!))}; refs=${JSON.stringify(controller.fileReferences.map(file => ({ name: file.name, token: file.token })))}`);
+          assert(controller.fileReferences.every(file => file.localReference), "entry point dropped reference identity");
+          assert(controller.fileReferences[0].size === 67108865, "entry point lost exact size");
+        };
+        const waitForReferences = () => new Promise<void>((resolve, reject) => {
+          const observer = new MutationObserver(check);
+          const deadline = setTimeout(() => {
+            observer.disconnect();
+            reject(new Error("reference cards did not commit to the DOM"));
+          }, 3000);
+          function check() {
+            if (controller.fileReferences.length !== 2 || controller.ref.current?.querySelectorAll(".composer-chip").length !== 2) return;
+            clearTimeout(deadline);
+            observer.disconnect();
+            resolve();
+          }
+          observer.observe(host, { childList: true, subtree: true, characterData: true });
+          check();
+        });
+        await waitForReferences();
+        checkReferences("paste");
+        flushSync(() => controller.applyEditorDraft("Inspect ", [], 8));
+        await attachmentController.attachDroppedItems(files.map(file => ({ file, path: api.getDroppedFilePath(file), isDirectory: false })));
+        await waitForReferences();
+        checkReferences("drop");
+        flushSync(() => controller.applyEditorDraft("Inspect ", [], 8));
+        await attachmentController.pickAndAttach();
+        await waitForReferences();
+        checkReferences("picker");
       }
       const snapshot = controller.draftSnapshot(readEditorValue(controller.ref.current!));
       const matchesSnapshot = (candidate: ComposerDraftSnapshot | undefined) => candidate !== undefined &&

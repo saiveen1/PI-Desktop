@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
+import { COMPOSER_FILE_SELECTION_CHANNEL, createComposerFileSelector } from "../composer-file-selection";
 import { IPC, IPC_WHITELIST } from "@pi-desktop/shared/protocol";
 // Narrow subpath, not the package barrel: the preload is a single bundled file
 // for a sandboxed renderer, so it must not pull the whole shared surface in.
@@ -54,6 +55,10 @@ const api = {
   // creation argument, read synchronously here (D679). Null — no file, the
   // setting off, a later window of the same process — means the brand splash.
   startupAnimation: decodeStartupAnimationArgument(process.argv),
+  selectComposerFiles: createComposerFileSelector(
+    file => webUtils.getPathForFile(file),
+    paths => ipcRenderer.invoke(COMPOSER_FILE_SELECTION_CHANNEL, paths),
+  ),
   /** Resolve a real dropped File without exposing Node or Electron to the page. */
   getDroppedFilePath: (file: File): string | null => {
     try {

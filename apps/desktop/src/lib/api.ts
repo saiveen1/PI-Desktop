@@ -366,6 +366,8 @@ declare global {
       startupAnimation?: StartupAnimationDescriptor | null;
       /** Resolve a native dropped File to its source path. */
       getDroppedFilePath?: (file: File) => string | null;
+      /** Register real File objects through the preload-only selection bridge. */
+      selectComposerFiles?: (files: File[]) => Promise<string>;
     };
   }
 }
@@ -1163,9 +1165,13 @@ export const api = {
   readClipboardDirectories: () => invoke<ClipboardDirectoryPaste | null>(IPC.invoke.composerReadClipboardDirectories),
   getDroppedFilePath: (file: File) =>
     window.piDesktop?.getDroppedFilePath?.(file) ?? null,
+  selectComposerFiles: (files: File[]): Promise<string> => {
+    if (!window.piDesktop?.selectComposerFiles) throw new Error("piDesktop file selection bridge unavailable");
+    return window.piDesktop.selectComposerFiles(files);
+  },
   pickPhotos: () =>
     invoke<{ token: string | null; canceled?: boolean }>(IPC.invoke.composerPickPhotos),
-  importFiles: (sessionId: string, token: string, reference = false) =>
+  importFiles: (sessionId: string, token: string, reference: boolean | "auto" = "auto") =>
     invoke<{ files: ComposerPastedFile[] }>(IPC.invoke.composerImportFiles, {
       sessionId,
       token,

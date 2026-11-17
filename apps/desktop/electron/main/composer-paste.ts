@@ -64,7 +64,7 @@ function isImageMimeType(mimeType: string): boolean {
   return mimeType.startsWith("image/");
 }
 
-function isImageFile(name: string, mimeType: string): boolean {
+export function isImageFile(name: string, mimeType: string): boolean {
   if (isSvgAttachment(mimeType, name)) return false;
   if (isImageMimeType(mimeType)) return true;
   return IMAGE_EXTENSIONS.has(extname(name).toLowerCase());

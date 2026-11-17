@@ -2,6 +2,8 @@ import { clipboard } from "electron";
 import { registerSidebarPreferencesIpc } from "./sidebar-preferences-ipc";
 import { readComposerClipboardDirectories } from "../composer-clipboard-directories";
 import { referenceComposerFiles } from "../composer-file-references";
+import { importComposerSelection } from "../composer-file-import";
+import { COMPOSER_FILE_SELECTION_CHANNEL } from "../../composer-file-selection";
 import { BrowserWindow, dialog, shell, type OpenDialogOptions } from "electron";
 import { dirname } from "node:path";
 import { homedir } from "node:os";
@@ -32,6 +34,7 @@ import {
 import {
   consumeComposerPickerSelection,
   rememberComposerPickerSelection,
+  rememberComposerNativeFiles,
 } from "../composer-picker";
 import { collectWorkspaceDiff } from "@pi-desktop/host-runtime";
 import { parseAllowedExternalUrl } from "../safe-open-external";
@@ -594,6 +597,11 @@ export function registerWorkspaceIpc({
     }),
   );
 
+  handleWithEvent(COMPOSER_FILE_SELECTION_CHANNEL, async (event, paths: unknown) => {
+    assertMainWindowSender(event);
+    return { token: rememberComposerNativeFiles(paths, event.sender.id) };
+  });
+
   handleWithEvent(
     IPC.invoke.composerImportFiles,
     async (
@@ -618,6 +626,10 @@ export function registerWorkspaceIpc({
         });
       }
       const paths = consumeComposerPickerSelection(input.token, event.sender.id);
+      if (input.reference === "auto") {
+        const projectPath = session.session.remoteWorkspace ? undefined : session.session.projectPath;
+        return { files: await importComposerSelection(dataDir, sessionId, projectPath, paths) };
+      }
       if (input.reference === true) {
         if (!session.session.projectPath || session.session.remoteWorkspace) throw new Error("local file references require a local project");
         return { files: await referenceComposerFiles(dataDir, sessionId, session.session.projectPath, paths) };

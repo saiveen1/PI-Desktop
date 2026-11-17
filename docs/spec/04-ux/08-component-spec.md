@@ -3550,23 +3550,27 @@ reasoning-level control.
   all files lack native paths. This keeps Word text editable. Native files,
   any non-image file, and image-only/whitespace-plus-image pastes remain
   attachments. Selected text uses the same large-paste threshold (ADR 0059).
-- Pasting one or more OS clipboard files or images saves their bytes into the
-  originating session's scratch directory and adds a compact leaf-name
-  reference above the textarea. A text-only paste at or below the configured
-  `largePasteThreshold` keeps the browser's native textarea behavior; a paste
-  above it is saved as UTF-8 in the session's scratch `pasted/` directory and
-  inserts an inline temporary-file token at the paste position (D197, D209,
-  D262, ADR 0059, ADR 0070, ADR 0131)
+- In local projects, ordinary disk files added by native paste, drag/drop or the
+  file picker become live original-path references with name and exact byte size.
+  They are not copied or read eagerly and do not encounter byte-transfer limits.
+  The same compact card is used without a reference/upload choice. Raster images
+  retain bounded image attachment handling; screenshots and generated clipboard
+  files still save bytes into the originating session's scratch directory.
+  A text-only paste at or below `largePasteThreshold` remains editable text;
+  above it, save UTF-8 in scratch and insert an inline temporary-file token.
 - The Composer `+` button opens one native file picker with no type-choice menu.
   While that picker or its import is in flight, repeated clicks are ignored so
   only one composer picker can be active at a time.
-  The picker accepts regular files, and the importer classifies each selected
-  item as an image or file from its MIME/extension metadata before copying it
-  into the active session's scratch `pasted/` directory and adding its compact
-  chip; the original absolute picker paths never enter the prompt. Native
-  drag-and-drop additionally accepts regular files and folders: file bytes use
-  the same bounded paste bridge, while folders remain visible as literal full
-  paths and are never copied or traversed.
+  The picker accepts regular files and Main applies the same automatic policy as
+  paste/drop. Reference identity and size survive drafts, queues and input history;
+  dispatch checks the original file and current project before presenting path and
+  size to the Agent. Reads retain normal permissions and observe current contents,
+  not a snapshot. Missing or redirected files produce errors. Picker results belong
+  to the draft captured before the dialog opened; navigating away from home must
+  not create a session in the destination project. Without a local project, or for
+  remote workspaces, retain the existing bounded copy path. Folder drops keep their
+  open-project/insert-path choice and never copy or traverse directory trees.
+  See [the amended local-file decision](../../adr/composer-local-file-references.md).
 - The compact chips retain structured kind/name/MIME metadata while keeping
   the textarea free of binary data. The selected model's published record
   supplies the baseline, then the exact binding's `supportsImages` override

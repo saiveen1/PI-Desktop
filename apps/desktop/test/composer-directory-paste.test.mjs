@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
 import ts from "typescript";
+import { importComposerBrowserFiles } from "../src/lib/composer-file-import.ts";
 
 function extract(source, name) {
   const tree = ts.createSourceFile("module.ts", source, ts.ScriptTarget.Latest, true);
@@ -17,7 +18,7 @@ function extract(source, name) {
   return result;
 }
 
-function harness(native, { files = [], text = "", items = [], paused, sourceSessionId = "source" } = {}) {
+function harness(native, { files = [], text = "", items = [], paused, pickerPaused, sourceSessionId = "source", diskBacked = false } = {}) {
   const read = path => readFileSync(new URL(path, import.meta.url), "utf8");
   const editor = read("../src/features/chat/composer/editor.ts");
   const hook = read("../src/features/chat/composer/hooks/useComposerAttachments.ts");
@@ -42,16 +43,20 @@ function harness(native, { files = [], text = "", items = [], paused, sourceSess
     module: { exports: {} }, Array, TextEncoder, crypto,
     context: () => context, ...context, draft: context, isInputBlocked: false,
     setPasting() {}, readEditorValue: editor => editor.textContent,
+    importComposerBrowserFiles, pickerInFlight: { current: false },
+    formatDroppedDirectoryPath: path => `@"${path}"`,
     editorSelectionRange: () => ({ start: 7, end: 7 }),
     pasteSessionLinks: () => false, parseSessionLinks: () => [],
     showErrorToast: error => errors.push(error.message),
     api: {
-      getDroppedFilePath: () => null,
+      getDroppedFilePath: file => diskBacked ? `/synthetic/original/${file.name}` : null,
+      selectComposerFiles: async selected => { assert.deepEqual(selected, files); return "file-selection"; },
+      pickFiles: async () => { if (pickerPaused) await pickerPaused; return { token: "picker-selection" }; },
       readClipboardDirectories: async () => { nativeReads.push(true); if (paused) await paused; return native; },
       recordClipboardPaste: async () => {},
       importFiles: async (session, token, reference) => {
         imported.push({ session, token });
-        assert.equal(reference, true);
+        assert.equal(reference, undefined, "the renderer uses the automatic import policy");
         return { files: [{ path: "/synthetic/original/notes.txt", name: "notes.txt", kind: "file", size: 67108865, localReference: "selection-id" }] };
       },
       pasteFiles: async (_session, payload) => {
@@ -71,14 +76,16 @@ function harness(native, { files = [], text = "", items = [], paused, sourceSess
     useAppStore: { getState: () => ({ activeSessionId, workspace: { path: workspacePath }, sessions: [{ id: "source" }, { id: "created" }] }) },
     materializeDraftSession: async () => { created.push(workspacePath); activeSessionId = "created"; return "created"; },
   };
-  const code = extract(editor, "clipboardFiles") + "\n" + extract(editor, "preferClipboardText") + "\nmodule.exports = " + extract(hook, "pasteClipboardFiles");
+  const code = extract(editor, "clipboardFiles") + "\n" + extract(editor, "preferClipboardText") + "\nconst refreshAttachmentInsertion = " + extract(hook, "refreshAttachmentInsertion") + ";\nmodule.exports = { paste: " + extract(hook, "pasteClipboardFiles") + ", drop: " + extract(hook, "attachDroppedItems") + ", pick: " + extract(hook, "pickAndAttach") + " };";
   vm.runInNewContext(ts.transpileModule(code, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, environment);
   return {
     drafts, errors, writes, imported, transfers, created, nativeReads, textInsertions,
-    edit(text) { element.textContent = text; revision++; },
+    edit(text) { element.textContent = text; if (activeSessionId === sourceSessionId) revision++; },
     switchSession() { activeSessionId = "other"; },
     switchProject() { workspacePath = "/synthetic/other-project"; },
-    paste: () => environment.module.exports({ currentTarget: element, preventDefault() {}, clipboardData: { files, items, types: ["Files"], getData: () => text } }),
+    paste: () => environment.module.exports.paste({ currentTarget: element, preventDefault() {}, clipboardData: { files, items, types: ["Files"], getData: () => text } }),
+    drop: () => environment.module.exports.drop(files.map(file => ({ file, path: environment.api.getDroppedFilePath(file), isDirectory: false }))),
+    pick: () => environment.module.exports.pick(),
   };
 }
 
@@ -138,7 +145,7 @@ test("native directory paste never reads browser directory bytes", async () => {
   assert.equal(run.transfers.length, 0);
 });
 
-test("ordinary native files keep their existing byte attachment flow", async () => {
+test("generated files without a native path keep their byte attachment flow", async () => {
   const run = harness(null, { files: [new File(["notes"], "notes.txt", { type: "text/plain" })] });
   await run.paste();
   assert.equal(run.drafts[0].references[0].kind, "file");
@@ -196,4 +203,59 @@ test("screenshot-only paste transfers image bytes without waiting for native dir
   assert.deepEqual(run.nativeReads, []);
   assert.equal(run.transfers.length, 1);
   assert.equal(new TextDecoder().decode(run.transfers[0][0].data), "screenshot bytes");
+});
+
+for (const action of ["paste", "drop", "pick"]) {
+  test(`${action} retains large native file reference identity without reading browser bytes`, async () => {
+    const file = new File([], "notes.txt", { type: "text/plain" });
+    file.arrayBuffer = () => assert.fail("disk bytes must not cross the renderer bridge");
+    const run = harness(null, { files: [file], diskBacked: true });
+    await run[action]();
+    assert.deepEqual(run.errors, []);
+    assert.equal(run.drafts.length, 1);
+    assert.equal(run.drafts[0].references[0].path, "/synthetic/original/notes.txt");
+    assert.equal(run.drafts[0].references[0].size, 67108865);
+    assert.equal(run.drafts[0].references[0].localReference, "selection-id");
+    assert.equal(run.writes[0].snapshot.fileReferences[0].localReference, "selection-id");
+    assert.deepEqual(run.transfers, []);
+  });
+}
+
+for (const navigate of ["switchSession", "switchProject"]) {
+  test(`pending home picker cannot materialize in a destination after ${navigate}`, async () => {
+    const gate = Promise.withResolvers();
+    const run = harness(null, { sourceSessionId: null, pickerPaused: gate.promise });
+    const pending = run.pick();
+    run[navigate]();
+    gate.resolve();
+    await pending;
+    assert.deepEqual(run.errors, []);
+    assert.deepEqual(run.created, []);
+    assert.deepEqual(run.writes, []);
+  });
+}
+
+test("picker completion preserves its original session and never reads the destination draft", async () => {
+  const gate = Promise.withResolvers();
+  const run = harness(null, { pickerPaused: gate.promise });
+  const pending = run.pick();
+  run.switchSession();
+  run.edit("destination draft");
+  gate.resolve();
+  await pending;
+  assert.deepEqual(run.errors, []);
+  assert.deepEqual(run.drafts, []);
+  assert.equal(run.writes[0].key, "source");
+  assert.equal(run.writes[0].snapshot.text, "before \ue001after");
+});
+
+test("picker completion preserves newer edits in its source draft", async () => {
+  const gate = Promise.withResolvers();
+  const run = harness(null, { pickerPaused: gate.promise });
+  const pending = run.pick();
+  run.edit("newer source edits");
+  gate.resolve();
+  await pending;
+  assert.deepEqual(run.errors, []);
+  assert.equal(run.drafts[0].text, "newer s\ue001ource edits");
 });

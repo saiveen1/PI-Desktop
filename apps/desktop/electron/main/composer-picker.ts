@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { isAbsolute } from "node:path";
 
 const PICKER_TOKEN_TTL_MS = 60_000;
 const MAX_PENDING_PICKER_SELECTIONS = 32;
@@ -69,4 +70,13 @@ export function consumeComposerPickerSelection(
     throw new Error("picker selection is unavailable");
   }
   return [...selection.paths];
+}
+
+/** Only the private preload bridge may register paths from native File objects. */
+export function rememberComposerNativeFiles(paths: unknown, senderId: number): string {
+  if (!Array.isArray(paths) || !paths.length || paths.length > 20 ||
+      paths.some(path => typeof path !== "string" || path.length > 32768 || path.includes("\0") || !isAbsolute(path))) {
+    throw new Error("invalid native file selection");
+  }
+  return rememberComposerPickerSelection(paths, senderId);
 }

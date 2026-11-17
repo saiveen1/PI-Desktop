@@ -267,6 +267,7 @@ push, open a PR, install or launch merely because this plan names a command.
 | G — Plugins (Chat file references) | E2E-CHAT-file-ref-opens-the-surface-that-owns-it, E2E-PLUGIN-file-view-collapse-persists |
 | Quality (Chat file references) | E2E-CHAT-shorthand-file-ref-opens-the-matching-file, E2E-CHAT-file-ref-opens-the-surface-that-owns-it, E2E-PLUGIN-file-view-collapse-persists |
 | C / Quality (Composer deep file mentions) | E2E-COMPOSER-deep-file-mentions |
+| C / F / H / Quality (Automatic local-file intake) | E2E-COMPOSER-local-file-references |
 | G — Plugins (project folder roots) | E2E-PLUGIN-file-view-switches-folder-per-project |
 | Security (project folder roots) | E2E-PLUGIN-file-view-switches-folder-per-project |
 | Quality (project folder roots) | E2E-PLUGIN-file-view-switches-folder-per-project |
