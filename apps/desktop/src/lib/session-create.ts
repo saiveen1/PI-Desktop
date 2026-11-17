@@ -1,4 +1,30 @@
+import type { SessionSummary } from "@pi-desktop/shared";
+import type { AppState } from "../stores/app-state";
+import { sessionOrganizationCatalog, sessionOrganizationScope } from "./session-organization";
+import { sessionArchived, sessionPinned } from "./sidebar-session-groups";
 import { isAutomationSession } from "./session-origin";
+
+export type SessionCreationGroup = { scope: string; id: string | null };
+
+type SessionCreationOrganization = Pick<AppState, "sessionOrganization" | "sessionLabels" | "sessionMeta" | "sidebarProjectGroups">;
+
+export function sessionCreationGroupExists(state: SessionCreationOrganization, group: SessionCreationGroup): boolean {
+  return group.id === null || sessionOrganizationCatalog(state.sessionOrganization, group.scope, state.sessionLabels)
+    .groups.some(entry => entry.id === group.id);
+}
+
+export function sessionMatchesCreationGroup(
+  state: SessionCreationOrganization,
+  session: SessionSummary,
+  group: SessionCreationGroup,
+): boolean {
+  if (sessionOrganizationScope(session, state.sidebarProjectGroups ?? []) !== group.scope) return false;
+  const meta = state.sessionMeta[session.id];
+  if (sessionPinned(session, meta) || sessionArchived(session, meta)) return false;
+  const id = meta?.groupId ?? null;
+  const effectiveId = sessionCreationGroupExists(state, { scope: group.scope, id }) ? id : null;
+  return effectiveId === group.id;
+}
 
 /**
  * New Task empty-slot reuse (ADR 0113) and first-frame empty reveal (ADR 0154).

@@ -326,7 +326,9 @@ may be retained while exactly one workspace supplies the visible shell context.
   ahead of the manual order; projects without an assigned order fall back to
   a stable path order until they are moved.
 - Named conversation groups start folded; Ungrouped starts open. Opening a
-  conversation from any entry point leaves group disclosure unchanged. When
+  conversation from any entry point leaves group disclosure unchanged. Creating via a
+  group destination is the exception: expand that project and group, reveal the
+  selected row, and focus the composer without disturbing sibling groups. When
   expanded, each local project's group shows its first ten eligible rows in the
   active sort order, with any remainder behind its own **Load N more…** control.
   Counts include folded and unloaded rows. Temporary and remote lists remain
@@ -342,6 +344,8 @@ may be retained while exactly one workspace supplies the visible shell context.
   moves a conversation to one group or Ungrouped. Unknown membership falls back
   to Ungrouped. Empty groups remain visible. Confirmed group deletion keeps all
   conversations and clears membership; Cancel keeps the group unchanged.
+  Forking a conversation or an assistant reply places the child in the source's
+  current group (or Ungrouped), without copying pins, labels, or archive state.
 - **Labels** are descriptive multi-valued marks. Project-scoped catalogs support
   add, rename, recolor, reorder and confirmed deletion. Deletion names the label
   and association count and removes only that project's references. Existing

@@ -1622,6 +1622,15 @@ folding retains its page. Selection excludes folded and unloaded rows.
 Temporary and remote lists remain unpaged. Existing labels are retained, never
 guessed into groups.
 
+With sidebar activity counts enabled, conversation group headers summarize running,
+needs-action and unread completed/failed outcomes across full membership, even
+when folded. Nonzero states use icons and counts separate from the total. Pins
+contribute to project totals and the global pinned section, not subgroup totals.
+Project New Task offers ordered named groups plus Ungrouped (no picker for an
+empty catalog). A group's New Task creates directly there. Explicit placement
+only reuses eligible empty sessions in the requested group; it reveals the
+selected task without reordering other groups or changing their disclosure.
+
 A compact Manage entry and the project menu open a scoped Groups/Labels editor.
 Names, colors and order are editable; confirmed group deletion moves conversations
 to Ungrouped, while label deletion only removes marks. Conversation menus separate

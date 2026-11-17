@@ -28,3 +28,18 @@
 .project-folder-reference strong { display: block; font-size: var(--text-sm); overflow-wrap: anywhere; }
 .project-folder-reference > span > span { display: block; color: var(--ds-text-muted); font-size: var(--text-xs); overflow-wrap: anywhere; }
 .project-folder-primary { color: var(--ds-text-secondary); font-size: var(--text-xs); flex-shrink: 0; }
+
+.sidebar-conversation-group-header { display: flex; align-items: center; min-width: 0; }
+.sidebar-conversation-group-header .sidebar-conversation-group-title { flex: 1 1 auto; width: auto; }
+.sidebar-conversation-group-header:hover .sidebar-session-group-add, .sidebar-conversation-group-header:focus-within .sidebar-session-group-add { opacity: 1; }
+.group-run-status { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 5px; margin-left: auto; }
+.group-run-status-item { display: inline-flex; align-items: center; gap: 2px; font-size: var(--text-xs); }
+.group-run-status-item.running { color: var(--ds-purple); }
+.group-run-status-item.waiting { color: var(--ds-warning); }
+.group-run-status-item.completed { color: var(--ds-success); }
+.group-run-status-item.failed { color: var(--ds-error); }
+.project-group-create-anchor { flex: 0 0 auto; }
+.project-group-create-menu { position: fixed; z-index: 300; min-width: 160px; max-width: min(320px, calc(100vw - 16px)); max-height: min(360px, calc(100dvh - 16px)); overflow: auto; padding: 4px; border: 1px solid var(--ds-border-default); border-radius: var(--radius-md); background: var(--ds-bg-elevated-opaque, var(--ds-bg-primary)); box-shadow: var(--ds-shadow-dialog); }
+.project-group-create-menu:not(.is-open) { visibility: hidden; }
+.project-group-create-item { display: flex; width: 100%; align-items: center; gap: 8px; padding: 6px 8px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--ds-text-primary); text-align: left; }
+.project-group-create-item:hover, .project-group-create-item:focus-visible { background: var(--ds-bg-hover); }

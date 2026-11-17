@@ -1,9 +1,12 @@
 import type { SessionSummary } from "@pi-desktop/shared";
 import { api } from "./api";
+import { remoteProjectKey } from "./remote-project-catalog";
 import { isRemoteSession, safeSessionSummary } from "./remote-session-safety";
-import { sessionIsReusableEmpty } from "./session-create";
+import { sessionIsReusableEmpty, sessionMatchesCreationGroup } from "./session-create";
+import { sessionGroupKey } from "./session-organization";
 import { isAutomationSession } from "./session-origin";
 import { sessionIsArchived } from "./sidebar-preferences";
+import { persistCreatedSessionGroup } from "../stores/helpers/store-helpers";
 import type { SessionRuntime } from "../stores/runtime/session-runtime";
 import type { StoreAccess } from "../stores/slices/types";
 
@@ -19,17 +22,24 @@ export function remoteProjectForSession(session?: SessionSummary): RemoteProject
 export async function openRemoteProjectSession(
   { get, set, runtime }: StoreAccess & { runtime: SessionRuntime },
   project: RemoteProjectTarget,
-): Promise<void> {
-  const scope = `remote-project:${JSON.stringify([project.hostKey, project.projectId])}`;
+  groupId?: string | null,
+): Promise<string | null | void> {
+  const projectKey = remoteProjectKey(project.hostKey, project.projectId);
+  const group = groupId === undefined ? undefined : { scope: `remote:${projectKey}`, id: groupId };
+  const scope = group ? `grouped:${sessionGroupKey(group.scope, group.id)}` : `remote-project:${projectKey}`;
   const pending = runtime.pendingNewSessionRequests.get(scope);
-  if (pending) { await pending; return; }
+  if (pending) {
+    const sessionId = await pending;
+    return group ? sessionId : undefined;
+  }
   const intent = runtime.beginNavigationIntent();
   const request = (async () => {
     const state = get();
     const latest = state.sessions.filter((session) =>
       !isAutomationSession(session)
       && session.remoteHostKey === project.hostKey && session.remoteProjectId === project.projectId
-      && !sessionIsArchived(session.id, state.sessionMeta),
+      && !sessionIsArchived(session.id, state.sessionMeta)
+      && (!group || sessionMatchesCreationGroup(state, session, group)),
     ).sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
     if (latest && sessionIsReusableEmpty(latest, {
       running: state.runningSessions[latest.id] === true,
@@ -43,6 +53,7 @@ export async function openRemoteProjectSession(
       const current = get();
       const candidate = current.sessions.find((session) => session.id === latest.id);
       if (candidate && !sessionIsArchived(candidate.id, current.sessionMeta)
+        && (!group || sessionMatchesCreationGroup(current, candidate, group))
         && detail.session && !detail.session.hasMoreBefore && sessionIsReusableEmpty(detail.session, {
         running: current.runningSessions[latest.id] === true,
         liveMessageCount: Math.max(detail.session.messages?.length ?? 0, runtime.liveMessageCountForSession(latest.id, current)),
@@ -55,15 +66,18 @@ export async function openRemoteProjectSession(
     const result = await api.createRemoteSession({ hostKey: project.hostKey,
       projectId: project.projectId, mode: "agent", permissionMode: "ask" });
     const session = safeSessionSummary(result.session);
+    const sessionMeta = persistCreatedSessionGroup(get(), session, group);
     // Preserve a successful creation even if the user navigated away while it ran.
-    set((current) => ({ sessions: [session, ...current.sessions.filter((item) => item.id !== session.id)] }));
+    set((current) => ({ sessionMeta, sessions: [session, ...current.sessions.filter((item) => item.id !== session.id)] }));
     if (!runtime.navigationIntentIsCurrent(intent)) return null;
     await get().selectSession(session.id, { navigationIntent: intent });
     return runtime.navigationIntentIsCurrent(intent) ? session.id : null;
   })();
   runtime.pendingNewSessionRequests.set(scope, request);
-  try { await request; }
-  finally {
+  try {
+    const sessionId = await request;
+    return group ? sessionId : undefined;
+  } finally {
     if (runtime.pendingNewSessionRequests.get(scope) === request) runtime.pendingNewSessionRequests.delete(scope);
   }
 }

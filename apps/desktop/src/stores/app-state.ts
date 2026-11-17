@@ -232,7 +232,9 @@ export type AppState = import("./slices/session-management-slice").SessionManage
     remoteProject?: RemoteProjectTarget;
     /** Create an isolated session in its own git worktree (ADR 0329). */
     isolated?: boolean;
-  }) => Promise<void>;
+    /** Omit for scope-wide reuse; null explicitly targets Ungrouped. */
+    groupId?: string | null;
+  }) => Promise<string | null | void>;
   forkSession: (id: string) => Promise<void>;
   forkAssistantMessage: (messageId: string) => Promise<void>;
   configureActiveSession: (config: {

@@ -5,7 +5,6 @@ import type {
   PendingInteractiveRequests,
   PlanProposal,
   ProposalKind,
-  SessionDetail,
   SessionSummary,
   UiMessage,
 } from "@pi-desktop/shared";
@@ -17,8 +16,10 @@ import {
 } from "../../lib/plan-mode-state";
 import {
   EMPTY_SESSION_WINDOW,
+  sessionMatchesCreationGroup,
   sessionIsReusableEmpty,
 } from "../../lib/session-create";
+import { projectOrganizationScope, sessionGroupKey } from "../../lib/session-organization";
 import {
   pinnedSessionModelBinding,
   sessionNeedsModelPin,
@@ -51,9 +52,9 @@ import { sessionReadLooksEmpty } from "../../lib/session-transcript-read";
 import { transcriptViewMessages } from "../../lib/transcript-reading";
 import type {
   AppState,
-  DraftSessionConfiguration,
   SessionHistoryWindow,
 } from "../app-state";
+import type { SessionCoordination } from "../runtime/session-coordination";
 import {
   type SessionRuntime,
 } from "../runtime/session-runtime";
@@ -88,15 +89,8 @@ export type SessionSliceDependencies = StoreAccess & {
       | null
       | undefined,
   ) => void;
-  commitForkedSession: (
-    session: SessionDetail,
-    options: { activate: boolean; clearError?: boolean },
-  ) => void;
-  persistSessionAndSelect: (options: {
-    intent: number;
-    projectPath?: string | null;
-    draftConfiguration?: DraftSessionConfiguration | null;
-  }) => Promise<string | null>;
+  commitForkedSession: SessionCoordination["commitForkedSession"];
+  persistSessionAndSelect: SessionCoordination["persistSessionAndSelect"];
 };
 
 function reconcilePendingQueue<T extends { requestId: string }>(
@@ -701,7 +695,7 @@ export function createSessionSlice({
         options && "projectPath" in options ? undefined
           : remoteProjectForSession(activeSession)
       );
-      if (remoteProject) return openRemoteProjectSession({ get, set, runtime }, remoteProject);
+      if (remoteProject) return openRemoteProjectSession({ get, set, runtime }, remoteProject, options?.groupId);
       if (!(options && "projectPath" in options) && isRemoteSession(activeSession ?? (
         get().activeSessionId?.startsWith("remote:") ? { id: get().activeSessionId! } : undefined
       ))) throw new Error(i18n.t("remote:REMOTE_PROJECT_REQUIRED"));
@@ -710,11 +704,16 @@ export function createSessionSlice({
           ? options.projectPath ?? null
           : get().workspace?.path ?? null;
       const isolated = options?.isolated === true;
-      const scopeKey = `${runtime.newSessionScopeKey(requestedProjectPath)}${isolated ? "\u0000isolated" : ""}`;
+      const group = options?.groupId === undefined ? undefined : {
+        scope: projectOrganizationScope(requestedProjectPath, get().sidebarProjectGroups ?? []),
+        id: options.groupId,
+      };
+      const scope = group ? `grouped:${sessionGroupKey(group.scope, group.id)}` : runtime.newSessionScopeKey(requestedProjectPath);
+      const scopeKey = `${scope}${isolated ? "\u0000isolated" : ""}`;
       const pending = runtime.pendingNewSessionRequests.get(scopeKey);
       if (pending) {
-        await pending;
-        return;
+        const sessionId = await pending;
+        return group ? sessionId : undefined;
       }
 
       const intent = runtime.beginNavigationIntent();
@@ -737,10 +736,12 @@ export function createSessionSlice({
           if (!runtime.navigationIntentIsCurrent(intent)) return null;
         }
 
+        const state = get();
         const latest = runtime.latestSessionInScope(
-          get().sessions,
+          state.sessions,
           requestedProjectPath,
-          get().sessionMeta,
+          state.sessionMeta,
+          group ? (session) => sessionMatchesCreationGroup(state, session, group) : undefined,
         );
         if (
           latest &&
@@ -760,12 +761,14 @@ export function createSessionSlice({
           intent,
           projectPath: requestedProjectPath,
           draftConfiguration: null,
+          group,
           ...(isolated ? { isolated: true } : {}),
         });
       })();
       runtime.pendingNewSessionRequests.set(scopeKey, request);
       try {
-        await request;
+        const sessionId = await request;
+        return group ? sessionId : undefined;
       } finally {
         if (runtime.pendingNewSessionRequests.get(scopeKey) === request) {
           runtime.pendingNewSessionRequests.delete(scopeKey);
@@ -806,6 +809,7 @@ export function createSessionSlice({
       );
       commitForkedSession(result.session, {
         activate: runtime.navigationIntentIsCurrent(intent),
+        source,
       });
     },
 
@@ -832,6 +836,7 @@ export function createSessionSlice({
         );
         commitForkedSession(result.session, {
           activate: runtime.navigationIntentIsCurrent(intent),
+          source,
           clearError: true,
         });
       } catch (error) {

@@ -307,7 +307,8 @@ destination, chat as the home surface, tools and permissions inline.
   Group order follows its catalog, while running-first display is a stable
   projection of the current row order. Temporary and remote scopes retain
   independent catalogs; global pins stay flat. Named groups start folded and
-  Ungrouped starts open. Opening a conversation does not change group disclosure,
+  Ungrouped starts open. Explicitly creating in a group reveals the destination;
+  opening an existing conversation does not change group disclosure,
   and folding does not rewrite membership or stored ordering.
 - **Subagent models**: A local conversation's composer opens its model-pool
   dialog. Follow global is the default; Custom enables model checkboxes and a

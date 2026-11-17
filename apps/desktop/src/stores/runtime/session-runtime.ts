@@ -61,6 +61,7 @@ export type SessionRuntime = {
     sessions: SessionSummary[],
     projectPath: string | null,
     sessionMeta: Record<string, SessionMeta>,
+    matchesScope?: (session: SessionSummary) => boolean,
   ) => SessionSummary | undefined;
   liveMessageCountForSession: (
     id: string,
@@ -411,12 +412,12 @@ export function createSessionRuntime({ get, set }: StoreAccess): SessionRuntime 
     navigationIntentIsCurrent: (intent) => navigationIntents.isCurrent(intent),
     newSessionScopeKey: (projectPath) =>
       normalizeProjectPath(projectPath) ?? "<temporary>",
-    latestSessionInScope: (sessions, projectPath, sessionMeta) =>
+    latestSessionInScope: (sessions, projectPath, sessionMeta, matchesScope) =>
       sessions
         .filter(
           (session) =>
             !isAutomationSession(session) &&
-            sessionMatchesProject(session, projectPath),
+            (matchesScope ? matchesScope(session) : sessionMatchesProject(session, projectPath)),
         )
         .sort((a, b) => {
           const aUpdated = Date.parse(a.updatedAt);

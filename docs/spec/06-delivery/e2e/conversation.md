@@ -2486,7 +2486,9 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
   5) Trigger the previously granted tool and verify confirmation is requested.
   6) Reopen the source. 7) Restart the app and inspect both sessions. 8) Open
   the running conversation overflow menu. 9) Fork the Temporary conversation
-  and invoke a workspace-required tool.
+  and invoke a workspace-required tool. 10) Move the source into a named sidebar
+  group, then fork from its row and from an assistant reply. Both children appear
+  in that group immediately and remain there after reload.
 - **Expected**: A localized branch title appears in the same project group and
   is activated with composer focus. Its visible active transcript and durable
   project/provider/model/mode/thinking/permission configuration match the

@@ -18,19 +18,25 @@ import {
   ProjectRunCount,
   ProjectRunRail,
 } from "../ProjectRunIndicator";
-import { IconChevronDown, IconFolder, IconNewProject } from "../icons";
-import { Button, TooltipButton } from "../ui";
+import { IconChevronDown, IconFolder } from "../icons";
+import { Button } from "../ui";
+import { ProjectGroupCreateButton } from "../../features/sessions/ProjectGroupCreateButton";
+import type { SessionGroup } from "../../lib/session-organization";
 
 /** The same project/chat hierarchy, keyed by Host identity rather than local paths. */
 export function RemoteProjectGroups({
   groups,
   renderSessions,
+  catalogGroups,
+  onCreate,
   eligibleSessions,
   pendingSessionIds,
   sessionOutcomes,
 }: {
   groups: RemoteProjectGroup[];
-  renderSessions: (sessions: SessionSummary[], projectKey: string) => ReactNode;
+  renderSessions: (key: string, create?: (groupId: string | null) => void) => ReactNode;
+  catalogGroups: (key: string) => readonly SessionGroup[];
+  onCreate: (project: RemoteProjectEntry, groupId: string | null) => Promise<void>;
   eligibleSessions: SessionSummary[];
   pendingSessionIds: ReadonlySet<string>;
   sessionOutcomes: Readonly<Record<string, "completed" | "failed" | undefined>>;
@@ -48,24 +54,19 @@ export function RemoteProjectGroups({
   // persisted fold survives a restart like a local one.
   const projectCollapsed = useAppStore((state) => state.projectCollapsed);
   const setProjectCollapsed = useAppStore((state) => state.setProjectCollapsed);
-  const open = async (project: RemoteProjectEntry) => {
+  const open = async (project: RemoteProjectEntry, groupId: string | null) => {
     if (busy) return;
     setBusy(project.key);
     try {
-      await useAppStore.getState().newSession({ remoteProject: project });
-    } catch (error) {
-      useAppStore
-        .getState()
-        .showToast(error instanceof Error ? error.message : String(error), {
-          variant: "error",
-        });
+      await onCreate(project, groupId);
     } finally {
       setBusy(null);
     }
   };
   return (
     <>
-      {groups.map(({ project, sessions }) => {
+      {groups.map(({ project }) => {
+        const create = (groupId: string | null) => void open(project, groupId);
         const projectSessions = eligibleSessions.filter(
           (session) => isRemoteSession(session)
             && session.remoteHostKey === project.hostKey
@@ -120,14 +121,8 @@ export function RemoteProjectGroups({
                 {showRunBadge ? <ProjectRunBadge summary={runSummary} /> : null}
                 {showRunCount ? <ProjectRunCount summary={runSummary} /> : null}
               </Button>
-              <TooltipButton
-                tooltip={t("nav.newTask")}
-                ariaLabel={`${t("nav.newTask")}: ${project.label} · ${project.hostLabel}`}
-                disabled={busy !== null}
-                onClick={() => void open(project)}
-              >
-                <IconNewProject size={14} />
-              </TooltipButton>
+              <ProjectGroupCreateButton groups={catalogGroups(project.key)} onCreate={create} disabled={busy !== null}
+                label={`${t("nav.newTask")}: ${project.label} · ${project.hostLabel}`} />
             </div>
             <div
               id={`${project.key}-sessions`}
@@ -138,7 +133,7 @@ export function RemoteProjectGroups({
             >
               <div className="sidebar-session-group-clip">
                 <div className="sidebar-session-group-list">
-                  {renderSessions(sessions, project.key)}
+                  {renderSessions(project.key, busy === null ? create : undefined)}
                 </div>
               </div>
             </div>

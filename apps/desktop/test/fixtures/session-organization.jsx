@@ -36,6 +36,7 @@ const database = new Map([
   session("folded", "D:/folded"),
 ].map((item) => [item.id, item]));
 const calls = [];
+let createGate;
 const unhandled = [];
 let failTrash = "";
 let failDelete = "";
@@ -82,6 +83,13 @@ window.piDesktop = {
         database.delete(input);
       }
       return ok({ ok: true });
+    }
+    if (channel === IPC.invoke.sessionCreate) {
+      const id = `zz-created-${calls.filter(([kind]) => kind === channel).length + 1}`;
+      const item = { ...session(id, input.projectPath), messageCount: 0 };
+      calls.push([channel, id]); database.set(id, item);
+      if (createGate) await createGate.promise;
+      return ok({ session: item });
     }
     if (channel === IPC.invoke.pluginViewClose) return ok(undefined);
     if (channel === IPC.invoke.updatesGetState) return ok(null);
@@ -204,9 +212,10 @@ window.sidebarLabelGroupingProbe = async () => {
         onWidthChange={() => {}} onWidthCommit={() => {}} onResizeCollapse={() => {}} />));
       const name = group("investigation").querySelector(".sidebar-conversation-group-name");
       const header = name.closest("button");
-      const bounds = header.getBoundingClientRect();
+      const bounds = header.parentElement.getBoundingClientRect();
       check(name.clientWidth >= 100, "group heading collapsed into a sliver");
       check(bounds.width >= group("investigation").getBoundingClientRect().width - 1, "group heading does not occupy its own row");
+      check(header.getBoundingClientRect().right <= header.nextElementSibling.getBoundingClientRect().left + 1, "group add overlaps its disclosure");
       check(!header.querySelector("time"), "timestamp competes with group heading");
       const sessionRow = rows()[0];
       const labels = sessionRow.querySelector(".session-row-labels");
@@ -255,6 +264,35 @@ window.sidebarLabelGroupingProbe = async () => {
   check(count("investigation") === 12 && visible("investigation") === 10 && visible("fix") === 4, "project collapse did not reset group pages with stable counts");
   click(group("").querySelector(".sidebar-load-more"));
   check(visible("") === 14 && visible("investigation") === 10 && count("") === 14, "ungrouped pagination leaked into another group");
+  // Exercise the real store through the project picker and subgroup shortcut.
+  // Name sorting places the new task beyond the first ten members.
+  click(groupToggle("investigation"));
+  click(groupToggle("fix"));
+  click(project.querySelector('[data-action="toggle-project-collapse"]'));
+  const composer = document.body.appendChild(document.createElement("textarea"));
+  composer.className = "composer-input";
+  const add = project.querySelector(".sidebar-session-group-header .sidebar-session-group-add");
+  add.scrollIntoView({ block: "center" });
+  click(add);
+  const destination = await waitFor(() => [...document.querySelectorAll('.project-group-create-menu.is-open [role="menuitem"]')].find(el => el.textContent === groups[0].name), "project picker lists named destinations");
+  click(destination);
+  await waitFor(() => row("zz-created-1")?.classList.contains("active"), "created task is visible beyond its group's initial page");
+  check(group("investigation").contains(row("zz-created-1")) && count("investigation") === 13, "project picker did not assign the new row");
+  check(groupToggle("fix").getAttribute("aria-expanded") === "false" && document.activeElement === composer, "create changed sibling disclosure or lost composer focus");
+  click(group("fix").querySelector(".sidebar-session-group-add"));
+  await waitFor(() => group("fix").contains(row("zz-created-2")) && row("zz-created-2")?.classList.contains("active"), "direct create reveals the folded target");
+  check(group("investigation").contains(row("zz-created-1")), "second create moved the other group's blank task");
+  const updateGroups = next => useAppStore.setState(state => ({ sessionOrganization: { ...state.sessionOrganization,
+    scopes: { ...state.sessionOrganization.scopes, [scope]: { ...state.sessionOrganization.scopes[scope], groups: next } } } }));
+  flushSync(() => updateGroups([...groups, { id: "transient", name: "Transient", color: "red" }]));
+  click(groupToggle(""));
+  createGate = Promise.withResolvers();
+  click(group("transient").querySelector(".sidebar-session-group-add"));
+  await waitFor(() => calls.some(([, id]) => id === "zz-created-3"), "create in flight before group removal");
+  flushSync(() => updateGroups(groups));
+  createGate.resolve(); createGate = undefined;
+  await waitFor(() => group("").contains(row("zz-created-3")) && row("zz-created-3")?.classList.contains("active"), "deleted destination reveals created task in Ungrouped");
+  composer.remove();
   const remoteKey = remoteProjectKey("fixture-host", "fixture-project");
   const remoteRows = ["one", "two"].map(id => ({ ...session(`remote:fixture-host:${id}`), source: "remote",
     remoteHostKey: "fixture-host", remoteProjectId: "fixture-project", remoteWorkspaceLabel: "Remote fixture" }));

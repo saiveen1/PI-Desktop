@@ -74,10 +74,11 @@ test("project header counts keep their interpolation variable and localization",
   const countKeys = ["nav.projectNeedsActionCount", "nav.projectCompletedCount", "nav.projectFailedCount"];
   assert.deepEqual(
     countKeys.map((key) => english[key]),
-    ["{{count}} need action", "{{count}} completed", "{{count}} failed"],
+    ["{{count}} need action", "Completed (unread): {{count}}", "Failed (unread): {{count}}"],
   );
   for (const [id, catalog] of Object.entries(catalogs)) {
     const flat = flattenCatalog(catalog);
+    assert.deepEqual(placeholders(flat["nav.groupTotalCount"]), ["count"], `${id} group total`);
     for (const key of countKeys) {
       assert.deepEqual(placeholders(flat[key]), ["count"], `${id} ${key}`);
       if (id !== "en") assert.notEqual(flat[key], english[key], `${id} ${key} must not fall back to English`);

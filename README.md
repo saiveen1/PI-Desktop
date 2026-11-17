@@ -112,8 +112,11 @@ This edition strengthens the existing framework rather than replacing it.
 
 - **Project-scoped groups, colored labels, and deliberate ordering.** Groups
   control placement; multiple labels do not duplicate conversations. Local project
-  groups show complete counts and page independently. Named groups start folded,
-  and opening a conversation does not change which groups are expanded. Manual
+  groups show complete counts and page independently. Folded groups can show running,
+  waiting and unread results. Use the project's **+** to choose a group, or a group's
+  **+** to create there directly. Creation reveals its destination; opening an
+  existing conversation preserves group disclosure. Forking a conversation or a
+  reply keeps the new conversation in the source's group. Manual
   moves and accepted user sends update activity order, not merely opening a chat
   or receiving streamed output.
 - **Visible selection and reversible deletion.** Extend existing modifier-key

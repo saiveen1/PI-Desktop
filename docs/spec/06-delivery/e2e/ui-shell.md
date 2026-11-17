@@ -3540,7 +3540,11 @@ PowerShell-launched fixture; activation must not restore the native outline.
   selected session, a pending destination and non-chat page state.
   Named groups start folded with their complete counts, while Ungrouped starts
   open. Opening a conversation from Search or a visible row leaves both folded
-  and manually expanded groups unchanged.
+  and manually expanded groups unchanged. With activity counts enabled, verify
+  that folded groups count off-page results but exclude global pins. Create
+  from a folded project via its group picker and directly via a group's plus.
+  Canceling the picker creates nothing; creating reveals only the destination
+  and focuses the composer. An empty task in another group stays untouched.
 - **Specs linked**: `04-ux/01-ui-ia.md`, `04-ux/08-component-spec.md`,
   `04-ux/09-interaction-patterns.md` §9.1c
 - **Acceptance**: C, D, Quality

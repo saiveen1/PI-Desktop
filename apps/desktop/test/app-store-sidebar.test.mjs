@@ -89,15 +89,10 @@ test("closed projects are not recreated from historical sidebar sessions", () =>
   assert.match(sidebarSource, /if \(entry\) entry\.sessions\.push\(session\)/);
 });
 
-test("project new-session creation uses one store-owned navigation transaction", () => {
-  assert.match(
-    sidebarSource,
-    /const createProjectSession[\s\S]*createSession\(\{ projectPath: path \}\)/,
-  );
-  assert.doesNotMatch(
-    sidebarSource,
-    /const createProjectSession[\s\S]*selectProject\(path\)/,
-  );
+test("project new-session creation uses one store-owned navigation transaction", async () => {
+  const hook = await readFile(new URL("../src/features/sessions/useGroupedTaskCreation.ts", import.meta.url), "utf8");
+  assert.match(sidebarSource, /createGroupedTask\(scope, \{ projectPath: entry.path \}, groupId\)/);
+  assert.doesNotMatch(hook, /\.activateProject\(|\.selectSession\(|\.moveSessionToGroup\(/);
 });
 
 test("durable empty sessions render and title heuristics do not filter them", () => {

@@ -1,6 +1,9 @@
 import { IconClock } from "./icons";
 import { ColorSwatch, SessionLabelChips, sessionGroupMenu, sessionMarkMenu } from "../features/sessions/SessionLabelControls";
 import { SidebarSessionGroups } from "../features/sessions/SidebarSessionGroups";
+import { ProjectGroupCreateButton } from "../features/sessions/ProjectGroupCreateButton";
+import { GroupRunStatus } from "./ProjectRunIndicator";
+import { useGroupedTaskCreation } from "../features/sessions/useGroupedTaskCreation";
 import { groupSessionsByGroup, prioritizeRunningSessions, visibleGroupedSessionIds, projectGroupForPath, projectOrganizationScope, sessionOrganizationCatalog, sessionOrganizationScope, type SidebarSessionGroup } from "../lib/session-organization";
 import { SessionOrganizationDialog, type SessionOrganizationTarget } from "../features/sessions/SessionOrganizationDialog";
 import { ProjectFolderReferences } from "../features/sessions/ProjectFolderReferences";
@@ -1406,9 +1409,11 @@ export function Sidebar({
     }
   };
 
-  const createProjectSession = async (path: string) => {
-    await createSession({ projectPath: path });
-  };
+  const createGroupedTask = useGroupedTaskCreation(sessionGroupsByScope, setToggledSessionGroups, setExpandedSessionGroups, reportError);
+  const catalogGroups = (scope: string) => sessionOrganizationCatalog(sessionOrganization, scope, sessionLabels).groups;
+  const summarizeGroup = runningAffordances.badge || runningAffordances.railCount
+    ? (rows: readonly SessionSummary[]) => summarizeProjectRuns(rows, runningSessions, pendingPermissions, pendingSessionIds, sessionOutcomes)
+    : undefined;
 
   const openProjectPicker = async () => {
     try {
@@ -2116,8 +2121,9 @@ export function Sidebar({
     );
   });
 
-  const renderGroupedSessionRows = (scope: string, options?: Parameters<typeof renderSessionRows>[1]) => (
+  const renderGroupedSessionRows = (scope: string, options: Parameters<typeof renderSessionRows>[1], onCreate?: (id: string | null) => void) => (
     <SidebarSessionGroups key={scope} groups={sessionGroupsByScope.get(scope) ?? []}
+      summarize={summarizeGroup} onCreate={onCreate}
       onLoadMore={groupId => setExpandedSessionGroups(previous => expandSessionGroup(previous, scope, groupId))}
       scope={scope} toggledGroups={toggledSessionGroups} onToggle={toggleSessionGroup}
       onManage={() => setOrganizationFor({ scope, name: projectEntries.find(entry => projectOrganizationScope(entry.path, sidebarProjectGroups) === scope)?.name
@@ -2126,6 +2132,8 @@ export function Sidebar({
   );
 
   const renderProjectGroup = (entry: ProjectEntry) => {
+    const scope = projectOrganizationScope(entry.path, sidebarProjectGroups);
+    const create = (groupId: string | null) => void createGroupedTask(scope, { projectPath: entry.path }, groupId);
     const collapsedProject = entry.meta.collapsed ?? projectCollapsed[entry.key] ?? false;
     const projectId = projectDomId(entry.key);
     const isMenuOpen = projectMenu === entry.key;
@@ -2274,15 +2282,8 @@ export function Sidebar({
               <IconMore size={14} />
             </TooltipButton>
           </div>
-          <TooltipButton
-            type="button"
-            className="sidebar-session-group-add"
-            tooltip={entry.active ? t("project.newTask") : t("project.openAndNewTask", { defaultValue: "Open project and create task" })}
-            ariaLabel={entry.active ? t("project.newTask") : t("project.openAndNewTask", { defaultValue: "Open project and create task" })}
-            onClick={() => void createProjectSession(entry.path)}
-          >
-            <IconNewSession size={13} />
-          </TooltipButton>
+          <ProjectGroupCreateButton groups={catalogGroups(scope)} onCreate={create}
+            label={entry.active ? t("project.newTask") : t("project.openAndNewTask")} />
         </div>
         <div
           id={`${projectId}-sessions`}
@@ -2293,7 +2294,7 @@ export function Sidebar({
         >
           <div className="sidebar-session-group-clip">
             <div className="sidebar-session-group-list">
-              {renderGroupedSessionRows(projectOrganizationScope(entry.path, sidebarProjectGroups), { projectPath: entry.path, showLastReplyDate })}
+              {renderGroupedSessionRows(scope, { projectPath: entry.path, showLastReplyDate }, create)}
               {entry.sessions.length === 0 ? <div className="sidebar-session-empty">{t("nav.noProjectSessions")}</div> : null}
             </div>
           </div>
@@ -2447,6 +2448,7 @@ export function Sidebar({
               <span id="sidebar-pinned-label" className="sidebar-list-label">
                 {t("nav.pinnedSessions")}
               </span>
+              {summarizeGroup && <GroupRunStatus summary={summarizeGroup(pinnedSessions)} />}
             </div>
             <div className="sidebar-session-group-body pinned" onScroll={() => closeMenus(false)}>
               {renderSessionRows(pinnedSessions, { global: true })}
@@ -2531,7 +2533,7 @@ export function Sidebar({
               openSectionMenu("sessions", event.clientX, event.clientY);
             }}
           >
-            {renderGroupedSessionRows("temporary", { temporary: true })}
+            {renderGroupedSessionRows("temporary", { temporary: true }, id => void createGroupedTask("temporary", { projectPath: null }, id))}
             {temporarySessions.length === 0 ? <div className="sidebar-session-empty">{t("nav.noTemporarySessions")}</div> : null}
           </div>
         </section>
@@ -2597,10 +2599,9 @@ export function Sidebar({
           )}
           <RemoteProjectGroups groups={remoteProjectGroups} eligibleSessions={listableSessions(sessions).filter(session => showArchived || !sessionArchived(session, sessionMeta[session.id]))}
             pendingSessionIds={pendingSessionIds} sessionOutcomes={sessionOutcomes}
-            renderSessions={(_sessions, projectKey) => renderGroupedSessionRows(`remote:${projectKey}`, {
-              temporary: false,
-              showLastReplyDate,
-            })} />
+            catalogGroups={key => catalogGroups(`remote:${key}`)}
+            onCreate={(project, groupId) => createGroupedTask(`remote:${project.key}`, { remoteProject: project }, groupId)}
+            renderSessions={(key, create) => renderGroupedSessionRows(`remote:${key}`, { temporary: false, showLastReplyDate }, create)} />
         </div>
 
         <div className="sidebar-footer no-drag">

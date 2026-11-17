@@ -1,6 +1,8 @@
 import { useTranslation } from "react-i18next";
 import type { ProjectRunSummary } from "../lib/sidebar-project-runs";
 import { projectRunSummaryIsLive } from "../lib/sidebar-project-runs";
+import { IconActivity, IconCheck, IconClock, IconClose } from "./icons";
+import "../styles/session-organization.css";
 
 /**
  * The two project-level "work is running under here" affordances (D-sidebar).
@@ -92,4 +94,20 @@ export function ProjectRunCount({ summary }: { summary: ProjectRunSummary }) {
       {summary.failed > 0 ? <span className="project-run-pip failed">{summary.failed}</span> : null}
     </span>
   );
+}
+
+/** Compact status and total for session-group and pinned headers. */
+export function GroupRunStatus({ summary }: { summary: ProjectRunSummary }) {
+  const { t } = useTranslation();
+  const label = [runLabel(t, summary), t("nav.groupTotalCount", { count: summary.total, defaultValue: "{{count}} total" })].filter(Boolean).join(" · ");
+  const items = [
+    { key: "running", count: summary.running, Icon: IconActivity },
+    { key: "waiting", count: summary.waiting, Icon: IconClock },
+    { key: "completed", count: summary.completed, Icon: IconCheck },
+    { key: "failed", count: summary.failed, Icon: IconClose },
+  ];
+  return <span className="group-run-status" role="img" aria-label={label} title={label}>
+    {items.map(({ key, count, Icon }) => count > 0 ? <span key={key} className={`group-run-status-item ${key}`} aria-hidden="true"><Icon size={11} />{count}</span> : null)}
+    <span className="sidebar-conversation-group-count" aria-hidden="true">{summary.total}</span>
+  </span>;
 }

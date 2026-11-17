@@ -18,8 +18,9 @@ import {
   forkedSessionMessages,
   FORKED_SESSION_WINDOW,
 } from "../../lib/session-fork";
-import { EMPTY_SESSION_WINDOW } from "../../lib/session-create";
+import { EMPTY_SESSION_WINDOW, type SessionCreationGroup } from "../../lib/session-create";
 import { inheritedSessionModelBinding } from "../../lib/session-model";
+import { sessionOrganizationScope } from "../../lib/session-organization";
 import {
   clearSessionPanes,
   retainSessionPane,
@@ -31,6 +32,7 @@ import {
 import type { AppState, DraftSessionConfiguration } from "../app-state";
 import type { SessionRuntime } from "./session-runtime";
 import type { StoreAccess } from "../slices/types";
+import { persistCreatedSessionGroup } from "../helpers/store-helpers";
 import { switchWorkPanelSession } from "../slices/work-panel-slice";
 
 export type PersistSessionOptions = {
@@ -39,7 +41,10 @@ export type PersistSessionOptions = {
   draftConfiguration?: DraftSessionConfiguration | null;
   /** Run the new session in its own git worktree (ADR 0329). */
   isolated?: boolean;
+  group?: SessionCreationGroup;
 };
+
+type ForkOptions = { source: SessionSummary; activate: boolean; clearError?: boolean };
 
 export type SessionCoordination = {
   flushPendingSessionConfiguration: (sessionId: string) => Promise<void>;
@@ -55,7 +60,7 @@ export type SessionCoordination = {
   ) => void;
   commitForkedSession: (
     session: SessionDetail,
-    options: { activate: boolean; clearError?: boolean },
+    options: ForkOptions,
   ) => void;
   persistSessionAndSelect: (
     options?: PersistSessionOptions,
@@ -81,6 +86,8 @@ export function createSessionCoordination({
   withoutRecordKey,
   untitledTaskTitle,
 }: SessionCoordinationDependencies): SessionCoordination {
+  let pendingGroupedDraft: { intent: number; result: () => Promise<string | null> } | undefined;
+
   function flushPendingSessionConfiguration(sessionId: string): Promise<void> {
     const active = runtime.sessionConfigurationFlushes.get(sessionId);
     if (active) return active;
@@ -168,18 +175,24 @@ export function createSessionCoordination({
 
   function commitForkedSession(
     session: SessionDetail,
-    options: { activate: boolean; clearError?: boolean },
+    options: ForkOptions,
   ): void {
     const { messages: _forkedMessages, ...summary } = session;
     const messages = forkedSessionMessages(session);
     const historyWindow = { ...FORKED_SESSION_WINDOW };
     runtime.cacheSessionTranscript(summary.id, messages, historyWindow);
+    const state = get();
+    const groupId = state.sessionMeta[options.source.id]?.groupId;
+    const sessionMeta = persistCreatedSessionGroup(state, summary, groupId ? {
+      scope: sessionOrganizationScope(options.source, state.sidebarProjectGroups ?? []), id: groupId,
+    } : undefined);
     set((current) => {
       const commit = commitForkedSessionState(current, summary, {
         activate: options.activate,
       });
       const shared: Partial<AppState> = {
-        sessions: decorateSessions(commit.sessions, current.sessionMeta),
+        sessionMeta,
+        sessions: decorateSessions(commit.sessions, sessionMeta),
         sessionHistory: {
           ...current.sessionHistory,
           [summary.id]: historyWindow,
@@ -234,17 +247,19 @@ export function createSessionCoordination({
 
   function commitCreatedEmptySession(
     summary: SessionSummary,
-    options: { activate: boolean },
+    options: { activate: boolean; group?: SessionCreationGroup },
   ): void {
     const messages: UiMessage[] = [];
     runtime.cacheSessionTranscript(summary.id, messages, EMPTY_SESSION_WINDOW);
     if (options.activate) scheduleHomeDraftAdopt(summary.id);
+    const sessionMeta = persistCreatedSessionGroup(get(), summary, options.group);
     set((current) => {
       const commit = commitForkedSessionState(current, summary, {
         activate: options.activate,
       });
       const shared: Partial<AppState> = {
-        sessions: decorateSessions(commit.sessions, current.sessionMeta),
+        sessionMeta,
+        sessions: decorateSessions(commit.sessions, sessionMeta),
         sessionHistory: {
           ...current.sessionHistory,
           [summary.id]: EMPTY_SESSION_WINDOW,
@@ -269,6 +284,18 @@ export function createSessionCoordination({
         navIndex: commit.navIndex,
       };
     });
+  }
+
+  async function persistGroupedSessionAndSelect(options: PersistSessionOptions & { intent: number }): Promise<string | null> {
+    // Own the empty home draft before revealing it, including synchronous store listeners.
+    const pending = { intent: options.intent, result: () => Promise.resolve().then(() => request) };
+    pendingGroupedDraft = pending;
+    const request = persistSessionAndSelect(options);
+    try {
+      return await request;
+    } finally {
+      if (pendingGroupedDraft === pending) pendingGroupedDraft = undefined;
+    }
   }
 
   async function persistSessionAndSelect(
@@ -337,16 +364,20 @@ export function createSessionCoordination({
     }
     const sessionId = created.session.id;
     if (!runtime.navigationIntentIsCurrent(active)) {
-      commitCreatedEmptySession(created.session, { activate: false });
+      commitCreatedEmptySession(created.session, { activate: false, group: options.group });
       return null;
     }
-    commitCreatedEmptySession(created.session, { activate: true });
+    commitCreatedEmptySession(created.session, { activate: true, group: options.group });
     return sessionId;
   }
 
   async function materializeDraftSession(
     intent?: number,
   ): Promise<string | null> {
+    const grouped = pendingGroupedDraft;
+    if (grouped && (intent === undefined || intent === grouped.intent) && runtime.navigationIntentIsCurrent(grouped.intent)) {
+      return grouped.result();
+    }
     const state = get();
     const scopeKey = runtime.newSessionScopeKey(state.workspace?.path ?? null);
     const pending = runtime.pendingNewSessionRequests.get(scopeKey);
@@ -368,7 +399,9 @@ export function createSessionCoordination({
     flushPendingSessionConfiguration,
     rememberSessionCompactions,
     commitForkedSession,
-    persistSessionAndSelect,
+    persistSessionAndSelect: (options) => options?.group && options.intent !== undefined
+      ? persistGroupedSessionAndSelect({ ...options, intent: options.intent })
+      : persistSessionAndSelect(options),
     materializeDraftSession,
   };
 }

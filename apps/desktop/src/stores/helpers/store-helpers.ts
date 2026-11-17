@@ -12,7 +12,10 @@ import type {
 import { isRenderableAttachment, modeForProposalKind } from "@pi-desktop/shared";
 import type { ComposerDraftSnapshot } from "../../lib/composer-smart-stop";
 import { normalizeProjectPath } from "../../lib/sidebar-session-groups";
+import { sessionCreationGroupExists, type SessionCreationGroup } from "../../lib/session-create";
+import { sessionOrganizationScope } from "../../lib/session-organization";
 import {
+  saveSidebarPreferences,
   sessionIsArchived,
   sessionIsPinned,
   type ProjectMeta,
@@ -205,6 +208,21 @@ export function preferencesFromState(state: Pick<
     sessionView: state.sessionView,
     openProjectPaths: state.openProjectPaths,
   };
+}
+
+/** Persist before the new row and its membership are published together. */
+export function persistCreatedSessionGroup(
+  state: AppState,
+  session: SessionSummary,
+  group?: SessionCreationGroup,
+): AppState["sessionMeta"] {
+  if (!group || !sessionCreationGroupExists(state, group)) return state.sessionMeta;
+  if (sessionOrganizationScope(session, state.sidebarProjectGroups ?? []) !== group.scope) return state.sessionMeta;
+  const meta = { ...state.sessionMeta[session.id], organizationScope: group.scope };
+  if (group.id === null) delete meta.groupId; else meta.groupId = group.id;
+  const sessionMeta = { ...state.sessionMeta, [session.id]: meta };
+  saveSidebarPreferences({ ...preferencesFromState(state), sessionMeta });
+  return sessionMeta;
 }
 
 /** Append a freshly installed checkpoint, or replace a retried one by id. */
