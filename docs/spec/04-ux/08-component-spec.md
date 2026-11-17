@@ -1527,6 +1527,14 @@ opens automatically. A second row activation does not close the tab.
   details use a bounded, local session read without moving the parent transcript.
   Earlier/later controls extend that local range while preserving the original
   Task and existing child rows; the first loaded page is not treated as complete.
+  A control appears only after bounded lookahead has found unseen content in the
+  selected resume chain. Parent-only pages, other delegates and rows already
+  merged from the live/reading range do not produce a control. Lookahead crosses
+  unrelated pages rather than treating a filtered-empty page as the end; clicks
+  reveal the prepared range without refetching it. Scanning accumulates records
+  incrementally, skips unrelated prose/task-chain rebuilding and yields between
+  bounded batches, including cached reads. Pending reads are scoped to
+  the mounted detail, stop on disposal and expose failures through Retry.
   A retained report is shown when its original child answer is not in the loaded
   range; truncation remains explicit. Read errors expose Retry.
 - The selected detail header shows the task description as its title, with

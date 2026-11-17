@@ -4760,6 +4760,25 @@ renderer's durable transcript reads. No real model or provider is contacted.
 `pnpm --filter @pi-desktop/shared test`, and
 `pnpm --filter @pi-desktop/host-runtime test`.
 
+## E2E-CHAT-subagent-truthful-pagination
+
+- **Setup:** A bounded parent transcript with parallel delegates and unrelated
+  messages on both sides of the selected Task; use only isolated fixture data.
+- **Steps:** Open a delegate whose complete transcript is already merged from
+  live/history rows. Then open a delegate with unseen evidence several physical
+  pages away, including a distant resume. Exercise read failure, Retry, live
+  arrival during lookahead and detail disposal during an outstanding read.
+- **Expected:** Earlier/later buttons exist only for prepared ranges that add
+  content to the selected chain. Parent/other-delegate/duplicate pages produce
+  no buttons; filtered-empty pages do not hide more distant child content.
+  Clicking reveals the prepared content without refetching it or moving the
+  parent chat. Errors remain retryable; disposed readers stop further paging and
+  cannot publish into another detail.
+- **Coverage:** `subagent-history.test.mjs` exercises bounded lookahead, duplicate
+  suppression, resume discovery, live arrival, read errors and cancellation.
+  `session-delegations-ui.test.mjs` uses the production detail/hook in an isolated
+  browser fixture for truthful controls, prepared clicks and read retry.
+
 ## E2E-CHAT-subagent-parent-error-resume
 
 - **Preconditions**: Built agent runtime and a loopback provider fixture; real

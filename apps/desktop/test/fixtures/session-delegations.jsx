@@ -24,7 +24,7 @@ import "../../src/styles/work-panel.css";
 await i18n.use(initReactI18next).init({ lng: "en", resources: Object.fromEntries(Object.entries(catalogs).map(([locale, catalog]) => [locale, { translation: catalog }])) });
 window.piDesktop = { platform: "win32", invoke: async () => ({ ok: true, data: {} }), on: () => () => {} };
 const events = new Set(), approvalEvents = new Set(), calls = [];
-let rows = [], messages = [], approvals = [], failure = false, detailFailure = false, delayed, delayedApproval;
+let rows = [], messages = [], approvals = [], failure = false, detailFailure = false, pageFailure = false, delayed, delayedApproval;
 const stamp = "2026-11-12T10:00:00.000Z";
 const task = (id, status = "running") => ({ id: `task-${id}`, role: "tool", content: "", createdAt: stamp,
   toolName: "Task", toolCallId: `call-${id}`, toolStatus: "success", status: "complete",
@@ -56,7 +56,7 @@ api.onDelegationApprovalChanged = callback => { approvalEvents.add(callback); re
 api.onAgentEvent = callback => { events.add(callback); return () => events.delete(callback); };
 api.getSession = async (sessionId, options) => {
   calls.push({ kind: "detail", sessionId, options });
-  if (detailFailure) throw Error("Fixture detail page failure");
+  if (detailFailure || (pageFailure && options.messageBefore !== undefined)) throw Error("Fixture detail page failure");
   if (options.messageBefore !== undefined) return { session: { id: sessionId,
     messages: options.messageBefore > 110 ? [{ id: "older-child-answer", role: "assistant", createdAt: stamp, content: "Child evidence beyond the first page", parentToolCallId: "call-old" }] : [],
     messageStart: options.messageBefore > 110 ? 110 : 0, messageEnd: options.messageBefore > 110 ? 170 : 50,
@@ -189,19 +189,33 @@ window.sessionDelegationsProbe = async stage => {
     await click(".session-subagents-approval button");
     check(approvalTarget?.sessionId === "alpha" && approvalTarget.requestId === "own" && approvalTarget.revision === approvals[0].revision, "Approval lost its identity");
     const chat = query(".fixture-chat"); chat.scrollTop = 200;
+    flushSync(() => useAppStore.setState({ messages: [...messages, task("old", "completed"),
+      { id: "older-child-answer", role: "assistant", createdAt: stamp, content: "Child evidence beyond the first page", parentToolCallId: "call-old" }],
+      sessionHistory: { alpha: { messageStart: 50, hasMoreBefore: true } } }));
     await click('[data-message-id="task-old"] .subagent-task-open');
+    check(![...document.querySelectorAll(".subagent-transcript-scroll button")].some(button =>
+      [i18n.t("chat.showEarlierMessages"), i18n.t("chat.loadLaterMessages")].includes(button.textContent)), "Complete live child transcript showed phantom pagination");
+    await click('[aria-label="All tasks"]');
+    flushSync(() => useAppStore.setState({ messages, sessionHistory: {} }));
+    detailFailure = true;
+    await click('[data-message-id="task-old"] .subagent-task-open');
+    check(query(".subagent-transcript-list [role=alert]"), "Detail failure was hidden");
+    detailFailure = false; pageFailure = true;
+    await click(".subagent-transcript-list [role=alert] button");
+    check(query(".subagent-transcript-list [role=alert]"), "Lookahead failure was hidden");
+    pageFailure = false; await click(".subagent-transcript-list [role=alert] button");
     check(query(".subagent-transcript-tab").textContent.includes("Retained historical report"), "Historical report was inaccessible");
     check(calls.some(call => call.kind === "detail" && call.options.messageAround === "task-old"), "Historical detail was not bounded by task identity");
     check(chat.scrollTop === 200 && !useAppStore.getState().transcriptViews.alpha, "Opening detail moved the parent conversation");
     const later = [...document.querySelectorAll(".subagent-transcript-scroll button")].find(button => button.textContent === i18n.t("chat.loadLaterMessages"));
-    check(later, "Missing later-history control");
-    detailFailure = true; flushSync(() => later.click()); await settle();
-    check(query(".subagent-transcript-list [role=alert]"), "Page failure was hidden");
-    detailFailure = false; await click(".subagent-transcript-list [role=alert] button");
+    check(later, "Missing later-history control for real child evidence");
+    const readsBeforeClick = calls.filter(call => call.kind === "detail").length;
+    flushSync(() => later.click()); await settle();
     check(query(".subagent-transcript-tab").textContent.includes("Child evidence beyond the first page"), "Later child messages remain inaccessible");
-    const earlier = [...document.querySelectorAll(".subagent-transcript-scroll button")].find(button => button.textContent === i18n.t("chat.showEarlierMessages"));
-    check(earlier, "Missing earlier-history control"); flushSync(() => earlier.click()); await settle();
-    check(calls.some(call => call.kind === "detail" && call.options.messageBefore === 50), "Earlier page did not use the original cursor");
+    const pagers = [...document.querySelectorAll(".subagent-transcript-scroll button")].filter(button => [i18n.t("chat.showEarlierMessages"), i18n.t("chat.loadLaterMessages")].includes(button.textContent));
+    check(pagers.length === 0, "Parent history advertised nonexistent child content");
+    check(calls.filter(call => call.kind === "detail").length === readsBeforeClick, "Click refetched already prepared pages");
+    check(calls.some(call => call.kind === "detail" && call.options.messageBefore === 50), "Earlier lookahead did not use the original cursor");
     check(chat.scrollTop === 200 && !useAppStore.getState().transcriptViews.alpha, "Child paging moved the parent conversation");
     await click('[aria-label="All tasks"]');
     await click('[data-message-id="task-failed"] .subagent-task-open');

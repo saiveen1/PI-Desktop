@@ -20,6 +20,8 @@ export type SubagentTranscriptTurn = {
  */
 export type SubagentTranscript = {
   agentName?: string;
+  /** Original Task rows in the resolved resume chain, in session order. */
+  calls: UiMessage[];
   /** Latest call in the connected resume chain, including its effective handle. */
   latestCall: UiMessage;
   turns: SubagentTranscriptTurn[];
@@ -175,6 +177,7 @@ export function buildSubagentTranscript(
   }
 
   return {
+    calls: chainCalls,
     chainId: chainCalls[0].toolCallId as string,
     latestCall: chainCalls[chainCalls.length - 1],
     ...(agentName ? { agentName } : {}),
