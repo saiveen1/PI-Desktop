@@ -34,6 +34,25 @@ Official release notes: [Pi 1.5.0](https://github.com/earendil-works/pi/releases
   and pulled undici into the sidecar entry (891 KiB, over the 500 KiB gate);
   one copy restores 315 KiB and the 1.4 instance topology.
 
+### Subsequent local Responses compatibility increment
+
+The existing pi-ai 1.5.0 patch is the repair boundary for terminal content loss:
+blank terminal reasoning or answer fields must not erase meaningful streamed
+content from the same item; meaningful reasoning content remains a fallback.
+An orphan DSML terminal tail retains the full streamed text only when it is an
+exact suffix; other nonempty corrections and explicit refusals, including blank
+refusals, remain authoritative. This does not parse prose into tools or change
+signatures, ordering, usage, stop/error/cancellation, schemas, or APIs.
+
+Upstream Desktop `047c4eab1c97a349b3cf8c734229b64ed9d87764` has the existing
+Responses patch but no such terminal guard; this is a local increment. The
+[maintenance record](../maintenance/responses-terminal-content-loss.md) documents
+the evidence and limits. The two synthetic regression files pass 24 cases; the
+selected adapter/replay/tool-recovery set passes 107 cases across eight files.
+Runtime typechecking, sidecar bundling, and Pi patch/dependency checks pass.
+Electron and live-provider validation are NOT RUN, and this cannot recover
+historical content or update an installed application.
+
 ## Inherited without Desktop code changes
 
 - Incremental tool-call argument parsing in providers and agent proxy streams

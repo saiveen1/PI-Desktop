@@ -714,6 +714,28 @@ with only Host API controlled. Running-turn configuration remains queued.
 - **Status**: Unit-covered (stream processor terminates on the terminal
   event via the pi-ai patch); live-proxy scenario Draft
 
+## E2E-PROVIDER-responses-terminal-content: Preserve streamed content at settlement
+
+- **Preconditions**: A synthetic Responses SSE stream and fake fetch exercise the
+  real provider adapter; a runtime fixture exercises the user-facing settlement path.
+- **Steps**: Stream meaningful thinking and answer text, then vary terminal items:
+  blank reasoning summary with meaningful content fallback, empty/missing/blank
+  answer, an exact orphan DSML suffix, a shorter nonempty correction, and explicit
+  refusals including blank refusal. Include structured sibling tools and replay data.
+- **Expected**: Blank terminal fields cannot erase meaningful same-item streamed
+  content; meaningful reasoning content is a fallback. The exact DSML suffix keeps
+  the full text and diagnostic, never becomes a tool call. Other nonempty revisions
+  and explicit refusals stay authoritative. Intermediate events, final snapshots,
+  signatures, tool order, usage, stop/error and cancellation semantics remain intact.
+- **Automated coverage**: `packages/agent-runtime/src/responses-terminal-content.test.ts`
+  and `packages/agent-runtime/src/responses-terminal-content-runtime.test.ts`:
+  24 cases passed through the real adapter and local HTTP runtime fixture.
+  Electron and live-provider verification: NOT RUN. Neither a synthetic pass
+  nor a source change proves an installed fix or recovers history.
+- **Specs linked**: `03-runtime/02-agent-runtime.md` (§5c);
+  [diagnosis](../../../maintenance/responses-terminal-content-loss.md).
+
+
 ## E2E-PROVIDER-deepseek-aggregator-thinking: DeepSeek thinking replay includes reasoning_content on aggregator endpoints
 
 - **Preconditions**: An OpenAI-compatible provider whose base URL is not

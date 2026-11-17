@@ -1,5 +1,5 @@
 diff --git a/dist/api/anthropic-messages.js b/dist/api/anthropic-messages.js
-index de2b2d8c209f5576c18b020de297d4ef5fad5960..037ecdaea6efcb76f827ba2dd69bc3a09a3d78f7 100644
+index de2b2d8c209f5576c18b020de297d4ef5fad5960..529fb33d7323c3940ade62663830adb9adadc685 100644
 --- a/dist/api/anthropic-messages.js
 +++ b/dist/api/anthropic-messages.js
 @@ -1,3 +1,6 @@
@@ -9,11 +9,15 @@ index de2b2d8c209f5576c18b020de297d4ef5fad5960..037ecdaea6efcb76f827ba2dd69bc3a0
  import Anthropic, {} from "@anthropic-ai/sdk";
  import { ANTHROPIC_FEDERATION_RULE_ID_ENV, ANTHROPIC_IDENTITY_TOKEN_FILE_ENV, ANTHROPIC_ORGANIZATION_ID_ENV, ANTHROPIC_SERVICE_ACCOUNT_ID_ENV, ANTHROPIC_WORKSPACE_ID_ENV, } from "../env-api-keys.js";
  import { calculateCost } from "../models.js";
-@@ -44,3 +47,3 @@ function mergeHeaders(...headerSources) {
+@@ -42,7 +45,7 @@ function getCacheControl(model, cacheRetention, env) {
+     };
+ }
  // Stealth mode: Mimic Claude Code's tool naming exactly
 -const claudeCodeVersion = "2.1.280";
 +const claudeCodeVersion = "2.1.322";
  // Claude Code 2.x tool names (canonical casing)
+ // Source: https://cchistory.mariozechner.at/data/prompts-2.1.11.md
+ // To update: https://github.com/badlogic/cchistory
 @@ -377,8 +380,6 @@ async function* iterateAnthropicEvents(response, signal) {
  }
  export const stream = (model, context, options) => {
@@ -462,7 +466,7 @@ index 12ec37eaf976340d2b29234dab2f17964ed56c91..02d3cdec478f40f40c312dea4d412f9e
          openRouterRouting: model.compat.openRouterRouting ?? {},
          vercelGatewayRouting: model.compat.vercelGatewayRouting ?? detected.vercelGatewayRouting,
 diff --git a/dist/api/openai-responses-shared.js b/dist/api/openai-responses-shared.js
-index 3901bfc4bc6dee0eb45a209dbcbdb59d6c55d054..60b63766576f463b83a964ef9b16d39472222693 100644
+index 3901bfc4bc6dee0eb45a209dbcbdb59d6c55d054..46c242f15bdc6cd017675eec068d92104e153a0a 100644
 --- a/dist/api/openai-responses-shared.js
 +++ b/dist/api/openai-responses-shared.js
 @@ -1,3 +1,4 @@
@@ -609,7 +613,37 @@ index 3901bfc4bc6dee0eb45a209dbcbdb59d6c55d054..60b63766576f463b83a964ef9b16d394
          }
          else if (event.type === "response.function_call_arguments.done") {
              const slot = getSlot(event.output_index, "toolCall");
-@@ -680,9 +732,25 @@ export async function processResponsesStream(openaiStream, output, stream, model
+@@ -630,7 +682,9 @@ export async function processResponsesStream(openaiStream, output, stream, model
+             if (item.type === "reasoning" && slot?.type === "thinking") {
+                 const summaryText = item.summary?.map((s) => s.text).join("\n\n") || "";
+                 const contentText = item.content?.map((c) => c.text).join("\n\n") || "";
+-                slot.block.thinking = summaryText || contentText || slot.block.thinking;
++                // Some compatible endpoints finalize a streamed summary with whitespace.
++                // Keep the wire signature below unchanged for provider replay.
++                slot.block.thinking = summaryText.trim() ? summaryText : contentText.trim() ? contentText : slot.block.thinking;
+                 slot.block.thinkingSignature = JSON.stringify(item);
+                 reasoningBlocksById.set(item.id, slot.block);
+                 stream.push({
+@@ -642,7 +696,17 @@ export async function processResponsesStream(openaiStream, output, stream, model
+                 outputSlots.delete(event.output_index);
+             }
+             else if (item.type === "message" && slot?.type === "text") {
+-                slot.block.text = item.content?.map((c) => (c.type === "output_text" ? c.text : c.refusal)).join("") || "";
++                const finalText = item.content?.map((c) => (c.type === "output_text" ? c.text : c.refusal)).join("") || "";
++                const hasRefusal = item.content?.some((c) => c.type === "refusal");
++                // Preserve only an observed orphan suffix, never reconstruct or execute a call.
++                const orphanDsmlTail = /^\s*<(?:｜DSML｜ parameter(?: [^>\r\n]*)?|\/｜DSML｜ (?:parameter|invoke|calls))>/.test(finalText) &&
++                    /(?:^|\r?\n) {0,3}<\/｜DSML｜ calls>\s*$/.test(finalText) &&
++                    !/<｜DSML｜ (?:calls|invoke)(?: |>)/.test(finalText);
++                const preserveStreamed = !hasRefusal && slot.block.text.trim().length > 0 &&
++                    (!finalText.trim() || (orphanDsmlTail && slot.block.text.endsWith(finalText)));
++                // Nonempty corrections and explicit refusals remain authoritative, even shorter ones.
++                if (!preserveStreamed)
++                    slot.block.text = finalText;
+                 slot.block.textSignature = encodeTextSignatureV1(item.id, item.phase ?? undefined);
+                 stream.push({
+                     type: "text_end",
+@@ -680,9 +744,25 @@ export async function processResponsesStream(openaiStream, output, stream, model
                  });
                  outputSlots.delete(event.output_index);
              }

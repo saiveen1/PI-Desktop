@@ -151,6 +151,13 @@ This edition strengthens the existing framework rather than replacing it.
 
 ### Fixes that matter in daily use
 
+- **Responses stream content preservation.** The local compatibility repair
+  protects meaningful streamed thinking and answers from blank terminal items,
+  while retaining authoritative corrections and refusals. An exact orphan DSML
+  suffix keeps the streamed text and its diagnostic, not an executable tool call.
+  See the [diagnosis and limits](docs/maintenance/responses-terminal-content-loss.md);
+  previously lost content cannot be recovered by this change.
+
 - **Fix cascading file-tool blocking under multi-agent concurrency.** Long-running
   searches could hold a Host-wide file lease, causing repeated read/write admission
   timeouts across sessions and preventing agents from editing files. Use per-file

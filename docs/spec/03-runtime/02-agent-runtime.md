@@ -1211,6 +1211,18 @@ criterion-by-criterion report of what was met and the evidence observed.
   new chunk. The runtime keeps the full `currentAssistant` in memory, coalesces
   deltas every 16ms, and flushes before tool/terminal/abort/error/retry
   boundaries. `message_end` is the authoritative snapshot (D412).
+- The shared pi-ai Responses compatibility patch reconciles terminal items before
+  this snapshot: a whitespace-only final reasoning summary cannot overwrite
+  meaningful streamed thinking, and meaningful final reasoning content remains a
+  fallback. An empty, missing, or whitespace-only terminal message cannot erase
+  meaningful streamed answer text from the same output item. An orphan DSML
+  terminal tail preserves the full streamed text, including the diagnostic tail,
+  only when it is an exact suffix. Other nonempty revisions, including shorter
+  answers, and explicit refusals, including blank refusals, remain authoritative;
+  this is not longest-string-wins and prose is never parsed into tool calls. Item
+  isolation, replay signatures, tool ordering, usage, and stop/error/cancellation
+  semantics remain unchanged. See the [diagnosis](../../maintenance/responses-terminal-content-loss.md).
+
 - Restored assistant history reconstructs separate text and thinking blocks
   before the next turn. Assistant transport identity is `model.provider` /
   `model.id` (same as live requests), not the account row id — including when
