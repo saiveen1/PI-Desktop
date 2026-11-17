@@ -261,3 +261,17 @@ Future README edits should re-evaluate the relevant row against their actual
 source/upstream revisions, retain valid origin credit if upstream later adopts a
 local change, and avoid implying that a historical local contribution is still an
 exclusive difference. Do not regenerate this inventory from commit titles alone.
+
+### Group pagination follow-up (source candidate)
+
+Against local base `ed93df9c8` and audited upstream `047c4eab1`, the upstream
+sidebar still pages the project-wide flat history and has no
+`SidebarSessionGroups.tsx` component. This follow-up fixes the local grouping
+composition: count complete eligible group membership, then page each local
+conversation group independently. It does not claim multi-root projects or the
+original paging affordance as local inventions. The production first-render
+regression in `sidebar-group-pagination.test.mjs` failed before the fix (a
+four-member group appeared as zero); component interaction coverage exercises
+independent expansion, stable counts and visible-only selection in
+`session-organization-user-path.test.mjs`. This is source-candidate evidence,
+not an installed-release verification.

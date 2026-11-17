@@ -27,32 +27,27 @@ test("groups place each multi-label conversation exactly once and retain empty g
   assert.notEqual(sessionGroupKey("project", null), sessionGroupKey("project", ""));
 });
 
-test("running sessions keep exclusive groups and manual order while entering the first page", async () => {
+test("running sessions keep exclusive groups and manual order while entering their group's first page", async () => {
   const { prioritizeRunningSessions } = await import("../src/lib/session-organization.ts");
-  const { getVisibleProjectSessions } = await import("../src/lib/sidebar-project-sessions.ts");
-  const rows = Object.freeze(Array.from({ length: 12 }, (_, index) => Object.freeze({ id: String(index) })));
-  const assignments = {
-    "0": { groupId: "investigation", labelIds: ["one", "two"], order: 0 },
-    "5": { groupId: "fix", order: 5 },
-    "10": { groupId: "investigation", labelIds: ["one", "two"], order: 10 },
-  };
+  const { paginateSessionGroups } = await import("../src/lib/sidebar-project-sessions.ts");
+  const rows = Object.freeze(Array.from({ length: 14 }, (_, index) => Object.freeze({ id: String(index) })));
+  const assignments = Object.fromEntries(rows.map((row, index) => [row.id, {
+    groupId: index === 5 ? "fix" : "investigation", labelIds: ["one", "two"], order: index,
+  }]));
   const originalAssignments = structuredClone(assignments);
-  const ordered = prioritizeRunningSessions(rows, { "10": true, "11": true });
-  assert.deepEqual(ordered.map(row => row.id), ["10", "11", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]);
-  assert.equal(ordered[0], rows[10]);
-  const page = getVisibleProjectSessions(ordered, false);
-  assert.equal(page.hiddenCount, 2);
+  const ordered = prioritizeRunningSessions(rows, { "12": true, "13": true });
+  assert.deepEqual(ordered.map(row => row.id), ["12", "13", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"]);
+  assert.equal(ordered[0], rows[12]);
   const catalog = [...groups, { id: "empty", name: "Empty", color: "green" }];
-  const grouped = groupSessionsByGroup(page.visibleSessions, catalog, assignments);
-  assert.deepEqual(grouped.map(row => [row.group?.id ?? null, row.sessions.map(session => session.id)]), [
-    ["investigation", ["10", "0"]], ["fix", ["5"]], ["empty", []], [null, ["11", "1", "2", "3", "4", "6", "7"]],
-  ]);
-  assert.equal(new Set(grouped.flatMap(row => row.sessions.map(session => session.id))).size, 10);
-  assert.deepEqual(visibleGroupedSessionIds(grouped, "project", new Set([sessionGroupKey("project", "investigation")])),
-    ["5", "11", "1", "2", "3", "4", "6", "7"]);
+  const grouped = paginateSessionGroups(groupSessionsByGroup(ordered, catalog, assignments));
+  assert.deepEqual(grouped.map(row => row.sessions.length), [13, 1, 0]);
+  assert.deepEqual(grouped[0].visibleSessions.map(row => row.id), ["12", "13", "0", "1", "2", "3", "4", "6", "7", "8"]);
+  assert.equal(new Set(visibleGroupedSessionIds(grouped, "project", new Set())).size, 11);
+  assert.deepEqual(visibleGroupedSessionIds(grouped, "project", new Set([sessionGroupKey("project", "investigation")])), ["5"]);
   assert.deepEqual(prioritizeRunningSessions(rows, {}), rows);
-  assert.deepEqual(getVisibleProjectSessions(ordered, true).visibleSessions, ordered);
-  assert.deepEqual(rows.map(row => row.id), Array.from({ length: 12 }, (_, index) => String(index)));
+  const expanded = paginateSessionGroups(groupSessionsByGroup(ordered, catalog, assignments), { investigation: true });
+  assert.equal(expanded[0].visibleSessions.length, 13);
+  assert.deepEqual(rows.map(row => row.id), Array.from({ length: 14 }, (_, index) => String(index)));
   assert.deepEqual(assignments, originalAssignments);
 });
 

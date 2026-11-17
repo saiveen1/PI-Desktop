@@ -130,15 +130,9 @@ test("collapsing a project resets its expanded session history", () => {
 
   assert.match(
     collapseBlock,
-    /if \(value\) \{[\s\S]*?setExpandedProjectSessions\([\s\S]*?updateProjectSessionExpansion\(previous, normalized, false\)/,
+    /if \(value\) \{[\s\S]*?setExpandedSessionGroups\([\s\S]*?resetSessionGroupExpansion\(previous, projectOrganizationScope\(path, sidebarProjectGroups\)\)/,
   );
-  const loadMoreBlock = sidebarSource.match(
-    /const expandProjectSessions = \(projectKey: string\) => \{[\s\S]*?\n  \};/,
-  )?.[0] ?? "";
-  assert.match(
-    loadMoreBlock,
-    /updateProjectSessionExpansion\(previous, projectKey, true\)/,
-  );
+  assert.match(sidebarSource, /onLoadMore=\{groupId => setExpandedSessionGroups\(previous => expandSessionGroup\(previous, scope, groupId\)\)\}/);
 });
 
 test("global search stays on the conversation topbar, not the sidebar header", () => {

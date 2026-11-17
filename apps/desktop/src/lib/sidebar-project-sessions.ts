@@ -1,27 +1,34 @@
+import type { SidebarSessionGroup } from "./session-organization";
+
 export const DEFAULT_VISIBLE_PROJECT_SESSION_COUNT = 10;
+export type SessionGroupExpansion = Record<string, Record<string, boolean>>;
 
-export function updateProjectSessionExpansion(
-  expandedByProject: Record<string, boolean>,
-  projectKey: string,
-  expanded: boolean,
-): Record<string, boolean> {
-  if (expanded) return { ...expandedByProject, [projectKey]: true };
+export function expandSessionGroup(
+  expanded: SessionGroupExpansion,
+  scope: string,
+  groupId: string,
+): SessionGroupExpansion {
+  return { ...expanded, [scope]: { ...expanded[scope], [groupId]: true } };
+}
 
-  const next = { ...expandedByProject };
-  delete next[projectKey];
+export function resetSessionGroupExpansion(
+  expanded: SessionGroupExpansion,
+  scope: string,
+): SessionGroupExpansion {
+  const next = { ...expanded };
+  delete next[scope];
   return next;
 }
 
-export function getVisibleProjectSessions<T>(
-  sessions: T[],
-  expanded: boolean,
-): { visibleSessions: T[]; hiddenCount: number } {
-  const visibleSessions = expanded
-    ? sessions
-    : sessions.slice(0, DEFAULT_VISIBLE_PROJECT_SESSION_COUNT);
-
-  return {
-    visibleSessions,
-    hiddenCount: sessions.length - visibleSessions.length,
-  };
+/** Keep complete membership for counts; only the rendered/selected rows are paged. */
+export function paginateSessionGroups<T extends { id: string }>(
+  groups: readonly SidebarSessionGroup<T>[],
+  expanded: Readonly<Record<string, boolean>> = {},
+): SidebarSessionGroup<T>[] {
+  return groups.map(row => ({
+    ...row,
+    visibleSessions: expanded[row.group?.id ?? ""] === true
+      ? row.sessions
+      : row.sessions.slice(0, DEFAULT_VISIBLE_PROJECT_SESSION_COUNT),
+  }));
 }
