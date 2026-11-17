@@ -1,5 +1,13 @@
 # E2E Scenarios: Conversation and Sessions
 
+## E2E-stop-navigation-running-state
+
+Hold the history read after a successful local Stop, switch to another running session, then resolve the older session's history. Verify only the stopped session is settled, the new transcript remains and its toolbar still offers Stop. Also navigate synchronously during the hydration commit to exercise the final state writer. Coverage: `stop-navigation-running-state.test.mjs`, related smart-stop/terminal regressions, and `scripts/e2e-stop-navigation-running-state.mjs` using the production store and ComposerToolbar in Electron.
+
+## E2E-native-stop-refresh-failure
+
+Click the production Composer Stop button for a Native Pi source. Let abort succeed and reject the follow-up session detail read. Verify the toolbar returns to Send, the session running flag clears, the prior transcript remains, and the read error is shown. The regression also covers remote and rejected Stop. Coverage: `native-stop-refresh-failure.test.mjs` and `scripts/e2e-native-stop-refresh-failure.mjs` with real Electron, production store/toolbar and controlled API results.
+
 > Part of the [E2E test plan](../04-e2e-test-plan.md). Sessions, transcripts, the composer, streaming, queueing, context, and review.
 > Scenario template, gates, and traceability live in the plan.
 
@@ -3638,6 +3646,10 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
      in provider-visible content, not only details. Include a text-heavy image goal,
      duplicate image metadata and composite call/result IDs sharing a wire ID. Check
      the 16 MiB ceiling, text-only trimming preserving images, activation markers and repaired pairs.
+  10. Force a delegate's CJK history to require multiple summary chunks. Confirm
+      each request receives the preceding summary, usage sums across chunks and
+      the active brief survives. Abort the second chunk: propagate cancellation
+      without publishing the first chunk as a completed checkpoint.
 - **Expected**: Automatic session compaction starts at
    `floor(hardLimit * 0.9)` for prompt, approved-plan, and in-run turn
    preflights; the estimate includes serialized messages, the active system
@@ -4955,6 +4967,10 @@ Build two actual runtimes with identical configuration and different scratch dir
   popover lists primary first, with paths available, not conversation buckets;
   its roots share one catalog through primary changes. Remote Host/project and
   standalone scopes remain independent.
+  Fold a remote Host/project with live work, use Select visible, unfold and
+  select again, then refold. Hidden remote rows never enter range/Select visible
+  and leave the selection on refold; configured header run indicators remain
+  visible and keep complete eligible-session counts.
 - **Delegation path:** Open the local conversation's model-pool dialog, save a
   custom subset and per-model approval in both directions, switch sessions,
   reopen, reload and fork. Change approval without toggling model membership;

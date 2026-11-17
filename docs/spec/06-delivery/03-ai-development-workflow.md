@@ -88,7 +88,10 @@ Branches and worktrees are optional, not prerequisites for development.
   to match upstream; record material decisions and test both retained fixes and
   adopted updates.
 - Retire optional worktrees only when authorized and after verifying their
-  changes are committed or safely migrated. Delete no unique work.
+  changes are committed or safely migrated. Before removal, check shared pnpm
+  bin shims for paths into the worktree, repair affected shims to the primary
+  checkout, and verify the affected CLI entry points. Follow the shared-install
+  teardown check in `AGENTS.md`; do not delete the referenced worktree first.
 
 ### Windows local source launcher
 

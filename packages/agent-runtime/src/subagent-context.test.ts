@@ -294,6 +294,47 @@ describe("prepareDelegateTurnContext", () => {
     expect(prompts[0]).not.toContain("delegate system prompt");
   });
 
+  it("chains CJK delegate summary chunks and adds usage without losing the active brief", async () => {
+    const brief = "Continue the recorded task without replaying completed writes.";
+    const messages = [userMessage(brief), ...Array.from({ length: 12 }, (_, index) =>
+      assistantText(`Progress ${index}: ${"中文进展".repeat(1_500)}`))];
+    let calls = 0;
+    const { factory, prompts } = summaryModels(() => summarySuccess(`CHUNK_${++calls}`));
+    const outcome = await prepareDelegateTurnContext({
+      messages, model: retentionModel(), taskBrief: brief, retentionMode: "active_turn",
+      summaryModels: factory, signal: new AbortController().signal,
+    });
+    expect(outcome.kind).toBe("compacted");
+    expect(calls).toBeGreaterThan(1);
+    for (let index = 1; index < prompts.length; index++) {
+      expect(prompts[index]).toContain("<previous-summary>");
+      expect(prompts[index]).toContain(`CHUNK_${index}`);
+    }
+    if (outcome.kind !== "compacted") return;
+    expect(outcome.summaryUsage?.totalTokens).toBe(7 * calls);
+    expect(outcome.summaryUsage?.input).toBe(5 * calls);
+    expect(outcome.summaryUsage?.output).toBe(2 * calls);
+    expect(outcome.messages[0]).toMatchObject({ role: "compactionSummary", summary: `CHUNK_${calls}` });
+    expect(outcome.messages).toContainEqual(userMessage(brief));
+  });
+
+  it("propagates a later CJK chunk abort without publishing a partial summary", async () => {
+    const controller = new AbortController();
+    let calls = 0;
+    const { factory } = summaryModels(() => {
+      if (++calls === 1) return summarySuccess("FIRST_CHUNK");
+      controller.abort();
+      return { ...summaryFailure("aborted"), stopReason: "aborted" } as AssistantMessage;
+    });
+    const messages = [userMessage("Continue the task."), ...Array.from({ length: 12 }, () =>
+      assistantText("中文进展".repeat(1_500)))];
+    await expect(prepareDelegateTurnContext({
+      messages, model: retentionModel(), taskBrief: "Continue the task.", retentionMode: "active_turn",
+      summaryModels: factory, signal: controller.signal,
+    })).rejects.toThrow("aborted while compacting");
+    expect(calls).toBe(2);
+  });
+
   it("includes cached input in the delegate's usage anchor", async () => {
     const taskBrief = "Read the permission flow.";
     const messages: AgentMessage[] = [

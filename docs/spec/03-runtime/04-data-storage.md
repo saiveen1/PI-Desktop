@@ -1,4 +1,4 @@
-# 04. Data Storage (Schema v33)
+# 04. Data Storage (Schema v34)
 
 ### Project path aliases (#2148)
 
@@ -69,12 +69,12 @@ Existing mode snapshots, runs, gates, approvals, delegation policy/history,
 project/session groups and transcript bytes are preserved. A failed step rolls
 back its DDL, ownership and version; its backup remains. Older schemas follow
 the existing versioned chain, including the lossless image marker at version 26.
-The current schema is 32. Upstream used v30 for elapsed/queued-Goal columns;
+The current schema is 34. Upstream used v30 for elapsed/queued-Goal columns;
 local v30 reconciliation predates those columns. Before the v31 completion-report
 migration, missing elapsed and Goal-intent columns are therefore reconciled in
 the same transaction. Existing values are preserved. The delegation-history
 index is idempotently ensured at every supported version, including upstream
-v29–32 databases. Reopening schema 32 does not repeat versioned migrations or
+v29–33 databases. Reopening schema 34 does not repeat versioned migrations or
 replace backups; newer schemas fail closed and downgrade requires a compatible
 backup rather than deleting user data.
 
@@ -1877,7 +1877,7 @@ truncating at a guessed position.
 - JSON columns are read blind on hot paths (shipped to the renderer as-is);
   anything filtered or summed is a promoted column by rule.
 
-## 7. Versioning, v7 reset, and v8-to-v33 migration
+## 7. Versioning, v7 reset, and v8-to-v34 migration
 
 - `PRAGMA user_version` stays the schema authority; future structural changes
   add ordered Rust migration fns again, each in one transaction, with a
@@ -1888,7 +1888,7 @@ truncating at a guessed position.
   Sessions, providers, and settings from the old file are not carried over;
   the archive remains for manual recovery. All pre-v7 migration code
   (v1 `settings.sqlite` import, v2→v6 chain) is deleted.
-- Fresh installs run the full v33 DDL directly.
+- Fresh installs run the full v34 DDL directly.
 - **Schema v7 first reaches v8, then uses the guarded path.** The v7→v8
   migration is followed by the same guarded v8→v15 migration; schema-v9 and
   schema-v10 databases take the same guarded path and receive an exact readable
@@ -1965,7 +1965,7 @@ truncating at a guessed position.
   session `/fast` switch, defaulting to `0` for every existing session. Forks
   copy it; scheduled runs and delegated workers start at `0`. The migration
   keeps a v26 backup.
-- **Schema v33 is additive.** The v32→v33 migration adds
+- **Historical local schema v33 is additive.** The v32→v33 migration added
   `sessions.observer_mode TEXT NOT NULL DEFAULT 'off'` with the same exact
   three-value CHECK as fresh databases. It first creates a readable
   `pi.sqlite.v32.bak`, probes for an existing column for idempotent upgrades,
@@ -2370,3 +2370,51 @@ does not repeat the migration. Earlier supported mode schemas upgrade through
 their existing migrations first. Host mode-id, snapshot, and permission validation
 is unchanged. Older binaries reject schema 32; rollback uses the retained
 `pi.sqlite.v31.bak` rather than deleting user data.
+
+### Retired independent Goal storage (historical upstream schema 33)
+
+Before the v32-to-v33 transaction, the Host verifies a `pi.sqlite.v32.bak`
+backup. The transaction retires only the obsolete
+`turn_execution_snapshot` trigger from the withdrawn independent Goal
+implementation. Its `turn_execution`, `goal_turns`, and `session_goals` tables,
+records, indexes, and other triggers remain intact; no new turns are written to
+that archived execution ledger. A custom mode can then start and finish a turn
+without being copied into its builtin-only mode CHECK.
+
+That historical candidate also used schema 32. The new migration therefore
+checks the actual sessions definition again and reuses the schema-32 repair
+when its builtin-only CHECK remains. Already-unconstrained sessions are not
+rebuilt. Foreign-key validation precedes commit, failures roll back both the
+trigger retirement and any table replacement, and connection PRAGMAs are
+restored on all exit paths. Earlier supported versions follow their existing
+upgrade chain first. Reopening schema 33 does not repeat the repair or replace
+the backup. Mode snapshots, permissions, and staged-run contracts are unchanged.
+Older Host binaries reject schema 33; retain the compatible backup rather than
+deleting application data or manually lowering the version marker.
+
+### Dual-v33 reconciliation (schema 34)
+
+Local v33 added Observer consent; upstream v33 retired the independent Goal
+writer. Neither version marker proves the other change exists. Current startup
+upgrades either actual v32/v33 shape directly to v34, after verifying a backup
+named for its original version (`pi.sqlite.v32.bak` or `pi.sqlite.v33.bak`).
+Older supported versions first follow the preserved v28 history-index, dual-v29
+reconciliation, elapsed-column and completion-report migration chain.
+
+One transaction adds a missing `sessions.observer_mode` with strict
+`off`/`observe`/`guard` validation and default `off`, retains any existing explicit
+consent unchanged, drops only `turn_execution_snapshot`, removes any remaining
+builtin-only sessions mode CHECK, and ensures the personal Task-history index.
+The table repair uses the actual DDL and dynamically copies writable columns;
+additive fields, generated columns, rows, unrelated checks, indexes, triggers,
+views and foreign keys survive. Archived Goal tables and transcript bytes are
+not rewritten. A custom mode can start and finish turns without reviving that
+legacy ledger.
+
+Foreign-key validation precedes the v34 stamp and commit. Any failure rolls back
+all column, trigger, index, table and version changes together, retaining the
+verified source backup. The rebuild restores the original `foreign_keys` and
+`legacy_alter_table` connection settings on success and failure. Fresh databases
+have both repairs; repeated opens of v34 do not rerun migration or replace its
+backups. Downgrade requires a complete compatible backup, not lowering the
+version marker or deleting data.

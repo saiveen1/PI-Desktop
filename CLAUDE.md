@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Policy-Sync: 2026-11-12.personal-edition.6
+Policy-Sync: 2026-11-17.personal-edition.1
 
 Claude Code / Claude Cowork entry point for PI-Desktop.
 

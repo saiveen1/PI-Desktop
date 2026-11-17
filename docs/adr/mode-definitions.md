@@ -24,9 +24,14 @@ global-only discovery (D202).
 
 `~/.pi/modes/<name>/mode.md` holds YAML frontmatter and a Markdown body that is the
 shared system prompt, with optional artifact templates in `templates/`; builtins
-`agent`, `plan` and `goal` use the same format, and their reserved ids make a user
-document using one reported in settings and not loaded. Discovery is global only, and
-settings re-read the directory on each catalog load. A simple mode is a prompt and a
+`agent`, `plan` and `goal` use the same format. A document in a builtin's own folder
+(`~/.pi/modes/goal/mode.md`) overrides that builtin: Settings → Modes edits it in
+place and Restore default deletes the file. An override must keep the shape the
+builtin's id-keyed behavior relies on (Agent and Plan stay simple at `agent` and
+`contract`; Goal stays staged and returns to `agent`); an invalid one is reported and
+the shipped definition stays in effect. Any other document that claims a builtin id
+is reported and not loaded. Discovery is global only, and settings re-read the
+directory on each catalog load. A simple mode is a prompt and a
 permission level, without stages or a run:
 
 ```markdown
@@ -166,14 +171,16 @@ if it was deleted. `mode_snapshots` stores immutable definitions, `mode_runs`
 stores state/claims/budgets/usage/retries/rounds, and `mode_gate_results` stores
 bounded action evidence. Existing Plan approvals stay valid.
 
-The integrated database is schema 32. The local schema-30 reconciliation already
-preserved delegation history and both independent schema-29 shapes. Upstream's
+The integrated database is schema 34. The local schema-30 reconciliation
+preserves delegation history and both independent schema-29 shapes. Upstream's
 elapsed clock and queued Goal columns are added when missing, transactionally
-before schema 31's completion-report migration; existing local v30 databases are
-not mistaken for the upstream v30 shape. Schema 32 removes the builtin-only
-session-mode CHECK without losing user data. The history index is idempotently
-reconciled for every supported version. Backups, rollback and transcript ownership
-remain authoritative; see the [storage contract](../spec/03-runtime/04-data-storage.md).
+before schema 31's completion-report migration; local v30 databases are not
+mistaken for upstream v30. Schema 32 removes the builtin-only session-mode CHECK.
+The two independent v33 histories introduced Observer consent and legacy Goal
+trigger retirement respectively; v34 reconciles both without changing existing
+consent or deleting Goal history. The history index is idempotently reconciled.
+Backups, rollback and transcript ownership remain authoritative; see the
+[storage contract](../spec/03-runtime/04-data-storage.md).
 
 ### 9. Builtins and compatibility
 
@@ -181,15 +188,18 @@ remain authoritative; see the [storage contract](../spec/03-runtime/04-data-stor
   no model-facing `new_context` or `CompactContext` tool is registered. Stage
   artifact injection still follows automatic, manual and trusted-extension
   compaction. See [runtime-owned compaction](runtime-owned-context-compaction.md).
-- `agent`: a simple mode.
+- `agent`: a simple mode. Agent and Plan prompts come from the runtime builtins unless
+  an override is in effect, in which case its definition is sent with the turn; the
+  Host never needs a snapshot for either.
 - `plan`: a simple `contract` mode keeping the ADR 0053 proposal pipeline unchanged
   (EnterPlanMode, SubmitPlan, approval, queued execution) with the same behavior, tool
   names and stored approvals; a staged Plan would rewrite a released approval flow.
 - `goal`: stage `work` (`agent`, `loop`, artifact `goal` from a template seeded with
   `{{run.input}}`, `inject` on compaction, gate `require: artifact:goal` with headings
   Objective, Acceptance criteria and Evidence), completion staying a model self-report,
-  with a new run taking its budget from the valid `goalBudget` setting or else the
-  definition. The legacy `EnterGoalMode` / `SubmitGoal` negotiation is no longer offered
+  with a new run taking the definition budget. The default budget is edited in the
+  Goal override file; there is no separate settings value, and an open run's budget
+  is edited through `modes.update`. The legacy `EnterGoalMode` / `SubmitGoal` negotiation is no longer offered
   and the Host rejects new proposals with `PLAN_GOAL_ACTIVATION_DISABLED`, while old
   approval rows stay readable; accepted Goal input returns the composer preference to
   Agent without changing the run, its snapshot or its claim.

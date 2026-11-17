@@ -987,7 +987,9 @@ The incoming user prompt participates in budgeting before the first provider
 request. The automatic summary request retries transient provider failures
 under a bounded pi-ai retry policy (3 retries, 2s/4s/8s backoff, cancelled by
 Stop); deterministic failures such as quota or auth return at once. The
-preflight guard sizes the actual serialized prompt rather than raw messages.
+preflight guard sizes the actual serialized prompt rather than raw messages,
+including the CJK correction shared with the output-cap estimator (Han, kana,
+and Hangul are charged near one token per character, not the chars/3.5 baseline).
 Tool results keep both ends within 2,000 characters; one reduced pass uses
 500 characters and drops thinking without removing messages. User images are
 marked as present but not visually included in the text input. Summary and

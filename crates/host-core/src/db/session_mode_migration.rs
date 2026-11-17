@@ -5,7 +5,7 @@ use rusqlite::Transaction;
 /// Existing databases can retain the builtin-only mode CHECK even though the
 /// current schema and Host accept validated custom mode ids. Remove only that
 /// legacy constraint, preserving the rest of the actual sessions definition.
-fn widen_session_modes(tx: &Transaction<'_>) -> Result<()> {
+pub(super) fn widen_session_modes(tx: &Transaction<'_>) -> Result<()> {
     let sql: String = tx.query_row(
         "SELECT sql FROM sqlite_master WHERE type='table' AND name='sessions'",
         [],
@@ -26,12 +26,22 @@ fn widen_session_modes(tx: &Transaction<'_>) -> Result<()> {
         .prepare("SELECT sql FROM sqlite_master WHERE tbl_name='sessions' AND type IN ('index','trigger') AND sql IS NOT NULL ORDER BY type,name")?
         .query_map([], |row| row.get::<_, String>(0))?
         .collect::<rusqlite::Result<Vec<_>>>()?;
+    // Copy actual writable columns, retaining additive fields and allowing SQLite
+    // to recompute generated columns rather than trying to insert into them.
+    let columns = tx
+        .prepare("SELECT name FROM pragma_table_xinfo('sessions') WHERE hidden=0 ORDER BY cid")?
+        .query_map([], |row| row.get::<_, String>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?
+        .into_iter()
+        .map(|name| format!("\"{}\"", name.replace('"', "\"\"")))
+        .collect::<Vec<_>>()
+        .join(",");
     tx.execute_batch(&create)?;
-    tx.execute_batch(
-        "INSERT INTO sessions_v32 SELECT * FROM sessions;
+    tx.execute_batch(&format!(
+        "INSERT INTO sessions_v32 ({columns}) SELECT {columns} FROM sessions;
          DROP TABLE sessions;
-         ALTER TABLE sessions_v32 RENAME TO sessions;",
-    )?;
+         ALTER TABLE sessions_v32 RENAME TO sessions;"
+    ))?;
     for object in objects {
         tx.execute_batch(&object)?;
     }
@@ -45,14 +55,7 @@ fn widen_session_modes(tx: &Transaction<'_>) -> Result<()> {
 
 pub(super) fn migrate(conn: &Connection, path: &Path) -> Result<()> {
     let backup = create_migration_backup(conn, path, 31)?;
-    let foreign_keys: bool = conn.pragma_query_value(None, "foreign_keys", |row| row.get(0))?;
-    let legacy_alter_table: bool =
-        conn.pragma_query_value(None, "legacy_alter_table", |row| row.get(0))?;
-    conn.pragma_update(None, "foreign_keys", false)?;
-    let result = (|| {
-        // Keep dependent views/triggers and child FK targets unchanged while
-        // sessions is briefly absent inside the transactional replacement.
-        conn.pragma_update(None, "legacy_alter_table", true)?;
+    super::schema_rebuild::with_table_rebuild(conn, || {
         let tx = conn.unchecked_transaction()?;
         widen_session_modes(&tx)?;
         tx.pragma_update(None, "user_version", 32i64)?;
@@ -62,13 +65,7 @@ pub(super) fn migrate(conn: &Connection, path: &Path) -> Result<()> {
                 backup.display()
             )
         })
-    })();
-    // Attempt both restores even when migration or the other restore fails.
-    let restore_alter = conn.pragma_update(None, "legacy_alter_table", legacy_alter_table);
-    let restore_keys = conn.pragma_update(None, "foreign_keys", foreign_keys);
-    restore_alter.context("restore legacy alter table after session mode migration")?;
-    restore_keys.context("restore foreign keys after session mode migration")?;
-    result
+    })
 }
 
 #[cfg(test)]

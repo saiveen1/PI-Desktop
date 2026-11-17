@@ -9,6 +9,7 @@ import { Sidebar } from "../../src/components/Sidebar";
 import { SessionDelegationModels } from "../../src/features/sessions/SessionDelegationModels";
 import { DelegationSelectionSummary } from "../../src/features/chat/transcript/DelegationSelectionSummary";
 import { useAppStore } from "../../src/stores/app-store";
+import { remoteProjectCollapseKey, remoteProjectKey } from "../../src/lib/remote-project-catalog";
 import "../../src/styles/tokens.css";
 import "../../src/styles/base.css";
 import "../../src/styles/ui-kit.css";
@@ -243,10 +244,31 @@ window.sidebarLabelGroupingProbe = async () => {
   check(count("investigation") === 12 && visible("investigation") === 10 && visible("fix") === 4, "project collapse did not reset group pages with stable counts");
   click(group("").querySelector(".sidebar-load-more"));
   check(visible("") === 14 && visible("investigation") === 10 && count("") === 14, "ungrouped pagination leaked into another group");
+  const remoteKey = remoteProjectKey("fixture-host", "fixture-project");
+  const remoteRows = ["one", "two"].map(id => ({ ...session(`remote:fixture-host:${id}`), source: "remote",
+    remoteHostKey: "fixture-host", remoteProjectId: "fixture-project", remoteWorkspaceLabel: "Remote fixture" }));
+  flushSync(() => useAppStore.setState({ sessions: [session("local-visible"), ...remoteRows], sessionMeta: {},
+    settings: { ...original.settings, sidebarRunningIndicators: true },
+    projectCollapsed: { [remoteProjectCollapseKey(remoteKey)]: true },
+    runningSessions: { [remoteRows[0].id]: true } }));
+  const remoteGroup = row(remoteRows[0].id).closest("[data-sidebar-project-group]");
+  check(remoteGroup.classList.contains("is-collapsed"), "remote project did not restore its fold");
+  check(remoteGroup.querySelector(".project-run-badges"), "folded remote project lost its running badge");
+  click(document.querySelector('[data-action="select-sessions"]'));
+  click(checkbox("Select visible", toolbar()));
+  check(chosen().join() === "local-visible", "collapsed remote sessions entered visible selection");
+  click(remoteGroup.querySelector('[data-action="toggle-project-collapse"]'));
+  check(!remoteGroup.classList.contains("is-collapsed"), "remote project did not expand");
+  click(checkbox("Select visible", toolbar()));
+  check(chosen().length === 3, "expanded remote project lost selectable rows");
+  click(remoteGroup.querySelector('[data-action="toggle-project-collapse"]'));
+  await waitFor(() => chosen().join() === "local-visible", "remote fold removes hidden selections");
+  await done();
   flushSync(() => useAppStore.setState({
     sessions: original.sessions, activeProjectPath: original.activeProjectPath, workspace: original.workspace, runningSessions: original.runningSessions,
     sessionMeta: original.sessionMeta, sessionLabels: original.sessionLabels,
     sessionOrganization: original.sessionOrganization,
+    projectCollapsed: original.projectCollapsed, settings: original.settings,
     selectSession: original.selectSession, activeSessionId: original.activeSessionId,
   }));
   document.documentElement.dataset.theme = "light";

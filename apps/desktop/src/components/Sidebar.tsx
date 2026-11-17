@@ -6,7 +6,7 @@ import { SessionOrganizationDialog, type SessionOrganizationTarget } from "../fe
 import { ProjectFolderReferences } from "../features/sessions/ProjectFolderReferences";
 import { useSidebarProjectCatalog } from "../features/sessions/useSidebarProjectCatalog";
 import { RemoteProjectGroups } from "./remote/RemoteProjectGroups";
-import { groupRemoteProjectSessions } from "../lib/remote-project-catalog";
+import { groupRemoteProjectSessions, remoteProjectCollapseKey } from "../lib/remote-project-catalog";
 import { isRemoteSession, sessionAllows } from "../lib/remote-session-safety";
 import {
   useCallback,
@@ -1088,7 +1088,7 @@ export function Sidebar({
     for (const entry of projectEntries) {
       if (!(entry.meta.collapsed ?? projectCollapsed[entry.key] ?? false)) add(projectOrganizationScope(entry.path, sidebarProjectGroups));
     }
-    for (const group of remoteProjectGroups) add(`remote:${group.project.key}`);
+    for (const group of remoteProjectGroups) if (!projectCollapsed[remoteProjectCollapseKey(group.project.key)]) add(`remote:${group.project.key}`);
     return [...new Set(ids)];
   }, [pinnedSessions, sessionGroupsByScope, collapsedSessionGroups, projectEntries, projectCollapsed, remoteProjectGroups, sidebarProjectGroups]);
   const selection = useSessionSelection(flatSessionOrder);

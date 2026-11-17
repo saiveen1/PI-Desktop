@@ -1496,13 +1496,22 @@ Use synthetic Darwin x64/arm64 uname responses through production SSH bootstrap,
 ## E2E-PERSONAL-upstream-mode-integration
 - **Environment:** Current integration candidate, synthetic provider/Host boundaries
   and isolated temporary databases; no installed application or real profile.
-- **Steps:** Upgrade both schema-v29 shapes and personal v30 to schema 32, reopen
-  and verify preserved feature tables/data plus elapsed/Goal/report columns and
-  the history index. Exercise older upgrades, future rejection, backups and rollback.
+- **Steps:** Upgrade both schema-v29 shapes, personal v30 and both populated
+  v32/v33 shapes (local Observer consent versus upstream retired Goal writer)
+  to schema 34, then reopen twice. Verify preserved feature tables/data,
+  elapsed/Goal/report columns, Task-history index and transcript bytes. Retain
+  explicit `observe`/`guard`, default missing/omitted consent to `off`, and reject
+  invalid consent. Start/finish a custom-mode turn without populating the retired
+  ledger. Verify additive/generated columns, indexes, views, unrelated triggers,
+  child rows and FK enforcement. Exercise older upgrades, future rejection,
+  original-version backups, atomic rollback and restoration of both rebuild
+  PRAGMAs on failure; repeated opens must not replace backups.
   Configure mode snapshots while retaining session delegation model pools and
   approvals. Run staged-mode completion and pause closeout beside ordinary Agent
   unfinished-checklist continuation. Probe tool discovery and restored history.
-- **Expected:** Neither v29 shape skips required migration or loses records.
+- **Expected:** Neither historical v29 or v33 shape skips a required repair or
+  loses records. Fresh and upgraded databases expose the same final contracts.
+  Failed reconciliation preserves the original schema/version and verified backup.
   Mode snapshots and delegation policy coexist without weakening admission or
   permission checks. Automatic/manual/trusted-extension compaction remains usable;
   `new_context` and `CompactContext` never return to the model tool catalog.

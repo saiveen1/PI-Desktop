@@ -26,6 +26,7 @@ import { cx, TooltipButton } from "../../components/ui";
 import { WindowControls } from "../../components/WindowControls";
 import { useCopyTex } from "../../hooks/use-copy-tex";
 import { api } from "../../lib/api";
+import { installMaximizedWindowChrome } from "../../lib/maximized-window-chrome";
 import { PortalVisibilityProvider } from "../../lib/portal-visibility";
 import { workPanelLayout } from "../../lib/work-panel-resize";
 import { LiveVoiceStatusHost } from "../voice/live/LiveVoiceStatusHost";
@@ -107,6 +108,9 @@ export function AppShell() {
   const [toastAnchor, setToastAnchor] = useState<HTMLElement | null>(null);
   const [delegationsOpen, setDelegationsOpen] = useState(false);
   useCopyTex();
+  useEffect(() => installMaximizedWindowChrome(
+    window.piDesktop?.platform ?? "darwin", document, window, api,
+  ), []);
 
   useEffect(() => {
     void loadChatSurface().catch((error: unknown) => {

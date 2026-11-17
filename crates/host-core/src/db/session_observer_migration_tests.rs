@@ -89,7 +89,7 @@ fn observer_migration_v32_preserves_every_legacy_session_field_messages_and_meta
     for _ in 0..2 {
         let upgraded = Database::open(&path).unwrap();
         assert_eq!(version(upgraded.conn()), SCHEMA_VERSION);
-        assert_eq!(SCHEMA_VERSION, 33);
+        assert_eq!(SCHEMA_VERSION, 34);
         assert_eq!(rows(upgraded.conn(), &session_sql), old_sessions);
         for (table, expected) in related.iter().zip(&old_related) {
             assert_eq!(
@@ -199,7 +199,7 @@ fn observer_migration_preserves_preexisting_column_on_idempotent_upgrade() {
     db.conn().pragma_update(None, "user_version", 32).unwrap();
     drop(db);
     let db = Database::open(&path).unwrap();
-    assert_eq!(version(db.conn()), 33);
+    assert_eq!(version(db.conn()), 34);
     assert_eq!(
         sessions::session_summary(&db, &session.id)
             .unwrap()

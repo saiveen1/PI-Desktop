@@ -16,7 +16,6 @@ import { AutoContinueUnfinishedTodosRow } from "../../../components/settings/Aut
 import { AgentOutputGuardSettings } from "../../../components/settings/AgentOutputGuardSettings";
 import { ObserverGuardSettings } from "../../../components/settings/ObserverGuardSettings";
 import { ComputerUseSettings } from "../computer-use/ComputerUseSettings";
-import { GoalBudgetSettingsRow } from "../../modes/GoalBudgetSettingsRow";
 import { CommandShellRow, SettingsCard, SettingsRow } from "../primitives";
 
 export function AgentBehaviorSettings({
@@ -50,7 +49,6 @@ export function AgentBehaviorSettings({
             role="group"
           />
         </SettingsRow>
-        <GoalBudgetSettingsRow settings={settings} saveSettings={saveSettings} />
         <SettingsRow
           title={t("settings.permissionMode")}
           description={t("settings.permissionModeDesc")}

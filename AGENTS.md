@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Policy-Sync: 2026-11-12.personal-edition.6
+Policy-Sync: 2026-11-17.personal-edition.1
 
 Mandatory rules for AI coding agents and maintainers working in PI-Desktop.
 
@@ -245,6 +245,26 @@ runtime environment solely to execute E2E. Isolate mutable test state
 (temporary profiles, data directories, sockets, ports, logs, artifacts) from
 the user's live state. Install or rebuild only for missing or incompatible
 dependencies, and record why. Clean CI/release runners may use lockfiles.
+
+### Shared install teardown
+
+A worktree that shares the primary checkout's `node_modules` also shares
+its pnpm bin shims. Shims written from inside the worktree record absolute
+worktree paths, so removing the worktree silently breaks `tsc`, `electron`,
+`vitest`, `electron-builder`, and every other package script in the primary
+checkout.
+
+Before removing a worktree, confirm no shim still references one:
+
+```bash
+grep -h "worktrees/" node_modules/.bin/* apps/*/node_modules/.bin/* \
+  packages/*/node_modules/.bin/* | grep -v "^# cmd-shim-target="
+```
+
+The command must print nothing. If it does, rewrite the offending shims
+back to the primary checkout path, then verify `tsc --version` and
+`electron --version` actually run. Never delete the worktree first and
+leave the shared shims dangling.
 
 ### Optional upstream contribution
 
