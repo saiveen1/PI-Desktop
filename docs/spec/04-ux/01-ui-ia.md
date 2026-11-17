@@ -249,6 +249,13 @@ destination, chat as the home surface, tools and permissions inline.
   migration is required.
   Motion is decoration only: `prefers-reduced-motion` keeps both static
   shapes legible with the animation removed.
+- **Read state**: the single-conversation overflow and context menus offer
+  **Mark as unread** or **Mark as read**, without navigating. Manual unread
+  persists in device-local sidebar preferences and never creates a notification
+  or changes project outcome counts. Explicitly opening the conversation clears
+  the manual mark; simply focusing the window does not. **Mark as read** also
+  acknowledges that conversation's existing unread task outcomes without
+  removing their history or acting on pending approvals.
 - **Running-first display**: within each conversation group, running sessions
   precede idle sessions stably; Ungrouped applies the same rule to its own rows.
   Running candidates are considered before project pagination. Group order,

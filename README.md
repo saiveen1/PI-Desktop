@@ -120,7 +120,8 @@ This edition strengthens the existing framework rather than replacing it.
   existing conversation preserves group disclosure. Forking a conversation or a
   reply keeps the new conversation in the source's group. Manual
   moves and accepted user sends update activity order, not merely opening a chat
-  or receiving streamed output.
+  or receiving streamed output. Mark a conversation read or unread from its row
+  menu; unread markers are saved on this device and clear when you reopen the chat.
 - **Visible selection and reversible deletion.** Extend existing modifier-key
   selection with checkboxes, selection controls, and batch archive/unarchive.
   Local Desktop sessions gain a recycle bin with restore and separately confirmed

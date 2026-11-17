@@ -5226,6 +5226,24 @@ Build two actual runtimes with identical configuration and different scratch dir
   the wider history/remount/authorization matrix remains covered only by the
   applicable existing regression suites or pending integrated acceptance.
 
+## E2E-SESSION-manual-read-state: Mark a sidebar conversation read or unread
+
+- **Preconditions:** An isolated Desktop profile with at least two conversations.
+- **Steps:** In one conversation's row menu, mark it unread without opening it.
+  Reload, then use the context menu to mark it read. Mark it unread again and
+  open it. Mark the active conversation unread while it is still selected.
+  With task outcomes for both conversations, mark only the first one read.
+- **Expected:** An accessible unread marker persists across preference reload;
+  marking read or explicitly opening the conversation clears it. Marking the
+  selected row unread preserves selection. No manual unread creates a bell item,
+  and marking read acknowledges only the chosen conversation's task outcomes.
+- **Specs linked:** [UI IA](../../04-ux/01-ui-ia.md#32-sidebar-project-groups),
+  [design system](../../04-ux/07-ui-design-system.md#45-sidebar-task-status-semantics).
+- **Acceptance criterion:** C (conversation), F (persistence), Quality.
+- **Milestone:** Personal-edition maintenance.
+- **Status:** Automated in the isolated production Sidebar session-organization
+  fixture using a local preference round trip and synthetic Host responses.
+
 ## E2E-IMAGES-tool-inspection
 - **Preconditions:** Current task candidate; isolated test profile and synthetic
   PNG/JPEG inputs; stub model transport. No live Desktop profile or paid provider.

@@ -26,6 +26,7 @@ export type SessionMeta = {
   color?: SessionColor;
   pinned?: boolean;
   archived?: boolean;
+  unread?: true;
   order?: number;
   /** Survives renderer restarts so automatic titles never replace a manual one. */
   manualTitle?: boolean;
@@ -130,6 +131,7 @@ function cleanSessionMeta(value: unknown): Record<string, SessionMeta> {
     const manualTitle = bool(raw.manualTitle);
     if (pinned !== undefined) item.pinned = pinned;
     if (archived !== undefined) item.archived = archived;
+    if (raw.unread === true) item.unread = true;
     if (order !== undefined) item.order = order;
     if (manualTitle !== undefined) item.manualTitle = manualTitle;
     if (Object.keys(item).length) output[id] = item;

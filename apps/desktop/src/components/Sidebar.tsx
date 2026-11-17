@@ -1134,7 +1134,7 @@ export function Sidebar({
             : status === "failed"
               ? "Failed"
               : "Permission required";
-    const label = t(labelKey, { defaultValue: fallback });
+    const label = status === "unread" ? t("nav.sessionUnread") : t(labelKey, { defaultValue: fallback });
     return (
       <span className={`thread-item-status ${status}`} aria-label={label} title={label}>
         {status === "completed" ? <IconCheck size={10} aria-hidden /> : null}
@@ -1519,6 +1519,7 @@ export function Sidebar({
       const archived = sessionArchived(session, meta);
       const pinned = sessionPinned(session, meta);
       const native = session.source === "pi-native";
+      const unread = Boolean(meta.unread || sessionOutcomes[session.id]);
       const siblings = filtered.filter(row => sessionOrganizationScope(row, sidebarProjectGroups) === scope &&
         sessionMeta[row.id]?.groupId === meta.groupId && !sessionPinned(row, sessionMeta[row.id]) && sessionArchived(row, sessionMeta[row.id]) === archived).sort(compareSessions);
       const position = siblings.findIndex(row => row.id === session.id);
@@ -1572,6 +1573,16 @@ export function Sidebar({
                   },
                 }),
               ]),
+          sidebarMenuAction({
+            id: "toggle-session-read",
+            label: t(unread ? "nav.markSessionRead" : "nav.markSessionUnread"),
+            onSelect: () => {
+              closeMenus();
+              const state = useAppStore.getState();
+              state.setSessionUnread(session.id, !unread);
+              if (unread) void state.acknowledgeSessionOutcome(session.id).catch(reportError);
+            },
+          }),
           sidebarMenuAction({
             id: "toggle-session-pin",
             label: pinned
@@ -1656,10 +1667,12 @@ export function Sidebar({
       copySessionPath,
       copySessionLink,
       forkSession,
+      reportError,
       openSessionPath,
       requestDeleteSession,
       runningSessions,
       sessionMeta,
+      sessionOutcomes,
       sessionWorktreeItems,
       sessionLabels,
       sessionOrganization,
@@ -1969,6 +1982,7 @@ export function Sidebar({
     const status = sidebarSessionStatus({
       running,
       selected: active,
+      unread: meta.unread,
       outcome: sessionOutcomes[session.id],
       hasPendingPermission,
     });
@@ -2071,6 +2085,7 @@ export function Sidebar({
           aria-current={active ? "page" : undefined}
           aria-describedby={sessionHoverCard?.session.id === session.id ? `session-hover-${session.id}` : undefined}
         >
+          {meta.unread ? <span className="sr-only">{t("nav.sessionUnread")}</span> : null}
           {sessionPinned(session, meta) ? (
             <IconPin size={11} className="thread-item-pin" aria-hidden />
           ) : null}

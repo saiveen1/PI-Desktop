@@ -8,6 +8,7 @@ import { IPC } from "@pi-desktop/shared";
 import { Sidebar } from "../../src/components/Sidebar";
 import { SessionDelegationModels } from "../../src/features/sessions/SessionDelegationModels";
 import { DelegationSelectionSummary } from "../../src/features/chat/transcript/DelegationSelectionSummary";
+import { loadSidebarPreferences } from "../../src/lib/sidebar-preferences";
 import { useAppStore } from "../../src/stores/app-store";
 import { remoteProjectCollapseKey, remoteProjectKey } from "../../src/lib/remote-project-catalog";
 import "../../src/styles/tokens.css";
@@ -49,6 +50,11 @@ window.piDesktop = {
     const ok = (data) => ({ ok: true, data });
     const failure = (message) => ({ ok: false, error: { code: "INTERNAL", message } });
     if (channel === IPC.invoke.sessionList) return ok({ sessions: [...database.values()].filter((item) => !item.deletedAt) });
+    if (channel === IPC.invoke.sessionGet) return ok({ session: { ...database.get(input.id), messages: [{ id: "reply", role: "assistant", content: "Fixture response" }] } });
+    if (channel === IPC.invoke.notificationMarkRead) {
+      calls.push([channel, input.id]);
+      return ok({ ok: true });
+    }
     if (channel === IPC.invoke.sessionConfigure) {
       if (failConfigure) { failConfigure = false; return failure("fixture configure denied"); }
       const item = { ...database.get(input) };
@@ -327,6 +333,42 @@ window.sidebarLabelGroupingProbe = async () => {
 
 window.organizationProbe = async () => {
   await waitFor(() => row("alpha"), "sidebar rendered");
+  const readMenu = () => document.querySelector('[data-action="toggle-session-read"]');
+  const unreadDot = () => row("alpha").querySelector('.thread-item-status.unread');
+  const openReadMenu = label => {
+    click(row("alpha").querySelector('[data-action="session-menu"]'));
+    const action = readMenu();
+    check(action?.textContent.trim() === label, "wrong read-state menu label: " + label);
+    return action;
+  };
+  click(openReadMenu("Mark as unread"));
+  check(unreadDot()?.title === "Unread", "manual unread did not render a labeled dot");
+  check(loadSidebarPreferences().sessionMeta.alpha.unread, "manual unread was not persisted");
+  check(useAppStore.getState().unreadNotificationCount === 0 && !useAppStore.getState().activeSessionId,
+    "marking unread notified or navigated");
+  flushSync(() => row("alpha").dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 10, clientY: 50 })));
+  check(readMenu()?.textContent.trim() === "Mark as read", "right-click did not expose mark as read");
+  click(readMenu());
+  check(!unreadDot() && !loadSidebarPreferences().sessionMeta.alpha.unread, "marking read did not clear the persisted dot");
+  check(loadSidebarPreferences().sessionMeta.alpha.pinned, "marking read removed an unrelated pin");
+  click(openReadMenu("Mark as unread"));
+  click(row("alpha").querySelector(".thread-item-main"));
+  await waitFor(() => useAppStore.getState().activeSessionId === "alpha" && !useAppStore.getState().selectingSessionId, "open marked conversation");
+  check(!unreadDot() && !loadSidebarPreferences().sessionMeta.alpha.unread, "opening did not clear the unread marker");
+  click(openReadMenu("Mark as unread"));
+  check(unreadDot() && row("alpha").classList.contains("active"), "marking selected conversation unread lost selection or the dot");
+  flushSync(() => {
+    for (const sessionId of ["alpha", "beta"]) {
+      useAppStore.getState().receiveNotification({ id: "outcome-" + sessionId, sessionId, sessionTitle: sessionId,
+        turnId: "turn-" + sessionId, kind: "task.completed", createdAt: new Date().toISOString(), readAt: null });
+    }
+  });
+  click(openReadMenu("Mark as read"));
+  await waitFor(() => useAppStore.getState().unreadNotificationCount === 1, "target task outcome acknowledged");
+  check(!unreadDot() && useAppStore.getState().sessionOutcomes.beta === "completed", "marking read cleared another conversation's outcome");
+  check(calls.filter(([channel]) => channel === IPC.invoke.notificationMarkRead).map(([, id]) => id).join() === "outcome-alpha",
+    "marking read did not acknowledge exactly the target task notification");
+  flushSync(() => useAppStore.setState({ activeSessionId: undefined, notifications: [], unreadNotificationCount: 0, sessionOutcomes: {} }));
   flushSync(() => useAppStore.getState().setSessionGroups("temporary", [{ id: "done", name: "Done", color: "green" }]));
   for (const target of ["done", "none"]) {
     click(row("beta").querySelector('[data-action="session-menu"]'));

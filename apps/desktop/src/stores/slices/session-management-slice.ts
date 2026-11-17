@@ -9,6 +9,7 @@ export type SessionManagementState = SessionOrganizationState & {
   sessionLabels: SessionLabel[];
   sessionFilter: SessionFilter;
   markSession: (id: string, patch: { labelIds?: string[]; color?: SessionColor | null }) => void;
+  setSessionUnread: (id: string, unread: boolean) => void;
   ensureSessionOrder: () => void;
   raiseSession: (id: string) => void;
   reorderSession: (id: string, targetId: string, after?: boolean) => void;
@@ -31,6 +32,17 @@ export function createSessionManagementSlice({ get, set, persist }: StoreAccess 
         if (color) next.color = color; else delete next.color;
       }
       set({ sessionMeta: { ...state.sessionMeta, [id]: next } });
+      persist(get);
+    },
+    setSessionUnread: (id, unread) => {
+      const { sessionMeta, sessions } = get();
+      const current = sessionMeta[id];
+      if (Boolean(current?.unread) === unread || (unread && !sessions.some(row => row.id === id))) return;
+      const next = { ...current };
+      if (unread) next.unread = true; else delete next.unread;
+      const updated = { ...sessionMeta };
+      if (Object.keys(next).length) updated[id] = next; else delete updated[id];
+      set({ sessionMeta: updated });
       persist(get);
     },
     ensureSessionOrder: () => {

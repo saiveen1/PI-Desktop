@@ -66,6 +66,14 @@ test("prioritizes in-progress and selected states over terminal outcomes", () =>
   assert.equal(sidebarSessionStatus({ running: false, selected: false }), null);
 });
 
+test("manual unread stays visible when selected but does not hide running or permission", () => {
+  const input = { running: false, selected: true, unread: true, outcome: "failed" };
+  assert.equal(sidebarSessionStatus(input), "unread");
+  assert.equal(sidebarSessionStatus({ ...input, selected: false, outcome: undefined }), "unread");
+  assert.equal(sidebarSessionStatus({ ...input, running: true }), "running");
+  assert.equal(sidebarSessionStatus({ ...input, running: true, hasPendingPermission: true }), "permission");
+});
+
 test("opening a conversation acknowledges its outcome badge before loading details", () => {
   const sessionSource = readStoreModuleSync("slices/session-slice.ts");
   const catalogSource = readStoreModuleSync("slices/catalog-slice.ts");

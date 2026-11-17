@@ -395,6 +395,7 @@ export function createSessionSlice({
 
     selectSession: async (id, opts) => {
       const intent = opts?.navigationIntent ?? runtime.beginNavigationIntent();
+      if (!runtime.navigationIntentIsCurrent(intent)) return;
       const selection = runtime.beginSessionSelection(id, intent);
       const stateAtStart = get();
       const runningAtSelection = stateAtStart.runningSessions[id] === true;
@@ -406,6 +407,7 @@ export function createSessionSlice({
           stateAtStart.sessionHistory[stateAtStart.activeSessionId],
         );
       }
+      if (stateAtStart.sessionMeta[id]?.unread) stateAtStart.setSessionUnread(id, false);
       set({ selectingSessionId: id, page: "chat" });
       const outcomeAcknowledgement = get().acknowledgeSessionOutcome(id);
 

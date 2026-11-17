@@ -40,6 +40,17 @@ function buildStore() {
   return { stateRef: () => state, runtime, slice };
 }
 
+test("a superseded navigation does not clear the conversation's manual unread marker", async () => {
+  const { stateRef, runtime, slice } = buildStore();
+  stateRef().sessionMeta.session = { unread: true };
+  stateRef().setSessionUnread = () => assert.fail("stale navigation tried to mark the conversation read");
+  const navigationIntent = runtime.beginNavigationIntent();
+  runtime.beginNavigationIntent();
+  await slice.selectSession("session", { navigationIntent });
+  assert.equal(stateRef().sessionMeta.session.unread, true);
+  assert.equal(stateRef().selectingSessionId, undefined);
+});
+
 test("a warm re-select does not commit a detail window a concurrent idle edit superseded", async t => {
   const stored = { id: "answer", role: "assistant", content: "before edit" };
   const edited = [{ ...stored, content: "after edit" }];

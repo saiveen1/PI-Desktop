@@ -207,6 +207,7 @@ push, open a PR, install or launch merely because this plan names a command.
 | A / C — Unicode stdio framing | E2E-RPC-unicode-separators |
 | C / G / Quality — Plugins navigation | E2E-NAV-plugins-button-goes-back |
 | C / D / Quality — Sidebar row states | E2E-LAYOUT-sidebar-row-states |
+| C / F / Quality — Manual conversation read state | E2E-SESSION-manual-read-state |
 | E / Quality — Browser screenshot timeout recovery | E2E-BROWSER-capture-resize |
 | A / C / Quality — Sidebar material and settings return | E2E-LAYOUT-sidebar-settings |
 | C / Quality — Destination loading and focus | E2E-087b |

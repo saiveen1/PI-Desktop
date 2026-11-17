@@ -268,10 +268,14 @@ token rather than introducing a decorative palette:
 |---|---|---|---|
 | Selected | neutral accent | static outlined ring | current conversation |
 | In progress | warning orange | filled dot; two breathing cycles, then steady | agent is producing or executing |
+| Unread | neutral accent | static filled dot | conversation manually marked unread |
 | Completed | success green | check mark | latest unread task turn completed |
 | Failed | error red | circled alert mark | latest unread task turn failed |
 
-Precedence is `in progress → selected → completed/failed`. Starting another
+Precedence is `permission → in progress → manual unread → selected → completed/failed`.
+The unread dot can replace the leading selection mark without changing selection
+paint, and the row's accessible name identifies manual unread even when a
+live status has priority. Starting another
 turn clears the prior terminal outcome; abort clears the live indicator without
 creating a failure. Opening a conversation acknowledges its unread terminal
 outcome: the terminal mark clears immediately and the matching durable task
