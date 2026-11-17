@@ -40,14 +40,14 @@ function Fixture() {
   const sessions = useAppStore(state => state.sessions);
   const catalog = sessionOrganizationCatalog(organization, scope, labels);
   const [target, setTarget] = useState<SessionOrganizationTarget | null>(null);
-  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
+  const [toggledGroups, setToggledGroups] = useState<ReadonlySet<string>>(new Set());
   const [selected, setSelected] = useState<string | null>(null);
   const row = sessions.find(session => session.id === selected);
   return <main style={{ padding: 24, display: "grid", gridTemplateColumns: "300px 1fr", gap: 24, minHeight: "100vh" }}>
     <section className="sidebar-session-group" style={{ width: 300 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}><strong>pi desktop</strong><ProjectFolderReferences roots={roots} primaryPath={roots[0].path} /></div>
-      <SidebarSessionGroups groups={groupSessionsByGroup(sessions, catalog.groups, meta)} scope={scope} collapsed={collapsed}
-        onToggle={key => setCollapsed(previous => { const next = new Set(previous); if (next.has(key)) next.delete(key); else next.add(key); return next; })}
+      <SidebarSessionGroups groups={groupSessionsByGroup(sessions, catalog.groups, meta)} scope={scope} toggledGroups={toggledGroups}
+        onToggle={key => setToggledGroups(previous => { const next = new Set(previous); if (next.has(key)) next.delete(key); else next.add(key); return next; })}
         onManage={() => setTarget({ scope, name: "pi desktop" })}
         renderSessions={rows => rows.map(session => <div key={session.id} className="thread-item" data-session-id={session.id}>
           <Button variant="ghost" className="thread-item-main" onClick={() => setSelected(session.id)}><SessionLabelChips labels={catalog.labels} meta={meta[session.id] ?? {}} /><span className="thread-item-title">{session.title}</span></Button>

@@ -1605,13 +1605,15 @@ independently of the last-reply timestamp. Each project owns an ordered group
 catalog; a conversation has at most one group, and appears once regardless of
 its labels. Unknown or absent membership renders under Ungrouped. Group headings
 are independently collapsible, including empty groups; global pins stay flat.
-Each local project's conversation groups (including Ungrouped) count their full
-membership after visibility filters and global-pin exclusion, then independently
-show their first ten rows. Load more belongs to that group, reveals its remaining
-rows, and never changes another group's page or a heading's count. Collapsing the
-project resets its group pages; subgroup folding retains its page. Selection
-excludes folded and unloaded rows. Temporary and remote lists retain their
-existing unpaged behavior. Existing labels are retained, never guessed into groups.
+Named groups start folded and Ungrouped starts open. Opening or switching
+conversations does not change group disclosure. Each local project's groups
+count their full membership after visibility filters and global-pin exclusion,
+then independently show their first ten rows when expanded. Load more belongs
+to that group, reveals its remaining rows, and never changes another group's page
+or a heading's count. Collapsing the project resets its group pages; subgroup
+folding retains its page. Selection excludes folded and unloaded rows.
+Temporary and remote lists remain unpaged. Existing labels are retained, never
+guessed into groups.
 
 A compact Manage entry and the project menu open a scoped Groups/Labels editor.
 Names, colors and order are editable; confirmed group deletion moves conversations

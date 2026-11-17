@@ -71,6 +71,14 @@ export function groupSessionsByGroup<T extends { id: string }>(sessions: readonl
 }
 
 export const sessionGroupKey = (scope: string, groupId: string | null) => JSON.stringify([scope, groupId]);
-export function visibleGroupedSessionIds(groups: readonly SidebarSessionGroup[], scope: string, collapsed: ReadonlySet<string>): string[] {
-  return groups.flatMap(row => collapsed.has(sessionGroupKey(scope, row.group?.id ?? null)) ? [] : (row.visibleSessions ?? row.sessions).map(session => session.id));
+export function isSessionGroupCollapsed(key: string, groupId: string | null, toggledGroups: ReadonlySet<string>): boolean {
+  const defaultCollapsed = groupId !== null;
+  return toggledGroups.has(key) ? !defaultCollapsed : defaultCollapsed;
+}
+
+export function visibleGroupedSessionIds(groups: readonly SidebarSessionGroup[], scope: string, toggledGroups: ReadonlySet<string>): string[] {
+  return groups.flatMap(row => {
+    const id = row.group?.id ?? null;
+    return isSessionGroupCollapsed(sessionGroupKey(scope, id), id, toggledGroups) ? [] : (row.visibleSessions ?? row.sessions).map(session => session.id);
+  });
 }

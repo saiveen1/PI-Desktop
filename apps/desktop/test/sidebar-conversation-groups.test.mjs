@@ -12,9 +12,9 @@ const meta = { one: { groupId: "investigation", labelIds: ["a", "b"] } };
 test("sidebar groups render multi-label conversations once, keep empty groups and exclude folded rows", async t => {
   const ssr = await slotSsr(t, { translationOverrides: { sessionGroups: { manage: "Manage…", ungrouped: "Ungrouped" } } });
   const { SidebarSessionGroups } = await ssr.load("/src/features/sessions/SidebarSessionGroups.tsx");
-  const collapsed = new Set();
+  const toggledGroups = new Set([sessionGroupKey("project", "investigation")]);
   const render = () => ssr.render(createElement(SidebarSessionGroups, {
-    groups: groupSessionsByGroup(rows, groups, meta), scope: "project", collapsed, onToggle() {}, onManage() {},
+    groups: groupSessionsByGroup(rows, groups, meta), scope: "project", toggledGroups, onToggle() {}, onManage() {},
     renderSessions: sessions => sessions.map(row => createElement("button", { key: row.id, "data-session-id": row.id }, row.title)),
   }));
   const html = render();
@@ -23,7 +23,7 @@ test("sidebar groups render multi-label conversations once, keep empty groups an
   assert.match(html, /Ungrouped/);
   assert.match(html, /data-sidebar-session-group="empty"/);
   assert.doesNotMatch(html, /data-sidebar-label-group/);
-  collapsed.add(sessionGroupKey("project", "investigation"));
+  toggledGroups.clear();
   const folded = render();
   assert.doesNotMatch(folded, /data-session-id="one"/);
   assert.match(folded, /aria-expanded="false"/);
@@ -90,12 +90,12 @@ test("the production sidebar keeps running rows and complete status counts acros
   const sessions = Array.from({ length: 16 }, (_, index) => ({ id: `root-${index}`, title: `Conversation ${index}`, projectPath: roots[index % 2].path,
     mode: "agent", createdAt: "2026-11-08T10:00:00Z", updatedAt: "2026-11-08T10:00:00Z" }));
   const sessionMeta = Object.fromEntries(sessions.map((session, index) => [session.id, {
-    order: index, groupId: index !== 0 && index !== 14 ? "investigation" : undefined,
+    order: index, groupId: index >= 2 && index <= 4 ? "investigation" : undefined,
     ...(index === 0 ? { pinned: true, labelIds: ["a", "b"] } : {}),
   }]));
   useAppStore.setState({ sessions, openProjectPaths: ["/app", "/plugins"], openProjects: roots.map(root => ({ path: root.path, name: root.name })),
     workspace: { path: "/app", name: "Combined" }, activeProjectPath: "/app", sessionMeta,
-    runningSessions: { "root-11": true }, pendingPermissions: { "root-0": [{}] },
+    runningSessions: { "root-15": true }, pendingPermissions: { "root-0": [{}] },
     sessionOutcomes: { "root-1": "completed", "root-10": "failed" },
     settings: { ...useAppStore.getState().settings, sidebarRunningIndicators: true, sidebarRunningBadge: true },
     projectMeta: {}, projectCollapsed: {}, sessionOrganization: { version: 1, scopes: { "group:combined": { groups, labels: [
@@ -114,10 +114,9 @@ test("the production sidebar keeps running rows and complete status counts acros
   const pinnedRow = html.slice(html.indexOf('data-sidebar-session-row="root-0"'));
   assert.ok(pinnedRow.indexOf('class="session-row-labels"') < pinnedRow.indexOf('class="thread-item-title"'), "label dots precede the title in the production row");
   assert.equal((html.match(/data-sidebar-session-row="root-1"/g) ?? []).length, 1);
-  assert.equal((html.match(/data-sidebar-session-row="root-11"/g) ?? []).length, 1);
-  assert.match(html, /data-sidebar-session-row="root-14"/);
-  assert.doesNotMatch(html, /data-sidebar-session-row="root-15"/);
-  assert.ok(html.indexOf('data-sidebar-session-row="root-11"') < html.indexOf('data-sidebar-session-row="root-1"'));
+  assert.equal((html.match(/data-sidebar-session-row="root-15"/g) ?? []).length, 1);
+  assert.doesNotMatch(html, /data-sidebar-session-row="root-(2|13|14)"/);
+  assert.ok(html.indexOf('data-sidebar-session-row="root-15"') < html.indexOf('data-sidebar-session-row="root-1"'));
   const assertCounts = markup => {
     for (const state of ["running", "waiting", "completed", "failed"]) {
       assert.match(markup, new RegExp(`class="project-run-badge ${state}"[^>]*>[\\s\\S]*?</span>1</span>`), state);
@@ -134,6 +133,6 @@ test("the production sidebar keeps running rows and complete status counts acros
   assert.deepEqual(useAppStore.getState().sessionMeta, sessionMeta);
   useAppStore.setState({ runningSessions: {}, projectCollapsed: {} });
   const idle = render();
-  assert.doesNotMatch(idle, /data-sidebar-session-row="root-11"/);
-  assert.match(idle, /data-sidebar-session-row="root-10"/);
+  assert.doesNotMatch(idle, /data-sidebar-session-row="root-15"/);
+  assert.match(idle, /data-sidebar-session-row="root-13"/);
 });

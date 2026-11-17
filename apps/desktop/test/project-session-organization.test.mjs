@@ -21,9 +21,11 @@ test("groups place each multi-label conversation exactly once and retain empty g
   ]);
   assert.equal(result[1].sessions[0], sessions[0]);
   assert.equal(groupSessionsByGroup([], groups, {}).length, 2);
-  const collapsed = new Set([sessionGroupKey("project", "fix")]);
-  assert.deepEqual(visibleGroupedSessionIds(result, "project", collapsed), ["b", "plain", "orphan"]);
-  assert.deepEqual(visibleGroupedSessionIds(result, "other", collapsed), ["b", "a", "plain", "orphan"]);
+  const toggled = new Set([sessionGroupKey("project", "investigation")]);
+  assert.deepEqual(visibleGroupedSessionIds(result, "project", toggled), ["b", "plain", "orphan"]);
+  assert.deepEqual(visibleGroupedSessionIds(result, "other", toggled), ["plain", "orphan"]);
+  toggled.add(sessionGroupKey("project", null));
+  assert.deepEqual(visibleGroupedSessionIds(result, "project", toggled), ["b"]);
   assert.notEqual(sessionGroupKey("project", null), sessionGroupKey("project", ""));
 });
 
@@ -42,8 +44,10 @@ test("running sessions keep exclusive groups and manual order while entering the
   const grouped = paginateSessionGroups(groupSessionsByGroup(ordered, catalog, assignments));
   assert.deepEqual(grouped.map(row => row.sessions.length), [13, 1, 0]);
   assert.deepEqual(grouped[0].visibleSessions.map(row => row.id), ["12", "13", "0", "1", "2", "3", "4", "6", "7", "8"]);
-  assert.equal(new Set(visibleGroupedSessionIds(grouped, "project", new Set())).size, 11);
-  assert.deepEqual(visibleGroupedSessionIds(grouped, "project", new Set([sessionGroupKey("project", "investigation")])), ["5"]);
+  const toggled = new Set(groups.map(group => sessionGroupKey("project", group.id)));
+  assert.equal(new Set(visibleGroupedSessionIds(grouped, "project", toggled)).size, 11);
+  toggled.delete(sessionGroupKey("project", "investigation"));
+  assert.deepEqual(visibleGroupedSessionIds(grouped, "project", toggled), ["5"]);
   assert.deepEqual(prioritizeRunningSessions(rows, {}), rows);
   const expanded = paginateSessionGroups(groupSessionsByGroup(ordered, catalog, assignments), { investigation: true });
   assert.equal(expanded[0].visibleSessions.length, 13);

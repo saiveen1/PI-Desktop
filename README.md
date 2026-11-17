@@ -112,10 +112,10 @@ This edition strengthens the existing framework rather than replacing it.
 
 - **Project-scoped groups, colored labels, and deliberate ordering.** Groups
   control placement; multiple labels do not duplicate conversations. Local project
-  groups show complete counts and page independently, so a small group is not
-  hidden behind another group's first ten rows. Manual moves
-  and accepted user sends update activity order, not merely opening a chat or
-  receiving streamed output.
+  groups show complete counts and page independently. Named groups start folded,
+  and opening a conversation does not change which groups are expanded. Manual
+  moves and accepted user sends update activity order, not merely opening a chat
+  or receiving streamed output.
 - **Visible selection and reversible deletion.** Extend existing modifier-key
   selection with checkboxes, selection controls, and batch archive/unarchive.
   Local Desktop sessions gain a recycle bin with restore and separately confirmed

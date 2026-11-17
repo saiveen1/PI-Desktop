@@ -23,7 +23,7 @@ test("each group retains its complete count and receives its own first page", ()
   assert.deepEqual(page[1].visibleSessions, sessions.slice(12, 16));
   assert.equal(page[0].sessions, grouped[0].sessions);
   assert.equal(page[0].visibleSessions.length, DEFAULT_VISIBLE_PROJECT_SESSION_COUNT);
-  const visible = visibleGroupedSessionIds(page, scope, new Set([sessionGroupKey(scope, "small")]));
+  const visible = visibleGroupedSessionIds(page, scope, new Set([sessionGroupKey(scope, "large")]));
   assert.equal(visible.length, 20);
   for (const id of ["10", "11", "12", "15", "26", "29"]) assert.ok(!visible.includes(id));
   assert.deepEqual(grouped.map(row => row.visibleSessions), [undefined, undefined, undefined]);
@@ -36,7 +36,8 @@ test("loading more affects only its group and collapsing a project resets only i
   assert.deepEqual(lengths(paginateSessionGroups(grouped, expanded[scope])), [[12, 12], [4, 4], [14, 10]]);
   expanded = expandSessionGroup(expanded, scope, "");
   assert.deepEqual(lengths(paginateSessionGroups(grouped, expanded[scope])), [[12, 12], [4, 4], [14, 14]]);
-  assert.equal(visibleGroupedSessionIds(paginateSessionGroups(grouped, expanded[scope]), scope, new Set()).length, 30);
+  const toggled = new Set(groups.map(group => sessionGroupKey(scope, group.id)));
+  assert.equal(visibleGroupedSessionIds(paginateSessionGroups(grouped, expanded[scope]), scope, toggled).length, 30);
   const reset = resetSessionGroupExpansion(expanded, scope);
   assert.equal(reset[scope], undefined);
   assert.equal(reset["project:/other"].large, true);

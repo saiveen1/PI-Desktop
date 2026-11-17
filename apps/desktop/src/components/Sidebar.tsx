@@ -353,8 +353,8 @@ export function Sidebar({
     registerDismissGuard: registerSessionHoverCardDismissGuard,
   } = useSessionHoverCard();
   const [expandedSessionGroups, setExpandedSessionGroups] = useState<SessionGroupExpansion>({});
-  const [collapsedSessionGroups, setCollapsedSessionGroups] = useState<ReadonlySet<string>>(() => new Set());
-  const toggleSessionGroup = useCallback((key: string) => setCollapsedSessionGroups(previous => {
+  const [toggledSessionGroups, setToggledSessionGroups] = useState<ReadonlySet<string>>(() => new Set());
+  const toggleSessionGroup = useCallback((key: string) => setToggledSessionGroups(previous => {
     const next = new Set(previous);
     if (next.has(key)) next.delete(key);
     else next.add(key);
@@ -1083,14 +1083,14 @@ export function Sidebar({
   }, [temporarySessionHistory, projectEntries, pinnedSessionIds, expandedSessionGroups, remoteProjectGroups, sessionLabels, sessionMeta, sessionOrganization, sidebarProjectGroups, runningSessions]);
   const flatSessionOrder = useMemo(() => {
     const ids = pinnedSessions.map(session => session.id);
-    const add = (scope: string) => ids.push(...visibleGroupedSessionIds(sessionGroupsByScope.get(scope) ?? [], scope, collapsedSessionGroups));
+    const add = (scope: string) => ids.push(...visibleGroupedSessionIds(sessionGroupsByScope.get(scope) ?? [], scope, toggledSessionGroups));
     add("temporary");
     for (const entry of projectEntries) {
       if (!(entry.meta.collapsed ?? projectCollapsed[entry.key] ?? false)) add(projectOrganizationScope(entry.path, sidebarProjectGroups));
     }
     for (const group of remoteProjectGroups) if (!projectCollapsed[remoteProjectCollapseKey(group.project.key)]) add(`remote:${group.project.key}`);
     return [...new Set(ids)];
-  }, [pinnedSessions, sessionGroupsByScope, collapsedSessionGroups, projectEntries, projectCollapsed, remoteProjectGroups, sidebarProjectGroups]);
+  }, [pinnedSessions, sessionGroupsByScope, toggledSessionGroups, projectEntries, projectCollapsed, remoteProjectGroups, sidebarProjectGroups]);
   const selection = useSessionSelection(flatSessionOrder);
   const { selectedIds } = selection;
   const selectedSessions = sessions.filter((session) => selectedIds.has(session.id));
@@ -2118,7 +2118,7 @@ export function Sidebar({
   const renderGroupedSessionRows = (scope: string, options?: Parameters<typeof renderSessionRows>[1]) => (
     <SidebarSessionGroups key={scope} groups={sessionGroupsByScope.get(scope) ?? []}
       onLoadMore={groupId => setExpandedSessionGroups(previous => expandSessionGroup(previous, scope, groupId))}
-      scope={scope} collapsed={collapsedSessionGroups} onToggle={toggleSessionGroup}
+      scope={scope} toggledGroups={toggledSessionGroups} onToggle={toggleSessionGroup}
       onManage={() => setOrganizationFor({ scope, name: projectEntries.find(entry => projectOrganizationScope(entry.path, sidebarProjectGroups) === scope)?.name
         ?? remoteProjectGroups.find(group => `remote:${group.project.key}` === scope)?.project.label ?? t("nav.sessions") })}
       renderSessions={rows => renderSessionRows(rows, options)} />

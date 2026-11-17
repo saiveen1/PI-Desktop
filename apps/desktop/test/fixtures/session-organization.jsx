@@ -168,14 +168,23 @@ window.sidebarLabelGroupingProbe = async () => {
     },
     selectSession: async id => { opened.push(id); useAppStore.setState({ activeSessionId: id }); },
   }));
-  const project = row("project-00").closest("[data-sidebar-project-group]");
+  const project = row("project-02").closest("[data-sidebar-project-group]");
   const group = id => project.querySelector('[data-sidebar-session-group="' + id + '"]');
+  const groupToggle = id => group(id).querySelector(".sidebar-conversation-group-title");
+  check(["investigation", "fix"].every(id => groupToggle(id).getAttribute("aria-expanded") === "false"), "named groups start expanded");
+  await useAppStore.getState().selectSession("project-00");
+  await frame();
+  check(!row("project-00") && groupToggle("investigation").getAttribute("aria-expanded") === "false", "opening a conversation expanded its group");
+  click(groupToggle("investigation"));
+  click(document.querySelector('[data-group-scope="temporary"][data-sidebar-session-group="investigation"] .sidebar-conversation-group-title'));
   const rows = () => [...project.querySelectorAll('[data-sidebar-session-row="project-00"]')];
   check(rows().length === 1, "multiple labels duplicated a conversation row");
   check(rows()[0].querySelectorAll(".session-row-labels .session-color-swatch").length === 2, "descriptive labels disappeared");
   check(!document.querySelector("[data-sidebar-label-group]"), "labels still create sidebar groups");
   click(rows()[0].querySelector(".thread-item-main"));
-  check(opened.join() === "project-00", "grouped row opened another conversation");
+  check(opened.join() === "project-00,project-00", "grouped row opened another conversation");
+  click(row("project-02").querySelector(".thread-item-main"));
+  check(rows().length === 1 && groupToggle("fix").getAttribute("aria-expanded") === "false", "switching conversations changed group disclosure");
   check(useAppStore.getState().sessions.length === original.sessions.length, "grouping duplicated stored conversations");
   click(document.querySelector('[data-action="select-sessions"]'));
   click(checkbox("Select visible", toolbar()));
@@ -221,6 +230,8 @@ window.sidebarLabelGroupingProbe = async () => {
   const count = id => Number(group(id).querySelector(".sidebar-conversation-group-count").textContent);
   const visible = id => group(id).querySelectorAll("[data-sidebar-session-row]").length;
   check(count("investigation") === 12 && count("fix") === 4 && count("") === 14, "group counts used a project page");
+  check(visible("fix") === 0, "session refresh expanded a folded group");
+  click(groupToggle("fix"));
   check(visible("investigation") === 10 && visible("fix") === 4 && visible("") === 10, "groups do not page independently");
   check(row("page-12") && row("page-15") && !row("page-10"), "a small group lost rows behind another group's page");
   flushSync(() => useAppStore.setState({ sessions: [...pagedSessions] }));

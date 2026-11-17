@@ -3520,6 +3520,8 @@ PowerShell-launched fixture; activation must not restore the native outline.
   inspect both row transition durations. In a separate twelve-session project,
   load the remaining two sessions, fold and reopen the group, and verify only
   the initial ten sessions remain visible.
+  In a project with several named groups, open a conversation in a folded group
+  via Search, then manually expand a group and switch to an ungrouped conversation.
 - **Expected**: Project and conversation hover backgrounds, radii and transitions
   match. The title button stays transparent. Only a conversation uses selected
   fill, which wins over hover; workspace identity remains a separate dot with
@@ -3536,6 +3538,9 @@ PowerShell-launched fixture; activation must not restore the native outline.
   reveals all twelve; folding and reopening restores the initial ten and the
   two-session remainder control. Rendered component tests additionally cover no
   selected session, a pending destination and non-chat page state.
+  Named groups start folded with their complete counts, while Ungrouped starts
+  open. Opening a conversation from Search or a visible row leaves both folded
+  and manually expanded groups unchanged.
 - **Specs linked**: `04-ux/01-ui-ia.md`, `04-ux/08-component-spec.md`,
   `04-ux/09-interaction-patterns.md` §9.1c
 - **Acceptance**: C, D, Quality
@@ -3546,7 +3551,9 @@ PowerShell-launched fixture; activation must not restore the native outline.
   flow. Window blur/focus events and the drop-target class are injected for those
   styling checks; this is not a native focus/drag test. Unit coverage:
   `sidebar-navigation.test.mjs`, `sidebar-pinned-rendering.test.mjs`, and
-  `sidebar-project-sessions.test.mjs`.
+  `sidebar-project-sessions.test.mjs`. The isolated
+  `session-organization-user-path.test.mjs` fixture exercises scoped disclosure
+  on an active-session change, manual toggles and per-group paging.
 
 ## E2E-LAYOUT-sidebar-settings
 

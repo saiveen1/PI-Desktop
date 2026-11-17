@@ -306,8 +306,9 @@ destination, chat as the home surface, tools and permissions inline.
   duplicating a conversation or changing its group. The optional row color remains separate.
   Group order follows its catalog, while running-first display is a stable
   projection of the current row order. Temporary and remote scopes retain
-  independent catalogs; global pins stay flat. Folding only changes visibility;
-  it does not rewrite membership or stored ordering.
+  independent catalogs; global pins stay flat. Named groups start folded and
+  Ungrouped starts open. Opening a conversation does not change group disclosure,
+  and folding does not rewrite membership or stored ordering.
 - **Subagent models**: A local conversation's composer opens its model-pool
   dialog. Follow global is the default; Custom enables model checkboxes and a
   separate per-model Automatically allowed / Approval required selector. Saving
@@ -318,9 +319,9 @@ destination, chat as the home surface, tools and permissions inline.
   model and approval overrides. The dialog is inspectable while busy but saves
   only while idle, retains failures and closes on conversation switch.
 - **Conversation list**: each local project's conversation groups count all
-  eligible members, then independently show up to ten rows in the active sort
-  order; each remainder folds behind that group's **Load N more…** row. A group
-  with four conversations immediately shows four rows and a count of four.
+  eligible members. When expanded, each group independently shows up to ten rows
+  in the active sort order; each remainder folds behind that group's
+  **Load N more…** row. Expanding a group of four shows all four rows.
   The list has no time-group headings. Rows show the title and a
   localized last-reply age through seven calendar days, then a concrete date;
   hovering or focusing a row replaces the date with its session actions. Pinned

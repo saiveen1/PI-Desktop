@@ -2,11 +2,11 @@ import { useId, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/ui";
 import { IconChevronRight, IconSettings } from "../../components/icons";
-import { sessionGroupKey, type SidebarSessionGroup } from "../../lib/session-organization";
+import { isSessionGroupCollapsed, sessionGroupKey, type SidebarSessionGroup } from "../../lib/session-organization";
 import { ColorSwatch } from "./SessionLabelControls";
 
-export function SidebarSessionGroups<T extends { id: string }>({ groups, scope, collapsed, onToggle, onManage, onLoadMore, renderSessions }: {
-  groups: readonly SidebarSessionGroup<T>[]; scope: string; collapsed: ReadonlySet<string>;
+export function SidebarSessionGroups<T extends { id: string }>({ groups, scope, toggledGroups, onToggle, onManage, onLoadMore, renderSessions }: {
+  groups: readonly SidebarSessionGroup<T>[]; scope: string; toggledGroups: ReadonlySet<string>;
   onToggle: (key: string) => void; onManage: () => void; onLoadMore?: (groupId: string) => void; renderSessions: (sessions: T[]) => ReactNode;
 }) {
   const { t } = useTranslation();
@@ -16,8 +16,9 @@ export function SidebarSessionGroups<T extends { id: string }>({ groups, scope, 
       <IconSettings size={12} aria-hidden />{t("sessionGroups.manage")}
     </Button>
     {groups.map((row, index) => {
-      const key = sessionGroupKey(scope, row.group?.id ?? null);
-      const folded = collapsed.has(key);
+      const id = row.group?.id ?? null;
+      const key = sessionGroupKey(scope, id);
+      const folded = isSessionGroupCollapsed(key, id, toggledGroups);
       const name = row.group?.name ?? t("sessionGroups.ungrouped");
       const bodyId = `${prefix}-${index}`;
       const visibleSessions = row.visibleSessions ?? row.sessions;

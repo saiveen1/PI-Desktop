@@ -325,15 +325,15 @@ may be retained while exactly one workspace supplies the visible shell context.
   contiguous order per normalized path. Archived and pinned priority remains
   ahead of the manual order; projects without an assigned order fall back to
   a stable path order until they are moved.
-- Each local project's conversation groups independently show their first ten
-  eligible rows in the active sort order; a group's remaining sessions fold behind
-  its own **Load N more…** control. Counts always cover complete eligible membership,
-  including unloaded rows. Small groups are fully visible immediately. Temporary
-  and remote lists retain their existing behavior. When Session time is enabled, each project
-  session row shows its title and localized last-reply age through seven
-  calendar days, then a month/day date; hover or keyboard focus replaces the
-  date with the session actions. Expanded state is per-group, for the current
-  session only, and not persisted.
+- Named conversation groups start folded; Ungrouped starts open. Opening a
+  conversation from any entry point leaves group disclosure unchanged. When
+  expanded, each local project's group shows its first ten eligible rows in the
+  active sort order, with any remainder behind its own **Load N more…** control.
+  Counts include folded and unloaded rows. Temporary and remote lists remain
+  unpaged. When Session time is enabled, each project session row shows its title
+  and localized last-reply age through seven calendar days, then a month/day date;
+  hover or keyboard focus replaces the date with the session actions. Disclosure
+  and page expansion are per group and are not persisted.
 - Presentation changes are saved best-effort. Storage failure must not block
   project activation, session selection, or agent execution.
 

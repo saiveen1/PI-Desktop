@@ -3,7 +3,7 @@ import { createElement } from "react";
 import test from "node:test";
 import { slotSsr } from "./helpers/slot-ssr.mjs";
 
-test("project groups count all members and page independently on the first render", async t => {
+test("named project groups keep complete counts and stay folded when their conversation is opened", async t => {
   const ssr = await slotSsr(t, { plugins: [{
     name: "ssr-notification-boundary", enforce: "pre",
     transform(code, id) {
@@ -29,7 +29,7 @@ test("project groups count all members and page independently on the first rende
   }]));
   useAppStore.setState({
     sessions, sessionMeta, openProjectPaths: ["/app"], openProjects: [{ path: "/app", name: "App" }],
-    workspace: { path: "/app", name: "App" }, activeProjectPath: "/app",
+    workspace: { path: "/app", name: "App" }, activeProjectPath: "/app", activeSessionId: "session-0", page: "chat",
     runningSessions: {}, pendingPermissions: {}, sessionOutcomes: {},
     projectMeta: {}, projectCollapsed: {}, sidebarProjectGroups: [],
     sessionOrganization: { version: 1, scopes: { "project:/app": { groups, labels: [] } } },
@@ -44,9 +44,10 @@ test("project groups count all members and page independently on the first rende
   assert.deepEqual(headings.map(([, name, count]) => [name, Number(count)]), [
     ["Large", 12], ["Gateway", 4], ["Empty", 0], ["Ungrouped", 4],
   ]);
-  for (const index of [0, 9, 12, 13, 14, 15, 16, 19]) assert.match(html, new RegExp(`data-sidebar-session-row="session-${index}"`));
-  for (const index of [10, 11]) assert.doesNotMatch(html, new RegExp(`data-sidebar-session-row="session-${index}"`));
-  assert.equal((html.match(/class="[^"]*sidebar-load-more/g) ?? []).length, 1);
+  // An already-open conversation must not reveal its group or neighboring groups.
+  for (let index = 0; index < 16; index++) assert.doesNotMatch(html, new RegExp(`data-sidebar-session-row="session-${index}"`));
+  for (const index of [16, 19]) assert.match(html, new RegExp(`data-sidebar-session-row="session-${index}"`));
+  assert.doesNotMatch(html, /class="[^"]*sidebar-load-more/);
   assert.deepEqual(useAppStore.getState().sessionMeta, sessionMeta);
   assert.equal(useAppStore.getState().sessions.length, 20);
   assert.equal(render(), html, "an unchanged refresh must not alter counts or visible rows");
