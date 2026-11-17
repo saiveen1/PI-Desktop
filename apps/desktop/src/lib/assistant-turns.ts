@@ -81,7 +81,8 @@ function isVisibleMessage(message: UiMessage): boolean {
     !messageContentFacts(message).hasContent &&
     !messageThinking(message) &&
     !message.hostedSearch &&
-    !message.error
+    !message.error &&
+    message.runDiagnostics?.observer?.messageId !== message.id
   );
 }
 

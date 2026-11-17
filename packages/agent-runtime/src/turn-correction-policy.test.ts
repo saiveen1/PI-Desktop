@@ -36,35 +36,35 @@ describe("shared corrective budget and turn evidence", () => {
 
   it.each([[], [receipt("wrong-call")], [{ ...receipt(), isError: true }]].map(results => ({ results })))("excludes missing, unknown and failed tool receipts: $results", async ({ results }) => {
     const guard = policy();
-    await guard.finishTurn(toolTurn(results), new Map(), () => true, vi.fn());
+    await guard.finishTurn(toolTurn(results), new Map(), () => undefined, vi.fn());
     const annotation = vi.fn();
-    expect(await guard.finishTurn(turn(), new Map(), () => true, annotation)).toBeUndefined();
+    expect(await guard.finishTurn(turn(), new Map(), () => undefined, annotation)).toBeUndefined();
     expect(annotation).not.toHaveBeenCalled();
     expect(guard.claimLegacyProgress()).toBe(false);
   });
 
   it("does not reset failure evidence on a later text-only response", async () => {
     const guard = policy();
-    await guard.finishTurn(toolTurn([{ ...receipt(), isError: true }]), new Map(), () => true, vi.fn());
-    await guard.finishTurn(turn("Checkpoint saved."), new Map(), () => true, vi.fn());
-    expect(await guard.finishTurn(turn(), new Map(), () => true, vi.fn())).toBeUndefined();
+    await guard.finishTurn(toolTurn([{ ...receipt(), isError: true }]), new Map(), () => undefined, vi.fn());
+    await guard.finishTurn(turn("Checkpoint saved."), new Map(), () => undefined, vi.fn());
+    expect(await guard.finishTurn(turn(), new Map(), () => undefined, vi.fn())).toBeUndefined();
   });
 
   it("requires fresh tool evidence for an ambiguous continue request", async () => {
     const guard = policy();
     guard.setTask("Continue.");
-    expect(await guard.finishTurn(turn(), new Map(), () => true, vi.fn())).toBeUndefined();
-    await guard.finishTurn(toolTurn([receipt()]), new Map(), () => true, vi.fn());
-    expect(await guard.finishTurn(turn(), new Map(), () => true, vi.fn())).toEqual({ action: "continue" });
+    expect(await guard.finishTurn(turn(), new Map(), () => undefined, vi.fn())).toBeUndefined();
+    await guard.finishTurn(toolTurn([receipt()]), new Map(), () => undefined, vi.fn());
+    expect(await guard.finishTurn(turn(), new Map(), () => undefined, vi.fn())).toEqual({ action: "continue" });
   });
 
   it("never corrects while delegates, steering, cancellation or recovery own the boundary", async () => {
     const guard = policy();
     const annotate = vi.fn();
-    expect(await guard.finishTurn(turn(), new Map(), () => false, annotate)).toBeUndefined();
+    expect(await guard.finishTurn(turn(), new Map(), () => "pending_work", annotate)).toBeUndefined();
     const abort = new AbortController();
     abort.abort();
-    expect(await guard.finishTurn(turn(), new Map(), () => true, annotate, abort.signal)).toBeUndefined();
+    expect(await guard.finishTurn(turn(), new Map(), () => undefined, annotate, abort.signal)).toBeUndefined();
     expect(guard.attempts).toBe(0);
     expect(annotate).not.toHaveBeenCalled();
   });
@@ -72,13 +72,13 @@ describe("shared corrective budget and turn evidence", () => {
   it("spends the same budget for legacy and ordinary progress and clears pending reminders on steering", async () => {
     const guard = policy(2);
     expect(guard.claimLegacyProgress()).toBe(true);
-    expect(await guard.finishTurn(turn(), new Map(), () => true, vi.fn())).toEqual({ action: "continue" });
+    expect(await guard.finishTurn(turn(), new Map(), () => undefined, vi.fn())).toEqual({ action: "continue" });
     expect(guard.attempts).toBe(2);
     guard.setTask("Fix only the existing locator.", true);
     expect(guard.pending).toBe(false);
     expect(JSON.stringify(guard.prepareRequest({ messages: [] }))).not.toContain("early_end_recovery");
     const annotate = vi.fn();
-    expect(await guard.finishTurn(turn(), new Map(), () => true, annotate)).toBeUndefined();
+    expect(await guard.finishTurn(turn(), new Map(), () => undefined, annotate)).toBeUndefined();
     expect(annotate).toHaveBeenCalledWith("exhausted", 2);
     expect(guard.claimLegacyProgress()).toBe(false);
   });

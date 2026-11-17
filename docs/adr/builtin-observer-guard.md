@@ -62,9 +62,22 @@ for host completion notices or an inherited historical task.
 
 A bounded `runDiagnostics.observer` record identifies the exact message, mode,
 selected model/effort, times, status, verdict/confidence, concise redacted reason,
-evidence IDs, usage and whether continuation was authorized/blocked. This is
-persisted by existing message metadata/outbox handling and displayed in a compact
-per-message disclosure. It is separate from primary-model usage and is advice,
+evidence IDs, usage and whether continuation was authorized/blocked. Optional
+skip/continuation reason codes and the first blocking tool's bounded identity
+make local gating observable without forwarding tool arguments or output.
+The record remains owned by its response, but its summary is displayed once
+outside the turn's folded process. Details link to the assessed response and
+evidence; continuation is explicitly not a second verification. The composer
+remains inspectable during execution while mode changes stay idle-gated.
+
+Post-response diagnostic updates are persisted before whole-turn completion.
+The Host's existing idempotent append boundary gains a narrowly validated
+diagnostic-only refresh, not a general upsert: immutable response content and
+unrelated metadata are preserved, identities must match, and stale checking
+cannot replace terminal evidence. This repairs the prior gap between live
+observer updates and an already-settled durable response. Extensible metadata
+keeps old rows compatible without a new schema/table or reconstructing missing
+history. Diagnostics remain separate from primary-model usage and are advice,
 not proof of correctness. No new result database or global reviewer dashboard.
 
 ## Compatibility and safety

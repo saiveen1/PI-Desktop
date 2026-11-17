@@ -54,6 +54,7 @@ import {
   reuseReferences,
 } from "../../../lib/transcript-summary";
 import { AssistantTurnParts } from "./AssistantTurnParts";
+import { ObserverGuardTurnSummary } from "./ObserverGuardDisclosure";
 import { TurnProcess } from "./TurnProcess";
 import { ActionSlotSide } from "./ActionBarSlots";
 import { EntryExtraStack } from "./EntryExtraStack";
@@ -425,6 +426,7 @@ export const AssistantTurn = memo(function AssistantTurn({
         {/* The answer stays outside the process disclosure: it is what the turn
             produced, not part of what it did. */}
         <AssistantTurnParts parts={responses} {...partContext} />
+        <ObserverGuardTurnSummary parts={entry.parts} sessionId={paneSessionId} />
         <TurnToolImages parts={entry.parts} />
         {/* Recorded work remains reachable during streaming and after interruption. */}
         <TurnChangesCard tools={tools} />

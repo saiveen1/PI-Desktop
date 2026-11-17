@@ -50,6 +50,20 @@ export function resolveObserverGuardSettings(value: unknown): Required<ObserverG
   return result;
 }
 
+export const OBSERVER_GUARD_SKIP_REASONS = [
+  "response_error", "response_aborted", "response_length", "empty_response", "task_changed",
+  "no_user_task", "stop_requested", "mode_closeout",
+] as const;
+export type ObserverGuardSkipReason = typeof OBSERVER_GUARD_SKIP_REASONS[number];
+
+export const OBSERVER_GUARD_CONTINUATION_REASONS = [
+  "observe_only", "verdict_complete", "verdict_blocked", "verdict_needs_input", "verdict_unknown",
+  "low_confidence", "correction_budget", "input_truncated", "task_not_actionable", "answer_needs_input",
+  "tool_error", "tool_effects_unknown", "tool_receipt_mismatch", "stop_requested", "plan_mode",
+  "pending_work", "task_changed", "runtime_unavailable",
+] as const;
+export type ObserverGuardContinuationReason = typeof OBSERVER_GUARD_CONTINUATION_REASONS[number];
+
 export type ObserverGuardVerdict = "complete" | "incomplete" | "blocked" | "needs_input" | "unknown";
 export type ObserverGuardError = "MODEL_NOT_CONFIGURED" | "MODEL_UNAVAILABLE" | "EFFORT_UNAVAILABLE" |
   "PROVIDER_UNAVAILABLE" | "TIMEOUT" | "INVALID_RESPONSE" | "CANCELLED" | "INSUFFICIENT_EVIDENCE";
@@ -69,8 +83,13 @@ export type ObserverGuardAssessment = {
   evidenceIds?: string[];
   errorCode?: ObserverGuardError;
   continued?: boolean;
-  /** Bounded reason why a verdict did not authorize an action. */
+  /** Legacy broad category for older readers. */
   continuationBlocked?: "observe_only" | "budget" | "unsafe" | "not_actionable";
+  skipReason?: ObserverGuardSkipReason;
+  continuationReason?: ObserverGuardContinuationReason;
+  blockingTool?: { toolCallId: string; toolName: string };
+  reviewedToolCount?: number;
+  toolOutputIncluded?: boolean;
   inputTruncated?: boolean;
   usage?: MessageUsage;
 };

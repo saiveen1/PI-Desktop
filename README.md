@@ -53,9 +53,11 @@ This edition strengthens the existing framework rather than replacing it.
 - **Optional conversation Observer Guard.** Enable Observe or Guard beside the
   composer controls, with an independent model and effort chosen in Behavior
   settings. Observe adds advisory assessments; Guard may continue within the
-  existing correction allowance after strict evidence and safety checks. Results
-  remain attached to the response for later inspection. Off adds no requests;
-  enabled assessments add cost/latency and are not proof of completion.
+  existing correction allowance after strict evidence and safety checks. A stable
+  turn summary explains checks, skips and blocked continuations, with links to
+  recorded evidence. Post-response assessments are retained across reloads;
+  unknown legacy reasons stay unknown. Off adds no requests; enabled assessments
+  add cost/latency, do not recheck continued output, and are not proof of completion.
 - **Configurable degenerate-output protection.** Interrupt long whitespace/symbol
   runs or sustained exact narrative-paragraph repetition in model text/thinking.
   Behavior settings expose switches and thresholds; partial results are retained

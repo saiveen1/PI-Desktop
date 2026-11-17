@@ -745,9 +745,24 @@ runtime reuse; stale results never attach to another response.
 
 `runDiagnostics.observer` records the owning message, configured model/effort,
 timing, status, verdict/confidence, concise reason/evidence, separate usage and
-continuation decision. Existing Host message metadata persists it; restored
-history does not trigger re-evaluation. Diagnostics do not become primary-model
-context and primary request counters are not inflated with observer usage.
+continuation decision. New records add optional `skipReason`,
+`continuationReason`, `blockingTool` (bounded tool-call ID/name only),
+`reviewedToolCount` and `toolOutputIncluded`; older records remain valid.
+Terminal ineligible responses with an owned message record a skipped decision
+without a reviewer request. Tool-use steps do not create skipped-record noise,
+and later continuations never replace an earlier assessment. An assessed result
+records whether continuation was requested and the specific reason if not.
+Tool failures, unconfirmed effects, mismatched receipts, Stop, Plan state,
+pending work, task changes, truncated evidence and exhausted allowance are
+distinct diagnostic causes, not a generic claim that a command was dangerous.
+The first unresolved tool boundary remains conservative for the whole user turn;
+a later successful tool does not prove that earlier unknown effects settled.
+
+Existing Host message metadata persists post-response updates, including an
+intermediate candidate before continuation and before whole-turn completion.
+Restored history does not trigger re-evaluation. Diagnostics do not become
+primary-model context and primary request counters are not inflated with
+observer usage. Missing legacy reasons are explicitly unknown, not reconstructed.
 See [the decision](../../adr/builtin-observer-guard.md) and
 E2E-RUNTIME-observer-guard. This optional judge is fallible, not a completion proof.
 

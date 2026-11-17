@@ -5104,6 +5104,21 @@ Build two actual runtimes with identical configuration and different scratch dir
   owning message. Settings/configuration preserve siblings and old user data;
   new/forked/old migrated sessions are off. Model reasons render as text, and
   extra costs/privacy limits remain explicit. No installed plugin is altered.
+  Exercise the actual two-stage write: persist the settled assistant first,
+  then checking and terminal observer updates, then reopen the Host transcript.
+  Both the final response and an intermediate response followed by continuation
+  retain their assessment. Diagnostic-only refresh cannot alter text, thinking,
+  usage, timestamps or unrelated metadata, cross an owner/turn boundary, or
+  regress terminal state to checking. Local summary remains outside the folded
+  process after continuation/reload. While running, open the composer menu to
+  inspect current state but verify every mode choice stays disabled. Check
+  skipped terminal responses, specific blocking-tool causes, missing legacy
+  reasons, evidence navigation, exact session ownership and all locale keys.
+  Also stop after a filtered, unsigned tool-only response: its original snapshot
+  must be queued before the late skip refresh without duplicate usage. Redaction
+  and length cuts must preserve valid Unicode in persisted reasons. Resolve
+  provider-local tool IDs to the owning session's stored receipt ID and abandon
+  a delayed evidence jump when the active session changes.
 - **Specs:** Runtime §5e.4; Observer Guard ADR; IPC session.configure; storage;
   Behavior settings; transcript §7.4c.
 - **Acceptance:** C / E / Privacy / Quality.

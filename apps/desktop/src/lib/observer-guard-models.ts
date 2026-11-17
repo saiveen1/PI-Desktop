@@ -19,3 +19,10 @@ export function observerSelection(settings: AppSettings | null | undefined, prov
   const selected = models.find(model => model.providerId === value.providerId && model.modelId === value.modelId);
   return { value, models, selected, available: Boolean(selected && selected.levels.includes(value.thinkingLevel)) };
 }
+
+export function observerModelLabel(modelKey: string, providers: readonly ProviderPublic[]): string {
+  const split = modelKey.indexOf("/");
+  if (split <= 0) return modelKey;
+  const providerId = modelKey.slice(0, split);
+  return `${providers.find(provider => provider.id === providerId)?.name ?? providerId} / ${modelKey.slice(split + 1)}`;
+}

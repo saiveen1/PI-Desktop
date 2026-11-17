@@ -4,6 +4,8 @@ import { addUsage, usageForEvent, type AgentEventEnvelope, type MessageUsage, ty
 import { DesktopAgentRuntime, type AgentRuntimeOptions } from "./runtime.js";
 import type { ObserverGuardRuntimeConfig } from "./observer-guard.js";
 import { completeOneShot, type OneShotCompleteResult } from "./one-shot-complete.js";
+import { builtinModeDefinition } from "./mode-definitions.js";
+import { MODE_CLOSEOUT_MAX_REQUESTS } from "./modes/mode-state.js";
 
 vi.mock("./one-shot-complete.js", () => ({ completeOneShot: vi.fn() }));
 const reviewer = vi.mocked(completeOneShot);
@@ -11,7 +13,7 @@ const provider = { id: "fixture", name: "Fixture", modelId: "main", apiKey: "", 
 const observerGuard: ObserverGuardRuntimeConfig = { mode: "guard", settings: { providerId: "reviewer", modelId: "judge", thinkingLevel: "off" }, provider: { ...provider, id: "reviewer", modelId: "judge" } };
 const instances: DesktopAgentRuntime[] = [];
 afterEach(async () => { await Promise.all(instances.splice(0).map(runtime => runtime.dispose())); vi.resetAllMocks(); vi.useRealTimers(); });
-type Script = Partial<Pick<AssistantMessage, "content" | "stopReason">>;
+type Script = Partial<Pick<AssistantMessage, "content" | "stopReason" | "errorMessage">>;
 const text = (value: string): Script => ({ content: [{ type: "text", text: value }] });
 function fixture(options: Partial<AgentRuntimeOptions> = {}, script: Script[] = [text("Implementation is still pending.")], toolFailure = false) {
   const events: AgentEventEnvelope[] = [];
@@ -28,7 +30,7 @@ function fixture(options: Partial<AgentRuntimeOptions> = {}, script: Script[] = 
     } }, sessionId: "session", mode: "agent", provider, thinkingLevel: "off",
     commandShell: { id: "bash", label: "Bash", dialect: "posix", available: true, isDefault: true },
     agentOutputGuard: { earlyEndMode: "off", recoveryLimit: 1 }, autoContinueUnfinishedTodos: false,
-    onEvent: event => events.push(event), ...options,
+    ...options, onEvent: event => { events.push(event); options.onEvent?.(event); },
   });
   const streamSimple = (_model: unknown, context: Context) => {
     requests.push({ ...context, messages: [...context.messages] });
@@ -80,7 +82,7 @@ describe("Observer Guard public prompt path", () => {
     expect(run.hostCalls.filter(method => method === "tools.execute")).toHaveLength(1);
     const persisted = rows(run.events);
     const candidate = persisted.find(message => message.runDiagnostics?.observer);
-    expect(candidate?.runDiagnostics?.observer).toMatchObject({ messageId: candidate?.id, status: "assessed", continued: true, usage: { totalTokens: 29 }, modelKey: "reviewer/judge", thinkingLevel: "off" });
+    expect(candidate?.runDiagnostics?.observer).toMatchObject({ messageId: candidate?.id, status: "assessed", continued: true, usage: { totalTokens: 29 }, modelKey: "reviewer/judge", thinkingLevel: "off", reviewedToolCount: 1, toolOutputIncluded: false });
     expect(persisted.filter(message => message.role === "assistant").at(-1)?.runDiagnostics?.observer).toBeUndefined();
     expect(run.events.filter(({ event }) => event.type === "message_update" && event.message.runDiagnostics?.observer?.status === "checking")).toHaveLength(1);
     const finalContext = JSON.stringify(run.requests.at(-1));
@@ -102,14 +104,14 @@ describe("Observer Guard public prompt path", () => {
     expect(JSON.stringify(run.requests)).not.toContain("observer_guard");
   });
 
-  it.each(["complete", "blocked", "needs_input", "unknown", "low", "medium", "observe"])("keeps %s advisory and leaves normal prompt/tool declarations unchanged", async variant => {
+  it.each([["complete", "verdict_complete"], ["blocked", "verdict_blocked"], ["needs_input", "verdict_needs_input"], ["unknown", "verdict_unknown"], ["low", "low_confidence"], ["medium", "low_confidence"], ["observe", "observe_only"]])("keeps %s advisory and leaves normal prompt/tool declarations unchanged", async (variant, reason) => {
     const config = variant === "observe" ? { ...observerGuard, mode: "observe" as const } : observerGuard;
     const run = fixture({ observerGuard: config });
     reviewer.mockImplementation(async (_provider, context) => verdict(context, ["low", "medium"].includes(variant) ? { confidence: variant } : variant === "observe" ? {} : { verdict: variant }));
     await run.runtime.prompt("Implement the fix.", "user");
     expect(reviewer).toHaveBeenCalledTimes(1);
     expect(run.requests).toHaveLength(1);
-    expect(assessment(run.events)?.continued).toBeUndefined();
+    expect(assessment(run.events)).toMatchObject({ continued: false, continuationReason: reason, reviewedToolCount: 0, toolOutputIncluded: false });
     expect(JSON.stringify(run.requests)).not.toContain("observer_guard");
     expect(assessment(run.events)?.status).toBe("assessed");
   });
@@ -118,7 +120,9 @@ describe("Observer Guard public prompt path", () => {
     const run = fixture({ observerGuard });
     reviewer.mockResolvedValue({ text: response });
     await run.runtime.prompt("Implement the fix.", "user");
-    expect(assessment(run.events)).toMatchObject({ status: "error", errorCode: "INVALID_RESPONSE" });
+    expect(assessment(run.events)).toMatchObject({ status: "error", errorCode: "INVALID_RESPONSE", reviewedToolCount: 0, toolOutputIncluded: false });
+    expect(assessment(run.events)).not.toHaveProperty("verdict");
+    expect(assessment(run.events)).not.toHaveProperty("continuationReason");
     expect(run.requests).toHaveLength(1);
     expect(run.events.some(({ event }) => event.type === "error")).toBe(false);
   });
@@ -128,7 +132,7 @@ describe("Observer Guard public prompt path", () => {
     reviewer.mockImplementation(async (_provider, context) => verdict(context));
     await run.runtime.prompt(task, "user");
     expect(run.requests).toHaveLength(1);
-    expect(assessment(run.events)?.continuationBlocked).toBe("not_actionable");
+    expect(assessment(run.events)).toMatchObject({ continued: false, continuationBlocked: "not_actionable", continuationReason: "task_not_actionable" });
   });
 
   it.each(["I cannot proceed because permission is required.", "Please provide the missing file.", "I won't perform this request.", "Should I continue?"])("does not override local blockers or refusals: %s", async answer => {
@@ -136,7 +140,7 @@ describe("Observer Guard public prompt path", () => {
     reviewer.mockImplementation(async (_provider, context) => verdict(context));
     await run.runtime.prompt("Implement the fix.", "user");
     expect(run.requests).toHaveLength(1);
-    expect(assessment(run.events)?.continued).toBeUndefined();
+    expect(assessment(run.events)).toMatchObject({ continued: false, continuationReason: "answer_needs_input" });
   });
 
   it("does not grant execution in Plan or from non-user notices", async () => {
@@ -144,10 +148,12 @@ describe("Observer Guard public prompt path", () => {
     reviewer.mockImplementation(async (_provider, context) => verdict(context));
     await plan.runtime.prompt("Implement the fix.", "user");
     expect(plan.requests).toHaveLength(1);
+    expect(assessment(plan.events)).toMatchObject({ continued: false, continuationBlocked: "unsafe", continuationReason: "plan_mode" });
     const notice = fixture({ observerGuard });
     await notice.runtime.prompt({ text: "Implement the fix.", sessionMessage: { kind: "completion", sourceSessionId: "other", sourceTitle: "Other", targetSessionId: "session", messageId: "notice", replyToMessageId: "parent" } });
     expect(reviewer).toHaveBeenCalledTimes(1);
     expect(notice.requests).toHaveLength(1);
+    expect(assessment(notice.events)).toBeUndefined();
   });
 
   it("local corrections precede assessment and share the ceiling even across later tools", async () => {
@@ -156,7 +162,7 @@ describe("Observer Guard public prompt path", () => {
     await run.runtime.prompt("Implement the fix.", "user");
     expect(run.requests).toHaveLength(3);
     expect(reviewer).toHaveBeenCalledTimes(1);
-    expect(assessment(run.events)?.continuationBlocked).toBe("budget");
+    expect(assessment(run.events)).toMatchObject({ continuationBlocked: "budget", continuationReason: "correction_budget", continued: false });
   });
 
   it("rejects truncated evidence and failed tools even with an apparently authoritative reviewer", async () => {
@@ -164,11 +170,25 @@ describe("Observer Guard public prompt path", () => {
     const bounded = fixture({ observerGuard: { ...observerGuard, settings: { ...observerGuard.settings, maxInputChars: 2000 } } }, [text("Pending. ".repeat(3000))]);
     await bounded.runtime.prompt("Implement the fix.", "user");
     expect(reviewer.mock.calls[0][1].messages.reduce((chars, message) => chars + String(message.content).length, 0)).toBeLessThanOrEqual(2000);
-    expect(assessment(bounded.events)).toMatchObject({ inputTruncated: true, continuationBlocked: "not_actionable" });
+    expect(assessment(bounded.events)).toMatchObject({ inputTruncated: true, continuationBlocked: "not_actionable", continuationReason: "input_truncated", continued: false });
     const failed = fixture({ observerGuard }, [read, text("Implementation is still pending.")], true);
     await failed.runtime.prompt("Implement the fix.", "user");
     expect(failed.requests).toHaveLength(2);
-    expect(assessment(failed.events)?.continued).toBeUndefined();
+    expect(assessment(failed.events)).toMatchObject({ continued: false, continuationBlocked: "unsafe", continuationReason: "tool_error", blockingTool: { toolCallId: "read-receipt", toolName: "Read" } });
+    expect(JSON.stringify(assessment(failed.events))).not.toMatch(/fixture\.txt|supersecret|retained receipt/);
+  });
+
+  it("explains the first unsettled tool even when later successful receipts replace it in the evidence window", async () => {
+    const unsettled: Script = { content: [{ type: "toolCall", id: "bash-receipt", name: "Bash", arguments: { command: "echo private-command", description: "Fixture command" } }], stopReason: "toolUse" };
+    const run = fixture({ observerGuard: { ...observerGuard, settings: { ...observerGuard.settings, recentToolCount: 1, includeToolOutput: true } } }, [unsettled, read, text("Implementation is still pending.")]);
+    reviewer.mockImplementation(async (_provider, context) => verdict(context));
+    await run.runtime.prompt("Implement the fix.", "user");
+    expect(run.requests).toHaveLength(3);
+    expect(assessment(run.events)).toMatchObject({ continued: false, continuationReason: "tool_effects_unknown", blockingTool: { toolCallId: "bash-receipt", toolName: "Bash" }, reviewedToolCount: 1, toolOutputIncluded: true });
+    const evidence = String(reviewer.mock.calls[0][1].messages[1].content);
+    expect(evidence).toContain("read-receipt");
+    expect(evidence).not.toMatch(/bash-receipt|private-command|supersecret/);
+    expect(JSON.stringify(assessment(run.events))).not.toMatch(/private-command|supersecret|retained receipt/);
   });
 
   it("bounds standalone input, forwards explicit effort, and excludes history/system/reasoning/tool arguments and default output", async () => {
@@ -279,7 +299,7 @@ describe("Observer Guard lifecycle and request isolation", () => {
     release.resolve(verdict(context));
     await turn;
     expect(run.requests).toHaveLength(1);
-    expect(assessment(run.events)?.continuationBlocked).toBe("unsafe");
+    expect(assessment(run.events)).toMatchObject({ continued: false, continuationBlocked: "unsafe", continuationReason: "stop_requested" });
   });
 
   it("pending user steering wins without an observer nudge or second review", async () => {
@@ -294,7 +314,7 @@ describe("Observer Guard lifecycle and request isolation", () => {
     release.resolve(verdict(context));
     await turn;
     expect(reviewer).toHaveBeenCalledTimes(1);
-    expect(assessment(run.events)?.continued).toBeUndefined();
+    expect(assessment(run.events)).toMatchObject({ continued: false, continuationReason: "task_changed" });
     expect(JSON.stringify(run.requests)).not.toContain("observer_guard_correction");
   });
 
@@ -314,6 +334,106 @@ describe("Observer Guard lifecycle and request isolation", () => {
     expect(signal?.aborted).toBe(true);
     expect(run.requests).toHaveLength(1);
     expect(run.events).toHaveLength(count);
+  });
+});
+
+describe("Observer Guard ineligible terminal replies", () => {
+  it.each([
+    ["length", "response_length", text("Truncated reply.")], ["error", "response_error", { ...text("Partial reply."), errorMessage: "401: invalid API key" }],
+    ["aborted", "response_aborted", text("Partial reply.")], ["stop", "empty_response", text("")],
+  ] as const)("publishes %s as %s on the owned settled reply only", async (stopReason, skipReason, response) => {
+    const run = fixture({ observerGuard }, [{ ...response, stopReason }]);
+    await run.runtime.prompt("Implement the requested fix.", "user");
+    expect(reviewer).not.toHaveBeenCalled();
+    const saved = rows(run.events).filter(message => message.runDiagnostics?.observer);
+    expect(saved).toHaveLength(1);
+    expect(saved[0].runDiagnostics?.observer).toMatchObject({ messageId: saved[0].id, mode: "guard", modelKey: "reviewer/judge", status: "skipped", skipReason });
+    expect(saved[0].runDiagnostics?.observer).not.toHaveProperty("verdict");
+    expect(run.requests).toHaveLength(skipReason === "empty_response" ? 2 : 1);
+  });
+
+  it.each([undefined, { ...observerGuard, mode: "off" as const }])("does not record a skipped reply with %j", async observerGuard => {
+    const run = fixture({ observerGuard }, [{ ...text("Truncated reply."), stopReason: "length" }]);
+    await run.runtime.prompt("Implement the requested fix.", "user");
+    expect(reviewer).not.toHaveBeenCalled();
+    expect(assessment(run.events)).toBeUndefined();
+  });
+
+  it("records graceful Stop only on the owned response where the run ends", async () => {
+    const requested: boolean[] = [];
+    const run = fixture({ observerGuard, onEvent: ({ event }) => {
+      if (event.type === "message_start" && event.message.role === "assistant") requested.push(run.runtime.requestGracefulStop().requested);
+    } }, [read]);
+    await run.runtime.prompt("Implement the requested fix.", "user");
+    expect(requested).toEqual([true]);
+    expect(run.requests).toHaveLength(1);
+    expect(reviewer).not.toHaveBeenCalled();
+    expect(assessment(run.events)).toMatchObject({ status: "skipped", skipReason: "stop_requested" });
+  });
+
+  it("records hard Stop during tools only on the last owned response", async () => {
+    let stopped: Promise<void> | undefined;
+    const run = fixture({ observerGuard, onEvent: ({ event }) => {
+      if (event.type === "tool_start" && !stopped) stopped = run.runtime.abort();
+    } }, [read, text("No later reply should run.")]);
+    await run.runtime.prompt("Implement the requested fix.", "user").catch(() => undefined);
+    expect(stopped).toBeDefined();
+    await stopped;
+    expect(run.requests).toHaveLength(1);
+    expect(reviewer).not.toHaveBeenCalled();
+    const replies = rows(run.events).filter(message => message.role === "assistant");
+    expect(replies.flatMap(reply => reply.runDiagnostics?.observer ?? [])).toEqual([expect.objectContaining({ messageId: replies.at(-1)?.id, status: "skipped", skipReason: "stop_requested" })]);
+  });
+
+  it("does not review a queued steering reply; records the changed task only on its settled response", async () => {
+    let accepted = false;
+    const followup = "Explain only; do not execute.";
+    const run = fixture({ observerGuard, onEvent: ({ event }) => {
+      if (!accepted && event.type === "message_start" && event.message.role === "assistant") {
+        accepted = run.runtime.steer({ text: followup }, "turn", { id: "steering", role: "user", content: followup, status: "complete", createdAt: "2026-01-01T00:00:00Z" }).accepted;
+      }
+    } }, [text("Implementation is still pending."), text("Here is the explanation.")]);
+    await run.runtime.prompt("Implement the requested fix.", "user", "turn");
+    expect(accepted).toBe(true);
+    expect(run.requests).toHaveLength(2);
+    expect(reviewer).not.toHaveBeenCalled();
+    const replies = rows(run.events).filter(message => message.role === "assistant");
+    expect(replies[0].runDiagnostics?.observer).toBeUndefined();
+    expect(replies[1].runDiagnostics?.observer).toMatchObject({ messageId: replies[1].id, status: "skipped", skipReason: "task_changed" });
+  });
+
+  it("skips the last closeout response without reviewing the preceding tool batches", async () => {
+    let applied = false;
+    const toolBatches: Script[] = Array.from({ length: MODE_CLOSEOUT_MAX_REQUESTS }, (_, i) => ({
+      content: [{ type: "toolCall", id: `read-${i}`, name: "Read", arguments: { path: "fixture.txt" } }], stopReason: "toolUse",
+    }));
+    const run = fixture({ observerGuard, mode: "goal", modeDefinition: builtinModeDefinition("goal"), onEvent: ({ event }) => {
+      if (!applied && event.type === "message_start" && event.message.role === "assistant") {
+        applied = run.runtime.modeTurnNotice({ turnId: "turn", runId: "run", action: "closeout" }).applied;
+      }
+    } }, [...toolBatches, text("Here is the closeout handoff.")]);
+    await run.runtime.prompt({ text: "Implement the requested fix.", modeTurn: { runId: "run", stageId: "work", origin: "user", enteredStage: false, input: "Implement the requested fix.", artifactPaths: {} } }, "user", "turn");
+    expect(applied).toBe(true);
+    expect(run.requests).toHaveLength(1 + MODE_CLOSEOUT_MAX_REQUESTS);
+    expect(reviewer).not.toHaveBeenCalled();
+    const replies = rows(run.events).filter(message => message.role === "assistant");
+    expect(replies.flatMap(reply => reply.runDiagnostics?.observer ?? [])).toEqual([expect.objectContaining({ messageId: replies.at(-1)?.id, status: "skipped", skipReason: "mode_closeout" })]);
+  });
+
+  it("does not spend the assessment on a silence retry or on later responses after assessing", async () => {
+    const run = fixture({ observerGuard }, [text(""), text("Implementation is still pending."), { ...text("Partial reply."), stopReason: "length" }]);
+    reviewer.mockImplementation(async (_provider, context) => verdict(context));
+    await run.runtime.prompt("Implement the requested fix.", "user");
+    expect(reviewer).toHaveBeenCalledTimes(1);
+    expect(run.requests).toHaveLength(3);
+    expect(rows(run.events).flatMap(message => message.runDiagnostics?.observer ?? [])).toEqual([expect.objectContaining({ status: "assessed", continued: true })]);
+  });
+
+  it("skips an owned reply when there is no current user task text", async () => {
+    const run = fixture({ observerGuard });
+    await run.runtime.prompt(" ", "user");
+    expect(reviewer).not.toHaveBeenCalled();
+    expect(assessment(run.events)).toMatchObject({ status: "skipped", skipReason: "no_user_task" });
   });
 });
 

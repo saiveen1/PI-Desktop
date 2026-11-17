@@ -14,7 +14,6 @@ import { ActivityGroup } from "./ActivityGroup";
 import { AssistantErrorMessage } from "./shared";
 import { useRenderBlocks, type RenderBlock } from "./render-blocks";
 import { earlyEndAdvisory } from "../../../lib/output-guard-advisory";
-import { ObserverGuardDisclosure } from "./ObserverGuardDisclosure";
 import { splitDsmlProtocolTail } from "../../../lib/dsml-protocol-tail";
 import { useDisclosureAnchorNotifier } from "../../../lib/disclosure-anchor-context";
 
@@ -61,7 +60,6 @@ const SmoothMessageBubble = memo(function SmoothMessageBubble({ message, streami
       {advisory ? (
         <p className="message-output-notice" role="status">{t(`outputGuard.${advisory}`)}</p>
       ) : null}
-      <ObserverGuardDisclosure message={message} sessionId={sessionId} />
       {protocol ? (
         <details className="dsml-protocol-details">
           <summary onClick={(event) => notifyAnchor?.(event.currentTarget)}>

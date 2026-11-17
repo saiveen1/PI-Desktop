@@ -69,7 +69,7 @@ describe("Observer Guard strict evidence boundary", () => {
     const window = new ObserverEvidenceWindow();
     window.observe(tools("unsafe", name), resolveObserverGuardSettings({}), []);
     window.observe(tools("later-success"), resolveObserverGuardSettings({}), []);
-    expect(window.unsafe).toBe(true);
+    expect(window.blockingTool).toEqual({ reason: "tool_effects_unknown", tool: { toolCallId: "unsafe", toolName: name } });
   });
 
   it.each([undefined, true])("retains failed or unknown tool outcomes even if later tools succeed: %s", isError => {
@@ -79,7 +79,7 @@ describe("Observer Guard strict evidence boundary", () => {
     else turn.toolResults[0].isError = isError;
     window.observe(turn, resolveObserverGuardSettings({}), []);
     window.observe(tools("later"), resolveObserverGuardSettings({}), []);
-    expect(window.unsafe).toBe(true);
+    expect(window.blockingTool).toEqual({ reason: isError === true ? "tool_error" : "tool_effects_unknown", tool: { toolCallId: "read", toolName: "Read" } });
   });
 
   it("requires matching receipts and only accepts completed zero-exit foreground shells", () => {
@@ -87,11 +87,21 @@ describe("Observer Guard strict evidence boundary", () => {
     const settings = resolveObserverGuardSettings({});
     const missing = tools(); missing.toolResults = [];
     window.observe(missing, settings, []);
-    expect(window.unsafe).toBe(true);
+    expect(window.blockingTool).toEqual({ reason: "tool_receipt_mismatch", tool: { toolCallId: "read", toolName: "Read" } });
     for (const output of ['{"exitCode":null}', '{"exitCode":1}', '{"backgroundTaskId":"job"}', '{"exitCode":0,"timedOut":true}', "unknown"]) {
       window.reset(); window.observe(tools("shell", "Bash", output), settings, []); expect(window.unsafe).toBe(true);
     }
     window.reset(); window.observe(tools("shell", "Bash", '{"exitCode":0}'), settings, []); expect(window.unsafe).toBe(false);
+  });
+
+  it("bounds and redacts first blocking identity independently of recent receipts", () => {
+    const window = new ObserverEvidenceWindow();
+    const settings = resolveObserverGuardSettings({ recentToolCount: 0 });
+    window.observe(tools("secret-call-token", "plugin_" + "x".repeat(248) + "🙂" + "y".repeat(100), "no-output-in-diagnostic", true), settings, ["secret-call-token"]);
+    window.observe(tools("later", "Other", "later-output", true), settings, []);
+    expect(window.blockingTool).toEqual({ reason: "tool_error", tool: { toolCallId: "[REDACTED]", toolName: "plugin_" + "x".repeat(248) } });
+    window.reset();
+    expect(window.blockingTool).toBeUndefined();
   });
 });
 
@@ -113,4 +123,13 @@ describe("Observer JSON and input bounds", () => {
     expect(input.text).not.toContain("private-output");
     expect(window.unsafe).toBe(true);
   });
+});
+
+it("keeps redacted verdict reasons valid Unicode when the export limit cuts an emoji", () => {
+  const reason = "password=a " + "x".repeat(279) + "🙂";
+  expect(reason.length).toBeLessThanOrEqual(300);
+  const parsed = parseObserverVerdict(JSON.stringify({ ...valid, reason }), supplied);
+  expect(parsed).toBeDefined();
+  expect(parsed!.reason.length).toBeLessThanOrEqual(300);
+  expect(parsed!.reason).not.toMatch(/\p{Cs}/u);
 });

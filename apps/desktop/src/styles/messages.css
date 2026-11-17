@@ -2107,6 +2107,42 @@
   line-height: var(--leading-normal);
 }
 
+.observer-assessment {
+  margin-top: 12px;
+  padding: 10px 0 10px 12px;
+  border-left: 2px solid var(--ds-border);
+  color: var(--ds-text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  overflow-wrap: anywhere;
+}
+
+.observer-assessment-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  color: var(--ds-text-primary);
+}
+
+.observer-assessment-summary strong { font-weight: 600; }
+.observer-assessment[data-state="error"] { border-left-color: var(--ds-error); }
+.observer-assessment[data-state="checking"] { border-left-color: var(--ds-accent); }
+.observer-assessment p { margin: 6px 0 0; }
+.observer-assessment-decision { color: var(--ds-text-primary); }
+.observer-assessment > details { margin-top: 8px; }
+.observer-assessment > details > summary { width: fit-content; cursor: pointer; }
+.observer-assessment > details > summary:focus-visible { outline: 2px solid var(--ds-accent); outline-offset: 3px; }
+.observer-assessment-advisory { color: var(--ds-text-muted); }
+.observer-assessment dl { display: grid; gap: 6px; margin: 10px 0 0; }
+.observer-assessment dl > div { display: grid; grid-template-columns: minmax(90px, 0.3fr) minmax(0, 1fr); gap: 8px; }
+.observer-assessment dt { color: var(--ds-text-muted); }
+.observer-assessment dd { margin: 0; min-width: 0; }
+.observer-assessment-evidence { display: grid; gap: 6px; }
+.observer-assessment-evidence > span { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+.observer-assessment-evidence code { color: var(--ds-text-muted); font-size: var(--text-xs); }
+.observer-assessment .observer-evidence-link { min-height: 0; padding: 0; text-align: left; text-decoration: underline; }
+
 .message-error {
   /* The message column owns the dynamic chat width; do not add a second cap. */
   width: 100%;

@@ -863,6 +863,16 @@ stub under the same id when the file is gone) so a queued outbox can drain
 checkpoints never go through the outbox: a checkpoint is only meaningful
 against a live host, and replaying one after the final row would be wrong.
 
+Settled main-assistant diagnostic refreshes are a narrow exception to duplicate
+append no-ops. Main queues a diagnostic-only snapshot separately from the original
+message append so offline coalescing cannot replace the original response. Host
+checks the existing message and turn owner, preserves all response content/usage
+and unrelated metadata, and merges only non-regressing `runDiagnostics` evidence.
+The transport-only `runDiagnostics.refreshOnly` marker is never persisted; a
+refresh with no existing owner cannot create an empty replacement message.
+Observer updates are durable even before the whole turn ends. No second usage
+settlement or extra model request is implied by this metadata refresh.
+
 ### Permissions
 - `permissions.evaluate`
 - `permissions.resolve`

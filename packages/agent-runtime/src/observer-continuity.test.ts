@@ -21,7 +21,7 @@ function fixture(thinkingLevel: "off" | "high" = "off") {
 
 it("keeps observer continuation active for compaction until its request is prepared", async () => {
   const { policy, turn } = fixture();
-  expect(await policy.finishTurn(turn, new Map(), () => true, () => {}, undefined, false, { messageId: "answer", publish() {} })).toEqual({ action: "continue" });
+  expect(await policy.finishTurn(turn, new Map(), () => undefined, () => {}, undefined, false, { messageId: "answer", publish() {} })).toEqual({ action: "continue" });
   expect(policy.pending).toBe(true);
   const prepared = policy.prepareRequest({ messages: [] });
   expect(JSON.stringify(prepared)).toContain("observer_guard_correction");
@@ -31,7 +31,27 @@ it("keeps observer continuation active for compaction until its request is prepa
 
 it("provides a reasoning budget without changing the explicitly selected effort", async () => {
   const { policy, turn } = fixture("high");
-  await policy.finishTurn(turn, new Map(), () => true, () => {}, undefined, false, { messageId: "answer", publish() {} });
+  await policy.finishTurn(turn, new Map(), () => undefined, () => {}, undefined, false, { messageId: "answer", publish() {} });
   expect(vi.mocked(completeOneShot).mock.calls[0]?.[2]).toBe("high");
   expect(vi.mocked(completeOneShot).mock.calls[0]?.[3]?.maxOutputTokens).toBe(8192);
+});
+
+it.each(["pending_work", "runtime_unavailable"] as const)("records %s without claiming the correction budget", async reason => {
+  const { policy, turn } = fixture();
+  const publish = vi.fn();
+  expect(await policy.finishTurn(turn, new Map(), () => reason, () => {}, undefined, false, { messageId: "answer", publish })).toBeUndefined();
+  expect(publish).toHaveBeenLastCalledWith(expect.objectContaining({ status: "assessed", continued: false, continuationBlocked: "unsafe", continuationReason: reason }));
+  expect(policy.attempts).toBe(0);
+});
+
+it("does not spend a review on an ineligible intermediate response or attach it to another reply", async () => {
+  const { policy, turn } = fixture();
+  const publish = vi.fn();
+  await policy.finishTurn({ ...turn, message: { ...turn.message, stopReason: "length" } }, new Map(), () => "pending_work", () => {}, undefined, false, { messageId: "short", publish });
+  expect(publish).not.toHaveBeenCalled();
+  policy.observer.finish({ messageId: "other", publish });
+  expect(publish).not.toHaveBeenCalled();
+  expect(await policy.finishTurn(turn, new Map(), () => undefined, () => {}, undefined, false, { messageId: "answer", publish })).toEqual({ action: "continue" });
+  expect(vi.mocked(completeOneShot)).toHaveBeenCalledTimes(1);
+  expect(publish).toHaveBeenLastCalledWith(expect.objectContaining({ messageId: "answer", status: "assessed", continued: true }));
 });

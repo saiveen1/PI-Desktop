@@ -368,9 +368,22 @@ rows may omit it and render without invented diagnostics. Stored message ISO
 timestamps remain unchanged; local timezone conversion is presentation only.
 
 Built-in Observer Guard assessments use `meta.runDiagnostics.observer` in the
-same message metadata container. Host storage preserves this optional JSON value
-without interpreting it, starting a model call, or granting tool permission;
-no separate assessment/result table is added.
+same message metadata container; no separate assessment/result table is added.
+An assistant response can settle before its observer completes. The existing
+append path therefore accepts a narrowly validated diagnostic-only refresh for
+that already-settled main assistant message, rather than dropping it as a replay.
+The Host preserves the original content, thinking, usage, timestamps, tool data
+and unrelated metadata. Ownership, turn identity and monotonic assessment state
+are checked; a stale checking snapshot cannot erase a terminal result, nor can a
+different response/turn gain an assessment. This is not a general message upsert.
+Checking and terminal observer updates reach durable storage even if another
+response follows in the same turn. Main retains at most the latest omitted empty
+reply per active session until a matching observer record, next reply, terminal
+turn or transcript rewrite settles it; only a matching observation causes its
+original snapshot to be queued before the diagnostic-only refresh. Ordinary
+empty replies stay omitted. Reopening only reads recorded evidence and
+does not start a model call or grant tool permission. Existing optional metadata
+allows the added reason/receipt fields without a new table or schema migration.
 
 Internal system-state rows use role `system`, empty visible content, and optional
 `meta.modelSystem = { version: 1, messageJson, beforeMessageId?, afterMessageId? }`.

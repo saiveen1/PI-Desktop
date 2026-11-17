@@ -246,7 +246,7 @@ test("a non-empty complete assistant message is persisted", () => {
   assert.equal(f.enqueued.length, 1);
 });
 
-test("a final diagnostic refresh upserts the settled row without settling usage twice", () => {
+test("a final diagnostic refresh queues only metadata without settling usage twice", () => {
   const f = fixture();
   const message = { id: "diagnostic-answer", role: "assistant", content: "done", status: "complete",
     createdAt: "2026-11-06T00:00:00Z", usage: { inputTokens: 4, outputTokens: 2, totalTokens: 6 } };
@@ -258,13 +258,75 @@ test("a final diagnostic refresh upserts the settled row without settling usage 
     event: { type: "message_update", message: { ...message, runDiagnostics } } });
   const rows = f.enqueued.filter(entry => entry.message);
   assert.equal(rows.length, 2);
-  assert.equal(rows[0].key, rows[1].key);
-  assert.deepEqual(rows[1].message.runDiagnostics, runDiagnostics);
-  assert.deepEqual(rows[1].message.usage, message.usage);
+  assert.notEqual(rows[0].key, rows[1].key);
+  assert.equal(rows[1].turnId, TURN);
+  assert.deepEqual(rows[1].message, {
+    id: message.id, role: message.role, createdAt: message.createdAt, content: "",
+    runDiagnostics: { ...runDiagnostics, refreshOnly: true },
+  });
   assert.equal(f.usageCalls.length, 1);
   f.activeTurns.set(SESSION, "new-turn");
   f.coordination.recordTurnStart(SESSION, "new-turn");
   f.persistence.persistAgentEvent({ sessionId: SESSION, turnId: TURN, ts: 4000,
     event: { type: "message_update", message: { ...message, runDiagnostics } } });
   assert.equal(f.enqueued.filter(entry => entry.message).length, 2);
+});
+
+test("intermediate observer updates are queued separately from the settled row and its usage", () => {
+  const f = fixture();
+  const message = { id: "observed", role: "assistant", content: "First answer", status: "complete",
+    createdAt: "2026-11-06T00:00:00Z", usage: { inputTokens: 4, outputTokens: 2, totalTokens: 6, operationId: "request-1" } };
+  f.persistAssistant(message);
+  const update = (status, { turnId = TURN, messageId = message.id, parentToolCallId, stream } = {}) => {
+    const runDiagnostics = { turnId: TURN, startedAt: 1000, observer: {
+      messageId, mode: "guard", status, startedAt: 1900,
+      ...(status === "assessed" ? { endedAt: 2000, continued: true } : {}),
+    } };
+    f.persistence.persistAgentEvent({ sessionId: SESSION, turnId, ts: 2000, parentToolCallId,
+      event: { type: "message_update", stream, message: { ...message, runDiagnostics } } });
+  };
+  update("checking");
+  update("assessed");
+  update("assessed", { messageId: "different-message" });
+  update("assessed", { turnId: "different-turn" });
+  update("assessed", { parentToolCallId: "delegate" });
+  update("assessed", { stream: "delta" });
+  f.persistAssistant({ ...message, id: "continuation", content: "Continued answer", usage: undefined });
+
+  const rows = f.enqueued.filter(entry => entry.message);
+  assert.deepEqual(rows.map(entry => entry.message.id), ["observed", "observed", "observed", "continuation"]);
+  assert.equal(new Set(rows.map(entry => entry.key)).size, rows.length);
+  assert.deepEqual(rows.slice(1, 3).map(entry => entry.message.runDiagnostics.observer.status), ["checking", "assessed"]);
+  for (const row of rows.slice(1, 3)) {
+    assert.equal(row.turnId, TURN);
+    assert.equal(row.message.content, "");
+    assert.equal(row.message.usage, undefined);
+  }
+  assert.equal(f.usageCalls.length, 1);
+  assert.equal(f.enqueued.filter(entry => entry.usage).length, 1);
+});
+
+test("an otherwise empty assistant retains its exact observer skip but not foreign metadata", () => {
+  const f = fixture();
+  const runDiagnostics = { turnId: TURN, startedAt: 1, observer: { messageId: "empty-observed", mode: "guard", status: "skipped", startedAt: 1, endedAt: 1, skipReason: "empty_response" } };
+  f.persistAssistant({ id: "empty-observed", content: "", status: "complete", runDiagnostics });
+  assert.equal(f.enqueued.length, 1);
+  assert.deepEqual(f.enqueued[0].message.runDiagnostics, runDiagnostics);
+  f.persistAssistant({ id: "other-empty", content: "", status: "complete", runDiagnostics });
+  assert.equal(f.enqueued.length, 1);
+});
+
+test("a late Stop assessment retains a previously filtered tool-only reply", async () => {
+  const f = fixture();
+  const base = { id: "tool-only", role: "assistant", content: "", status: "complete", createdAt: "2026-01-01T00:00:00Z", usage: { inputTokens: 1, outputTokens: 2, totalTokens: 3 }, runDiagnostics: { turnId: TURN, startedAt: 1000 } };
+  f.persistAssistant(base);
+  assert.equal(f.enqueued.filter(entry => entry.message).length, 0);
+  const observer = { messageId: base.id, mode: "guard", status: "skipped", startedAt: 2000, endedAt: 2000, skipReason: "stop_requested" };
+  f.persistence.persistAgentEvent({ sessionId: SESSION, turnId: TURN, ts: 2000, event: { type: "message_update", message: { ...base, runDiagnostics: { ...base.runDiagnostics, observer } } } });
+  await f.persistence.flush();
+  const rows = f.enqueued.filter(entry => entry.message);
+  assert.equal(rows.length, 2);
+  assert.deepEqual(rows[0].message, base);
+  assert.deepEqual(rows[1].message.runDiagnostics.observer, observer);
+  assert.equal(f.usageCalls.length, 1);
 });

@@ -26,6 +26,7 @@ mod observer;
 pub use observer::ObserverMode;
 #[cfg(test)]
 mod observer_tests;
+mod run_diagnostics;
 mod usage;
 pub use usage::{record_usage, session_usage_cost};
 
@@ -2476,6 +2477,13 @@ pub fn append_message(
     message: &UiMessage,
     turn_id: Option<&str>,
 ) -> Result<()> {
+    if let Some(refresh) = message
+        .run_diagnostics
+        .as_ref()
+        .filter(|value| value.get("refreshOnly").is_some())
+    {
+        return run_diagnostics::refresh(db, session_id, message, turn_id, refresh);
+    }
     model_system::validate(message)?;
     let message = crate::session_collaboration::prepare_append(db, session_id, message, turn_id)?;
     let session_created = ensure_session_for_append(db, session_id)?;

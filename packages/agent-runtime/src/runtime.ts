@@ -35,8 +35,8 @@ import { readLocalRequestErrorDetails } from "./local-request-errors.js";
 import { isValidToolCall, recoverMalformedToolCalls } from "./tool-call-recovery.js";
 import { textToolCallDiagnostic } from "./text-tool-call.js";
 import { TurnCorrectionPolicy } from "./turn-correction-policy.js";
-import type { ObserverGuardRuntimeConfig } from "./observer-guard.js";
-import { finishRuntimeTurn, finishDiagnosticMessage } from "./runtime-turn-finalization.js";
+import type { ObserverGuardRuntimeConfig, ObserverRuntimeBlock } from "./observer-guard.js";
+import { finishRuntimeTurn, finishDiagnosticMessage, recordRuntimeObserverSkip } from "./runtime-turn-finalization.js";
 import { PROGRESS_TURN_NUDGE, isProgressOnlyAssistantTurn } from "./progress-turn.js";
 export { isProgressOnlyAssistantTurn } from "./progress-turn.js";
 import { diagnosticsForMessage, runDiagnosticsProviderEvent } from "./run-diagnostics.js";
@@ -2338,21 +2338,20 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       // Stop and mode closeout take precedence over all corrective continuations.
       finishTurn: async (turn, signal) => {
         if (turn.message.stopReason === "error" || turn.message.stopReason === "aborted") return;
-        // Mode closeout takes precedence over checklist continuation.
-        if (this.modeState.closeoutExhausted()) return { action: "end" };
-        if (this.gracefulStopRequested) {
-          this.gracefulStopRequested = false;
-          return { action: "end" };
-        }
-        const canContinue = () =>
-          this.mode === "agent" && !this.disposed && !this.runCancelled && !this.turnHadError &&
-          !this.modeState.closeoutExhausted() &&
-          !this.gracefulStopRequested && this.acceptingSteering && !this.pendingSteering.size &&
-          !this.pendingProgressTurnRerun && !this.pendingSilentTurnRerun && !this.pendingOverflow &&
-          !this.pendingProviderRetry && !this.keepTurnOpenForDelegates();
-        return finishRuntimeTurn({ turn, signal, corrections: this.turnCorrections, toolNames: this.toolCatalog, canContinue,
+        const stopReason = this.modeState.closeoutExhausted() ? "mode_closeout" : this.gracefulStopRequested ? "stop_requested" : undefined;
+        if (stopReason === "stop_requested") this.gracefulStopRequested = false;
+        const turnId = this.turnId;
+        const runtimeBlock = (): ObserverRuntimeBlock | undefined => {
+          if (this.runCancelled || this.gracefulStopRequested) return "stop_requested";
+          if (this.pendingSteering.size) return "task_changed";
+          if (this.mode !== "agent") return this.mode === "plan" ? "plan_mode" : "runtime_unavailable";
+          if (this.turnId !== turnId || this.disposed || this.turnHadError || !this.acceptingSteering || this.modeState.closeoutExhausted()) return "runtime_unavailable";
+          if (this.pendingProgressTurnRerun || this.pendingSilentTurnRerun || this.pendingOverflow ||
+            this.pendingProviderRetry || this.keepTurnOpenForDelegates()) return "pending_work";
+        };
+        return finishRuntimeTurn({ turn, signal, corrections: this.turnCorrections, toolNames: this.toolCatalog, runtimeBlock, stopReason, turnId,
           autonomous: this.autonomousExecution, tracker: this.runDiagnostics, response: this.runDiagnosticMessage,
-          publish: message => this.emit({ type: "message_update", message }),
+          publish: message => this.emit({ type: "message_update", message }, turnId),
         });
       },
     });
@@ -6979,8 +6978,8 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
 
   private emit(event: AgentEventEnvelope["event"], turnId?: string, ts = Date.now()) {
     const owner = turnId ?? this.turnId;
-    if (event.type === "agent_end" || event.type === "error") finishDiagnosticMessage(this.runDiagnostics, owner, ts,
-      this.runDiagnosticMessage, message => this.emit({ type: "message_update", message }, owner, ts));
+    if (event.type === "agent_end" || event.type === "error") finishDiagnosticMessage(this.turnCorrections, this.runDiagnostics, owner, ts,
+      this.runDiagnosticMessage, message => this.emit({ type: "message_update", message }, owner, ts), this.runCancelled);
     if ((event.type === "message_start" || event.type === "message_update" || event.type === "message_end") &&
       event.message.role === "assistant" && !event.message.parentToolCallId) {
       const diagnostics = this.runDiagnostics?.snapshot(ts);
@@ -9273,6 +9272,8 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           };
           if (!this.currentAssistant.providerReplay) delete this.currentAssistant.providerReplay;
           if (!this.currentAssistant.responseModelId) delete this.currentAssistant.responseModelId;
+          if (failed || aborted || emptyResponse) recordRuntimeObserverSkip(this.turnCorrections, this.runDiagnostics, this.turnId, assistantId,
+            this.runCancelled ? "stop_requested" : aborted ? "response_aborted" : failed ? "response_error" : "empty_response");
           this.emit({ type: "message_end", message: this.currentAssistant });
           this.activeProviderRetryAttempt = 0;
           this.streamStartedAt = undefined;
@@ -9507,6 +9508,11 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           : {}),
         ...(error ? { error, isError: true } : {}),
       };
+      if (this.turnCorrections.observer.canRecord) {
+        this.runDiagnostics?.settleResponse(this.currentAssistant.id, { stopReason: status }, this.turnCorrections.attempts);
+        recordRuntimeObserverSkip(this.turnCorrections, this.runDiagnostics, this.turnId, this.currentAssistant.id,
+          this.runCancelled ? "stop_requested" : status === "aborted" ? "response_aborted" : "response_error");
+      }
     }
     this.emit({ type: "message_end", message: this.currentAssistant });
     // The failure path is where a slow turn matters most: a provider that
@@ -9720,7 +9726,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     this.pendingUserMessageId = userMessageId;
     this.resetRunRecoveryState();
     this.turnCorrections.setTask(typeof input === "string" ? input :
-      input.sessionMessage || (input.modeTurn && input.modeTurn.origin !== "user") ? "" : input.text);
+      input.sessionMessage || (input.modeTurn && input.modeTurn.origin !== "user") ? undefined : input.text);
     this.autonomousExecution = false;
     const recovered = recoverMalformedToolCalls(this.agent.state.messages);
     if (recovered !== this.agent.state.messages) this.setAgentMessages(recovered);
@@ -10060,8 +10066,8 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       throw error;
     }
     return result.finally(() => {
-      finishDiagnosticMessage(this.runDiagnostics, turnId, Date.now(), this.runDiagnosticMessage,
-        message => this.emit({ type: "message_update", message }, turnId));
+      finishDiagnosticMessage(this.turnCorrections, this.runDiagnostics, turnId, Date.now(), this.runDiagnosticMessage,
+        message => this.emit({ type: "message_update", message }, turnId), this.runCancelled);
       if (this.activeTurnSettlements.get(turnId) === settlement) {
         this.activeTurnSettlements.delete(turnId);
       }

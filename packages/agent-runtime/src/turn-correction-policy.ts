@@ -6,7 +6,7 @@ import { CorrectiveBudget } from "./corrective-budget.js";
 import { EARLY_END_REMINDER, EARLY_END_SECTION, suspectedEarlyEnd } from "./early-end.js";
 import { TextToolCallRecovery } from "./text-tool-call-recovery.js";
 import { UnfinishedTodoContinuation } from "./unfinished-todo-continuation.js";
-import { ObserverGuard } from "./observer-guard.js";
+import { ObserverGuard, type ObserverRuntimeBlock } from "./observer-guard.js";
 
 type EarlyEnd = NonNullable<AgentResponseTermination["earlyEnd"]>;
 
@@ -40,9 +40,9 @@ export class TurnCorrectionPolicy {
     this.nextSettings = settings ? { ...settings } : undefined;
   }
 
-  setTask(task: string, steering = false): void {
-    this.task = task;
-    this.observer.setTask(task);
+  setTask(task: string | undefined, steering = false): void {
+    this.task = task ?? "";
+    if (!steering) this.observer.setTask(task);
     if (steering) {
       this.pendingEarlyEnd = false;
       this.todos.cancelPending();
@@ -79,16 +79,21 @@ export class TurnCorrectionPolicy {
   async finishTurn(
     turn: AgentTurnContext,
     toolNames: ReadonlyMap<string, unknown>,
-    canContinue: () => boolean,
+    runtimeBlock: () => ObserverRuntimeBlock | undefined,
     annotate: (state: EarlyEnd, attempts: number) => void,
     signal?: AbortSignal,
     autonomous = false,
     observerSink?: Parameters<ObserverGuard["assess"]>[1],
   ): Promise<{ action: "continue" | "end" } | undefined> {
+    const generation = this.generation;
     this.observer.observeTools(turn);
-    const correction = await this.finishLocal(turn, toolNames, canContinue, annotate, signal, autonomous);
+    const correction = await this.finishLocal(turn, toolNames, () => !runtimeBlock(), annotate, signal, autonomous);
+    if (generation !== this.generation) return;
     if (correction) return correction;
-    return this.observer.assess(turn, observerSink, () => canContinue() && !autonomous && !this.latestBatchUnsafe && !this.pending, this.budget, signal);
+    // A queued user message owns the next request; record the skip on its reply, not on this intermediate one.
+    if (runtimeBlock() === "task_changed") return;
+    return this.observer.assess(turn, observerSink, () => runtimeBlock() ??
+      (autonomous || this.latestBatchUnsafe ? "runtime_unavailable" : this.pending ? "pending_work" : undefined), this.budget, signal);
   }
 
   private async finishLocal(

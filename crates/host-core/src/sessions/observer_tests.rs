@@ -153,3 +153,231 @@ fn observer_forks_default_off_without_mutating_source_or_other_configuration() {
         );
     }
 }
+
+fn refresh(message: &UiMessage, turn: &str, snapshot: Value) -> UiMessage {
+    let mut diagnostics = snapshot;
+    diagnostics["turnId"] = json!(turn);
+    diagnostics["startedAt"] = json!(1000);
+    diagnostics["refreshOnly"] = json!(true);
+    serde_json::from_value(json!({
+        "id": message.id, "role": "assistant", "content": "",
+        "createdAt": message.created_at, "runDiagnostics": diagnostics,
+    }))
+    .unwrap()
+}
+
+#[test]
+fn observer_late_diagnostics_stay_on_the_settled_candidate_after_reopen() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = Database::open_in_dir(dir.path()).unwrap();
+    let session = create_session(&db, None, None, None, None, None).unwrap();
+    let turn = begin_turn(&db, &session.id, None, None).unwrap();
+    let mut original = message();
+    original.thinking = Some("original thinking".into());
+    original.provider_id = Some("original-provider".into());
+    original.run_diagnostics = None;
+    let usage =
+        json!({"inputTokens": 4, "outputTokens": 2, "totalTokens": 6, "operationId": "request-1"});
+    original.usage = Some(serde_json::from_value(usage.clone()).unwrap());
+    append_message(&db, &session.id, &original, Some(&turn)).unwrap();
+    assert!(record_usage(&db, &session.id, &turn, &usage).unwrap());
+    let mut stored = indexed_message_record(&db, &session.id, &original.id)
+        .unwrap()
+        .unwrap();
+    stored.meta.as_mut().unwrap()["futureMetadata"] = json!({"keep": true});
+    assert!(transcripts::update_message(db.data_dir(), &session.id, &stored).unwrap());
+
+    let mut assessment = json!({ "messageId": original.id, "mode": "guard", "status": "checking", "startedAt": 2000 });
+    let checking = refresh(&original, &turn, json!({"observer": assessment}));
+    append_message(&db, &session.id, &checking, Some(&turn)).unwrap();
+    assert_eq!(
+        get_session(&db, &session.id).unwrap().unwrap().messages[0]
+            .run_diagnostics
+            .as_ref()
+            .unwrap()["observer"]["status"],
+        "checking"
+    );
+
+    assessment["status"] = json!("assessed");
+    assessment["endedAt"] = json!(3000);
+    assessment["continued"] = json!(true);
+    assessment["reviewedToolCount"] = json!(1);
+    assessment["toolOutputIncluded"] = json!(false);
+    let assessed = refresh(&original, &turn, json!({"observer": assessment}));
+    append_message(&db, &session.id, &assessed, Some(&turn)).unwrap();
+    append_message(&db, &session.id, &checking, Some(&turn)).unwrap();
+
+    let mut continuation = original.clone();
+    continuation.id = "continued-answer".into();
+    continuation.content = "I finished the work".into();
+    append_message(&db, &session.id, &continuation, Some(&turn)).unwrap();
+    let final_update = refresh(
+        &continuation,
+        &turn,
+        json!({"endedAt": 5000, "requestCount": 2}),
+    );
+    append_message(&db, &session.id, &final_update, Some(&turn)).unwrap();
+    end_turn(&db, &turn, "completed", None, None, false).unwrap();
+    drop(db);
+
+    let db = Database::open_in_dir(dir.path()).unwrap();
+    let detail = get_session(&db, &session.id).unwrap().unwrap();
+    assert_eq!(detail.messages.len(), 2);
+    let diagnostics = detail.messages[0].run_diagnostics.as_ref().unwrap();
+    assert_eq!(diagnostics["observer"], assessment);
+    assert!(diagnostics.get("endedAt").is_none());
+    assert!(diagnostics.get("refreshOnly").is_none());
+    assert_eq!(
+        detail.messages[1].run_diagnostics.as_ref().unwrap()["endedAt"],
+        5000
+    );
+    assert!(detail.messages[1]
+        .run_diagnostics
+        .as_ref()
+        .unwrap()
+        .get("observer")
+        .is_none());
+
+    let mut candidate = transcripts::read_transcript(db.data_dir(), &session.id)
+        .unwrap()
+        .into_iter()
+        .rev()
+        .find(|record| record.id == original.id)
+        .unwrap();
+    candidate
+        .meta
+        .as_mut()
+        .unwrap()
+        .as_object_mut()
+        .unwrap()
+        .remove("runDiagnostics");
+    assert_eq!(
+        serde_json::to_value(candidate).unwrap(),
+        serde_json::to_value(stored).unwrap()
+    );
+    let turn_usage: String = db
+        .conn()
+        .query_row(
+            "SELECT usage_json FROM turns WHERE id = ?1",
+            [&turn],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let turn_usage: Value = serde_json::from_str(&turn_usage).unwrap();
+    assert_eq!(turn_usage, usage);
+}
+
+#[test]
+fn observer_diagnostic_refresh_cannot_insert_or_rewrite_unowned_rows() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = Database::open_in_dir(dir.path()).unwrap();
+    let session = create_session(&db, None, None, None, None, None).unwrap();
+    let other = create_session(&db, None, None, None, None, None).unwrap();
+    let turn = begin_turn(&db, &session.id, None, None).unwrap();
+    let other_turn = begin_turn(&db, &other.id, None, None).unwrap();
+    let mut main = message();
+    main.run_diagnostics = None;
+    let mut delegate = main.clone();
+    delegate.id = "delegated".into();
+    delegate.parent_tool_call_id = Some("task-call".into());
+    let mut streaming = main.clone();
+    streaming.id = "streaming".into();
+    streaming.status = Some("streaming".into());
+    let mut legacy = main.clone();
+    legacy.id = "unbound-legacy".into();
+    append_message(&db, &session.id, &legacy, None).unwrap();
+    for row in [&main, &delegate, &streaming] {
+        append_message(&db, &session.id, row, Some(&turn)).unwrap();
+    }
+    let snapshot = |id: &str| {
+        json!({"observer": {
+            "messageId": id, "mode": "observe", "status": "skipped", "startedAt": 2000,
+            "endedAt": 2001, "skipReason": "unsafe_effect",
+            "blockingTool": {"toolCallId": "some-call", "toolName": "Write"},
+        }})
+    };
+    let mut missing = main.clone();
+    missing.id = "not-persisted".into();
+    for row in [&delegate, &streaming, &legacy, &missing] {
+        append_message(
+            &db,
+            &session.id,
+            &refresh(row, &turn, snapshot(&row.id)),
+            Some(&turn),
+        )
+        .unwrap();
+    }
+    let patch = refresh(&main, &turn, snapshot(&main.id));
+    let mut forged = patch.clone();
+    forged.content = "replace the answer".into();
+    append_message(&db, &session.id, &forged, Some(&turn)).unwrap();
+    forged.content.clear();
+    forged.thinking = Some("replace thinking".into());
+    forged.error = Some(json!({"code": "PROVIDER_ERROR"}));
+    forged.tool_result = Some(json!({"forged": true}));
+    forged.output_truncated = Some(true);
+    append_message(&db, &session.id, &forged, Some(&turn)).unwrap();
+    let mut wrong_created_at = patch.clone();
+    wrong_created_at.created_at = "2026-01-02T00:00:00Z".into();
+    append_message(&db, &session.id, &wrong_created_at, Some(&turn)).unwrap();
+    let wrong_message = refresh(&main, &turn, snapshot(&delegate.id));
+    append_message(&db, &session.id, &wrong_message, Some(&turn)).unwrap();
+    let wrong_termination = refresh(
+        &main,
+        &turn,
+        json!({"endedAt": 2500, "termination": {"messageId": delegate.id}}),
+    );
+    append_message(&db, &session.id, &wrong_termination, Some(&turn)).unwrap();
+    append_message(&db, &session.id, &patch, None).unwrap();
+    append_message(&db, &other.id, &patch, Some(&turn)).unwrap();
+    let wrong_turn = refresh(&main, &other_turn, snapshot(&main.id));
+    append_message(&db, &other.id, &wrong_turn, Some(&other_turn)).unwrap();
+
+    end_turn(&db, &turn, "completed", None, None, false).unwrap();
+    let next_turn = begin_turn(&db, &session.id, None, None).unwrap();
+    let stale_owner = refresh(&main, &next_turn, snapshot(&main.id));
+    append_message(&db, &session.id, &stale_owner, Some(&next_turn)).unwrap();
+    let original_rows = get_session(&db, &session.id).unwrap().unwrap().messages;
+    assert_eq!(original_rows.len(), 4);
+    assert!(original_rows
+        .iter()
+        .all(|row| row.run_diagnostics.is_none()));
+    assert!(get_session(&db, &other.id)
+        .unwrap()
+        .unwrap()
+        .messages
+        .is_empty());
+    assert_eq!(original_rows[1].content, main.content);
+    assert_eq!(original_rows[3].status.as_deref(), Some("streaming"));
+
+    // A delayed outbox replay may reach its rightful row after the real turn ended.
+    append_message(&db, &session.id, &patch, Some(&turn)).unwrap();
+    let final_update = refresh(&main, &turn, json!({"endedAt": 3000}));
+    append_message(&db, &session.id, &final_update, Some(&turn)).unwrap();
+    let diagnostics = get_session(&db, &session.id).unwrap().unwrap().messages[1]
+        .run_diagnostics
+        .clone()
+        .unwrap();
+    assert_eq!(diagnostics["observer"], snapshot(&main.id)["observer"]);
+    assert_eq!(diagnostics["endedAt"], 3000);
+
+    let mut failed = main.clone();
+    failed.id = "observer-error".into();
+    append_message(&db, &session.id, &failed, Some(&next_turn)).unwrap();
+    let error = refresh(
+        &failed,
+        &next_turn,
+        json!({"observer": {
+            "messageId": failed.id, "mode": "guard", "status": "error", "errorCode": "TIMEOUT",
+            "startedAt": 2000, "endedAt": 3000
+        }}),
+    );
+    append_message(&db, &session.id, &error, Some(&next_turn)).unwrap();
+    let response = indexed_message_record(&db, &session.id, &failed.id)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        response.meta.unwrap()["runDiagnostics"]["observer"]["status"],
+        "error"
+    );
+}

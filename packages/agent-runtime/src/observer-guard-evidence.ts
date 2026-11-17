@@ -1,5 +1,5 @@
 import type { AgentTurnContext } from "@earendil-works/pi-agent-core";
-import type { ObserverGuardSettings, ObserverGuardVerdict } from "@pi-desktop/shared";
+import type { ObserverGuardAssessment, ObserverGuardSettings, ObserverGuardVerdict } from "@pi-desktop/shared";
 
 const KNOWN_SETTLED_TOOLS = new Set(["Read", "Glob", "Grep", "Write", "Edit", "Skill", "ToolSearch", "TodoWrite", "TaskReport"]);
 function knownToolEffects(result: AgentTurnContext["toolResults"][number]): boolean {
@@ -14,16 +14,27 @@ function knownToolEffects(result: AgentTurnContext["toolResults"][number]): bool
 export type ObserverEvidence = { id: string; kind: "user" | "assistant" | "tool"; text?: string; toolName?: string; isError?: boolean };
 export type ObserverInput = { text: string; evidence: ObserverEvidence[]; truncated: boolean };
 export type ObserverVerdict = { verdict: ObserverGuardVerdict; confidence: "low" | "medium" | "high"; reason: string; evidenceIds: string[] };
+type ToolBlock = {
+  reason: "tool_error" | "tool_effects_unknown" | "tool_receipt_mismatch";
+  tool?: ObserverGuardAssessment["blockingTool"];
+};
+
+function toolIdentity(toolCallId: string, toolName: string, secrets: readonly string[]): ToolBlock["tool"] {
+  const safe = (value: string) => redactObserverText(value.replace(/[\p{Cc}\p{Cf}]/gu, ""), secrets).trim().slice(0, 256).replace(/\p{Cs}/gu, "");
+  const id = safe(toolCallId), name = safe(toolName);
+  return id && name ? { toolCallId: id, toolName: name } : undefined;
+}
 
 /** Best effort only: avoid forwarding common credential shapes even in opted-in tool text. */
-export function redactObserverText(text: string, secrets: readonly string[] = []): string {
+export function redactObserverText(text: string, secrets: readonly string[] = [], maxChars?: number): string {
   let safe = text.replace(/-----BEGIN [^-\n]*PRIVATE KEY-----[\s\S]*?(?:-----END [^-\n]*PRIVATE KEY-----|$)/g, "[REDACTED]")
     .replace(/\b(?:sk-[\w-]{8,}|gh[pousr]_[\w]{8,}|github_pat_[\w]{8,}|AKIA[A-Z0-9]{16}|eyJ[\w-]+\.[\w-]+\.[\w-]+)\b/g, "[REDACTED]")
     .replace(/\b(Bearer|Basic)\s+[\w+/.=:-]+/gi, "$1 [REDACTED]")
     .replace(/((?:api[_-]?key|access[_-]?token|refresh[_-]?token|authorization|password|secret|cookie)[\s"']*[:=][\s"']*)[^\s,;"'}]+/gi, "$1[REDACTED]")
     .replace(/(https?:\/\/)[^\s/@]+:[^\s/@]+@/gi, "$1[REDACTED]@");
   for (const secret of secrets) if (secret.length >= 4) safe = safe.split(secret).join("[REDACTED]");
-  return safe;
+  // Host JSON rejects isolated surrogate halves, including those created by a length cut.
+  return safe.slice(0, maxChars).replace(/\p{Cs}/gu, "");
 }
 
 export function observerResponseAllowsAction(text: string): boolean {
@@ -33,17 +44,30 @@ export function observerResponseAllowsAction(text: string): boolean {
 export class ObserverEvidenceWindow {
   private tools: ObserverEvidence[] = [];
   private truncatedTools = new Set<string>();
-  unsafe = false;
+  private firstBlock?: ToolBlock;
+  get blockingTool(): ToolBlock | undefined { return this.firstBlock; }
+  get unsafe(): boolean { return this.firstBlock !== undefined; }
   hasToolProgress = false;
 
-  reset(): void { this.tools = []; this.truncatedTools.clear(); this.unsafe = false; this.hasToolProgress = false; }
+  reset(): void { this.tools = []; this.truncatedTools.clear(); this.firstBlock = undefined; this.hasToolProgress = false; }
 
   observe({ message, toolResults }: AgentTurnContext, settings: Required<ObserverGuardSettings>, secrets: readonly string[]): void {
     const calls = message.content.filter(block => block.type === "toolCall");
     if (!calls.length && !toolResults.length) return;
-    if (calls.length !== toolResults.length || calls.some(call => !toolResults.some(result => result.toolCallId === call.id && result.toolName === call.name)) ||
-      toolResults.some(result => result.isError !== false || !knownToolEffects(result))) this.unsafe = true;
-    else this.hasToolProgress = true;
+    const matches = (call: typeof calls[number], result: typeof toolResults[number]) => result.toolCallId === call.id && result.toolName === call.name;
+    const missing = calls.find(call => !toolResults.some(result => matches(call, result)));
+    if (missing || calls.length !== toolResults.length) {
+      const unmatched = toolResults.find(result => !calls.some(call => matches(call, result)));
+      const tool = missing ? toolIdentity(missing.id, missing.name, secrets) : unmatched && toolIdentity(unmatched.toolCallId, unmatched.toolName, secrets);
+      this.firstBlock ??= { reason: "tool_receipt_mismatch", tool };
+    } else {
+      const unsettled = toolResults.find(result => result.isError !== false || !knownToolEffects(result));
+      if (unsettled) this.firstBlock ??= {
+        reason: unsettled.isError === true ? "tool_error" : "tool_effects_unknown",
+        tool: toolIdentity(unsettled.toolCallId, unsettled.toolName, secrets),
+      };
+      else this.hasToolProgress = true;
+    }
     for (const result of toolResults) {
       const raw = settings.includeToolOutput ? result.content.flatMap(block => block.type === "text" ? [block.text] : []).join("\n") : undefined;
       const text = raw === undefined ? undefined : redactObserverText(raw, secrets);
@@ -93,7 +117,7 @@ export function parseObserverVerdict(text: string, evidence: readonly ObserverEv
     evidenceIds.some(id => typeof id !== "string" || !evidence.some(row => row.id === id)) || new Set(evidenceIds).size !== evidenceIds.length ||
     (verdict !== "unknown" && !evidenceIds.length) ||
     (verdict === "incomplete" && confidence === "high" && !evidence.some(row => row.kind === "assistant" && evidenceIds.includes(row.id)))) return;
-  return { verdict, confidence, reason: redactObserverText(reason).slice(0, 300), evidenceIds } as ObserverVerdict;
+  return { verdict, confidence, reason: redactObserverText(reason, [], 300), evidenceIds } as ObserverVerdict;
 }
 
 export const OBSERVER_REVIEW_INSTRUCTIONS = [

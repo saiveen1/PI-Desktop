@@ -71,6 +71,7 @@ export function createEventPersistence({
   flush: () => Promise<void>;
 } {
   const inflightSnapshots = new Map<string, UiMessage>();
+  const unwrittenEmptyReplies = new Map<string, { message: UiMessage; turnId: string }>();
   const pendingWrites = new Set<Promise<void>>();
   function trackWrite(write: Promise<void>): void {
     pendingWrites.add(write);
@@ -93,6 +94,7 @@ export function createEventPersistence({
         if (settled) return;
         settled = true;
         lease.commit();
+        unwrittenEmptyReplies.delete(sessionId);
       },
       rollback(): void {
         if (settled) return;
@@ -116,23 +118,43 @@ function subagentTagged(message: UiMessage, envelope: AgentEventEnvelope): UiMes
 
 
 function persistAgentEvent(envelope: AgentEventEnvelope): UiMessage | undefined {
-  const incoming = envelope.event;
-  // A settled diagnostic refresh upserts the row, without a second public end
-  // event or usage settlement (accounting still reads the original envelope).
-  const diagnosticRefresh = incoming.type === "message_update" && incoming.stream !== "delta" &&
-    incoming.message.role === "assistant" && !envelope.parentToolCallId &&
-    incoming.message.status !== "streaming" && incoming.message.runDiagnostics?.endedAt !== undefined
-      ? incoming.message : undefined;
-  const event = diagnosticRefresh ? { type: "message_end" as const, message: diagnosticRefresh } : incoming;
+  const event = envelope.event;
   if (transcriptRewrite.deferTranscriptEvent(envelope)) return;
   const activeTurnId = activeTurns.get(envelope.sessionId);
-  if (diagnosticRefresh && (
-    (activeTurnId && diagnosticRefresh.runDiagnostics?.turnId !== activeTurnId) ||
-    (envelope.turnId && diagnosticRefresh.runDiagnostics?.turnId !== envelope.turnId)
-  )) return;
   if (transcriptRewrite.isStaleTranscriptEvent(envelope, activeTurnId)) {
     if (envelope.turnId) completionNoticeTurns.delete(envelope.turnId);
     return;
+  }
+  if (event.type === "message_update" && event.stream !== "delta" &&
+    event.message.role === "assistant" && event.message.status !== "streaming") {
+    const { id, createdAt, runDiagnostics } = event.message;
+    if (runDiagnostics && (runDiagnostics.observer || runDiagnostics.endedAt !== undefined)) {
+      const owner = envelope.turnId ?? activeTurnId;
+      if (!owner || runDiagnostics.turnId !== owner || (activeTurnId && activeTurnId !== owner) ||
+        envelope.parentToolCallId || envelope.nestedParentToolCallId ||
+        event.message.parentToolCallId || event.message.nestedParentToolCallId ||
+        (runDiagnostics.observer && runDiagnostics.observer.messageId !== id)) return;
+      // The original append must reach Host first, even if both events arrive while it is offline.
+      const hash = createHash("sha256").update(JSON.stringify(runDiagnostics)).digest("hex");
+      const original = runDiagnostics.observer ? unwrittenEmptyReplies.get(envelope.sessionId) : undefined;
+      trackWrite((async () => {
+        if (original?.turnId === owner && original.message.id === id && original.message.createdAt === createdAt) {
+          await persistenceOutbox.enqueue({ key: `message:${envelope.sessionId}:${id}`,
+            sessionId: envelope.sessionId, turnId: owner, message: original.message }, () => runtimeState.host);
+          if (unwrittenEmptyReplies.get(envelope.sessionId) === original) unwrittenEmptyReplies.delete(envelope.sessionId);
+        }
+        await persistenceOutbox.enqueue({
+          key: `diagnostics:${envelope.sessionId}:${id}:${hash}`,
+          sessionId: envelope.sessionId, turnId: owner,
+          message: { id, createdAt, role: "assistant", content: "", runDiagnostics: { ...runDiagnostics, refreshOnly: true } },
+        }, () => runtimeState.host);
+      })().catch((error: unknown) => {
+        logger.app("persistence", "warn", "diagnostic refresh enqueue failed", {
+          sessionId: envelope.sessionId, data: String(error),
+        });
+      }));
+      return;
+    }
   }
   const turnId = activeTurnId;
   const usage = usageForEvent(envelope);
@@ -175,6 +197,7 @@ function persistAgentEvent(envelope: AgentEventEnvelope): UiMessage | undefined 
     !envelope.parentToolCallId
   ) {
     inflightSnapshots.set(envelope.sessionId, event.message);
+    unwrittenEmptyReplies.delete(envelope.sessionId);
   }
   if (event.type === "message_update" && event.message.role === "assistant") {
     // Checkpoint only the session's own reply (D299). Delegate rows stream in
@@ -227,6 +250,7 @@ function persistAgentEvent(envelope: AgentEventEnvelope): UiMessage | undefined 
     // renderer, but persistence is a separate call: without this check the
     // finalizer below would still settle a turn this event does not own.
     if (isStaleTerminalEvent(envelope)) return;
+    unwrittenEmptyReplies.delete(envelope.sessionId);
     completionNoticeTurns.delete(envelope.turnId ?? turnId ?? "");
     const turnFinalization = finishTurn(
       envelope.sessionId,
@@ -252,6 +276,7 @@ function persistAgentEvent(envelope: AgentEventEnvelope): UiMessage | undefined 
     // A late terminal event must not close a newer turn, nor restate the
     // regenerate branch archive below on its behalf.
     if (isStaleTerminalEvent(envelope)) return;
+    unwrittenEmptyReplies.delete(envelope.sessionId);
     completionNoticeTurns.delete(envelope.turnId ?? turnId ?? "");
     const turnFinalization = finishTurn(envelope.sessionId, "completed", undefined, {
       turnId: envelope.turnId ?? "",
@@ -341,6 +366,7 @@ function persistAgentEvent(envelope: AgentEventEnvelope): UiMessage | undefined 
     if (!envelope.parentToolCallId) {
       const sessionId = envelope.sessionId;
       inflightSnapshots.delete(sessionId);
+      unwrittenEmptyReplies.delete(sessionId);
       const finalId = event.message.id;
       inflightCheckpointer.observe({
         sessionId,
@@ -369,10 +395,17 @@ function persistAgentEvent(envelope: AgentEventEnvelope): UiMessage | undefined 
       event.message.status === "complete" &&
       messageTurnId !== undefined &&
       completionNoticeTurns.delete(messageTurnId);
+    const hasObserver = !envelope.parentToolCallId && !event.message.parentToolCallId &&
+      messageTurnId !== undefined && event.message.runDiagnostics?.turnId === messageTurnId &&
+      event.message.runDiagnostics?.observer?.messageId === event.message.id;
     if (
       empty && !carriesTool && !event.message.error && !reservedForSteering &&
-      !isCompletionNoticeReply && !event.message.providerReplay
+      !isCompletionNoticeReply && !event.message.providerReplay && !hasObserver
     ) {
+      if (!envelope.parentToolCallId && !event.message.parentToolCallId && messageTurnId &&
+        event.message.runDiagnostics?.turnId === messageTurnId) {
+        unwrittenEmptyReplies.set(envelope.sessionId, { message: event.message, turnId: messageTurnId });
+      }
       return;
     }
     void persistenceOutbox
@@ -381,7 +414,7 @@ function persistAgentEvent(envelope: AgentEventEnvelope): UiMessage | undefined 
           key: `message:${envelope.sessionId}:${event.message.id}`,
           sessionId: envelope.sessionId,
           message: subagentTagged(event.message, envelope),
-          turnId,
+          turnId: envelope.parentToolCallId ? turnId : messageTurnId,
         },
         () => runtimeState.host,
       )

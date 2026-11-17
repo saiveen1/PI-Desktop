@@ -1,8 +1,9 @@
 import type { AgentContext, AgentTurnContext } from "@earendil-works/pi-agent-core";
 import { getCurrentSystemMessage } from "@earendil-works/pi-ai";
 import {
-  isObserverGuardMode, isObserverGuardSettings, resolveObserverGuardSettings,
-  type ObserverGuardAssessment, type ObserverGuardError, type ObserverGuardMode, type ObserverGuardSettings,
+  isObserverGuardSettings, resolveObserverGuardSettings,
+  type ObserverGuardAssessment, type ObserverGuardContinuationReason, type ObserverGuardError, type ObserverGuardMode,
+  type ObserverGuardSettings, type ObserverGuardSkipReason,
 } from "@pi-desktop/shared";
 import type { RuntimeProviderConfig } from "./provider-binding.js";
 import { completeOneShot } from "./one-shot-complete.js";
@@ -18,6 +19,9 @@ export type ObserverGuardRuntimeConfig = {
 };
 
 type AssessmentSink = { messageId: string; publish: (assessment: ObserverGuardAssessment) => void };
+export type ObserverRuntimeBlock = Extract<ObserverGuardContinuationReason,
+  "stop_requested" | "plan_mode" | "pending_work" | "task_changed" | "runtime_unavailable">;
+const VERDICT_REASONS = { complete: "verdict_complete", blocked: "verdict_blocked", needs_input: "verdict_needs_input", unknown: "verdict_unknown" } as const;
 const SECTION = "observer_guard_correction";
 const REMINDER = "Recheck the user's existing task against the retained results. Continue only remaining authorized work within the original scope and permissions. Do not replay completed actions or assume unknown effects failed. If complete, blocked, refused, or awaiting input or approval, report that accurately and stop. This one-request reminder is not a new user request.";
 const ERRORS: readonly ObserverGuardError[] = ["MODEL_NOT_CONFIGURED", "MODEL_UNAVAILABLE", "EFFORT_UNAVAILABLE", "PROVIDER_UNAVAILABLE", "TIMEOUT", "INVALID_RESPONSE", "CANCELLED", "INSUFFICIENT_EVIDENCE"];
@@ -29,15 +33,19 @@ export class ObserverGuard {
   private generation = 0;
   private attempted = false;
   private invalidated = false;
-  private task = "";
+  private task?: string;
   private userId?: string;
   private controller?: AbortController;
   private pending = false;
+  private pendingSkip?: { messageId: string; reason: ObserverGuardSkipReason };
   private readonly evidence = new ObserverEvidenceWindow();
 
   constructor(private readonly sessionId?: string) {}
 
   get pendingCorrection(): boolean { return this.pending; }
+  get canRecord(): boolean {
+    return !this.attempted && this.task !== undefined && (this.active?.mode === "observe" || this.active?.mode === "guard");
+  }
 
   setConfig(value?: ObserverGuardRuntimeConfig): void {
     this.next = value && { ...value, settings: { ...value.settings }, provider: value.provider && {
@@ -53,15 +61,16 @@ export class ObserverGuard {
     this.active = this.next;
     this.attempted = false;
     this.invalidated = false;
-    this.task = "";
+    this.task = undefined;
     this.userId = undefined;
+    this.pendingSkip = undefined;
     this.evidence.reset();
   }
 
-  setTask(task: string): void { this.task = task; }
+  setTask(task: string | undefined): void { this.task = task; }
   userMessage(id: string, steering: boolean): void {
     if (steering) { this.invalidated = true; this.cancel(); }
-    else if (this.task) this.userId = id;
+    else if (this.task !== undefined) this.userId = id;
   }
   cancel(): void { this.pending = false; this.controller?.abort(); }
 
@@ -74,19 +83,49 @@ export class ObserverGuard {
     return [provider?.apiKey ?? "", ...Object.values(provider?.headers ?? {})];
   }
 
-  async assess(turn: AgentTurnContext, sink: AssessmentSink | undefined, canContinue: () => boolean, budget: CorrectiveBudget, signal?: AbortSignal): Promise<{ action: "continue" } | undefined> {
+  private begin(sink: AssessmentSink) {
     const config = this.active;
-    const { message } = turn;
-    const answer = message.content.flatMap(block => block.type === "text" ? [block.text] : []).join("\n");
-    if (!config || !isObserverGuardMode(config.mode) || config.mode === "off" || this.attempted || this.invalidated || !this.task || !this.userId || !sink ||
-      signal?.aborted || message.stopReason !== "stop" || !answer.trim() || message.content.some(block => block.type === "toolCall")) return;
+    if (!config || !this.canRecord || config.mode === "off") return;
     this.attempted = true;
-    const generation = this.generation;
     const settings = resolveObserverGuardSettings(config.settings);
-    let assessment: ObserverGuardAssessment = {
+    const assessment: ObserverGuardAssessment = {
       messageId: sink.messageId, mode: config.mode, status: "checking", startedAt: Date.now(), thinkingLevel: settings.thinkingLevel,
       ...(settings.providerId && settings.modelId ? { modelKey: `${settings.providerId}/${settings.modelId}` } : {}),
     };
+    return { config, settings, assessment };
+  }
+
+  skip(sink: AssessmentSink | undefined, skipReason: ObserverGuardSkipReason): undefined {
+    if (!sink) return;
+    const started = this.begin(sink);
+    if (started) sink.publish({ ...started.assessment, status: "skipped", skipReason, endedAt: started.assessment.startedAt });
+  }
+
+  private deferSkip(sink: AssessmentSink, reason: ObserverGuardSkipReason): undefined {
+    // Another request can still follow this reply (e.g. pending delegate results).
+    this.pendingSkip = { messageId: sink.messageId, reason };
+  }
+
+  finish(sink: AssessmentSink | undefined): void {
+    if (sink && this.pendingSkip?.messageId === sink.messageId) this.skip(sink, this.pendingSkip.reason);
+  }
+
+  async assess(turn: AgentTurnContext, sink: AssessmentSink | undefined, runtimeBlock: () => ObserverRuntimeBlock | undefined, budget: CorrectiveBudget, signal?: AbortSignal): Promise<{ action: "continue" } | undefined> {
+    const { message } = turn;
+    const task = this.task, userId = this.userId;
+    if (!sink || !this.canRecord || task === undefined || message.content.some(block => block.type === "toolCall")) return;
+    if (signal?.aborted) return this.skip(sink, "stop_requested");
+    if (message.stopReason === "length") return this.deferSkip(sink, "response_length");
+    if (message.stopReason !== "stop") return;
+    if (this.invalidated) return this.deferSkip(sink, "task_changed");
+    const answer = message.content.flatMap(block => block.type === "text" ? [block.text] : []).join("\n");
+    if (!answer.trim()) return this.deferSkip(sink, "empty_response");
+    if (!task.trim() || !userId) return this.deferSkip(sink, "no_user_task");
+    const started = this.begin(sink);
+    if (!started) return;
+    const generation = this.generation;
+    const { config, settings } = started;
+    let { assessment } = started;
     const publish = () => { if (generation === this.generation) sink.publish({ ...assessment }); };
     const fail = (errorCode: ObserverGuardError) => { assessment = { ...assessment, status: "error", errorCode, endedAt: Date.now() }; publish(); };
     publish();
@@ -96,7 +135,7 @@ export class ObserverGuard {
     if (!provider || provider.id !== settings.providerId || provider.modelId !== settings.modelId) { fail("MODEL_UNAVAILABLE"); return; }
     if (!provider.supportedThinkingLevels.includes(settings.thinkingLevel)) { fail("EFFORT_UNAVAILABLE"); return; }
     if (!provider.apiKey && provider.authKind !== "none" && !provider.resolveAuth) { fail("PROVIDER_UNAVAILABLE"); return; }
-    const input = this.evidence.build(this.task, this.userId, answer, sink.messageId,
+    const input = this.evidence.build(task, userId, answer, sink.messageId,
       { ...settings, maxInputChars: settings.maxInputChars - OBSERVER_REVIEW_INSTRUCTIONS.length }, this.secrets());
     assessment.inputTruncated = input.truncated;
     if (input.text.length + OBSERVER_REVIEW_INSTRUCTIONS.length > settings.maxInputChars || input.evidence.some(row => !row.id || row.id.length > 256) || new Set(input.evidence.map(row => row.id)).size !== input.evidence.length) {
@@ -115,6 +154,10 @@ export class ObserverGuard {
         controller.signal.addEventListener("abort", rejectAbort, { once: true });
       });
       if (signal?.aborted || this.invalidated) controller.abort();
+      if (!controller.signal.aborted) {
+        assessment.reviewedToolCount = input.evidence.length - 2;
+        assessment.toolOutputIncluded = input.evidence.some(row => row.kind === "tool" && Boolean(row.text));
+      }
       const result = await Promise.race([aborted, controller.signal.aborted ? aborted : completeOneShot(provider, {
         messages: [
           { role: "system", content: OBSERVER_REVIEW_INSTRUCTIONS, timestamp: Date.now() },
@@ -132,14 +175,30 @@ export class ObserverGuard {
       assessment.usage = result.usage ?? assessment.usage;
       const verdict = parseObserverVerdict(result.text, input.evidence);
       if (!verdict) { fail("INVALID_RESPONSE"); return; }
-      assessment = { ...assessment, ...verdict, reason: redactObserverText(verdict.reason, this.secrets()).slice(0, 300), status: "assessed", endedAt: Date.now() };
-      if (config.mode === "observe") assessment.continuationBlocked = "observe_only";
-      else if (verdict.verdict === "incomplete" && verdict.confidence === "high") {
-        if (this.invalidated || !canContinue() || signal?.aborted || this.evidence.unsafe) assessment.continuationBlocked = "unsafe";
-        else if (input.truncated || !actionableUserTask(this.task, this.evidence.hasToolProgress) || !observerResponseAllowsAction(answer)) assessment.continuationBlocked = "not_actionable";
-        else if (!budget.claim()) assessment.continuationBlocked = "budget";
-        else { this.pending = true; assessment.continued = true; }
+      const toolBlock = this.evidence.blockingTool;
+      let continuationReason: ObserverGuardContinuationReason | undefined;
+      let continuationBlocked: ObserverGuardAssessment["continuationBlocked"];
+      if (config.mode === "observe") continuationReason = continuationBlocked = "observe_only";
+      else if (verdict.verdict !== "incomplete") continuationReason = VERDICT_REASONS[verdict.verdict];
+      else if (verdict.confidence !== "high") continuationReason = "low_confidence";
+      else {
+        const lifecycle = runtimeBlock();
+        const unsafe = this.invalidated ? "task_changed" : signal?.aborted ? "stop_requested" :
+          lifecycle === "stop_requested" || lifecycle === "task_changed" ? lifecycle : toolBlock?.reason ?? lifecycle;
+        if (unsafe) { continuationReason = unsafe; continuationBlocked = "unsafe"; }
+        else if (input.truncated) { continuationReason = "input_truncated"; continuationBlocked = "not_actionable"; }
+        else if (!actionableUserTask(task, this.evidence.hasToolProgress)) { continuationReason = "task_not_actionable"; continuationBlocked = "not_actionable"; }
+        else if (!observerResponseAllowsAction(answer)) { continuationReason = "answer_needs_input"; continuationBlocked = "not_actionable"; }
+        else if (!budget.claim()) { continuationReason = "correction_budget"; continuationBlocked = "budget"; }
+        else this.pending = true;
       }
+      assessment = {
+        ...assessment, ...verdict, reason: redactObserverText(verdict.reason, this.secrets(), 300),
+        status: "assessed", endedAt: Date.now(), continued: this.pending,
+        ...(continuationReason ? { continuationReason } : {}),
+        ...(continuationBlocked ? { continuationBlocked } : {}),
+        ...(toolBlock && continuationReason === toolBlock.reason && toolBlock.tool ? { blockingTool: toolBlock.tool } : {}),
+      };
       publish();
       if (this.pending) return { action: "continue" };
     } catch (error) {

@@ -60,6 +60,15 @@ completion provider adapters and Host session storage remain existing foundation
 It does not bundle, install or remove the earlier external plugin. See
 [the amendment](../adr/builtin-observer-guard.md); live reviewer accuracy and
 installed upgrades are not established by source-level tests.
+The observer reliability amendment on personal base `8240316b9` rechecks the
+same locally recorded upstream revision (no fetch): its tree still lacks the
+Observer modules above. The local increment repairs post-response diagnostic
+refreshes across Main/Host persistence, adds bounded skip/continuation reasons,
+and keeps the assessed response discoverable outside folded turn activity.
+It retains existing execution gates and storage ownership; it is not a new
+safety authority or a promise of reviewer accuracy. Original response data and
+legacy unknowns remain intact. Verification uses synthetic provider events and
+isolated Host/renderer fixtures, not the daily profile or installed app.
 
 The local tool observer was implemented on personal base `2dea25a27` and checked
 against locally recorded upstream `aa35fee4b15c354303bb5a0c77c9c33a731d097f`
@@ -229,7 +238,7 @@ image reader/viewer, or generation contracts. See the component coverage below.
 | --- | --- | --- |
 | Personal installer lane and self-managed updater policy | `15943ccd0`, `2855929bb`, `59feb539f`, `0f7552494` | Upstream supplies Electron packaging/updater foundations. The local lane restricts personal output to Windows x64 NSIS, disables official updates for marked builds, cleans intermediates without deleting past installers, and records build identity/source/hash/change notes. See [builder](../../scripts/build-personal-release.mjs), [updater](../../apps/desktop/electron/main/updater.ts), [runbook](../spec/06-delivery/07-personal-release-runbook.md), [coverage](../../apps/desktop/test/personal-release.test.mjs). |
 | Photon Main startup asset repair | Follow-up to local `2877d6d27` | Against upstream `29043af33`, the Main Vite configuration had no Photon resource emission. Local image-integrity decoding introduced an eager loader; the installed `0.23.1-beta.1` archive at `2877d6d27` omitted its WASM and failed before logging/window/tray creation, reproduced with an empty isolated profile. [Main bundling](../../apps/desktop/electron.vite.config.ts) now retains the pinned WASM beside entry/shared-chunk loaders, [standalone regressions](../../apps/desktop/test/main-wasm-assets.test.mjs) decode a real image, and the [installer gate](../../scripts/build-personal-release.mjs) rejects missing/invalid ASAR assets. This does not establish existing-profile upgrade compatibility. |
-| Development profile opt-in and fixed Windows source launcher | `15943ccd0`, `001c3215e`; same-console/config-export follow-up | The local dev launcher clears inherited data-directory overrides by default. Read-only comparison with recorded upstream `047c4eab1c97a349b3cf8c734229b64ed9d87764` confirms the Windows entry is absent there. The current source entry keeps build output and exact exit status in the same console. It performs no backup by default; only explicit `-BackupConfig` exports application preferences and user-owned provider/model definitions through read-only Host Core SQLite access, excluding conversations, whole databases and credential blobs. It checks owners without stopping processes. See [dev launcher](../../scripts/dev-electron.mjs), [Windows launcher](../../scripts/start-local.ps1), [config exporter](../../crates/host-core/src/config_backup.rs), [dev coverage](../../apps/desktop/test/development-launch.test.mjs), [launcher coverage](../../scripts/start-local.test.ps1). |
+| Development profile opt-in and fixed Windows source launcher | `15943ccd0`, `001c3215e`; same-console/config-export follow-up | The local dev launcher clears inherited data-directory overrides by default. Read-only comparison with recorded upstream `047c4eab1c97a349b3cf8c734229b64ed9d87764` confirms the Windows entry is absent there. The current source entry keeps build output and exact exit status in the same console. It performs no backup by default; only explicit `-BackupConfig` exports application preferences and user-owned provider/model definitions through read-only Host Core SQLite access, excluding conversations, whole databases and credential blobs. It checks owners without stopping processes. See [dev launcher](../../scripts/dev-electron.mjs), Windows launcher (`scripts/start-local.ps1`), config exporter (`crates/host-core/src/config_backup.rs`), [dev coverage](../../apps/desktop/test/development-launch.test.mjs), and launcher coverage (`scripts/start-local.test.ps1`). |
 
 ## Upstream-origin items excluded from local highlights
 
