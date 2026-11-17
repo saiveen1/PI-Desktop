@@ -289,6 +289,15 @@ window.sidebarLabelGroupingProbe = async () => {
 
 window.organizationProbe = async () => {
   await waitFor(() => row("alpha"), "sidebar rendered");
+  flushSync(() => useAppStore.getState().setSessionGroups("temporary", [{ id: "done", name: "Done", color: "green" }]));
+  for (const target of ["done", "none"]) {
+    click(row("beta").querySelector('[data-action="session-menu"]'));
+    click(await waitFor(() => document.querySelector('[data-submenu-trigger="session-group"]'), "move to group"));
+    click(await waitFor(() => document.querySelector(`[data-action="session-group-${target}"]`), "choose destination"));
+    check(useAppStore.getState().sessionMeta.beta.groupId === (target === "none" ? undefined : target), "wrong group membership");
+    check(!document.querySelector('.sidebar-row-menu[role="menu"]'), "group selection left a menu open");
+    if (target === "done") click(document.querySelector('[data-group-scope="temporary"][data-sidebar-session-group="done"] .sidebar-conversation-group-title'));
+  }
   click(row("beta").querySelector('[data-action="session-menu"]'));
   click(await waitFor(() => document.querySelector('[data-submenu-trigger="session-labels"]'), "labels menu"));
   click(await waitFor(() => document.querySelector('[data-action="session-label-fix"]'), "assign label"));

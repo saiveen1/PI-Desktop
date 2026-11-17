@@ -1625,7 +1625,9 @@ guessed into groups.
 A compact Manage entry and the project menu open a scoped Groups/Labels editor.
 Names, colors and order are editable; confirmed group deletion moves conversations
 to Ungrouped, while label deletion only removes marks. Conversation menus separate
-Move to group from multi-label assignment. Labels are display-only color dots
+Move to group from multi-label assignment. Choosing a group or Ungrouped closes
+both the submenu and the row menu. Choosing a label leaves the menu open for
+additional selections. Labels are display-only color dots
 before the title (up to two plus an overflow count in a bounded 44px lane), never
 containers or filters. Label text appears only in the hover tooltip and accessible
 name, including overflow labels; long names do not consume title or timestamp

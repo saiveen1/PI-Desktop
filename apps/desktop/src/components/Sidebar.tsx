@@ -1535,7 +1535,7 @@ export function Sidebar({
       return {
         label: t("nav.sessionActions", { defaultValue: "Session actions" }),
         items: [
-          sessionGroupMenu(session.id, catalog.groups, meta, t, () => manage("groups")),
+          sessionGroupMenu(session.id, catalog.groups, meta, t, () => manage("groups"), closeMenus),
           ...sessionMarkMenu(session.id, catalog.labels, meta, t, () => manage("labels")),
           ...(!pinned ? [-1, 1].map(offset => sidebarMenuAction({
             id: offset < 0 ? "session-move-up" : "session-move-down",
@@ -1646,6 +1646,7 @@ export function Sidebar({
     },
     [
       archiveSession,
+      closeMenus,
       copyConversationId,
       copySessionPath,
       copySessionLink,

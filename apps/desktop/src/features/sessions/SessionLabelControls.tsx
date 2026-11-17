@@ -30,8 +30,11 @@ export function SessionLabelChips({ labels, meta }: { labels: SessionLabel[]; me
   </span>;
 }
 
-export function sessionGroupMenu(id: string, groups: SessionGroup[], meta: SessionMeta, t: TFunction, manage: () => void) {
-  const move = (groupId: string | null) => useAppStore.getState().moveSessionToGroup(id, groupId);
+export function sessionGroupMenu(id: string, groups: SessionGroup[], meta: SessionMeta, t: TFunction, manage: () => void, closeMenu: () => void) {
+  const move = (groupId: string | null) => {
+    useAppStore.getState().moveSessionToGroup(id, groupId);
+    closeMenu();
+  };
   return sidebarMenuSubmenu({ id: "session-group", label: t("sessionGroups.moveTo"), icon: <IconFolder size={14} />, items: [
     sidebarMenuAction({ id: "session-group-none", label: t("sessionGroups.ungrouped"), checked: !groups.some(group => group.id === meta.groupId), onSelect: () => move(null) }),
     ...groups.map(group => sidebarMenuAction({ id: `session-group-${group.id}`, label: group.name, icon: <ColorSwatch color={group.color} />,

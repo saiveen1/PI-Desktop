@@ -57,7 +57,7 @@ function Fixture() {
       <pre id="fixture-state" style={{ whiteSpace: "pre-wrap", fontSize: 12 }}>{JSON.stringify({ organization, meta, sessions: sessions.map(session => session.id) }, null, 2)}</pre>
     </section>
     {row ? <SidebarMenuPanel position={{ top: 200, left: 330 }} onKeyDown={event => { if (event.key === "Escape") setSelected(null); }} content={{ label: t("nav.sessionActions"), items: [
-      sessionGroupMenu(row.id, catalog.groups, meta[row.id] ?? {}, t, () => { setSelected(null); setTarget({ scope, name: "pi desktop" }); }),
+      sessionGroupMenu(row.id, catalog.groups, meta[row.id] ?? {}, t, () => { setSelected(null); setTarget({ scope, name: "pi desktop" }); }, () => setSelected(null)),
       ...sessionMarkMenu(row.id, catalog.labels, meta[row.id] ?? {}, t, () => { setSelected(null); setTarget({ scope, name: "pi desktop", tab: "labels" }); }),
     ] }} /> : null}
     {target ? <SessionOrganizationDialog target={target} onClose={() => setTarget(null)} /> : null}

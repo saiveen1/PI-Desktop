@@ -4968,8 +4968,9 @@ Build two actual runtimes with identical configuration and different scratch dir
   Failed sends leave order unchanged; queued execution never raises twice.
 - **Groups/labels path:** Open Manage from each project or its row menu. Add,
   rename, recolor, reorder and delete a group; empty groups remain visible. Move
-  a conversation between groups and back to Ungrouped using the row menu. Assign
-  multiple labels: verify exactly one conversation row and color-only dots before
+  a conversation between groups and back to Ungrouped using the row menu. Verify
+  both menu levels close after each move. Assign multiple labels without reopening
+  the menu: verify exactly one conversation row and color-only dots before
   its title (up to two plus a bounded overflow count), without label headings or
   filters. Full names, including overflow labels, remain in the hover tooltip and
   accessible name. At narrow widths, long CJK label names must not consume title

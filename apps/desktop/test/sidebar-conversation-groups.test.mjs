@@ -60,7 +60,7 @@ test("row menu moves membership independently from multi-label marking", async t
   });
   const translate = key => key;
   let managed = 0;
-  const groupMenu = sessionGroupMenu("one", groups, {}, translate, () => managed++);
+  const groupMenu = sessionGroupMenu("one", groups, {}, translate, () => managed++, () => {});
   groupMenu.items.find(item => item.id === "session-group-investigation").onSelect();
   const marks = sessionMarkMenu("one", useAppStore.getState().sessionLabels, useAppStore.getState().sessionMeta.one, translate, () => managed++);
   marks[0].items.find(item => item.id === "session-label-b").onSelect();
