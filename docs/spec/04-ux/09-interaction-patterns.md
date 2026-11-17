@@ -1140,8 +1140,9 @@ may be retained while exactly one workspace supplies the visible shell context.
 - Tool activity starts as a lightweight collapsed item row. Failed and denied
   calls keep their issue in the row header and do not auto-expand their payload.
 - One unified presentation gives each loaded assistant turn a single collapsible
-  process disclosure. It contains thinking, tools, hosted searches, intermediate
-  progress text and the turn's `Bash`/run rows; the trailing answer, assistant
+  process disclosure for thinking, tools, hosted searches and `Bash`/run rows.
+  Intermediate assistant prose stays readable when activity is folded; expanding
+  shows it once in order with the activity. The trailing answer, assistant
   errors and stopped trailing text remain outside it. The `Transcript display`
   mode selects the layout: `flat` has no nested groups, `command-first` lifts
   commands into standalone rows, and `fully-folded` (the default) keeps commands

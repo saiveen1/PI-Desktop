@@ -964,13 +964,13 @@ reading surface of the workstation.
 
 ### Turn process and thinking display
 
-One unified turn-process presentation projects each loaded assistant turn into a
-single collapsible process disclosure plus its trailing answer. Reasoning, tools,
-hosted searches and intermediate assistant text keep their transcript order inside
-that disclosure. The trailing answer streams outside the process; later activity
-can reclassify provisional answer text into the process without changing the
-stored message. Assistant errors and stopped trailing partial answers also stay
-outside it. User/system messages and compaction boundaries are unchanged.
+A turn with activity has one process control. When expanded, reasoning, tools,
+searches and intermediate assistant paragraphs follow transcript order. Closing
+it hides activity, not assistant prose: each progress paragraph remains readable
+once, in order, even when a later tool establishes that it was not the final
+answer. The trailing answer, assistant errors and stopped trailing partial
+answers retain their existing placement. This is a reading projection, not a
+change to stored messages, turn boundaries, copy/export or model replay.
 
 A recognizable orphan DSML suffix in assistant prose is collapsed by default.
 Expanding protocol details reveals the original fragment as inert text. It never
@@ -985,8 +985,8 @@ top-level process disclosure, including a Bash-only turn; no run row is a siblin
 of it, and a long turn collapses in one gesture. The answer, assistant errors,
 stopped trailing partial text and pending action cards remain outside, reachable
 without expanding the process. An untouched process closes on completion, leaving
-the final answer; with no final text, the process header and those surfaces
-remain. Liveness follows the turn's rows, not the transcript's tail position:
+assistant paragraphs readable even if the turn has no trailing final answer.
+Liveness follows the turn's rows, not the transcript's tail position:
 while the session runs, a turn whose rows are still streaming stays open and
 reads as running even when a steering message or a system row renders after
 it — both stay inside the run. An ordinary user message ends the run's

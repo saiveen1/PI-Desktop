@@ -11,6 +11,7 @@ import { GenUiCards } from "../gen-ui/GenUiCard";
 import { useGenUiSplit } from "../gen-ui/gen-ui-split";
 import { isGenUiRemoteOwner } from "../gen-ui/gen-ui-source";
 import { ActivityGroup } from "./ActivityGroup";
+import { TurnProcessActivity } from "./TurnProcessActivity";
 import { AssistantErrorMessage } from "./shared";
 import { useRenderBlocks, type RenderBlock } from "./render-blocks";
 import { earlyEndAdvisory } from "../../../lib/output-guard-advisory";
@@ -115,17 +116,18 @@ const TurnPartBlock = memo(function TurnPartBlock({
   turnDelegationStatuses, turnDelegationTimings,
 }: PartContext & { block: RenderBlock<AssistantTurnPart> }) {
   return <>{block.items.map((part) => part.kind === "activity" ? (
-    <ActivityGroup
-      embedded
-      key={partKey(part)}
-      items={part.items}
-      endedAt={part.endedAt}
-      isActive={part === activePart}
-      turnActive={isActive}
-      runtimeActivity={part === activePart ? runtimeActivity : undefined}
-      turnDelegationStatuses={turnDelegationStatuses}
-      turnDelegationTimings={turnDelegationTimings}
-    />
+    <TurnProcessActivity key={partKey(part)}>
+      <ActivityGroup
+        embedded
+        items={part.items}
+        endedAt={part.endedAt}
+        isActive={part === activePart}
+        turnActive={isActive}
+        runtimeActivity={part === activePart ? runtimeActivity : undefined}
+        turnDelegationStatuses={turnDelegationStatuses}
+        turnDelegationTimings={turnDelegationTimings}
+      />
+    </TurnProcessActivity>
   ) : (
     <SmoothMessageBubble
       key={part.message.id}

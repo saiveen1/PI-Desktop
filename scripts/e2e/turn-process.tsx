@@ -395,7 +395,7 @@ export async function turnProcessProbe() {
       "opening it reveals both Bash rows",
     );
 
-    // Progress text without a tool still owns the turn's one process.
+    // No activity to fold: consecutive assistant paragraphs remain readable.
     const progressOnly = [
       message("progress-only", "assistant", "Inspecting the workspace", {
         status: "streaming",
@@ -403,15 +403,8 @@ export async function turnProcessProbe() {
       message("progress-final", "assistant", "Done", { status: "complete" }),
     ];
     render(progressOnly, false, null, "progress-only");
-    check(
-      container.querySelectorAll(".turn-process").length === 1,
-      "a progress-only process keeps its one disclosure",
-    );
-    click(processHeaders()[0] ?? null);
-    check(
-      visible(row("progress-only")),
-      "opening the progress-only disclosure reveals its text",
-    );
+    check(processHeaders().length === 0 && visible(row("progress-only")),
+      "ordinary narration is readable without an empty activity toggle");
 
     // Active process content opens while the turn runs and closes when it stops.
     const activeTurn = [intro, read, grep];
@@ -425,8 +418,8 @@ export async function turnProcessProbe() {
     render(activeTurn, false, null, "active");
     check(
       processHeaders()[0]?.getAttribute("aria-expanded") === "false" &&
-        !visible(firstProcess()),
-      "an untouched process chunk collapses on completion",
+        visible(row("intro")) && !visible(row("read")) && !visible(row("grep")),
+      "an untouched process hides activity but not its introduction on completion",
     );
 
     // A streaming thinking chunk superseded by a later Bash row must not keep a

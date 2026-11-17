@@ -45,8 +45,8 @@ test("one turn groups thinking, tools and progress while retaining only the trai
     projected.responses.map((part) => part.message.id),
     ["final"],
   );
-  assert.equal(cachedVisibleProcessSteps(projected.process, false, false), 5);
-  assert.equal(cachedVisibleProcessSteps(projected.process, true, false), 4);
+  assert.equal(cachedVisibleProcessSteps(projected.process, false, false), 3); // thinking + two tools
+  assert.equal(cachedVisibleProcessSteps(projected.process, true, false), 2);
 });
 
 test("streamed text stays readable until later work establishes it as progress", () => {
@@ -579,17 +579,15 @@ test("the header count comes from the production activity summary", () => {
   );
 });
 
-test("the shared process-step helper counts message rows and hides content-backed thinking", () => {
+test("the process control counts foldable activity, not readable prose", () => {
   const progress = {
     kind: "message",
     message: message("progress", "assistant", "Inspecting"),
   };
-  // A message-only process is still visible: the disclosure needs a non-zero
-  // step count even when no activity item exists.
-  assert.equal(cachedVisibleProcessSteps([progress], true, false), 1);
-  assert.equal(cachedVisibleProcessSteps([progress], true, true), 1);
-  // A streaming assistant row with content counts its content only. The
-  // reasoning beside it is hidden by the preference, so it adds no step.
+  // A prose-only turn has nothing to expand, even while new text arrives.
+  assert.equal(cachedVisibleProcessSteps([progress], true, false), 0);
+  assert.equal(cachedVisibleProcessSteps([progress], true, true), 0);
+  // Reasoning rows are projected separately; a message row is never a hidden step.
   const streamingContentAndThinking = {
     kind: "message",
     message: message("answer", "assistant", "Visible answer", {
@@ -599,7 +597,7 @@ test("the shared process-step helper counts message rows and hides content-backe
   };
   assert.equal(
     cachedVisibleProcessSteps([streamingContentAndThinking], true, true),
-    1,
+    0,
   );
   // A live reasoning-only row keeps its indicator; completed reasoning does not.
   const thinkingItem = {

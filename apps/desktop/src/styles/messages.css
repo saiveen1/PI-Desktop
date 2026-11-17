@@ -3559,7 +3559,12 @@
   padding-left: 0;
 }
 
+.turn-process-activity:not([hidden]) {
+  display: contents;
+}
+
 .turn-process-body[hidden],
+.turn-process-activity[hidden],
 .process-activity-body[hidden] {
   display: none;
 }

@@ -79,6 +79,20 @@ business operation. Never replay an already successful action to restore text.
    separately. Stop once the root cause and fix boundary are established. A
    cleared inflight checkpoint does not recover previously overwritten text.
 
+## When narration is stored but missing from the reading view
+
+A separate incident had a completed answer and recorded paragraphs before tool
+calls. The process disclosure hid those paragraphs along with the commands when
+it closed. Check the visibility of **each intermediate assistant message**, not
+just the length of the last answer. Use a synthetic narration → tool → narration
+→ tool → answer turn and compare collapsed and expanded views. Each paragraph
+should remain readable once; opening activity should reveal the tools in order.
+The same check applies to delegates and does not require a provider request.
+
+A missing changed-files card is different: it summarizes recorded review
+snapshots, not filenames mentioned in answers or arbitrary shell writes. Do not
+infer missing conversation text or fabricate a diff from successful shell calls.
+
 ## Repair contract
 
 The narrow compatibility repair belongs in the existing pi-ai Responses patch,

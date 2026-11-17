@@ -1,3 +1,4 @@
+import { checkProgressProse } from "./progress-prose";
 import { transcriptLongHistoryProbe as runLongHistoryProbe } from "./transcript-long-history";
 import { transcriptEditProbe } from "./transcript-edit";
 import { turnProcessProbe } from "./turn-process";
@@ -474,7 +475,8 @@ globalThis.transcriptRenderProbe = async (protocolDetailsOnly = false) => {
     assert(!details.querySelector(".message-error") && raw.isConnected, "dismiss should affect only the error");
     summary.click();
     assert(!details.open, "summary must close the disclosure again");
-    if (protocolDetailsOnly) return { ok: true, protocolDetails: true };
+    checkProgressProse(i18n);
+    if (protocolDetailsOnly) return { ok: true, protocolDetails: true, progressProse: true };
 
     const groups = 100;
     // The render-count regression needs ordinary activity groups. A Bash row is

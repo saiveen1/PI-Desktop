@@ -98,7 +98,8 @@ Harness 指控制 Agent 执行、工具调用和恢复的框架。本版本在�
 
 - **保留 Responses 流式内容**：本地兼容修复避免空白终态覆盖已输出的有效思考与回答，
   同时保留正常的最终修订和拒绝。聊天中能明确识别的 DSML 尾片段默认收在「协议详情」里，
-  可展开查看原文；实际执行状态以工具记录为准。详见[诊断与限制](docs/maintenance/responses-terminal-content-loss.md)；
+  可展开查看原文，实际执行状态以工具记录为准。主会话或子代理里收起工具活动后，
+  工具之间的说明仍按原顺序可读。详见[诊断与限制](docs/maintenance/responses-terminal-content-loss.md)；
   此改动无法恢复此前丢失的内容。
 
 - **修复多 Agent 并发下的文件工具连锁阻塞**：解决长时间搜索持有 Host 范围的文件锁，导致其他会话

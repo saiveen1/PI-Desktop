@@ -22,7 +22,7 @@ import {
   useAutomaticDisclosure,
   type DisclosureScopeValue,
 } from "./disclosure";
-import { ScopeContext } from "./disclosure-scope";
+import { TurnActivityScope } from "./TurnProcessActivity";
 
 /**
  * Live stages that rate their own wording.
@@ -43,11 +43,9 @@ const LIVE_PHASE_KEYS: Partial<Record<AgentActivity["phase"], string>> = {
 /**
  * The whole turn's process, as one disclosure.
  *
- * Every row the turn produced before its answer lives here: the activity groups
- * and the standalone `Bash` run rows alike. That is one top-level collapse for
- * the turn, with the groups and run calls at the level below it, so a long
- * turn reads as "what the agent did" plus the answer instead of a scrolling
- * stack of sibling disclosures.
+ * The turn's activity groups and standalone `Bash` rows fold together. Its
+ * intermediate messages stay in chronological order between them, even when
+ * every activity is folded.
  *
  * The levels below read this disclosure's scope rather than its choice: closing
  * the process here closes every group under it, and reopening restores the
@@ -105,6 +103,10 @@ export function TurnProcess({
     () => ({ claim: disclosure.claim, reveal: disclosure.reveal, visible: disclosure.open }),
     [disclosure.claim, disclosure.open, disclosure.reveal],
   );
+  const hasMessages = useMemo(() => processParts.some((part) => part.kind === "message"), [processParts]);
+  const bodyHidden = !disclosure.open && !hasMessages;
+  // Reading visible prose in a folded turn must not automatically reopen its activity.
+  const readingBodyRef = hasMessages && !disclosure.open ? null : disclosure.bodyRef;
   // With nothing to reveal there is no disclosure - but the rows still have to
   // render. Hidden reasoning superseded by a separate answer is exactly this
   // case: the reader gets the answer, and the process does not exist.
@@ -171,16 +173,16 @@ export function TurnProcess({
         <span className="tool-activity-caret" aria-hidden><IconChevronRight size={12} /></span>
       </button>
       <div
-        ref={disclosure.bodyRef}
+        ref={readingBodyRef}
         id={detailsId}
         className="turn-process-body"
-        hidden={!disclosure.open}
-        inert={!disclosure.open}
-        aria-hidden={!disclosure.open}
+        hidden={bodyHidden}
+        inert={bodyHidden}
+        aria-hidden={bodyHidden}
         {...disclosure.bodyEvents}
       >
-        <DisclosureCollapseRail label={t("chat.collapseTurnProcess")} onCollapse={disclosure.collapse} />
-        <ScopeContext.Provider value={scope}>{children}</ScopeContext.Provider>
+        {disclosure.open ? <DisclosureCollapseRail label={t("chat.collapseTurnProcess")} onCollapse={disclosure.collapse} /> : null}
+        <TurnActivityScope.Provider value={scope}>{children}</TurnActivityScope.Provider>
       </div>
     </section>
   );

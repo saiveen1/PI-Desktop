@@ -17,6 +17,16 @@
 > and validation entries below retain their dated history, not current
 > task-first acceptance results. Current settings live in Conversation → Display.
 
+## Reading-view amendment: keep narration readable
+
+Folding activity must not hide ordinary assistant paragraphs when tools follow
+those paragraphs. Keep one activity control and the expanded transcript order;
+in the folded view keep the prose once, without tool payloads or reasoning.
+This applies to parent and delegate turns independent of provider. It changes
+presentation only, not the final-answer classification, review snapshots, or
+stored transcript. Upstream Desktop `047c4eab1` hid the entire process body;
+retaining this narration in the folded view is a local presentation change.
+
 ## Context
 
 A model can alternate reasoning, tool calls, and progress text many times before

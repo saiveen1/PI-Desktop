@@ -1,3 +1,4 @@
+import { useAppStore } from "../../apps/desktop/src/stores/app-store";
 import { AssistantTurn } from "../../apps/desktop/src/features/chat/transcript/AssistantTurn";
 import { buildTranscriptEntries } from "../../apps/desktop/src/lib/assistant-turns";
 import { createRoot } from "react-dom/client";
@@ -348,6 +349,7 @@ globalThis.transcriptDisclosureProbe = async () => {
     resources: { en: { translation: en } },
     interpolation: { escapeValue: false },
   });
+  const originalSettings = useAppStore.getState().settings;
   const host = document.createElement("div");
   host.style.width = "700px";
   document.body.append(host);
@@ -497,10 +499,13 @@ globalThis.transcriptDisclosureProbe = async () => {
       dockExpanded.scrollTop <= dockBefore.scrollTop + 2,
       "expanding the dock re-bottomed the dock scroller",
     );
+    // Generate the height delta from foldable activity, not from visible prose.
+    flushSync(() => useAppStore.setState({ settings: { defaultMode: "agent", theme: "light",
+      enterToSend: true, onboardingDismissed: true, ...originalSettings, transcriptDisplayMode: "flat" } }));
     const processMessages = [
       message("process-user", "user", "Inspect"),
-      message("progress", "assistant", Array.from({ length: 50 }, (_, i) => `Progress paragraph ${i}.`).join("\n\n")),
-      toolRowMessage("process-tool"),
+      message("progress", "assistant", "Inspecting the files."),
+      ...Array.from({ length: 20 }, (_, index) => toolRowMessage(`process-tool-${index}`)),
     ];
     const processContainer = document.createElement("div");
     processContainer.style.height = "600px";
@@ -761,6 +766,7 @@ globalThis.transcriptDisclosureProbe = async () => {
       dock: { before: dockBefore, expanded: dockExpanded },
     };
   } finally {
+    useAppStore.setState({ settings: originalSettings });
     for (const root of roots) flushSync(() => root.unmount());
     host.remove();
   }
