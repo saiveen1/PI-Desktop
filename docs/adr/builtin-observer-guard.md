@@ -1,4 +1,4 @@
-# Built-in per-conversation Observer Guard
+# ADR: Built-in per-conversation Observer Guard
 
 - Status: Accepted
 - Date: 2026-11-17

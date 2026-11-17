@@ -47,6 +47,21 @@ remote is contacted. Preflight
 shows the exact proposed version files and Git-derived change list. It does
 not allocate a build identifier, reserve a version, or write a release.
 
+### Source documentation check
+
+`pnpm check:release-docs` checks a personal `X.Y.Z-beta.N` checkout without
+inventing a stable release entry for that beta. All workspace, Cargo and
+`APP_VERSION` surfaces must match the exact source beta. The in-app catalog is
+checked against its newest English stable entry only when it has the same
+major/minor and no later patch than the beta target. Every locale, highlight
+count, catalog test pin and both README release lines still must agree.
+
+This source check is not stable-release qualification and changes no version
+or personal release history. An explicit `pnpm check:release-docs X.Y.Z`
+retains the stable-preview contract: it requires that target's catalog, not an
+older inherited entry. Stable releases and other prerelease forms do not use
+the automatic personal-beta fallback.
+
 ## Preconditions and provenance
 
 - Inspect `git status --short`; preserve unrelated work. Ordinary builds can

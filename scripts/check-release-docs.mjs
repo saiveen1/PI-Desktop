@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 /**
- * Release preflight: every version surface and release document must describe
- * the same app version before a stable tag is cut.
+ * Release preflight: verify source versions and recorded stable documentation.
+ * Stable tags require one target; personal beta source checks keep the exact
+ * beta version separate from the compatible inherited stable catalog.
  *
  * Usage:
- *   node scripts/check-release-docs.mjs             # check against package.json
+ *   node scripts/check-release-docs.mjs             # check current source and catalog
  *   node scripts/check-release-docs.mjs <version>   # check against an explicit version
  *
  * Checks (D260, docs/spec/06-delivery/06-release-runbook.md section 4.1):
@@ -17,8 +18,9 @@
  *   4. packages/shared/src/changelog.test.ts pins the version as newest.
  *   5. README.md and README.zh-CN.md declare the current release line
  *      (`<major>.<minor>.x`) in their status section.
- * For a prerelease preview, pass the stable version being previewed so the
- * changelog/README checks run against that catalog rather than x.y.z-beta.*.
+ * Personal beta source checks default to the latest stable catalog in the same
+ * major/minor, no newer than the beta target patch. This does not qualify a
+ * stable release. An explicit version retains the strict stable-preview check.
  */
 import {
   readdirSync,
@@ -48,9 +50,16 @@ if (requested && !/^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/.test(requested)) {
 }
 
 const currentVersion = JSON.parse(read("package.json")).version;
+let catalogs = null;
+try {
+  ({ CHANGELOG: catalogs } = await loadChangelogCatalog());
+} catch (error) {
+  fail("packages/shared/src/changelog.ts", `could not be imported: ${error.message}`);
+}
 const { documentVersion, surfaceVersion, isPrereleasePreview } = resolveReleaseDocumentCheck(
   currentVersion,
   requested,
+  catalogs?.en?.[0]?.version,
 );
 const releaseLine = `${documentVersion.split(".").slice(0, 2).join(".")}.x`;
 
@@ -141,12 +150,6 @@ async function loadChangelogCatalog() {
   }
 }
 
-let catalogs = null;
-try {
-  ({ CHANGELOG: catalogs } = await loadChangelogCatalog());
-} catch (error) {
-  fail("packages/shared/src/changelog.ts", `could not be imported: ${error.message}`);
-}
 
 if (catalogs) {
   const enEntries = catalogs.en;
@@ -213,5 +216,9 @@ if (failures.length > 0) {
   console.error("\nSee docs/spec/06-delivery/06-release-runbook.md section 4.1.");
   process.exit(1);
 }
-const previewNote = isPrereleasePreview ? ` for ${surfaceVersion}` : "";
-console.log(`Release documentation is aligned with ${documentVersion}${previewNote} (${releaseLine} line).`);
+if (requested === undefined && surfaceVersion !== documentVersion) {
+  console.log(`Personal beta source ${surfaceVersion} and stable catalog ${documentVersion} are aligned (${releaseLine} line); not stable-release qualification.`);
+} else {
+  const previewNote = isPrereleasePreview ? ` for ${surfaceVersion}` : "";
+  console.log(`Release documentation is aligned with ${documentVersion}${previewNote} (${releaseLine} line).`);
+}

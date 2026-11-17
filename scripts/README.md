@@ -13,10 +13,18 @@ disagrees, so a green `check:release-docs` is a precondition, not a substitute.
 | Script | Alias | Purpose |
 |---|---|---|
 | `release.mjs` | `node scripts/release.mjs <version> [--tag]` | Bump every workspace version surface, commit, and optionally create the `vX.Y.Z` tag the Release workflow builds from |
-| `check-release-docs.mjs` | `pnpm check:release-docs` | Verify the models.dev catalog, changelog and test list, `APP_VERSION`, workspace versions, Cargo versions, and both README release lines agree |
+| `check-release-docs.mjs` | `pnpm check:release-docs [version]` | Verify source versions, model metadata, stable catalogs, locale/test alignment and both README release lines; an explicit version remains the release target |
 | `check-agent-policy-sync.mjs` | `pnpm check:agent-policy` | Verify policy tokens, explicit CLAUDE-to-AGENTS delegation, authoritative safety anchors and local document references |
 | `check-marketplace-catalog.mjs` | `pnpm check:marketplace -- --url <url> --plugin <id>` | Marketplace catalog preflight; rejects a version record missing a checksum, package URL, size, or permissions, and a catalog `author` that is not a string |
 | `check-style-tokens.mjs` | run by the desktop `lint` script | Fail renderer styles that hardcode values instead of design-system tokens |
+
+With no argument, a personal `X.Y.Z-beta.N` source uses the newest stable
+catalog in the same major/minor at or below its target patch. Source versions
+still match the exact beta; locale, highlight, test-pin and README checks remain
+mandatory. The result explicitly does not qualify a stable release. Supplying
+`X.Y.Z` retains the original strict stable-preview check; it cannot silently
+reuse an older catalog. Tests: `node --test scripts/release-version-check.test.mjs
+scripts/check-release-docs.test.mjs`.
 
 ## Packaging
 

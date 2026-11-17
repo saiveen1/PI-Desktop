@@ -266,6 +266,12 @@ Blocking steps:
    workspace build. Refresh the models.dev snapshot explicitly for stable and
    prerelease builds; `--skip-docs-check` exists only for a deliberate
    non-release bump.
+   For an independent personal beta source snapshot, the no-argument command
+   instead validates exact beta version surfaces and the newest compatible
+   stable catalog (same major/minor, patch no newer than the beta target).
+   This is not stable-release qualification; it neither requires fictitious
+   beta catalog entries nor relaxes the explicit target check. See the
+   [personal source check](07-personal-release-runbook.md#source-documentation-check).
 7. Commit the documentation updates so the tagged commit contains notes and
    accurate version claims for that version (alone or adjacent to the bump).
 8. GitHub Release bodies may still use `generate_release_notes: true` for the

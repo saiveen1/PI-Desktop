@@ -1,4 +1,4 @@
-# Local tool observation and developer review
+# ADR: Local tool observation and developer review
 
 - Status: Accepted
 - Scope: Additive Desktop diagnostics IPC and background settlement telemetry

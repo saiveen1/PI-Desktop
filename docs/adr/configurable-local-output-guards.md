@@ -1,4 +1,4 @@
-# Configurable local output guards
+# ADR: Configurable local output guards
 
 - Status: Accepted
 - Date: 2026-11-17

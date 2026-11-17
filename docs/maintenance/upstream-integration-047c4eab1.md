@@ -96,14 +96,26 @@ passed without increasing any timeout. Rust fault injection now disables FKs
 only to create the deliberately invalid source, then tests restoration of both
 original pragma combinations; production enforcement is unchanged.
 
-`pnpm check:release-docs` remains red: the stable catalog has no
+At merge time, `pnpm check:release-docs` failed: the stable catalog had no
 `0.23.1-beta.1` entry in nine locales or its version-list test. Running the exact
 checker against extracted pre-merge `e72fdba94` files reproduced the identical
-ten diagnostics. This is an existing stable-release qualification limitation,
-not a new functional regression or permission to fabricate a release catalog.
-The source beta version and recorded release history are unchanged.
+ten diagnostics. This was a pre-existing version-policy mismatch, not a new
+functional regression or permission to fabricate a release catalog.
+The source beta version and recorded release history remained unchanged.
 
 Not authorized or not attempted: remote publication, worktree deletion,
 installer build/install, production-provider calls, real remote-host journeys,
 daily-profile migration, full Desktop launch, and native interactive snap
 qualification. Isolated synthetic component fixtures are separate from Desktop.
+
+## Release documentation follow-up (2026-11-18)
+
+The no-argument personal-beta source check now validates exact source versions
+separately from the latest compatible stable catalog: same major/minor and no
+later patch than the beta target. Explicit stable-preview checks retain their
+original strict target contract. This does not declare a stable release.
+The actual `pnpm check:release-docs` command passed for source
+`0.23.1-beta.1` and catalog `0.23.0`; all 24 resolver/CLI regression cases
+passed, including rejection of mismatched source versions, locale catalogs,
+highlight counts, test pins and README lines. No version, catalog entry or
+personal release-history record was changed.

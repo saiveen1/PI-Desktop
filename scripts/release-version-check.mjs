@@ -1,5 +1,10 @@
-export function resolveReleaseDocumentCheck(currentVersion, requestedVersion) {
-  const documentVersion = requestedVersion ?? currentVersion;
+export function resolveReleaseDocumentCheck(currentVersion, requestedVersion, latestStableVersion) {
+  const beta = /^(\d+\.\d+)\.(\d+)-beta\.\d+$/.exec(currentVersion);
+  const stable = /^(\d+\.\d+)\.(\d+)$/.exec(latestStableVersion ?? "");
+  // Personal beta source checks retain the inherited catalog, not a fictitious release.
+  const useStableCatalog = requestedVersion === undefined && beta !== null && stable !== null
+    && beta[1] === stable[1] && BigInt(stable[2]) <= BigInt(beta[2]);
+  const documentVersion = requestedVersion ?? (useStableCatalog ? latestStableVersion : currentVersion);
   const isPrereleasePreview =
     requestedVersion !== undefined &&
     currentVersion !== documentVersion &&
@@ -7,7 +12,7 @@ export function resolveReleaseDocumentCheck(currentVersion, requestedVersion) {
 
   return {
     documentVersion,
-    surfaceVersion: isPrereleasePreview ? currentVersion : documentVersion,
+    surfaceVersion: useStableCatalog || isPrereleasePreview ? currentVersion : documentVersion,
     isPrereleasePreview,
   };
 }
