@@ -9,6 +9,8 @@
 > [Pasted local file references](../adr/composer-local-file-references.md) extend
 > native clipboard paste, file selection and drag/drop to live ordinary-file paths
 > and byte sizes, with metadata-only dispatch and unchanged tool permissions.
+> Projectless local references belong to their originating session; existing
+> project references retain project ownership. Remote use is rejected.
 > Images and generated clipboard content retain bounded attachment handling.
 
 

@@ -160,7 +160,7 @@ ipcMain.handle("pi-desktop/composer/importFiles", async (event, input) => {
   const referenceMode = process.argv.includes("--file-references-only");
   if (referenceMode) await fs.truncate(path.join(__dirname, "large reference.bin"), 67108865);
   const files = await importComposerSelection(__dirname, input.sessionId,
-    referenceMode ? path.join(__dirname, "reference-project") : undefined,
+    referenceMode && !process.argv.includes("--without-project") ? path.join(__dirname, "reference-project") : undefined,
     consumeComposerPickerSelection(input.token, event.sender.id));
   if (referenceMode) {
     assert.equal(files[0].size, 67108865);
@@ -174,7 +174,7 @@ if (process.argv.includes("--file-references-only") || process.argv.includes("--
   ipcMain.handle("pi-desktop/agent/prompt", async (_event, input) => {
     assert.equal(input.attachments.length, 2);
     const prepared = await preparePromptAttachments(__dirname, input.sessionId,
-      path.join(__dirname, "reference-project"), input.attachments, true, input.content);
+      process.argv.includes("--without-project") ? undefined : path.join(__dirname, "reference-project"), input.attachments, true, input.content);
     assert(prepared.every(item => item.message.kind === "file" && !item.inlineData));
     const large = prepared.find(item => item.message.name === "large reference.bin");
     assert.equal(large.message.size, 7);
@@ -384,7 +384,7 @@ app.whenReady().then(async () => {
     const screenshotOnly = process.argv.includes("--screenshot-only");
     const fileReferencesOnly = process.argv.includes("--file-references-only");
     const referenceHistoryOnly = process.argv.includes("--file-references-history-check");
-    const referenceProject = path.join(__dirname, "reference-project");
+    const referenceProject = process.argv.includes("--without-project") ? "" : path.join(__dirname, "reference-project");
     const result = await window.webContents.executeJavaScript(
       "globalThis.composerPasteProbe(" + JSON.stringify({ directoriesOnly, screenshotOnly, fileReferencesOnly, referenceHistoryOnly, referenceProject }) + ")",
     );
@@ -450,6 +450,7 @@ app.whenReady().then(async () => {
   const env = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE;
   const runElectron = async (args = []) => {
+    if (process.argv.includes("--without-project")) args = [...args, "--without-project"];
     console.log("COMPOSER_STAGE " + (args.join(" ") || "full-paste"));
     const child = spawn(electronBinary, [join(temp, "main.cjs"), ...args], {
       env,

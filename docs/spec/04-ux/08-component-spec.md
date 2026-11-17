@@ -3572,7 +3572,7 @@ reasoning-level control.
   all files lack native paths. This keeps Word text editable. Native files,
   any non-image file, and image-only/whitespace-plus-image pastes remain
   attachments. Selected text uses the same large-paste threshold (ADR 0059).
-- In local projects, ordinary disk files added by native paste, drag/drop or the
+- In local sessions with or without a project, ordinary files added by paste, drop or the
   file picker become live original-path references with name and exact byte size.
   They are not copied or read eagerly and do not encounter byte-transfer limits.
   The same compact card is used without a reference/upload choice. Raster images
@@ -3585,12 +3585,14 @@ reasoning-level control.
   only one composer picker can be active at a time.
   The picker accepts regular files and Main applies the same automatic policy as
   paste/drop. Reference identity and size survive drafts, queues and input history;
-  dispatch checks the original file and current project before presenting path and
+  dispatch checks the original file and owning project or session before presenting path and
   size to the Agent. Reads retain normal permissions and observe current contents,
   not a snapshot. Missing or redirected files produce errors. Picker results belong
   to the draft captured before the dialog opened; navigating away from home must
-  not create a session in the destination project. Without a local project, or for
-  remote workspaces, retain the existing bounded copy path. Folder drops keep their
+  not create a session in the destination project. Projectless references belong to
+  their originating session and survive restart or a later project binding, but
+  cannot be reused by another session. Remote workspaces retain the existing
+  bounded copy path and cannot dispatch local references. Folder drops keep their
   open-project/insert-path choice and never copy or traverse directory trees.
   See [the amended local-file decision](../../adr/composer-local-file-references.md).
 - The compact chips retain structured kind/name/MIME metadata while keeping

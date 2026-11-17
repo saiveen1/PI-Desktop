@@ -11,8 +11,6 @@ export async function importComposerSelection(
   paths: string[],
 ): Promise<ComposerPastedFile[]> {
   if (paths.length > 20) throw new Error("too many imported files (maximum 20)");
-  // A local path is not a remotely readable reference. Keep the existing copy flow.
-  if (!projectPath) return importComposerFiles(dataDir, sessionId, paths);
   const canonical = await Promise.all(paths.map(path => realpath(path)));
   const image = canonical.map(path => isImageFile(path, mimeTypeForPath(path)));
   const copied = await importComposerFiles(dataDir, sessionId, canonical.filter((_, index) => image[index]));

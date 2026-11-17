@@ -258,7 +258,7 @@ globalThis.composerPasteProbe = async ({
     if (fileReferencesOnly || referenceHistoryOnly) {
       const prefix = referenceHistoryOnly ? "" : "Inspect ";
       await reset(prefix, prefix.length, prefix.length);
-      useAppStore.setState({ workspace: { path: referenceProject, name: "Reference fixture" } as AppState["workspace"] });
+      useAppStore.setState({ workspace: referenceProject ? { path: referenceProject, name: "Reference fixture" } as AppState["workspace"] : null });
       render("paste-a", referenceProject);
       if (referenceHistoryOnly) {
         const history = loadComposerInputHistory("paste-a")[0];
@@ -1019,16 +1019,12 @@ globalThis.composerPasteProbe = async ({
       "native text file became inline text",
     );
 
-    const mixedDraft = controller.value;
-    const mixedReferences = controller.fileReferences;
-    flushSync(() => controller.ref.current!.querySelector<HTMLElement>('[data-action="expand-text-reference"]')!.click());
-    const textDeadline = performance.now() + 5000;
-    while (controller.fileReferences.length !== 1 && performance.now() < textDeadline) {
-      await new Promise(requestAnimationFrame);
-    }
-    assert(controller.value.includes("native file bytes") && controller.fileReferences[0]?.kind === "image",
-      "text chip no longer expands while preserving the image attachment");
-    flushSync(() => controller.applyEditorDraft(mixedDraft, mixedReferences, mixedDraft.length));
+    assert(controller.fileReferences[1].localReference &&
+      controller.fileReferences[1].path === api.getDroppedFilePath(nativeFiles[1]),
+      "projectless native text must remain a live reference");
+    assert(!controller.ref.current!.querySelector('[data-action="expand-text-reference"]'),
+      "referenced native text must not offer eager content expansion");
+    assert(controller.fileReferences[0].kind === "image", "mixed image attachment was lost");
     const saved = readComposerDraft("paste-a");
     assert(
       saved?.fileReferences.length === 2,

@@ -11,6 +11,7 @@ import { preparePromptAttachments, appendPromptFallbackPaths } from "../electron
 import { appendLocalFileReferenceContext } from "@pi-desktop/shared";
 import { consumeComposerPickerSelection, rememberComposerPickerSelection } from "../electron/main/composer-picker.ts";
 import { createLinkOrSkip } from "./helpers/link-fixture.mjs";
+import { readFile } from "node:fs/promises";
 
 async function fixture(t) {
   const root = await realpath(await mkdtemp(join(tmpdir(), "pi-file-reference-")));
@@ -107,4 +108,64 @@ test("native selection IPC binds sender and session before registering and dispa
   assert.equal(prepared.message.size, 67108865);
   assert.ok(appendPromptFallbackPaths("Inspect", [prepared]).includes("67108865 bytes"));
   assert.deepEqual(await readdir(data), ["composer-file-references"]);
+});
+
+test("projectless records persist session ownership without snapshots and reject forged scopes", async t => {
+  const { data, path, project } = await fixture(t);
+  const [reference] = await referenceComposerFiles(data, "source", undefined, [path]);
+  const recordPath = join(data, "composer-file-references", `${reference.localReference}.json`);
+  const record = JSON.parse(await readFile(recordPath, "utf8"));
+  assert.deepEqual(record, { version: 2, scope: "session", path, sessionId: "source" });
+  assert.deepEqual(await readdir(data), ["composer-file-references"]);
+  const resolve = (sessionId, projectPath) => resolveComposerFileReference(data, projectPath, path, reference.localReference, sessionId);
+  assert.equal((await resolve("source")).size, 67108865);
+  assert.equal((await resolve("source", project)).path, path, "binding a project later retains the same session's reference");
+  await assert.rejects(resolve("other"), /does not belong/);
+  await assert.rejects(resolve("other", project), /does not belong/);
+  await assert.rejects(resolve(undefined), /does not belong/);
+  for (const changed of [{ ...record, version: 99 }, { ...record, scope: "project" }, { ...record, sessionId: undefined }]) {
+    await writeFile(recordPath, JSON.stringify(changed));
+    await assert.rejects(resolve("source"), /does not belong/);
+  }
+  await writeFile(recordPath, JSON.stringify(record));
+  await writeFile(path, "updated");
+  assert.equal((await resolve("source")).size, 7);
+  await rm(path);
+  await assert.rejects(resolve("source"), /Referenced file is unavailable/);
+});
+
+test("existing project records keep version 1 and same-project cross-session compatibility", async t => {
+  const { data, path, project } = await fixture(t);
+  const [reference] = await referenceComposerFiles(data, "source", project, [path]);
+  const record = JSON.parse(await readFile(join(data, "composer-file-references", `${reference.localReference}.json`), "utf8"));
+  assert.deepEqual(record, { version: 1, path, projectPath: project, sessionId: "source" });
+  assert.equal((await resolveComposerFileReference(data, project, path, reference.localReference, "other")).path, path);
+  await assert.rejects(preparePromptAttachments(data, "source", project, [reference], true, "Inspect", true), /remote/);
+});
+
+test("normal prompt and steering wiring pass local session ownership and remote rejection", async t => {
+  const { data, path } = await fixture(t);
+  const [reference] = await referenceComposerFiles(data, "source", undefined, [path]);
+  const source = readFileSync(new URL("../electron/main/ipc/agent-ipc.ts", import.meta.url), "utf8");
+  const tree = ts.createSourceFile("agent-ipc.ts", source, ts.ScriptTarget.Latest, true);
+  const calls = [];
+  function visit(node) {
+    if (ts.isCallExpression(node) && node.expression.getText(tree) === "preparePromptAttachments") calls.push(node);
+    ts.forEachChild(node, visit);
+  }
+  visit(tree);
+  assert.equal(calls.length, 2, "cover both normal and steering dispatch");
+  for (const call of calls) {
+    for (const remote of [false, true]) {
+      const remoteWorkspace = remote ? { hostKey: "remote" } : undefined;
+      const args = vm.runInNewContext(`[${call.arguments.map(arg => arg.getText(tree)).join(",")}]`, {
+        dataDir: data, req: { sessionId: "source", attachments: [reference] },
+        session: { remoteWorkspace }, context: { remoteWorkspace, supportsVision: true },
+        localProjectPath: undefined, supportsVision: true, steerContent: "Inspect", promptContent: "Inspect",
+      });
+      assert.equal(args[6], remote);
+      if (remote) await assert.rejects(preparePromptAttachments(...args), /remote/);
+      else assert.equal((await preparePromptAttachments(...args))[0].message.size, 67108865);
+    }
+  }
 });

@@ -166,7 +166,7 @@ export function registerAgentIpc({
     const steerContent = mcpExpansion?.expanded ?? req.content;
     const prepared = await preparePromptAttachments(
       dataDir, req.sessionId, localProjectPath, req.attachments ?? [],
-      context.supportsVision, steerContent,
+      context.supportsVision, steerContent, Boolean(context.remoteWorkspace),
     );
     const session = await host.call<{ session?: { messages?: UiMessage[] } }>("session.get", {
       id: req.sessionId, messageLimit: 1,
@@ -502,6 +502,7 @@ export function registerAgentIpc({
         // The text the durable message will hold: an image chip the Composer
         // left inline keeps its place in the prompt and in the transcript.
         promptContent,
+        Boolean(session.remoteWorkspace),
       );
     } catch (error) {
       await finishTurn(req.sessionId, "error", (error as any)?.errorCode, {

@@ -3205,8 +3205,8 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
 
 ## E2E-COMPOSER-local-file-references: Native file intake keeps paths and sizes
 
-- **Preconditions**: Local project and synthetic disk files, including a sparse
-  64 MiB + 1 byte file outside the project, a small text file and an image.
+- **Preconditions**: Local sessions both with and without a project, and synthetic
+  disk files including a sparse 64 MiB + 1 byte file, small text and an image.
 - **Steps**: Add the same files by OS paste, drag/drop and the file picker;
   also paste a mixed file/folder selection and a browser File fallback. Try a
   forged File/path and a replayed selection token. Switch sessions/projects
@@ -3222,8 +3222,11 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
   Dispatch refreshes size and preserves metadata
   through messages and model history, and clearly rejects unavailable or
   redirected sources. Forged ids/paths, another project and remote metadata
-  references are refused. Automatic imports outside a local project retain copy
-  compatibility rather than granting local paths to a remote Agent. Agent reads
+  references are refused. Projectless local sessions reference ordinary files with
+  session ownership, without creating a project or copying bytes. Another session
+  cannot reuse the selection; a restart or later project binding retains access
+  for the same local session. Remote imports retain bounded copy compatibility.
+  Normal prompts and steering reject local references in remote contexts. Agent reads
   use normal permissions; referencing an external file does not grant access.
   Metadata-only input history restores the live path and size. A pending picker
   cannot overwrite a destination draft or create a session in a new project.
@@ -3233,6 +3236,7 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
   draft/history tests and the host attachment roundtrip test. Native clipboard
   gestures and full provider delivery require a separate desktop E2E run.
 - **Electron coverage**: `node scripts/e2e-composer-paste.mjs --file-references-only`
+  (add `--without-project` for session-owned references and restart coverage)
   bundles current preload source and drives real React hooks, native disk-backed
   `File` objects, preload IPC, selection tokens, automatic import, prompt
   preparation and Composer history. Paste, drop and picker all retain a sparse
@@ -3248,6 +3252,9 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
   Restore the saved selection before focusing the original control so selection
   updates cannot steal its final focus. Stale session/project previews restore
   neither focus nor selection (`composer-image-preview-focus.test.mjs`).
+  Version 1 project records remain readable; new version 2 session records are
+  rejected by older clients instead of widening ownership. Unit tests exercise
+  actual normal/steering preparation arguments for both local and remote contexts.
 - **Specs linked**: `03-runtime/01-ipc-protocol.md` Composer import/selection,
   `04-ux/08-component-spec.md` §11.7, `composer-local-file-references` ADR amendment.
 - **Acceptance**: C (chat), F (persistence), H (permissions), Quality.

@@ -5,7 +5,10 @@ import { ErrorCodes, type ComposerPastedFile } from "@pi-desktop/shared";
 import { mimeTypeForPath } from "./composer-paste.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-type FileReference = { version: 1; path: string; projectPath: string; sessionId: string };
+type FileReference = { path: string; sessionId: string } & (
+  | { version: 1; projectPath: string }
+  | { version: 2; scope: "session" }
+);
 
 async function referenceRoot(dataDir: string): Promise<string> {
   const data = await realpath(dataDir);
@@ -19,12 +22,12 @@ async function referenceRoot(dataDir: string): Promise<string> {
 export async function referenceComposerFiles(
   dataDir: string,
   sessionId: string,
-  projectPath: string,
+  projectPath: string | undefined,
   paths: string[],
 ): Promise<ComposerPastedFile[]> {
   if (!/^[A-Za-z0-9_-]+$/.test(sessionId)) throw new Error("invalid session id");
   if (paths.length > 20) throw new Error("too many referenced files (maximum 20)");
-  const project = await realpath(projectPath);
+  const project = projectPath?.trim() ? await realpath(projectPath.trim()) : undefined;
   const prepared = await Promise.all(paths.map(async path => {
     if (!isAbsolute(path)) throw new Error("file reference path must be absolute");
     const canonical = await realpath(path);
@@ -35,7 +38,10 @@ export async function referenceComposerFiles(
   const root = await referenceRoot(dataDir);
   return Promise.all(prepared.map(async ({ path, size }) => {
     const localReference = randomUUID();
-    const record: FileReference = { version: 1, path, projectPath: project, sessionId };
+    // Keep existing project records unchanged; new projectless records fail closed on older clients.
+    const record: FileReference = project
+      ? { version: 1, path, projectPath: project, sessionId }
+      : { version: 2, scope: "session", path, sessionId };
     await writeFile(join(root, `${localReference}.json`), JSON.stringify(record), { flag: "wx", mode: 0o600 });
     return { path, name: basename(path), kind: "file" as const, mimeType: mimeTypeForPath(path), size, localReference };
   }));
@@ -47,16 +53,24 @@ export async function resolveComposerFileReference(
   projectPath: string | undefined,
   path: string,
   localReference: string,
+  sessionId?: string,
 ): Promise<ComposerPastedFile> {
-  if (!UUID.test(localReference) || !projectPath) {
+  if (!UUID.test(localReference)) {
     throw Object.assign(new Error("local file reference is unavailable in this project"), { errorCode: ErrorCodes.PATH_OUTSIDE_WORKSPACE });
   }
   const root = await referenceRoot(dataDir);
   const recordPath = join(root, `${localReference}.json`);
   if (await realpath(recordPath) !== recordPath) throw new Error("file reference record was redirected");
   const record: FileReference = JSON.parse(await readFile(recordPath, "utf8"));
-  if (record.version !== 1 || record.path !== path || record.projectPath !== await realpath(projectPath)) {
-    throw Object.assign(new Error("local file reference does not belong to this project"), { errorCode: ErrorCodes.PATH_OUTSIDE_WORKSPACE });
+  if (record.version === 1 && !projectPath) {
+    throw Object.assign(new Error("local file reference is unavailable in this project"), { errorCode: ErrorCodes.PATH_OUTSIDE_WORKSPACE });
+  }
+  const ownsReference = record.version === 1
+    ? typeof record.projectPath === "string" && record.projectPath === await realpath(projectPath!)
+    : record.version === 2 && record.scope === "session" &&
+      typeof sessionId === "string" && /^[A-Za-z0-9_-]+$/.test(sessionId) && record.sessionId === sessionId;
+  if (record.path !== path || !ownsReference) {
+    throw Object.assign(new Error("local file reference does not belong to this project or session"), { errorCode: ErrorCodes.PATH_OUTSIDE_WORKSPACE });
   }
   try {
     if (await realpath(path) !== path) throw new Error("referenced file was redirected");

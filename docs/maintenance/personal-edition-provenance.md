@@ -147,6 +147,15 @@ physical audio, installed-app behavior or pure model-generation performance.
 
 ## Local interface, organization, and host fixes
 
+The projectless-reference follow-up starts from personal `f28653e41`, compared
+read-only with recorded upstream `047c4eab1c97a349b3cf8c734229b64ed9d87764`
+(no fetch). That upstream's reference registry requires `projectPath: string`
+and only writes version 1 project-owned records. The local follow-up adds version 2
+session-owned records for projectless local sessions and explicit remote rejection
+in normal/steering preparation, without rewriting existing records or changing
+tool-read permissions. This extends the inherited reference registry rather than
+claiming that registry as a local invention.
+
 The automatic local-file intake amendment starts from personal source `a402d2cec`,
 compared read-only with recorded upstream `4d16de71a34b02fd8711c1102a288664b3d171c1`
 (no fetch). Both already contain `46c6788c8` and its native clipboard references.

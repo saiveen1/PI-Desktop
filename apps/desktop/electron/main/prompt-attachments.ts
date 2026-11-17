@@ -240,6 +240,7 @@ export async function preparePromptAttachments(
    * in the prompt, instead of being appended after the body.
    */
   promptContent: string,
+  remoteWorkspace = false,
 ): Promise<PreparedPromptAttachment[]> {
   const prepared: PreparedPromptAttachment[] = [];
   // Reference order is the user's order, so each entry takes the next matching
@@ -250,7 +251,12 @@ export async function preparePromptAttachments(
   );
   for (const [index, attachment] of attachments.entries()) {
     if (attachment.localReference !== undefined) {
-      const file = await resolveComposerFileReference(dataRoot, projectPath, attachment.path, attachment.localReference);
+      if (remoteWorkspace) {
+        throw Object.assign(new Error("local file references are unavailable in remote sessions"), {
+          errorCode: ErrorCodes.PATH_OUTSIDE_WORKSPACE,
+        });
+      }
+      const file = await resolveComposerFileReference(dataRoot, projectPath, attachment.path, attachment.localReference, sessionId);
       prepared.push({
         message: {
           kind: "file", name: file.name, ref: file.path, mimeType: file.mimeType,

@@ -37,14 +37,14 @@ existing scratch materialization, and records without `localReference` are uncha
 ## Amendment: automatic native file intake
 
 Composer now requests `reference: "auto"` for native clipboard selections,
-file-picker selections and disk-backed browser File objects. In a local project,
+file-picker selections and disk-backed browser File objects. In a local session,
 Main classifies canonical paths once: ordinary files (including SVG source) use
 the existing metadata reference records; raster images retain the bounded image
 copy/vision flow. There is no user-facing reference/upload choice or size threshold
-for ordinary files. Without a local project, or in a remote workspace, automatic
+for ordinary files, even without a project. In a remote workspace, automatic
 intake preserves the existing bounded copy behavior rather than presenting a local
-path as remotely readable. Explicit legacy `true`/`false` requests retain their
-original semantics, including metadata-only images for explicit `true`.
+path as remotely readable. Explicit `true` keeps metadata-only images and now
+also supports projectless local sessions; explicit `false` retains copy semantics.
 
 The private `pi-desktop/composer/nativeFileSelection` channel is not exposed by
 the generic IPC whitelist or MCP. Its only renderer bridge takes File objects;
@@ -61,3 +61,26 @@ edits and discard results for removed sessions. A pending picker captures its
 source draft before opening the dialog; navigating away from a home draft cannot
 create a session in a different project.
 Actual byte-transfer bounds and the overall 20-file selection bound stay intact.
+
+## Amendment: projectless local sessions
+
+Missing project metadata is not evidence of a remote session. Native selection
+registration and automatic intake accept projectless local sessions, without
+creating a project or copying ordinary files. Main continues to use version 1
+project records unchanged. When no project exists it writes a version 2 record
+`{version: 2, scope: "session", path, sessionId}` in the same reference directory.
+Dispatch checks the current session id for these records, including after a
+restart or a later project binding. Other sessions cannot reuse the selection;
+version 1 records retain their same-project cross-session behavior.
+
+Both normal prompt and steering preparation pass the authoritative remote flag
+and refuse local references for remote execution even when the id/path/session
+otherwise match. Tool-read permissions are unchanged. Images retain bounded
+attachment handling and references remain live rather than snapshots.
+
+Migration is additive/lazy: existing records are neither rewritten nor deleted,
+and no database schema changes. Older clients reject version 2 instead of
+misinterpreting it; after downgrade the user must reselect those files. Current
+clients accept version 1 and 2 and reject unknown versions/scopes. Tests cover
+old project records, new session records, restart, changed/missing targets,
+cross-session rejection and remote prompt/steering boundaries.

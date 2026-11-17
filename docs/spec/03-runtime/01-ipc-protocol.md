@@ -2630,28 +2630,34 @@ external source path in the prompt or bypass the attachment-root boundary.
 
 The current renderer requests `reference: "auto"` for picker, clipboard and
 disk-backed File selections. Main resolves canonical paths and, in a local
-project, registers ordinary files as metadata references without reading or
-copying contents. Raster images retain the bounded copy/vision path. There is
-no size-based switch or new UI choice. Without a local project, or with a remote
-workspace, automatic import retains the bounded copy behavior above. The
-20-item selection limit applies to the whole batch, including mixed images and
+session with or without a project, registers ordinary files as metadata references
+without reading or copying contents. Raster images retain the bounded copy/vision
+path. There is no size-based switch or new UI choice. Remote workspaces retain the
+bounded copy behavior above; no project is created for a projectless local session.
+The 20-item selection limit applies to the whole batch, including mixed images and
 ordinary files. Screenshots/generated payloads continue through `pasteFiles`.
 
 Explicit `reference: true` retains the metadata-only behavior for all selected
-files, including images, and requires a local project. Explicit `false` or an
+files, including images, and requires a local session, not a project. Explicit `false` or an
 omitted field retains the old copy contract. Main stores a durable UUID selection
 record and returns the canonical original path, name, MIME, exact byte size and
 `localReference` id. Transfer byte limits do not apply to metadata references.
 Only the main window may invoke these flows.
 
 Drafts, queue entries and message attachments retain `localReference` and `size`.
-On dispatch, main matches the id/path to the selection record and current local
-project, rejects missing files or canonical-target changes, and refreshes size.
+On dispatch, main matches the id/path to the selection record and its owning
+project or session, rejects missing files or canonical-target changes, and refreshes size.
 The Agent receives path and byte size as reference context. No referenced file
 or image contents are read, hashed, snapshotted or uploaded by dispatch; normal
 tool access policy governs subsequent reads, including outside-project approval.
-Input history can restore the live reference into another session in the same
-project. Original contents can change and the reference can become unavailable.
+Version 1 project records remain unchanged and may be restored into another session
+in the same project. New projectless references use version 2 records with
+`scope: "session"` and the originating `sessionId`; only that session may dispatch
+them, including after restart or a later project binding. Normal prompts and
+steering pass the authoritative remote flag and reject local references in remote
+contexts. Migration is additive: no record rewriting or database schema change;
+older clients reject version 2, requiring reselection after downgrade. Original
+contents can change and the reference can become unavailable.
 See [the decision record](../../adr/composer-local-file-references.md).
 
 ### Preload-only native file selection

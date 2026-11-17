@@ -9,6 +9,7 @@ import ts from "typescript";
 import { importComposerFiles } from "../electron/main/composer-paste.ts";
 import { referenceComposerFiles } from "../electron/main/composer-file-references.ts";
 import { consumeComposerPickerSelection, rememberComposerPickerSelection } from "../electron/main/composer-picker.ts";
+import { preparePromptAttachments, appendPromptFallbackPaths } from "../electron/main/prompt-attachments.ts";
 
 function importHandler(dataDir, session) {
   const source = readFileSync(new URL("../electron/main/ipc/workspace-ipc.ts", import.meta.url), "utf8");
@@ -66,9 +67,9 @@ test("automatic native selection references large and small files while retainin
   assert.deepEqual(await readFile(files[1].path), await readFile(image));
 });
 
-test("automatic import preserves copy semantics without a local project and for remote sessions", async t => {
+test("automatic import preserves copy semantics for remote sessions", async t => {
   const { data, project, small } = await fixture(t);
-  for (const session of [{}, { projectPath: project, remoteWorkspace: { hostKey: "remote" } }]) {
+  for (const session of [{ remoteWorkspace: { hostKey: "remote" } }, { projectPath: project, remoteWorkspace: { hostKey: "remote" } }]) {
     const { files } = await select(importHandler(data, session), [small]);
     assert.notEqual(files[0].path, small);
     assert.equal(files[0].localReference, undefined);
@@ -84,4 +85,38 @@ test("legacy copy and reference modes retain their explicit behavior", async t =
   const referenced = await select(handler, [image], true);
   assert.equal(referenced.files[0].path, image);
   assert.equal(referenced.files[0].kind, "file");
+});
+
+for (const reference of ["auto", true]) {
+  test(`projectless local session imports and dispatches a large reference (${reference})`, async t => {
+    const { data, large } = await fixture(t);
+    const { files } = await select(importHandler(data, {}), [large], reference);
+    assert.equal(files[0].path, large);
+    assert.equal(files[0].size, 67108865);
+    assert.ok(files[0].localReference);
+    await writeFile(large, "changed");
+    const [prepared] = await preparePromptAttachments(data, "source", undefined, files, true, "Inspect");
+    assert.equal(prepared.message.size, 7);
+    assert.equal(prepared.inlineData, undefined);
+    assert.ok(appendPromptFallbackPaths("Inspect", [prepared]).includes(large));
+    await assert.rejects(preparePromptAttachments(data, "other", undefined, files, true, "Inspect"), /does not belong/);
+    await assert.rejects(preparePromptAttachments(data, "source", undefined, files, true, "Inspect", true), /remote/);
+  });
+}
+
+test("remote explicit references are refused even without a project", async t => {
+  const { data, large } = await fixture(t);
+  await assert.rejects(select(importHandler(data, { remoteWorkspace: { hostKey: "remote" } }), [large], true), /local|remote/);
+});
+
+test("projectless mixed selection keeps images while ordinary files stay metadata-only", async t => {
+  const { data, large, image, small } = await fixture(t);
+  const { files } = await select(importHandler(data, { projectPath: "" }), [large, image, small]);
+  assert.deepEqual(Array.from(files, file => file.kind), ["file", "image", "file"]);
+  assert.equal(files[0].path, large);
+  assert.equal(files[2].path, small);
+  assert.ok(files[0].localReference && files[2].localReference);
+  assert.equal(files[1].localReference, undefined);
+  assert.notEqual(files[1].path, image);
+  assert.deepEqual(await readFile(files[1].path), await readFile(image));
 });
