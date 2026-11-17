@@ -10,6 +10,7 @@ import { SubagentRetryButton } from "../../features/chat/transcript/SubagentRetr
 import { SubagentTurnContent } from "../../features/chat/transcript/SubagentTurnContent";
 import { TranscriptDisclosureProvider } from "../../features/chat/transcript/disclosure";
 import { delegateModelId, delegateThinkingLevel } from "../../features/chat/transcript/model";
+import { SubagentModelInfo } from "../../features/chat/transcript/SubagentModelInfo";
 import { SlotSessionProvider } from "../../plugins/renderer-slots/use-slots";
 import { collectDelegationFailures, collectDelegationStatuses, delegationIsCreating } from "../../lib/subagent-topology";
 import { delegationIdForMessage } from "../../lib/subagent-panel";
@@ -23,7 +24,7 @@ import { useAppStore } from "../../stores/app-store";
 import { useFollowScroll } from "../../hooks/use-follow-scroll";
 import { useTranscriptView } from "../../hooks/use-transcript-view";
 import { useTranscriptSearchFocus } from "../../hooks/use-transcript-search-focus";
-import { IconArrowDown, IconChevronLeft, IconSparkles } from "../icons";
+import { IconArrowDown, IconBot, IconChevronLeft } from "../icons";
 import { Button, TooltipButton } from "../ui";
 import { useSubagentHistory } from "../../features/delegations/useSubagentHistory";
 import { delegationHistoryDiagnostics } from "../../features/delegations/session-delegation-tasks";
@@ -57,7 +58,8 @@ function SubagentTranscriptSurface({ delegationId, sessionId }: { delegationId: 
   const payload = selected ? toolResultPayload(selected.message) : undefined;
   const recordedId = payload && typeof payload === "object" && "delegationId" in payload &&
     typeof payload.delegationId === "string" ? payload.delegationId : undefined;
-  const modelLabel = selected ? [delegateModelId(selected.message), delegateThinkingLevel(selected.message)].filter(Boolean).join(" · ") : "";
+  const modelId = selected ? delegateModelId(selected.message) : "";
+  const thinkingLevel = selected ? delegateThinkingLevel(selected.message) : undefined;
   const title = selected ? subagentTaskTitle(selected.message, t("chat.subagentUnnamed")) : t("panel.subagent");
   const failure = useMemo(() => collectDelegationFailures(items).get(selectedId), [items, selectedId]);
   const {
@@ -87,9 +89,10 @@ function SubagentTranscriptSurface({ delegationId, sessionId }: { delegationId: 
           onClick={() => openTab(sessionId, subagentsWorkPanelTab())}>
           <IconChevronLeft size={16} />
         </TooltipButton>
-        <span className="subagent-task-icon" aria-hidden><IconSparkles size={17} /></span>
+        <span className="subagent-task-icon" aria-hidden><IconBot size={17} /></span>
+        <span className="subagent-task-kind">{t("subagentControls.taskLabel")}</span>
         <strong className="subagent-task-title">{title}</strong>
-        {modelLabel ? <span className="subagent-transcript-model" title={modelLabel}>{modelLabel}</span> : null}
+        {selected ? <span className="subagent-transcript-model"><SubagentModelInfo modelId={modelId} thinkingLevel={thinkingLevel} /></span> : null}
         {selected ? <span className="subagent-task-status" role="status">{t(subagentTaskStatusKey(selected.message, statuses))}</span> : null}
           <SubagentStopButton delegationId={selectedId} running={delegateRunning} name={title} compact />
           <SubagentRetryButton delegationId={selectedId} failed={outcome === "failed"} compact />

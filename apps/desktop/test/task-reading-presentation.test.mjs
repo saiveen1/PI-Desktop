@@ -125,7 +125,9 @@ test("production task list and thinking render the compact defaults", async (t) 
   assert.match(html, /Task a/);
   assert.match(html, /Needs attention/);
   assert.match(html, /data-outcome="failed"/);
-  assert.doesNotMatch(html, /test-model|topology|coordinator|processingSteps/);
+  assert.match(html, /test-model/);
+  assert.match(html, /Effort: high/);
+  assert.doesNotMatch(html, /topology|coordinator|processingSteps/);
   const thinking = { kind: "thinking", message: { id: "reasoning", role: "assistant", content: "", thinking: "Private detail", status: "streaming", createdAt: "2026-11-08T09:00:00Z" } };
   const group = ssr.render(createElement(ActivityGroup, { items: [thinking], isActive: true, turnActive: true }));
   assert.match(group, /aria-expanded="false"/);

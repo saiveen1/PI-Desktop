@@ -89,6 +89,9 @@ This edition strengthens the existing framework rather than replacing it.
   times, output tokens and explicitly labeled run/request throughput. Missing
   old measurements stay unavailable; throughput is not pure generation speed.
   Retained approval receipts never provide fresh consent to run work.
+  Inline tasks and the session index use distinct subagent icons/labels and show
+  recorded model/effort without expansion. Background refresh keeps the list in
+  place; failures retain previous information with an explicit warning.
 - **Progress checkpoints and direct follow-up.** Alongside configurable work
   budgets, automatically saved checkpoints retain bounded tool evidence,
   confirmed writes and uncertain pending effects.

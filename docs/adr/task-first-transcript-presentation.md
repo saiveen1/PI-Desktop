@@ -4,6 +4,7 @@
 - Date: 2026-11-08
 - Scope: Personal-edition renderer presentation only
 - Amends: [Turn process and thinking presentation](turn-process-and-thinking-display.md), the presentation portions of [ADR 0062](0062-bounded-subagents-behind-a-task-tool.md), and [component spec](../spec/04-ux/08-component-spec.md) §§4, 5.7, 9.9
+- Presentation amendment: [Refresh stability and execution metadata](session-subagent-topbar-index.md#refresh-stability-and-execution-metadata-amendment) supersedes the single-line and hidden-model/effort choices below; other reading and execution invariants remain.
 
 ## Context
 

@@ -158,6 +158,15 @@ fn project(c: &Candidate, message: sessions::UiMessage) -> Option<Value> {
             bounded(&mut out, key, text, None);
         }
     }
+    // The run's own recorded effective level, allowlisted so an unknown token
+    // can never reach the typed shared entry. Legacy rows recorded none and
+    // stay absent rather than inheriting current settings.
+    if let Some(level) = details["thinkingLevel"]
+        .as_str()
+        .filter(|level| sessions::is_valid_thinking_level(level))
+    {
+        out["thinkingLevel"] = json!(level);
+    }
     let completed = stamp(&details["completedAt"]).or_else(|| {
         if status == "interrupted" {
             c.ended.map(ms_to_ts)

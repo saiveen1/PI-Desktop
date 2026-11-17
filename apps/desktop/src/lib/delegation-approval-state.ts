@@ -15,7 +15,7 @@ export function createDelegationApprovalState(client: DelegationApprovalSourceCl
   const eventVersions = new Map<string, number>();
   const hydrated = new Set<string>();
   const listeners = new Set<() => void>();
-  let snapshot = { requests: [] as DelegationApprovalPrompt[], loading: true, loadError: false };
+  let snapshot = { requests: [] as DelegationApprovalPrompt[], loading: true, loaded: false, loadError: false };
   let references = 0, generation = 0;
   let listeningSince = 0;
   let off: (() => void) | undefined;
@@ -37,7 +37,7 @@ export function createDelegationApprovalState(client: DelegationApprovalSourceCl
   const reload = async () => {
     const operation = ++generation;
     const atStart = new Map(eventVersions);
-    snapshot = { ...snapshot, loading: true, loadError: false }; emit();
+    snapshot = { ...snapshot, loading: true }; emit();
     try {
       const result = await client.listDelegationApprovals();
       if (!references || operation !== generation) return;
@@ -54,6 +54,7 @@ export function createDelegationApprovalState(client: DelegationApprovalSourceCl
           merge(request);
         }
       }
+      snapshot = { ...snapshot, loaded: true, loadError: false };
     } catch {
       if (references && operation === generation) snapshot = { ...snapshot, loadError: true };
     } finally {

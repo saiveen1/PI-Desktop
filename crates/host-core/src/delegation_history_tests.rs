@@ -341,3 +341,49 @@ fn lifecycle_projection_is_bounded_allowlisted_and_durable() {
     invalid["attempts"][0]["usage"]["outputTokens"] = json!(-1);
     assert!(observation::project(&invalid).is_none());
 }
+
+#[test]
+fn history_preserves_only_recorded_valid_effort_without_inventing_legacy_values() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = Database::open_in_dir(dir.path()).unwrap();
+    let session = sessions::create_session(&db, None, None, None, None, None).unwrap();
+    let cases = [
+        (None, None),
+        (Some(json!("off")), Some("off")),
+        (Some(json!("omit")), Some("omit")),
+        (Some(json!("minimal")), Some("minimal")),
+        (Some(json!("low")), Some("low")),
+        (Some(json!("medium")), Some("medium")),
+        (Some(json!("high")), Some("high")),
+        (Some(json!("xhigh")), Some("xhigh")),
+        (Some(json!("max")), Some("max")),
+        (Some(json!("unknown")), None),
+        (Some(json!(" high")), None),
+        (Some(json!(null)), None),
+        (Some(json!(3)), None),
+        (Some(json!(["high"])), None),
+    ];
+    for (index, (recorded, expected)) in cases.iter().enumerate() {
+        let id = format!("effort-{index}");
+        let mut message = task(&id, "completed");
+        message.tool_args.as_mut().unwrap()["thinkingLevel"] = json!("low");
+        if let Some(value) = recorded {
+            message.tool_result.as_mut().unwrap()["details"]["thinkingLevel"] = value.clone();
+        }
+        sessions::append_message(&db, &session.id, &message, None).unwrap();
+        let page = list(&db, Query::default()).unwrap();
+        let entry = page["entries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|entry| entry["messageId"] == id)
+            .unwrap();
+        assert_eq!(entry["modelId"], "actual");
+        assert_eq!(entry["requestedModel"], "requested");
+        assert_eq!(entry["status"], "completed");
+        assert_eq!(
+            entry.get("thinkingLevel"),
+            expected.map(|s| json!(s)).as_ref()
+        );
+    }
+}

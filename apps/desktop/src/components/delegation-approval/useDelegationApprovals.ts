@@ -17,7 +17,7 @@ const consentIdentity = (request: DelegationApprovalPrompt) => JSON.stringify([
 /** Selection and feedback stay local; the authoritative request stream is shared. */
 export function useDelegationApprovals(client: ApprovalClient = api) {
   const source = useMemo(() => delegationApprovalState(client), [client]);
-  const { requests, loading, loadError } = useSyncExternalStore(source.subscribe, source.getSnapshot, source.getSnapshot);
+  const { requests, loading, loaded, loadError } = useSyncExternalStore(source.subscribe, source.getSnapshot, source.getSnapshot);
   const [selected, setSelected] = useState<Record<string, string>>({});
   const [feedback, setFeedback] = useState<Record<string, ApprovalFeedback>>({});
   const [now, setNow] = useState(Date.now);
@@ -83,5 +83,5 @@ export function useDelegationApprovals(client: ApprovalClient = api) {
       await send(request, { sessionId: request.sessionId, requestId: request.requestId, revision: request.revision, action });
     }
   };
-  return { requests, selected, feedback, loading, loadError, now, reload: source.reload, toggle, send, batch };
+  return { requests, selected, feedback, loading, loaded, loadError, now, reload: source.reload, toggle, send, batch };
 }

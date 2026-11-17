@@ -16,7 +16,7 @@ export function subagentTaskTitle(message: UiMessage, fallback = ""): string {
 
 /** Stable before and after a Task result arrives; never derived from list order. */
 export function subagentTaskTone(message: UiMessage): number {
-  const identity = message.toolCallId || delegationIdForMessage(message);
+  const identity = message.id || message.toolCallId || delegationIdForMessage(message);
   let hash = 0;
   for (const char of identity) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
   return hash % 4;

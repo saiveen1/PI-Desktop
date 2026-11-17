@@ -2514,6 +2514,53 @@
   gap: 2px;
 }
 
+.subagent-task-heading {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 6px;
+}
+
+.subagent-task-heading > .subagent-task-title {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.subagent-task-kind {
+  flex: 0 0 auto;
+  padding: 0 4px;
+  border-radius: var(--radius-xs);
+  background: var(--ds-tile);
+  color: var(--ds-text-secondary);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--leading-body);
+}
+
+.subagent-model-info {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  color: var(--ds-text-secondary);
+  font-size: var(--text-xs-plus);
+  font-weight: var(--font-weight-normal);
+  line-height: var(--leading-body);
+}
+
+.subagent-model-info > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.subagent-task-navigation {
+  display: inline-flex;
+  flex: 0 0 auto;
+  padding-top: 2px;
+  color: var(--ds-text-muted);
+}
+
 .subagent-task-title {
   color: var(--ds-text-primary);
   font-size: var(--text-sm-plus);
@@ -3663,44 +3710,20 @@
   padding: 2px 0;
 }
 
-.is-inline .subagent-task-row {
-  flex-wrap: nowrap;
-}
-
 .is-inline .subagent-task-open.btn {
-  min-height: 28px;
-  flex-basis: 0;
-  align-items: center;
-  gap: 6px;
-  padding: 2px 4px;
+  min-height: 40px;
+  gap: 8px;
+  padding: 4px;
 }
 
 .is-inline .subagent-task-icon {
-  width: 16px;
-  height: 16px;
-  flex-basis: 16px;
-  background: transparent;
-}
-
-.is-inline .subagent-task-copy {
-  flex-direction: row;
-  align-items: baseline;
-  gap: 6px;
+  width: 22px;
+  height: 22px;
+  flex-basis: 22px;
 }
 
 .is-inline .subagent-task-title {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--ds-text-secondary);
   font-size: var(--text-sm);
-  font-weight: var(--font-weight-normal);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.is-inline .subagent-task-status {
-  flex: none;
-  white-space: nowrap;
 }
 
 .is-inline .subagent-task-actions {

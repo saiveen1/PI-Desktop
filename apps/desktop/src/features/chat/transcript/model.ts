@@ -1,5 +1,5 @@
-import type { ThinkingLevel, UiMessage } from "@pi-desktop/shared";
-import { THINKING_LEVELS } from "@pi-desktop/shared";
+import type { SessionThinkingLevel, UiMessage } from "@pi-desktop/shared";
+import { isSessionThinkingLevel } from "@pi-desktop/shared";
 import type { SubagentRun } from "../../../lib/assistant-turns";
 import { toolResultPayload } from "../../../lib/tool-presentation";
 
@@ -26,22 +26,12 @@ export function delegateModelId(message: UiMessage): string {
   return typeof modelId === "string" ? modelId.trim() : "";
 }
 
-/** Effective thinking level resolved for this delegation, from the Task result.
- * `off` and `omit` deliberately have no visible suffix. */
-export function delegateThinkingLevel(message: UiMessage): ThinkingLevel | undefined {
+/** Recorded effective effort; absence is unknown, not an implicit off/default. */
+export function delegateThinkingLevel(message: UiMessage): SessionThinkingLevel | undefined {
   const payload = toolResultPayload(message);
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-    return undefined;
-  }
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return undefined;
   const value = (payload as { thinkingLevel?: unknown }).thinkingLevel;
-  if (
-    typeof value !== "string" ||
-    value === "off" ||
-    !THINKING_LEVELS.includes(value as ThinkingLevel)
-  ) {
-    return undefined;
-  }
-  return value as ThinkingLevel;
+  return isSessionThinkingLevel(value) ? value : undefined;
 }
 
 /**

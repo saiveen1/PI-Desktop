@@ -3924,13 +3924,24 @@ Load the actual bundled plugin in an isolated workspace. Create a file and Unico
   `message_end` while the parent runs, then deliver stale creation/poll snapshots.
   Check keyboard entry,
   long labels, narrow light/dark layouts and source-session Stop/Retry.
+  Hold repeated history and approval refresh responses after hydration (including
+  an empty result); compare row identity, geometry, focus, scroll and topbar text
+  before/during/after settlement. Fail a refresh, retry while still pending, then
+  recover. Compare model/effort in inline rows, index and detail, including long
+  model names, recorded `off`/`omit` and legacy records without effort.
 - **Expected:** Text entry stays visible after completion; counts are scoped,
   deduplicated, independent of chat paging, and distinguish approval/creation
   from execution. One index tab is reused; existing detail controls keep their
   identity. Old responses do not overwrite newer state or another session.
   Historical detail/report reads do not move the main chat. Errors stay visible
   with recovery; no automatic navigation, execution, or approval occurs.
+  Background refresh inserts no loading paragraph or empty-state flicker and
+  never clears a stale-data warning before success. Manual refresh feedback
+  remains on its button. Task icons/labels differ from thinking disclosures;
+  model/effort remain visible without opening a detail, use only recorded values,
+  and wrap inside narrow localized layouts.
 - **Automation:** `session-delegations.test.mjs`,
+  `session-delegations-refresh.test.mjs`, `subagent-task-metadata.test.mjs`,
   `session-delegations-ui.test.mjs`, existing task-reading, work-panel tab and
   delegation-history contracts, plus Host session-filter pagination tests.
 - **Specs:** Component spec §§5.7/9.9 and the additive delegation-history query

@@ -5,11 +5,11 @@ export type SessionDelegationsClient = {
   listDelegationHistory: (query: DelegationRunHistoryQuery) => Promise<DelegationRunHistoryPage>;
   onAgentEvent: (listener: (event: AgentEventEnvelope) => void) => () => void;
 };
-type Snapshot = { entries: readonly DelegationRunHistoryEntry[]; loading: boolean; error: boolean };
+type Snapshot = { entries: readonly DelegationRunHistoryEntry[]; loading: boolean; loaded: boolean; error: boolean };
 
 /** Shared by the session header and index, independent of the chat reading window. */
 export function createSessionDelegationsSource(client: SessionDelegationsClient, sessionId: string) {
-  let snapshot: Snapshot = { entries: [], loading: true, error: false };
+  let snapshot: Snapshot = { entries: [], loading: true, loaded: false, error: false };
   let references = 0;
   let generation = 0;
   let off: (() => void) | undefined;
@@ -19,7 +19,8 @@ export function createSessionDelegationsSource(client: SessionDelegationsClient,
   const publish = (next: Snapshot) => { snapshot = next; for (const listener of listeners) listener(); };
   const reload = async () => {
     const request = ++generation;
-    publish({ ...snapshot, loading: true, error: false });
+    // Keep the last successful snapshot and any stale-state warning while syncing.
+    publish({ ...snapshot, loading: true });
     const entries = new Map<string, DelegationRunHistoryEntry>();
     let offset = 0;
     try {
@@ -33,7 +34,7 @@ export function createSessionDelegationsSource(client: SessionDelegationsClient,
         if (!Number.isSafeInteger(page.nextOffset) || page.nextOffset <= offset) throw new Error("Invalid delegation history cursor");
         offset = page.nextOffset;
       }
-      publish({ entries: [...entries.values()], loading: false, error: false });
+      publish({ entries: [...entries.values()], loading: false, loaded: true, error: false });
     } catch {
       if (references && request === generation) publish({ ...snapshot, loading: false, error: true });
     }
@@ -70,7 +71,7 @@ export function createSessionDelegationsSource(client: SessionDelegationsClient,
           off?.(); off = undefined;
           if (timer !== undefined) clearTimeout(timer);
           calls.clear();
-          snapshot = { entries: [], loading: true, error: false };
+          snapshot = { entries: [], loading: true, loaded: false, error: false };
           timer = undefined;
         }
       };

@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { IconSparkles } from "../../../components/icons";
+import { IconArrowUpRight, IconBot } from "../../../components/icons";
 import { Button } from "../../../components/ui";
 import { useChatSessionCapability } from "../../../hooks/use-chat-session-capability";
 import { delegationIdForMessage } from "../../../lib/subagent-panel";
@@ -12,6 +12,8 @@ import { useSlotSessionId } from "../../../plugins/renderer-slots/use-slots";
 import { useAppStore } from "../../../stores/app-store";
 import { SubagentRetryButton } from "./SubagentRetryButton";
 import { SubagentStopButton } from "./SubagentStopButton";
+import { SubagentModelInfo } from "./SubagentModelInfo";
+import { delegateModelId, delegateThinkingLevel } from "./model";
 
 export function SubagentTaskRow({ item, statuses, onOpen }: {
   item: DelegationActivityItem;
@@ -41,11 +43,16 @@ export function SubagentTaskRow({ item, statuses, onOpen }: {
   return (
     <div className="subagent-task-row" role="listitem" data-tone={subagentTaskTone(message)} data-outcome={outcome} data-message-id={message.id}>
       <Button variant="ghost" className="subagent-task-open" disabled={!localToolsAllowed} onClick={open} title={`${title} · ${status}`}>
-        <span className="subagent-task-icon" aria-hidden><IconSparkles size={17} /></span>
+        <span className="subagent-task-icon" aria-hidden><IconBot size={17} /></span>
         <span className="subagent-task-copy">
-          <span className="subagent-task-title">{title}</span>
-          <span className="subagent-task-status" role="status">{status}</span>
+          <span className="subagent-task-heading">
+            <span className="subagent-task-kind">{t("subagentControls.taskLabel")}</span>
+            <span className="subagent-task-title">{title}</span>
+            <span className="subagent-task-status" role="status">{status}</span>
+          </span>
+          <SubagentModelInfo modelId={delegateModelId(message)} thinkingLevel={delegateThinkingLevel(message)} />
         </span>
+        <span className="subagent-task-navigation" aria-hidden><IconArrowUpRight size={14} /></span>
       </Button>
       {recordedId ? <div className="subagent-task-actions">
         <SubagentStopButton delegationId={recordedId} running={outcome === "running" && !creating} name={title} compact />
@@ -77,7 +84,7 @@ export function SubagentTaskList({ items, delegationStatuses, onOpen, grouped = 
         <section className="subagent-task-group" key={key} aria-label={t(labels[key])}>
           <h3 className="subagent-task-group-label">{t(labels[key])}<span aria-hidden> · {groups[key].length}</span>{key === "active" ? <SubagentStopButton running compact /> : null}</h3>
           <div role="list" aria-label={t(labels[key])}>
-            {groups[key].map((item) => <SubagentTaskRow key={delegationIdForMessage(item.message)} item={item} statuses={delegationStatuses} onOpen={onOpen} />)}
+            {groups[key].map((item) => <SubagentTaskRow key={item.message.id} item={item} statuses={delegationStatuses} onOpen={onOpen} />)}
           </div>
         </section>
       ) : null)}
