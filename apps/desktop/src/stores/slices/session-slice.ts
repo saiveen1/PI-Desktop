@@ -1,4 +1,5 @@
 import i18n from "i18next";
+import { isObserverGuardMode } from "@pi-desktop/shared";
 import type {
   Mode,
   PendingInteractiveRequests,
@@ -839,8 +840,14 @@ export function createSessionSlice({
       }
     },
 
-    configureActiveSession: async (config) => {
-      const sessionId = get().activeSessionId;
+    configureActiveSession: async (config, targetSessionId) => {
+      const sessionId = targetSessionId ?? get().activeSessionId;
+      if (config.observerMode !== undefined) {
+        if (!isObserverGuardMode(config.observerMode)) throw new Error("observerMode is invalid");
+        const session = get().sessions.find((row) => row.id === sessionId);
+        if (!session || session.id.startsWith("native-pi:") || isRemoteSession(session) || (session.source && session.source !== "desktop") || get().runningSessions[session.id]) return;
+        if (runtime.sessionConfigurationFlushes.has(session.id)) throw new Error("session configuration is busy");
+      }
       if (!sessionId) {
         set((state) => ({
           draftConfiguration: {

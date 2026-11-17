@@ -100,6 +100,8 @@ CREATE TABLE sessions (
   permission_mode TEXT NOT NULL DEFAULT 'inherit'
                 CHECK (permission_mode IN ('inherit', 'ask', 'accept-edits', 'auto')),
   fast_mode   INTEGER NOT NULL DEFAULT 0 CHECK (fast_mode IN (0, 1)),
+  observer_mode TEXT NOT NULL DEFAULT 'off'
+                CHECK (observer_mode IN ('off', 'observe', 'guard')),
   -- Definition snapshot of a custom or staged mode (schema v29); NULL for
   -- builtin modes configured without one.
   mode_snapshot_hash TEXT,

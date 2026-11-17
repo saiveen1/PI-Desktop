@@ -215,7 +215,10 @@ it("preserves the newest run diagnostic snapshot through delta projection and co
   const newer = { ...diagnostics, attemptCount: 2, retryCount: 1, lastEventAt: 1200,
     termination: { messageId: original.id, stopReason: "stop" as const,
       reasonSource: "normalized" as const, earlyEnd: "suspected" as const,
-      outputTokens: 45, recoveryAttempts: 0 } };
+      outputTokens: 45, recoveryAttempts: 0 },
+    observer: { messageId: original.id, mode: "observe" as const, status: "assessed" as const,
+      startedAt: 1100, endedAt: 1200, verdict: "unknown" as const, confidence: "low" as const,
+      reason: "Insufficient evidence", evidenceIds: [original.id], modelKey: "reviewer/small" } };
   const second = toWireMessageUpdate({ type: "message_update",
     message: { ...original, content: "ab", runDiagnostics: newer }, deltaText: "b" });
   const merged = mergeMessageUpdates(first, second);
@@ -227,4 +230,5 @@ it("preserves the newest run diagnostic snapshot through delta projection and co
   expect(applyMessageUpdate(restored, legacyDelta).runDiagnostics).toEqual(newer);
   expect(restored.runDiagnostics?.termination?.messageId).toBe(original.id);
   expect(restored.runDiagnostics?.termination?.earlyEnd).toBe("suspected");
+  expect(restored.runDiagnostics?.observer).toEqual(newer.observer);
 });

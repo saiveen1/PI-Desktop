@@ -227,6 +227,15 @@ every terminal frame; neither is fabricated. A normal stop is not task success.
 
 ## 8. User-facing diagnostics
 
+The optional built-in Observer adds `runDiagnostics.observer` on the exact
+candidate message: mode/status, selected model/effort, start/end, bounded verdict,
+confidence, redacted short reason, evidence IDs, continuation decision and its
+own usage. No raw reviewer prompt/reasoning or provider error prose is logged.
+The transcript disclosure uses this persisted metadata after reload, not a fresh
+assessment. These facts are separate from main-provider attempt counters and
+from the developer tool-observation report. Missing old data remains absent;
+an advisory verdict is never a verified task outcome.
+
 MVP provides:
 
 1. in-app error text with a stable code;

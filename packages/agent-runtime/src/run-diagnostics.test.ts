@@ -54,3 +54,30 @@ describe("normalized response termination", () => {
     expect(tracker.snapshot(4).termination?.maxOutputTokens).toBe(256);
   });
 });
+
+describe("Observer message association", () => {
+  it("retains the last settled assessment across later requests without attaching it to a different response", () => {
+    const tracker = new RunDiagnosticsTracker({ turnId: "turn", startedAt: 1 });
+    tracker.startRequest({ at: 2 });
+    tracker.settleResponse("candidate", { stopReason: "stop" }, 0);
+    const checking = { messageId: "candidate", mode: "guard" as const, status: "checking" as const, startedAt: 3 };
+    expect(tracker.setObserver({ ...checking, messageId: "future" })).toBe(false);
+    expect(tracker.setObserver(checking)).toBe(true);
+    const before = tracker.snapshot(3);
+    expect(tracker.setObserver({ ...checking, status: "assessed", verdict: "incomplete", confidence: "high", evidenceIds: ["candidate"], continued: true, endedAt: 4, usage: { inputTokens: 2, outputTokens: 3, totalTokens: 5 } })).toBe(true);
+    expect(before.observer?.status).toBe("checking");
+    tracker.startRequest({ at: 5 });
+    const active = tracker.snapshot(5);
+    expect(active.termination).toBeUndefined();
+    expect(diagnosticsForMessage(active, "candidate").observer?.continued).toBe(true);
+    expect(diagnosticsForMessage(active, "future").observer).toBeUndefined();
+    tracker.settleResponse("final", { stopReason: "stop" }, 1);
+    const final = tracker.finish(6);
+    expect(final.observer?.messageId).toBe("candidate");
+    expect(diagnosticsForMessage(final, "final").observer).toBeUndefined();
+    expect(diagnosticsForMessage(final, "candidate").termination).toBeUndefined();
+    final.observer!.evidenceIds!.push("mutated");
+    expect(tracker.snapshot(7).observer?.evidenceIds).toEqual(["candidate"]);
+    expect(tracker.setObserver(checking)).toBe(false);
+  });
+});

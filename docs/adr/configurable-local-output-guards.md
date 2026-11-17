@@ -46,11 +46,12 @@ scoped to their actual message ID. A normalized stop reason is not the provider'
 raw final frame and is not proof the task succeeded. Show a settled early-end
 warning only on its owning message; no warning is injected into model context.
 
-Semantic assessment belongs to an optional external Observer plugin using public
-post-turn/read-only session and standalone completion APIs. It is not a runtime
-dependency, does not run unless explicitly configured, and cannot grant execution
-permission or directly resume the parent Agent. Plugin failures do not block the
-main turn. No new privileged plugin API is introduced here.
+Semantic assessment was initially an optional external Observer plugin. The
+[built-in Observer Guard](builtin-observer-guard.md) amendment moves the optional
+per-conversation assessment into the runtime with Observe/Guard choices. These
+local deterministic guards still require no reviewer and add no normal prompt
+context. No new privileged plugin API is introduced, and the external plugin is
+not automatically installed, disabled or removed.
 
 ## Compatibility and ownership
 

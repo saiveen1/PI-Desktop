@@ -5012,6 +5012,35 @@ Build two actual runtimes with identical configuration and different scratch dir
   settings interaction, persistence, and launch contract tests. Electron
   end-to-end execution is not claimed by these isolated tests.
 
+## E2E-RUNTIME-observer-guard
+- **Title:** A conversation explicitly opts into independent Observe/Guard assessment.
+- **Preconditions:** Synthetic independent/main provider streams and Host boundaries;
+  isolated storage, no real credentials, daily profile or Desktop installation.
+- **Steps:** Configure an explicit observer model and supported effort in Behavior,
+  save/reload partial settings, then choose Off/Observe/Guard in one local session.
+  Switch sessions during a pending save; verify native/remote/running cases. End a
+  current task with normal text after tool receipts. Exercise every verdict,
+  confidence, invalid JSON/reference, missing model/effort, timeout, Stop, steering,
+  failures, uncertain effects and input truncation. Spend the local correction
+  allowance before Observer, and continue after a permitted Guard verdict. Reopen
+  history and fork the session. Upgrade a populated pre-Observer database.
+- **Expected:** Off and unconfigured settings cause no independent model request;
+  no silent provider/model/effort fallback. Observe only advises. Guard continues
+  only a locally eligible high-confidence incomplete task within the shared
+  allowance, once assessed per user turn. No replay, new user message, review
+  tools, native search or permanent main prompt is added. Deadline/cancellation
+  and stale-state fences settle safely; uncertainty/error never grants execution.
+  Per-response diagnostic results survive roundtrip and appear only on their
+  owning message. Settings/configuration preserve siblings and old user data;
+  new/forked/old migrated sessions are off. Model reasons render as text, and
+  extra costs/privacy limits remain explicit. No installed plugin is altered.
+- **Specs:** Runtime §5e.4; Observer Guard ADR; IPC session.configure; storage;
+  Behavior settings; transcript §7.4c.
+- **Acceptance:** C / E / Privacy / Quality.
+- **Milestone:** Maintenance.
+- **Status:** Offline runtime, boundary, renderer interaction and migration
+  fixtures; installed-upgrade, real-model accuracy and live UI remain separate.
+
 ## E2E-RUNTIME-configurable-output-guards
 - **Title:** Ordinary Agent early endings are advisory or boundedly corrected.
 - **Preconditions:** Synthetic provider and Host boundaries, isolated test state,

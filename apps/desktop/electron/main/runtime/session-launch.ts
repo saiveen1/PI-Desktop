@@ -50,6 +50,7 @@ import type { RuntimeProvider } from "./provider-catalog";
 import type { LoadedSkillDocument } from "../skill-document";
 import { getActiveRemoteHostsBoot } from "../bootstrap/remote-hosts";
 import { loadRemoteWorkspaceInstructions } from "../remote/remote-workspace-instructions.js";
+import { resolveObserverGuardBinding } from "./observer-guard-binding";
 
 const ErrorCodes = {
   ...SharedErrorCodes,
@@ -715,6 +716,19 @@ export function createSessionLaunchRuntime({
         data: { diagnostics: subagentDiagnostics },
       });
     }
+    const observerGuard = await resolveObserverGuardBinding(
+      remoteWorkspace || session.scheduledRun === true || (session.source && session.source !== "desktop") ? "off" : session.observerMode,
+      settings.observerGuard,
+      {
+        providers: providers.providers,
+        getSecret: async id => (await runtimeState.host!.call<{ value?: string }>("providers.getSecret", { id })).value,
+        vendorBinding: (id, selectedModel) => vendorOAuth.bindingFor(id, selectedModel),
+        catalogModel: (row, selectedModel) => catalogModelConfigFor(modelsDevCatalog, {
+          providerId: row.id, vendorKey: row.vendorKey, baseUrl: row.baseUrl, apiStyle: row.apiStyle, modelId: selectedModel,
+        }),
+        isImageModel: (id, selectedModel) => isImageGenerationModel(imageGenerationBindings(settings.imageGenerationModels, settings.imageGeneration), id, selectedModel),
+      },
+    );
     // Bind the vendor-account rows this turn is allowed to sign requests with:
     // the session's own provider plus any row a pinned subagent resolved to. The
     // sidecar may then ask main for request auth, but only for a row named here,
@@ -724,6 +738,7 @@ export function createSessionLaunchRuntime({
       [
         provider.id,
         ...Object.values(subagentBindings.providers).map((binding) => binding.id),
+        ...(observerGuard.provider ? [observerGuard.provider.id] : []),
       ]
         .map((id) => providers.providers.find((row) => row.id === id))
         .flatMap((row) =>
@@ -770,6 +785,7 @@ export function createSessionLaunchRuntime({
         providerStreamIdleTimeoutMinutes: resolveProviderStreamIdleTimeoutMinutes(settings.providerStreamIdleTimeoutMinutes),
         autoContinueUnfinishedTodos: settings.autoContinueUnfinishedTodos !== false,
         agentOutputGuard: resolveAgentOutputGuardSettings(settings.agentOutputGuard),
+        observerGuard,
         // The session `/fast` switch only reaches a model the user allowed it
         // for in model settings (ADR 0334).
         fastMode: session.fastMode === true && storedModel?.fastModeAllowed === true,

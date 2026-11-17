@@ -40,11 +40,8 @@ export type SubmittedComposerDraft = {
   resolveAbort?: (restored: boolean) => void;
 };
 
-export type SessionConfiguration = Pick<
-  SessionSummary,
-  "mode" | "providerId" | "modelId" | "thinkingLevel"
-> &
-  Partial<Pick<SessionSummary, "permissionMode" | "fastMode">>;
+export type SessionConfiguration = Pick<SessionSummary, "mode" | "providerId" | "modelId"> &
+  Partial<Pick<SessionSummary, "thinkingLevel" | "permissionMode" | "fastMode" | "observerMode">>;
 
 export type SessionSelection = { id: string; intent: number };
 

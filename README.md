@@ -50,6 +50,12 @@ This edition strengthens the existing framework rather than replacing it.
   and printed-tool-call corrections use the same ceiling rather than stacking
   fresh budgets. Normal checks add no model context or reviewer call; actual
   continuations may add usage and never guarantee completion.
+- **Optional conversation Observer Guard.** Enable Observe or Guard beside the
+  composer controls, with an independent model and effort chosen in Behavior
+  settings. Observe adds advisory assessments; Guard may continue within the
+  existing correction allowance after strict evidence and safety checks. Results
+  remain attached to the response for later inspection. Off adds no requests;
+  enabled assessments add cost/latency and are not proof of completion.
 - **Configurable degenerate-output protection.** Interrupt long whitespace/symbol
   runs or sustained exact narrative-paragraph repetition in model text/thinking.
   Behavior settings expose switches and thresholds; partial results are retained

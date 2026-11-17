@@ -1,4 +1,5 @@
 import { outputGuard } from "../output-guard.js";
+import { observerGuard } from "../observer-guard.js";
 import { subagentControls } from "./subagent-controls.js";
 import { approvalCenter } from "./delegation-approval.js";
 import { delegationReliabilitySettings, delegationDiagnostics } from "./delegation-reliability.js";
@@ -7,6 +8,7 @@ import { en, type EnglishCatalog } from "../en/index.js";
 
 export const tr = {
   outputGuard: outputGuard.tr,
+  observerGuard: observerGuard.tr,
   toolObserver: en.toolObserver,
   toolImages: {
     title: "Araç görselleri", image: "Görsel {{index}}", returned: "{{count}} görsel döndürüldü",

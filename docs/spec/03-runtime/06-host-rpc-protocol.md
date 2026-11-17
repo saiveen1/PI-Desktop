@@ -451,6 +451,14 @@ to later refresh and inference; the vendor picker does not collect them.
   without a custom pool reject the whole configuration. Both fields share the
   idle gate and transaction; delegation-only changes leave activity intact.
   Session list/get return both optional fields; forks copy both.
+- Optional `observerMode: off | observe | guard` is accepted by local session
+  creation/configuration; invalid explicit values, including null, reject the
+  write. Omission preserves configuration and defaults creation to off. It uses
+  the same idle transaction and never starts execution. Lists/get expose it;
+  forks deliberately reset it to off rather than inheriting model-use consent.
+  Assessments persist in existing message `runDiagnostics.observer` metadata,
+  not a new RPC that lets a reviewer execute tools. See
+  [Observer Guard](../../adr/builtin-observer-guard.md).
 - `session.delegationPolicy({ id })` returns
   `{ modelKeys: string[] | null, modelApprovals: Record<string, "auto" | "ask"> | null }`
   without reading the transcript; null keys mean inherit. An unknown session fails.

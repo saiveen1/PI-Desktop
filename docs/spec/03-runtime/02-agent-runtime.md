@@ -707,6 +707,50 @@ warning/recovery state and correction count. Old rows remain valid without this
 field; raw provider reasons are not fabricated from normalized values. See
 [the decision](../../adr/configurable-local-output-guards.md).
 
+### 5e.4. Optional built-in Observer Guard
+
+Local Desktop sessions may explicitly select `observerMode: observe | guard`
+(default off). Settings `observerGuard` choose an independent exact model and
+effort, with bounded deadline/evidence preferences. Missing/unsupported selection
+is a diagnostic, never a default-model fallback. The Node runtime, not a plugin
+or the renderer, owns the lifecycle and decision. The deterministic guards in
+§5e.3 remain available without an observer model.
+
+At most one eligible text-only normal-stop candidate per user turn receives an
+independent tool-free assessment. It uses the current goal, exact answer and
+bounded recent tool receipts; system instructions, reasoning and tool arguments
+are excluded. Raw tool text is opt-in, with best-effort redaction. Input and
+output are treated as untrusted data. Strictly validate the verdict, confidence,
+bounded reason and references to supplied evidence. Unknown/truncated/incomplete
+assessment evidence never authorizes a continuation. Pending Observer correction
+participates in active-task compaction retention until its request is prepared.
+Standalone output is capped at 512 tokens with effort off and 8,192 with thinking,
+further constrained by the selected model and configured deadline. Scheduled-run
+sessions are explicitly disabled by Main even if their stored mode is non-off.
+
+Observe only annotates the reply. Guard requires high-confidence `incomplete`,
+valid evidence, an actionable current user task, safe tool/lifecycle state and a
+remaining shared correction allowance. It continues the same loop with retained
+receipts and a fixed temporary reminder, not reviewer-authored commands or a
+synthetic user message. Stop, steering, permissions, approvals, user-input waits,
+non-execution scope and mode closeout remain authoritative. Host notices and
+historical tasks do not acquire new permission.
+
+An enabled assessment can add bounded completion latency. A checking diagnostic
+is emitted immediately; the independent request has cancellation/deadline control,
+no observer retries, no tools and no native search. Failure, timeout, malformed
+output or uncertain judgement leaves a visible advisory/error and allows normal
+settlement, without auto-resume. New configuration applies next turn, including
+runtime reuse; stale results never attach to another response.
+
+`runDiagnostics.observer` records the owning message, configured model/effort,
+timing, status, verdict/confidence, concise reason/evidence, separate usage and
+continuation decision. Existing Host message metadata persists it; restored
+history does not trigger re-evaluation. Diagnostics do not become primary-model
+context and primary request counters are not inflated with observer usage.
+See [the decision](../../adr/builtin-observer-guard.md) and
+E2E-RUNTIME-observer-guard. This optional judge is fallible, not a completion proof.
+
 ### 5.1 Context checkpoint protection (D158/D203, ADR 0030/0049/0061/0064)
 
 The complete visible transcript and the model context are separate views of

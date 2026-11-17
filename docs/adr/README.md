@@ -440,3 +440,4 @@ git history.
 | plan-approval-session-permission | [Plan approval defaults to the owning Session's permission](plan-approval-session-permission.md) | Accepted; amends ADR 0053 and ADR 0158 |
 | local-tool-observer | [Local tool observation and developer review](local-tool-observer.md) | Accepted; additive diagnostics only |
 | configurable-local-output-guards | [Configurable local output guards](configurable-local-output-guards.md) | Accepted; additive settings and normalized termination diagnostics |
+| builtin-observer-guard | [Built-in per-conversation Observer Guard](builtin-observer-guard.md) | Accepted; optional independent assessment and bounded Guard continuation |

@@ -209,6 +209,8 @@ export const SETTINGS_NAV: SettingsNavEntry[] = [
       "settings.providerStreamIdleTimeoutDesc",
       "settings.autoContinueUnfinishedTodos",
       "settings.autoContinueUnfinishedTodosDesc",
+      "observerGuard.title", "observerGuard.description", "observerGuard.model", "observerGuard.effort",
+      "observerGuard.timeoutSeconds", "observerGuard.maxInputChars", "observerGuard.recentToolCount", "observerGuard.includeToolOutput",
       "outputGuard.title",
       "outputGuard.description",
       "outputGuard.mode",

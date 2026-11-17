@@ -20,6 +20,7 @@ import {
   type RuntimeProviderConfig,
 } from "./runtime.js";
 import type { PluginSkillDef } from "./plugin-skills-prompt.js";
+import type { ObserverGuardRuntimeConfig } from "./observer-guard.js";
 import type { SessionMessageOrigin, TrustedExtensionSpec } from "@pi-desktop/shared";
 import type { ProjectInstructions } from "./project-instructions.js";
 import type { CustomSystemPrompt } from "./custom-system-prompt.js";
@@ -125,6 +126,7 @@ type RuntimeParams = {
   providerStreamIdleTimeoutMinutes?: number;
   autoContinueUnfinishedTodos?: boolean;
   agentOutputGuard?: AgentOutputGuardSettings;
+  observerGuard?: ObserverGuardRuntimeConfig;
   /** Session `/fast` switch AND the model's opt-in, resolved by main (ADR 0334). */
   fastMode?: boolean;
   /** Opt-in TypeSafe classifier credential resolved by Electron main. */
@@ -233,6 +235,9 @@ async function runtimeFor(
       withVendorAuth(sessionId, pinned),
     ]),
   );
+  const observerGuard = params.observerGuard && { ...params.observerGuard,
+    provider: params.observerGuard.provider && withVendorAuth(sessionId, params.observerGuard.provider),
+  };
   if (
     !provider?.modelId ||
     (!provider.apiKey &&
@@ -293,6 +298,7 @@ async function runtimeFor(
     reusable.setProviderStreamIdleTimeoutMinutes(params.providerStreamIdleTimeoutMinutes);
     reusable.setAutoContinueUnfinishedTodos(params.autoContinueUnfinishedTodos !== false);
     reusable.setAgentOutputGuard(params.agentOutputGuard);
+    reusable.setObserverGuard(observerGuard);
     reusable.setFastMode(params.fastMode === true);
     reusable.setMode(mode, modeDefinition);
     return reusable;
@@ -349,6 +355,7 @@ async function runtimeFor(
     providerStreamIdleTimeoutMinutes: params.providerStreamIdleTimeoutMinutes,
     autoContinueUnfinishedTodos: params.autoContinueUnfinishedTodos !== false,
     agentOutputGuard: params.agentOutputGuard,
+    observerGuard,
     fastMode: params.fastMode === true,
     jevApiKey: params.jevApiKey,
     history,

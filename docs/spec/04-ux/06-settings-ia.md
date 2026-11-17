@@ -521,6 +521,18 @@ Card order is **Session defaults → Execution → Computer use**.
   Help distinguishes no-extra-model local detection from potentially billed
   continuations, and explains that these heuristics do not guarantee completion.
   Warnings and diagnostic counters do not become main-Agent prompt context.
+- **Observer Guard** is a separate Behavior card. It selects an explicit observer
+  provider/model and one of that binding's supported thinking levels (effort),
+  not the primary model or an automatic fallback. Missing/disabled model and
+  unavailable effort remain visible; the user can repair or clear the binding.
+  Optional controls set deadline (5-90 seconds, default 30), input characters
+  (2,000-20,000, default 8,000), recent tools (0-8, default 3), and whether tool
+  result excerpts may be sent (default false). Help explains billed independent
+  requests, best-effort redaction and bounded completion latency. Selecting a
+  model does not enable any conversation. The composer owns each local session's
+  Off/Observe/Guard choice; forks/new sessions start off. All preferences use
+  shared validation and sibling-preserving saves. No plugin installation is
+  required, and no existing plugin is modified automatically.
 - **Computer use** card: last on the page. It omits card/row explanatory copy
   and the static scope note; controls, platform and permission status, errors,
   and the missing-model hint remain unchanged.

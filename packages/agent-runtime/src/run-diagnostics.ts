@@ -11,9 +11,12 @@ export function normalizedStopReason(value: unknown): AgentResponseTermination["
 
 /** A reused turn snapshot must never annotate an earlier or future bubble. */
 export function diagnosticsForMessage(diagnostics: AgentRunDiagnostics, messageId: string): AgentRunDiagnostics {
-  if (!diagnostics.termination || diagnostics.termination.messageId === messageId) return diagnostics;
-  const { termination: _termination, ...rest } = diagnostics;
-  return rest;
+  const { termination, observer, ...rest } = diagnostics;
+  return {
+    ...rest,
+    ...(termination?.messageId === messageId ? { termination } : {}),
+    ...(observer?.messageId === messageId ? { observer } : {}),
+  };
 }
 
 export function runDiagnosticsProviderEvent(event: AssistantMessageEvent): RunDiagnosticsProviderEvent {

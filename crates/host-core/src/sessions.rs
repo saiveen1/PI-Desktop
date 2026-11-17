@@ -22,6 +22,10 @@ pub use history_mutations::{
     activate_message_revision_canonical, delete_message, retract_pending_prompt, running_turn,
 };
 mod model_system;
+mod observer;
+pub use observer::ObserverMode;
+#[cfg(test)]
+mod observer_tests;
 mod usage;
 pub use usage::{record_usage, session_usage_cost};
 
@@ -160,6 +164,9 @@ pub struct SessionSummary {
     /// use the priority tier only when the model binding also allows it.
     #[serde(default)]
     pub fast_mode: bool,
+    /// Explicit consent for this conversation; never an execution permission.
+    #[serde(default)]
+    pub observer_mode: ObserverMode,
     pub updated_at: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub delegation_model_keys: Option<Vec<String>>,
@@ -1345,7 +1352,7 @@ pub(crate) const SUMMARY_SELECT: &str =
     "SELECT s.id, s.title, s.last_seq, p.path, s.model_id, s.provider_id, s.mode,
             s.thinking_level, s.permission_mode, s.updated_at, s.created_at,
             EXISTS (SELECT 1 FROM task_runs r WHERE r.session_id = s.id) AS scheduled_run,
-            s.fast_mode, s.deleted_at
+            s.fast_mode, s.deleted_at, s.observer_mode
      FROM sessions s LEFT JOIN projects p ON p.id = s.project_id";
 
 pub(crate) fn summary_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<SessionSummary> {
@@ -1365,6 +1372,7 @@ pub(crate) fn summary_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Sess
         // alias keeps this mapper independent of any one query's column order.
         scheduled_run: row.get("scheduled_run")?,
         fast_mode: row.get("fast_mode")?,
+        observer_mode: row.get("observer_mode")?,
         worktree: None,
         delegation_model_keys: None,
         delegation_model_approvals: None,
@@ -1425,6 +1433,7 @@ pub struct SessionCreateOptions {
     pub permission_mode: Option<String>,
     /// The `/fast` switch (ADR 0334); false keeps the default service tier.
     pub fast_mode: bool,
+    pub observer_mode: ObserverMode,
 }
 
 pub fn create_session_with_thinking(
@@ -1447,6 +1456,7 @@ pub fn create_session_with_thinking(
             thinking_level,
             permission_mode: None,
             fast_mode: false,
+            observer_mode: ObserverMode::Off,
         },
     )
 }
@@ -1479,6 +1489,7 @@ pub fn create_session_with_mode_snapshot(
         thinking_level,
         permission_mode,
         fast_mode,
+        observer_mode,
     } = options;
     let now = now_ms();
     let id = Uuid::new_v4().to_string();
@@ -1519,8 +1530,9 @@ pub fn create_session_with_mode_snapshot(
         .prepare_cached(
             "INSERT INTO sessions (
                 id, title, project_id, provider_id, model_id, mode, thinking_level,
-                permission_mode, title_source, fast_mode, created_at, updated_at, mode_snapshot_hash
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?11, ?12)",
+                permission_mode, title_source, fast_mode, created_at, updated_at, mode_snapshot_hash,
+                observer_mode
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?11, ?12, ?13)",
         )?
         .execute(params![
             id,
@@ -1534,7 +1546,8 @@ pub fn create_session_with_mode_snapshot(
             title_source,
             fast_mode,
             now,
-            prepared.as_ref().and_then(|value| value.snapshot_hash())
+            prepared.as_ref().and_then(|value| value.snapshot_hash()),
+            observer_mode
         ])?;
     if let Some(transaction) = transaction {
         transaction.commit()?;
@@ -1550,6 +1563,7 @@ pub fn create_session_with_mode_snapshot(
         thinking_level,
         permission_mode,
         fast_mode,
+        observer_mode,
         updated_at: ms_to_ts(now),
         created_at: ms_to_ts(now),
         // The run row that owns this transcript is written after creation.
@@ -1942,6 +1956,8 @@ pub fn fork_session_through(
         thinking_level: source.summary.thinking_level,
         permission_mode: source.summary.permission_mode,
         fast_mode: source.summary.fast_mode,
+        // Consent does not transfer to another conversation.
+        observer_mode: ObserverMode::Off,
         delegation_model_keys: source.summary.delegation_model_keys,
         delegation_model_approvals: source.summary.delegation_model_approvals,
         updated_at: created_at.clone(),
@@ -2056,6 +2072,7 @@ pub fn configure_session_with_delegation(
         delegation_model_keys,
         delegation_model_approvals,
         None,
+        None,
     )
 }
 
@@ -2084,6 +2101,7 @@ pub fn configure_session_with_mode_snapshot(
         None,
         None,
         mode_snapshot_hash,
+        None,
     )
 }
 
@@ -2102,6 +2120,7 @@ pub fn configure_session_with_delegation_and_mode_snapshot(
     delegation_model_keys: Option<Option<&[String]>>,
     delegation_model_approvals: Option<Option<&crate::session_delegation::ModelApprovals>>,
     mode_snapshot_hash: Option<&str>,
+    observer_mode: Option<ObserverMode>,
 ) -> Result<Option<SessionSummary>> {
     if !(is_valid_mode(mode) || mode == "chat") {
         return Err(anyhow!("mode must be a valid mode id"));
@@ -2122,6 +2141,9 @@ pub fn configure_session_with_delegation_and_mode_snapshot(
         thinking_level,
         permission_mode,
     )?;
+    if observer_mode.is_some() {
+        crate::session_delegation::ensure_idle(db, id)?;
+    }
     let has_delegation_patch =
         delegation_model_keys.is_some() || delegation_model_approvals.is_some();
     let previous = if has_delegation_patch {
@@ -2183,7 +2205,7 @@ pub fn configure_session_with_delegation_and_mode_snapshot(
                  thinking_level = COALESCE(?5, thinking_level),
                  permission_mode = COALESCE(?6, permission_mode),
                  fast_mode = COALESCE(?8, fast_mode), mode_snapshot_hash = ?9,
-                 updated_at = ?7
+                 observer_mode = COALESCE(?10, observer_mode), updated_at = ?7
              WHERE id = ?1",
         )?
         .execute(params![
@@ -2195,7 +2217,8 @@ pub fn configure_session_with_delegation_and_mode_snapshot(
             permission_mode,
             now_ms(),
             fast_mode,
-            mode_snapshot_hash
+            mode_snapshot_hash,
+            observer_mode
         ])?;
     if changed == 0 {
         return Ok(None);
@@ -2213,6 +2236,7 @@ pub fn configure_session_with_delegation_and_mode_snapshot(
                     && thinking_level.is_none_or(|value| old.thinking_level == value)
                     && permission_mode.is_none_or(|value| old.permission_mode == value)
                     && fast_mode.is_none_or(|value| old.fast_mode == value)
+                    && observer_mode.is_none_or(|value| old.observer_mode == value)
             })
         {
             let timestamp =
@@ -5631,6 +5655,7 @@ mod tests {
             // Ownership is derived from `task_runs`, so an import is never one.
             scheduled_run: false,
             fast_mode: false,
+            observer_mode: ObserverMode::Off,
             worktree: None,
             delegation_model_keys: None,
             delegation_model_approvals: None,
@@ -5687,6 +5712,7 @@ mod tests {
             // Ownership is derived from `task_runs`, so an import is never one.
             scheduled_run: false,
             fast_mode: false,
+            observer_mode: ObserverMode::Off,
             worktree: None,
             delegation_model_keys: None,
             delegation_model_approvals: None,
@@ -6948,6 +6974,7 @@ mod tests {
             // Ownership is derived from `task_runs`, so an import is never one.
             scheduled_run: false,
             fast_mode: false,
+            observer_mode: ObserverMode::Off,
             worktree: None,
             delegation_model_keys: None,
             delegation_model_approvals: None,

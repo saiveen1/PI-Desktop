@@ -104,6 +104,8 @@ export type AppSettings = {
   autoContinueUnfinishedTodos?: boolean;
   /** Configurable local end-of-turn and repetitive-output guards; no reviewer model. */
   agentOutputGuard?: import("../agent-output-guard.js").AgentOutputGuardSettings;
+  /** Independent Observer model; session.observerMode is the explicit opt-in. */
+  observerGuard?: import("../observer-guard.js").ObserverGuardSettings;
   /** Allow Agent mode to call TypeSafe Jev for explicit structured classifications. */
   jevEnabled?: boolean;
   /** Prevent idle system sleep while this desktop app runs; off when absent. */

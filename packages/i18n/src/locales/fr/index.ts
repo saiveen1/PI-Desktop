@@ -1,4 +1,5 @@
 import { outputGuard } from "../output-guard.js";
+import { observerGuard } from "../observer-guard.js";
 import { subagentControls } from "./subagent-controls.js";
 import { approvalCenter } from "./delegation-approval.js";
 import { delegationReliabilitySettings, delegationDiagnostics } from "./delegation-reliability.js";
@@ -7,6 +8,7 @@ import { en, type EnglishCatalog } from "../en/index.js";
 
 export const fr = {
   outputGuard: outputGuard.fr,
+  observerGuard: observerGuard.fr,
   toolObserver: en.toolObserver,
   toolImages: {
     title: "Images de l’outil", image: "Image {{index}}", returned: "{{count}} images renvoyées",

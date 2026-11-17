@@ -14,6 +14,7 @@ import { ActivityGroup } from "./ActivityGroup";
 import { AssistantErrorMessage } from "./shared";
 import { useRenderBlocks, type RenderBlock } from "./render-blocks";
 import { earlyEndAdvisory } from "../../../lib/output-guard-advisory";
+import { ObserverGuardDisclosure } from "./ObserverGuardDisclosure";
 
 /** Message bubble that optionally applies smooth text release. */
 const SmoothMessageBubble = memo(function SmoothMessageBubble({ message, streaming, turnActive }: {
@@ -50,6 +51,7 @@ const SmoothMessageBubble = memo(function SmoothMessageBubble({ message, streami
       {advisory ? (
         <p className="message-output-notice" role="status">{t(`outputGuard.${advisory}`)}</p>
       ) : null}
+      <ObserverGuardDisclosure message={message} sessionId={sessionId} />
       {message.error ? <AssistantErrorMessage message={message} /> : null}
     </div>
   );

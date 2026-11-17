@@ -1,5 +1,8 @@
 use super::*;
 
+#[path = "session_observer_migration.rs"]
+pub(super) mod session_observer_migration;
+
 const AUDIT_RETENTION_MS: i64 = 90 * 24 * 3600 * 1000;
 const TASK_RUNS_KEEP: i64 = 100;
 

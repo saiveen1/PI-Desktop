@@ -217,6 +217,8 @@ type SessionConfigureRequest = {
   thinkingLevel: SessionThinkingLevel;
   /** Session `/fast` switch (ADR 0334); omitted keeps the stored value. */
   fastMode?: boolean;
+  /** Local Observer consent, independent of execution/permission mode. */
+  observerMode?: "off" | "observe" | "guard";
   /** Omitted preserves; null inherits global; [] disables delegation. */
   delegationModelKeys?: string[] | null;
   /** Omitted preserves; null clears; keys must belong to the custom pool. */
@@ -240,6 +242,17 @@ conversation. Omitted approval entries inherit global rules. Resetting the pool
 to null clears both overrides; removing keys prunes their approvals. Invalid
 approval values or keys outside the custom pool reject the entire write.
 Unsupported/native/remote session UI does not expose this local configuration.
+
+Observer mode is a local conversation opt-in; omission preserves it on configure.
+Invalid explicit values (including null) are rejected, and old/new/forked
+conversations default to off. It shares the idle configuration boundary but does
+not grant tools or change Agent/Plan/permission state. The composer hides this
+local control for native and remote sessions; the remote bridge rejects an
+explicit Observer field rather than dropping it silently. Global
+`AppSettings.observerGuard` selects the independent provider/model, effort and
+bounded evidence/deadline preferences. Main and renderer validate writes and
+merge partial preferences without losing siblings. Selecting a model does not
+enable the feature. See [the decision](../../adr/builtin-observer-guard.md).
 
 Only a changed effective global `defaultCommandShell` is idle-only across all
 affected sessions: any active turn or pending/queued/running Plan/Goal work blocks

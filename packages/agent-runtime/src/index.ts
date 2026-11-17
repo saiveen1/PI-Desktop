@@ -19,6 +19,7 @@ export * from "./plugin-skills.js";
 export * from "./plugin-skills-prompt.js";
 export * from "./plugin-session-context.js";
 export * from "./one-shot-complete.js";
+export type { ObserverGuardRuntimeConfig } from "./observer-guard.js";
 export * from "./prompt-templates.js";
 export * from "./provider-headers.js";
 export {

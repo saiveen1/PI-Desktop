@@ -11,6 +11,8 @@ import {
   providerCreateInputFromDraft,
   isModelConfigImportSource,
   isModeId,
+  isObserverGuardMode,
+  type ObserverGuardMode,
   type ModelConfigImportDraft,
   type Mode,
   type SessionThinkingLevel,
@@ -747,12 +749,16 @@ export function registerSessionIpc({
         thinkingLevel?: SessionThinkingLevel;
         permissionMode?: "inherit" | "ask" | "accept-edits" | "auto";
         fastMode?: boolean;
+        observerMode?: ObserverGuardMode;
         delegationModelKeys?: string[] | null;
         delegationModelApprovals?: Record<string, "auto" | "ask"> | null;
       },
     ) => {
       rejectNativeMutation(id, "configuration");
       if (!host) throw new Error("host unavailable");
+      if (Object.prototype.hasOwnProperty.call(config, "observerMode") && !isObserverGuardMode(config.observerMode)) {
+        throw Object.assign(new Error("observerMode is invalid"), { errorCode: ErrorCodes.INVALID_PARAMS });
+      }
       // Every mode other than the builtin Agent and Plan carries the parsed
       // definition; the Host persists it as the session's policy snapshot.
       const modeSnapshot = await modeCatalog.snapshotFor(config.mode);

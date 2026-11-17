@@ -117,6 +117,22 @@ test("session launch resolves Jev credentials only for opted-in Agent mode", asy
     const malformed = await launch("agent", false, { agentOutputGuard: { recoveryLimit: 99, repetitiveOutputEnabled: false } });
     assert.equal(malformed.sidecarParams.agentOutputGuard.recoveryLimit, 1);
     assert.equal(malformed.sidecarParams.agentOutputGuard.repetitiveOutputEnabled, false);
+    assert.equal(defaultOff.sidecarParams.observerGuard.mode, "off");
+    const observation = await launchRuntime.resolveAgentRuntimeLaunch("session-fixture",
+      { providerId: provider.id, modelId: provider.defaultModelId, observerMode: "observe" },
+      { defaultMode: "agent", observerGuard: { providerId: provider.id, modelId: provider.defaultModelId, thinkingLevel: "off", timeoutSeconds: 15 } });
+    assert.equal(observation.sidecarParams.observerGuard.mode, "observe");
+    assert.equal(observation.sidecarParams.observerGuard.provider.modelId, provider.defaultModelId);
+    assert.equal(observation.sidecarParams.observerGuard.settings.timeoutSeconds, 15);
+    const unconfigured = await launchRuntime.resolveAgentRuntimeLaunch("session-fixture",
+      { providerId: provider.id, modelId: provider.defaultModelId, observerMode: "guard" }, { defaultMode: "agent" });
+    assert.equal(unconfigured.sidecarParams.observerGuard.errorCode, "MODEL_NOT_CONFIGURED");
+    assert.equal(unconfigured.sidecarParams.provider.modelId, provider.defaultModelId);
+    const scheduled = await launchRuntime.resolveAgentRuntimeLaunch("session-fixture",
+      { providerId: provider.id, modelId: provider.defaultModelId, observerMode: "guard", scheduledRun: true },
+      { defaultMode: "agent", observerGuard: { providerId: provider.id, modelId: provider.defaultModelId } });
+    assert.equal(scheduled.sidecarParams.observerGuard.mode, "off");
+    assert.equal(scheduled.sidecarParams.observerGuard.provider, undefined);
 
     // The visualization directory follows the visualize skill (D671): a
     // disabled skill must not leave the prompt pointing at it.

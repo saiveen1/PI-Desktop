@@ -30,6 +30,8 @@ export type AgentRunDiagnostics = {
   infiniteRetry?: boolean;
   /** Last response only; messageId prevents warnings leaking onto other bubbles. */
   termination?: import("./agent-output-guard.js").AgentResponseTermination;
+  /** Independent assessment tied to one exact message; never main-model context. */
+  observer?: import("./observer-guard.js").ObserverGuardAssessment;
   /** Sanitized retry identity only; never provider prose, prompt text, or headers. */
   lastRetry?: {
     at: number;

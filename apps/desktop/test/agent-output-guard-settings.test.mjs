@@ -82,6 +82,15 @@ test("main settings IPC merges validated partial guard writes with stored siblin
   assert.equal(stored.agentOutputGuard.symbolMinChars, 8000);
   await set({ agentOutputGuard: { recoveryLimit: 1 } });
   assert.equal(stored.agentOutputGuard.recoveryLimit, 1);
+  await Promise.all([set({ observerGuard: { providerId: "reviewer", modelId: "small" } }),
+    set({ observerGuard: { thinkingLevel: "low" } }), set({ observerGuard: { timeoutSeconds: 15 } })]);
+  assert.equal(stored.observerGuard.providerId, "reviewer");
+  assert.equal(stored.observerGuard.modelId, "small");
+  assert.equal(stored.observerGuard.thinkingLevel, "low");
+  assert.equal(stored.observerGuard.timeoutSeconds, 15);
+  assert.equal(stored.agentOutputGuard.recoveryLimit, 1);
+  await assert.rejects(set({ observerGuard: { thinkingLevel: "invented" } }), /observerGuard is invalid/);
+  assert.equal(stored.observerGuard.thinkingLevel, "low");
 });
 
 test("warnings require the matching settled response and remain distinct from truncation", () => {

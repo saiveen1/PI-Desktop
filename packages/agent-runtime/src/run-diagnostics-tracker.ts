@@ -1,4 +1,4 @@
-import type { AgentResponseTermination, AgentRunDiagnostics } from "@pi-desktop/shared";
+import type { AgentResponseTermination, AgentRunDiagnostics, ObserverGuardAssessment } from "@pi-desktop/shared";
 import { normalizedStopReason } from "./run-diagnostics.js";
 
 export type RunDiagnosticsProviderEvent = {
@@ -188,6 +188,12 @@ export class RunDiagnosticsTracker {
     return true;
   }
 
+  setObserver(assessment: ObserverGuardAssessment): boolean {
+    if (this.diagnostics.endedAt !== undefined || this.diagnostics.termination?.messageId !== assessment.messageId) return false;
+    this.diagnostics.observer = structuredClone(assessment);
+    return true;
+  }
+
   stopRetryWait(at: number): void {
     this.settleRetryWait(at);
   }
@@ -209,6 +215,7 @@ export class RunDiagnosticsTracker {
       retryWaitMs: this.settledRetryWaitMs + activeRetryWait,
       ...(this.diagnostics.lastRetry ? { lastRetry: { ...this.diagnostics.lastRetry } } : {}),
       ...(this.diagnostics.termination ? { termination: { ...this.diagnostics.termination } } : {}),
+      ...(this.diagnostics.observer ? { observer: structuredClone(this.diagnostics.observer) } : {}),
     };
   }
 

@@ -26,6 +26,7 @@ import { LiveVoiceControls } from "../../voice/live/LiveVoiceControls";
 import { ComputerUseIndicator } from "../../computer-use/ComputerUseIndicator";
 import { ComposerModelPicker } from "./ComposerModelPicker";
 import { SessionDelegationModels } from "../../sessions/SessionDelegationModels";
+import { ObserverGuardPicker } from "../../sessions/ObserverGuardPicker";
 import type { useComposerModelMenu } from "./hooks/useComposerModelMenu";
 
 type ModelMenuController = ReturnType<typeof useComposerModelMenu>;
@@ -189,6 +190,7 @@ export function ComposerToolbar({
                 }
           }} />
         {localToolsAllowed ? <SessionDelegationModels sessionId={workSessionId} /> : null}
+        {localToolsAllowed ? <ObserverGuardPicker sessionId={workSessionId} /> : null}
         {localToolsAllowed ? <ComposerControlSlots side="left" /> : null}
       </div>
 

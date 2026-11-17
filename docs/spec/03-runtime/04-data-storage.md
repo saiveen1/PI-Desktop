@@ -1,4 +1,4 @@
-# 04. Data Storage (Schema v32)
+# 04. Data Storage (Schema v33)
 
 ### Project path aliases (#2148)
 
@@ -366,6 +366,11 @@ The final snapshot freezes elapsed time across reload. The existing metadata
 container round-trips it without a schema migration; legacy and plugin-imported
 rows may omit it and render without invented diagnostics. Stored message ISO
 timestamps remain unchanged; local timezone conversion is presentation only.
+
+Built-in Observer Guard assessments use `meta.runDiagnostics.observer` in the
+same message metadata container. Host storage preserves this optional JSON value
+without interpreting it, starting a model call, or granting tool permission;
+no separate assessment/result table is added.
 
 Internal system-state rows use role `system`, empty visible content, and optional
 `meta.modelSystem = { version: 1, messageJson, beforeMessageId?, afterMessageId? }`.
@@ -825,6 +830,8 @@ CREATE TABLE sessions (
                 CHECK (permission_mode IN ('inherit', 'ask', 'accept-edits', 'auto')),
   fast_mode   INTEGER NOT NULL DEFAULT 0       -- ADR 0334: session /fast switch
                CHECK (fast_mode IN (0, 1)),
+  observer_mode TEXT NOT NULL DEFAULT 'off'
+                CHECK (observer_mode IN ('off', 'observe', 'guard')),
   source      TEXT,                            -- import origin: claude-code | codex | opencode | pi
   deleted_at  INTEGER,                         -- host recycle-bin marker; null means active
   pinned      INTEGER NOT NULL DEFAULT 0,
@@ -864,6 +871,22 @@ CREATE INDEX idx_session_import_origins_plugin
   request without rewriting the stored preference. Schema v19 adds `omit`
   (ADR 0295): send no thinking override. Existing rows keep their stored
   canonical values.
+- `observer_mode` is explicit per-conversation consent for the built-in Observer
+  Guard, projected as `SessionSummary.observerMode` (`off | observe | guard`).
+  Legacy summaries without the optional wire field read as `off`; new and
+  migrated sessions default to `off`. Existing trusted `session.create` and
+  `session.configure` RPCs accept only these exact strings when supplied:
+  explicit null, booleans, arrays, objects, and unknown strings are rejected as
+  `INVALID_PARAMS`, not coerced. Omission during configuration preserves the
+  current value; creation persists an explicitly selected value atomically.
+  Changes use the existing host session authority and idle configuration gate.
+  The mode is independent of Agent/Plan/Goal, model selection, thinking level,
+  and permission mode; configuring it never starts execution or a model call.
+  Global observer model/effort settings do not enable conversations. Neither
+  permission inheritance nor another conversation's configuration enables it.
+  Forks always start `off`, requiring separate consent, while preserving their
+  source and the other established fork fields. Trash/restore retain the mode;
+  permanent deletion removes it with the existing session row lifecycle.
 
 - `project_id` normalizes v1's free-text `project_path` (grouping, badges,
   hover-`+` new-session-in-project all become indexed lookups).
@@ -1854,7 +1877,7 @@ truncating at a guessed position.
 - JSON columns are read blind on hot paths (shipped to the renderer as-is);
   anything filtered or summed is a promoted column by rule.
 
-## 7. Versioning, v7 reset, and v8-to-v27 migration
+## 7. Versioning, v7 reset, and v8-to-v33 migration
 
 - `PRAGMA user_version` stays the schema authority; future structural changes
   add ordered Rust migration fns again, each in one transaction, with a
@@ -1865,7 +1888,7 @@ truncating at a guessed position.
   Sessions, providers, and settings from the old file are not carried over;
   the archive remains for manual recovery. All pre-v7 migration code
   (v1 `settings.sqlite` import, v2→v6 chain) is deleted.
-- Fresh installs run the full v27 DDL directly.
+- Fresh installs run the full v33 DDL directly.
 - **Schema v7 first reaches v8, then uses the guarded path.** The v7→v8
   migration is followed by the same guarded v8→v15 migration; schema-v9 and
   schema-v10 databases take the same guarded path and receive an exact readable
@@ -1942,6 +1965,15 @@ truncating at a guessed position.
   session `/fast` switch, defaulting to `0` for every existing session. Forks
   copy it; scheduled runs and delegated workers start at `0`. The migration
   keeps a v26 backup.
+- **Schema v33 is additive.** The v32→v33 migration adds
+  `sessions.observer_mode TEXT NOT NULL DEFAULT 'off'` with the same exact
+  three-value CHECK as fresh databases. It first creates a readable
+  `pi.sqlite.v32.bak`, probes for an existing column for idempotent upgrades,
+  and stamps `user_version = 33` only in the successful transaction. Existing
+  session fields, messages, transcripts, settings, and metadata are unchanged;
+  there is no global opt-in backfill. Reopen preserves explicit selections.
+  Older builds refuse v33 rather than silently losing per-conversation consent;
+  rollback requires the pre-migration backup.
 - **Schema v14 is additive.** It adds nullable `sessions.deleted_at`, the
   partial deletion index, and `session_import_origins`. Existing sessions stay
   active and have no origin rows. The migration runs in the same guarded

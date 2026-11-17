@@ -1,4 +1,5 @@
 import { outputGuard } from "../output-guard.js";
+import { observerGuard } from "../observer-guard.js";
 import { subagentControls } from "./subagent-controls.js";
 import { approvalCenter } from "./delegation-approval.js";
 import { delegationReliabilitySettings, delegationDiagnostics } from "./delegation-reliability.js";
@@ -7,6 +8,7 @@ import { en, type EnglishCatalog } from "../en/index.js";
 
 export const ko = {
   outputGuard: outputGuard.ko,
+  observerGuard: observerGuard.ko,
   toolObserver: en.toolObserver,
   toolImages: {
     title: "도구 이미지", image: "이미지 {{index}}", returned: "이미지 {{count}}개 반환됨",

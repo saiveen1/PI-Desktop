@@ -32,6 +32,8 @@ mod session_mode_create_tests;
 
 #[cfg(test)]
 mod session_mode_migration_tests;
+#[cfg(test)]
+mod session_observer_tests;
 
 #[cfg(test)]
 mod plugin_reviews_rpc_tests;
@@ -792,6 +794,22 @@ fn fast_mode_param(params: &Value) -> Result<Option<bool>, JsonRpcError> {
             "INVALID_PARAMS",
         )),
     }
+}
+
+/// Omission preserves consent; explicit null and non-enum values are invalid.
+fn observer_mode_param(params: &Value) -> Result<Option<sessions::ObserverMode>, JsonRpcError> {
+    params
+        .get("observerMode")
+        .cloned()
+        .map(serde_json::from_value)
+        .transpose()
+        .map_err(|_| {
+            rpc_err(
+                1002,
+                "observerMode must be off, observe, or guard",
+                "INVALID_PARAMS",
+            )
+        })
 }
 
 /// Parse the optional session thinking selector at the RPC boundary.  A
@@ -2786,6 +2804,7 @@ async fn handle_request(
         "session.create" => {
             let thinking_level = thinking_level_param(&params)?;
             let fast_mode = fast_mode_param(&params)?.unwrap_or(false);
+            let observer_mode = observer_mode_param(&params)?.unwrap_or_default();
             let permission_parent = permission_parent_param(&params)?;
             // ADR 0329: an isolated session gets its own git worktree.
             let isolated = params
@@ -2848,6 +2867,7 @@ async fn handle_request(
                     thinking_level,
                     permission_mode,
                     fast_mode,
+                    observer_mode,
                 },
                 params.get("modeSnapshot"),
             )
@@ -3029,6 +3049,7 @@ async fn handle_request(
                 .ok_or_else(|| rpc_err(1002, "mode required", "INVALID_PARAMS"))?;
             let thinking_level = thinking_level_param(&params)?;
             let fast_mode = fast_mode_param(&params)?;
+            let observer_mode = observer_mode_param(&params)?;
             let delegation_keys = params
                 .get("delegationModelKeys")
                 .map(crate::session_delegation::parse)
@@ -3055,6 +3076,7 @@ async fn handle_request(
                     .as_ref()
                     .map(|approvals| approvals.as_ref()),
                 prepared.snapshot_hash(),
+                observer_mode,
             )
             .map_err(|e| {
                 let message = e.to_string();

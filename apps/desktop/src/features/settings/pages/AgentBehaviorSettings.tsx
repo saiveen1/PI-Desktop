@@ -14,6 +14,7 @@ import { SegmentedControl, SettingsToggle } from "../../../components/ui";
 import { SettingsMenuSelect } from "../../../components/settings/SettingsMenuSelect";
 import { AutoContinueUnfinishedTodosRow } from "../../../components/settings/AutoContinueUnfinishedTodosRow";
 import { AgentOutputGuardSettings } from "../../../components/settings/AgentOutputGuardSettings";
+import { ObserverGuardSettings } from "../../../components/settings/ObserverGuardSettings";
 import { ComputerUseSettings } from "../computer-use/ComputerUseSettings";
 import { GoalBudgetSettingsRow } from "../../modes/GoalBudgetSettingsRow";
 import { CommandShellRow, SettingsCard, SettingsRow } from "../primitives";
@@ -119,6 +120,7 @@ export function AgentBehaviorSettings({
       </SettingsCard>
 
       <AgentOutputGuardSettings settings={settings} saveSettings={saveSettings} />
+      <ObserverGuardSettings settings={settings} saveSettings={saveSettings} />
 
       <ComputerUseSettings t={t} settings={settings} saveSettings={saveSettings} />
     </div>

@@ -1,5 +1,6 @@
 import { isProviderStreamIdleTimeoutMinutes, resolveProviderStreamIdleTimeoutMinutes } from "@pi-desktop/shared";
 import { isAgentOutputGuardSettings, resolveAgentOutputGuardSettings } from "@pi-desktop/shared";
+import { isObserverGuardSettings, resolveObserverGuardSettings, resolveObserverGuardMode } from "@pi-desktop/shared";
 import type { CoreNotificationRequest, NotificationDeliveryResult, NotificationTarget } from "@pi-desktop/shared";
 import type { DelegationApprovalSnapshot, DelegationApprovalActionRequest, DelegationApprovalActionResult, DelegationApprovalExtendRequest, DelegationApprovalChangedEvent } from "@pi-desktop/shared";
 import type { DelegationRunHistoryQuery, DelegationRunHistoryPage, DelegationApprovalHistory, DelegationApprovalHistoryMarkRead } from "@pi-desktop/shared";
@@ -426,6 +427,8 @@ function normalizeSession(session: SessionSummary): SessionSummary {
     ...safeSessionSummary(session),
     source: isRemoteSession(session) ? "remote" : session.source ?? "desktop",
     mode: normalizeMode((session as { mode?: unknown }).mode),
+    ...(!session.id.startsWith("native-pi:") && !isRemoteSession(session) && (!session.source || session.source === "desktop")
+      ? { observerMode: resolveObserverGuardMode(session.observerMode) } : {}),
   };
 }
 
@@ -435,6 +438,8 @@ function normalizeSessionDetail(detail: SessionDetail | null): SessionDetail | n
         ...safeSessionSummary(detail),
         messages: projectPlanHistory(detail.messages, detail.planHistory ?? [], detail.id),
         mode: normalizeMode((detail as { mode?: unknown }).mode),
+        ...(!detail.id.startsWith("native-pi:") && !isRemoteSession(detail) && (!detail.source || detail.source === "desktop")
+          ? { observerMode: resolveObserverGuardMode(detail.observerMode) } : {}),
       }
     : null;
 }
@@ -480,6 +485,7 @@ export function normalizeSettings(settings: AppSettings): AppSettings {
       (settings as { autoContinueUnfinishedTodos?: unknown })
         .autoContinueUnfinishedTodos !== false,
     agentOutputGuard: resolveAgentOutputGuardSettings(settings.agentOutputGuard),
+    observerGuard: resolveObserverGuardSettings(settings.observerGuard),
     jevEnabled: (settings as { jevEnabled?: unknown }).jevEnabled === true,
     defaultCommandShell: isCommandShellId(
       (settings as { defaultCommandShell?: unknown }).defaultCommandShell,
@@ -505,6 +511,10 @@ export function validateSettingsWrite(settings: AppSettings): AppSettings {
   if (Object.prototype.hasOwnProperty.call(settings, "agentOutputGuard") &&
       !isAgentOutputGuardSettings(settings.agentOutputGuard)) {
     throw Object.assign(new Error("agentOutputGuard is invalid"), { errorCode: "INVALID_PARAMS" });
+  }
+  if (Object.prototype.hasOwnProperty.call(settings, "observerGuard") &&
+      !isObserverGuardSettings(settings.observerGuard)) {
+    throw Object.assign(new Error("observerGuard is invalid"), { errorCode: "INVALID_PARAMS" });
   }
   if (
     settings.thinkingDisplayMode !== undefined &&
@@ -902,7 +912,7 @@ export const api = {
   configureSession: (
     id: string,
     config: Pick<SessionSummary, "mode" | "providerId" | "modelId"> &
-      Partial<Pick<SessionSummary, "thinkingLevel" | "permissionMode" | "fastMode">> & {
+      Partial<Pick<SessionSummary, "thinkingLevel" | "permissionMode" | "fastMode" | "observerMode">> & {
         delegationModelKeys?: string[] | null;
         delegationModelApprovals?: SessionSummary["delegationModelApprovals"] | null;
       },

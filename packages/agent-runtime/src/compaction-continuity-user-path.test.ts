@@ -150,12 +150,29 @@ describe("successful compaction execution continuity", () => {
   it("does not misrepresent attached images as absent from the conversation", () => {
     const input: AgentMessage[] = [{ role: "user", timestamp: 1, content: [
       { type: "text", text: "Use the attached receipt." },
-      { type: "image", mimeType: "image/png", data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==" },
+      { type: "image", mimeType: "image/png", data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAEElEQVR4AQEFAPr/AP8AAP8FAAH/+lyI0QAAAABJRU5ErkJggg==" },
     ] }];
-    const serialized = serializeConversation(convertToLlm(input));
+    const projected = convertToLlm(input);
+    expect(projected).toEqual(input);
+    const serialized = serializeConversation(projected);
+    expect(serialized).toContain("User attached 1 image(s)");
     expect(serialized).toContain("image");
     expect(serialized).toContain("not included");
     expect(serialized).not.toContain("iVBORw0KGgo");
+  });
+
+  it("keeps corrupt image notices distinct from valid attachment summary markers", () => {
+    // This PNG has valid dimensions but a corrupt IDAT checksum.
+    const input: AgentMessage[] = [{ role: "user", timestamp: 1, content: [
+      { type: "text", text: "Use the attached receipt." },
+      { type: "image", mimeType: "image/png", data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==" },
+    ] }];
+    const original = structuredClone(input);
+    const serialized = serializeConversation(convertToLlm(input));
+    expect(serialized).toContain("[Image omitted: image input is invalid.]");
+    expect(serialized).not.toContain("User attached");
+    expect(serialized).not.toContain("iVBORw0KGgo");
+    expect(input).toEqual(original);
   });
 });
 

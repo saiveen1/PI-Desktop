@@ -27,6 +27,7 @@ export type OptimisticSessionConfiguration = {
   mode?: unknown;
   permissionMode?: unknown;
   fastMode?: boolean;
+  observerMode?: "off" | "observe" | "guard";
 };
 
 export type ThinkingProviderLike = {

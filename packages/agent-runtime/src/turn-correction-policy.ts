@@ -6,6 +6,7 @@ import { CorrectiveBudget } from "./corrective-budget.js";
 import { EARLY_END_REMINDER, EARLY_END_SECTION, suspectedEarlyEnd } from "./early-end.js";
 import { TextToolCallRecovery } from "./text-tool-call-recovery.js";
 import { UnfinishedTodoContinuation } from "./unfinished-todo-continuation.js";
+import { ObserverGuard } from "./observer-guard.js";
 
 type EarlyEnd = NonNullable<AgentResponseTermination["earlyEnd"]>;
 
@@ -13,6 +14,7 @@ type EarlyEnd = NonNullable<AgentResponseTermination["earlyEnd"]>;
 export class TurnCorrectionPolicy {
   readonly budget = new CorrectiveBudget();
   readonly todos: UnfinishedTodoContinuation;
+  readonly observer: ObserverGuard;
   private readonly textCalls = new TextToolCallRecovery(this.budget);
   private nextSettings?: AgentOutputGuardSettings;
   private activeSettings = Object.freeze(resolveAgentOutputGuardSettings(undefined));
@@ -23,6 +25,7 @@ export class TurnCorrectionPolicy {
   private generation = 0;
 
   constructor(host: RuntimeHost, sessionId: string, todosEnabled = true, settings?: AgentOutputGuardSettings) {
+    this.observer = new ObserverGuard(sessionId);
     this.todos = new UnfinishedTodoContinuation(host, sessionId, todosEnabled, this.budget);
     this.setSettings(settings);
     this.reset();
@@ -31,7 +34,7 @@ export class TurnCorrectionPolicy {
   get settings() { return this.activeSettings; }
   get progressSafe(): boolean { return !this.latestBatchUnsafe; }
   get attempts(): number { return this.budget.attempts; }
-  get pending(): boolean { return this.pendingEarlyEnd || this.todos.pending || this.textCalls.pending; }
+  get pending(): boolean { return this.pendingEarlyEnd || this.todos.pending || this.textCalls.pending || this.observer.pendingCorrection; }
 
   setSettings(settings?: AgentOutputGuardSettings): void {
     this.nextSettings = settings ? { ...settings } : undefined;
@@ -39,6 +42,7 @@ export class TurnCorrectionPolicy {
 
   setTask(task: string, steering = false): void {
     this.task = task;
+    this.observer.setTask(task);
     if (steering) {
       this.pendingEarlyEnd = false;
       this.todos.cancelPending();
@@ -48,6 +52,7 @@ export class TurnCorrectionPolicy {
 
   reset(): void {
     this.generation++;
+    this.observer.reset();
     this.activeSettings = Object.freeze(resolveAgentOutputGuardSettings(this.nextSettings));
     this.budget.reset(this.settings.recoveryLimit);
     this.todos.reset();
@@ -72,6 +77,21 @@ export class TurnCorrectionPolicy {
   }
 
   async finishTurn(
+    turn: AgentTurnContext,
+    toolNames: ReadonlyMap<string, unknown>,
+    canContinue: () => boolean,
+    annotate: (state: EarlyEnd, attempts: number) => void,
+    signal?: AbortSignal,
+    autonomous = false,
+    observerSink?: Parameters<ObserverGuard["assess"]>[1],
+  ): Promise<{ action: "continue" | "end" } | undefined> {
+    this.observer.observeTools(turn);
+    const correction = await this.finishLocal(turn, toolNames, canContinue, annotate, signal, autonomous);
+    if (correction) return correction;
+    return this.observer.assess(turn, observerSink, () => canContinue() && !autonomous && !this.latestBatchUnsafe && !this.pending, this.budget, signal);
+  }
+
+  private async finishLocal(
     turn: AgentTurnContext,
     toolNames: ReadonlyMap<string, unknown>,
     canContinue: () => boolean,
@@ -105,7 +125,7 @@ export class TurnCorrectionPolicy {
   }
 
   prepareRequest(context: AgentContext): AgentContext {
-    const prepared = this.textCalls.prepareRequest(this.todos.prepareRequest(context));
+    const prepared = this.observer.prepareRequest(this.textCalls.prepareRequest(this.todos.prepareRequest(context)));
     const reminder = this.pendingEarlyEnd ? EARLY_END_REMINDER : null;
     this.pendingEarlyEnd = false;
     if (!reminder && !getCurrentSystemMessage(prepared.messages)?.sections?.[EARLY_END_SECTION]) return prepared;

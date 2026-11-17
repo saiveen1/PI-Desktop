@@ -1,5 +1,6 @@
 import { isNotificationSettings, type AppSettings, type NotificationSettings } from "@pi-desktop/shared";
 import { isAgentOutputGuardSettings, resolveAgentOutputGuardSettings } from "@pi-desktop/shared";
+import { isObserverGuardSettings, resolveObserverGuardSettings } from "@pi-desktop/shared";
 
 type Boundary = {
   read(): Promise<AppSettings>;
@@ -24,11 +25,17 @@ export function createSettingsWriter(boundary: Boundary) {
       if (Object.prototype.hasOwnProperty.call(patch, "agentOutputGuard") && !isAgentOutputGuardSettings(patch.agentOutputGuard)) {
         return Promise.reject(new Error("agentOutputGuard is invalid"));
       }
+      if (Object.prototype.hasOwnProperty.call(patch, "observerGuard") && !isObserverGuardSettings(patch.observerGuard)) {
+        return Promise.reject(new Error("observerGuard is invalid"));
+      }
       return update(latest => ({
         ...latest,
         ...patch,
         ...(patch.agentOutputGuard === undefined ? {} : {
           agentOutputGuard: { ...resolveAgentOutputGuardSettings(latest.agentOutputGuard), ...patch.agentOutputGuard },
+        }),
+        ...(patch.observerGuard === undefined ? {} : {
+          observerGuard: { ...resolveObserverGuardSettings(latest.observerGuard), ...patch.observerGuard },
         }),
       }));
     },

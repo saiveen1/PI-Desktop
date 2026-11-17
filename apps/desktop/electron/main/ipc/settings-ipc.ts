@@ -1,5 +1,5 @@
 import { IPC, type UpdatePreference } from "@pi-desktop/shared";
-import { resolveAgentOutputGuardSettings } from "@pi-desktop/shared";
+import { resolveAgentOutputGuardSettings, resolveObserverGuardSettings } from "@pi-desktop/shared";
 import type { AgentSidecar } from "../agent-sidecar";
 import type { HostProcess } from "../host-process";
 import type { IpcRegistrar } from "./types";
@@ -82,9 +82,12 @@ export function registerSettingsIpc({
     const currentSettings = await host.call<AppSettings>("settings.get");
     const guardPatch = incoming && typeof incoming === "object" && !Array.isArray(incoming)
       ? (incoming as Partial<AppSettings>).agentOutputGuard : undefined;
-    const validatedSettings = guardPatch === undefined ? incoming : {
+    const observerPatch = incoming && typeof incoming === "object" && !Array.isArray(incoming)
+      ? (incoming as Partial<AppSettings>).observerGuard : undefined;
+    const validatedSettings = guardPatch === undefined && observerPatch === undefined ? incoming : {
       ...incoming,
-      agentOutputGuard: { ...resolveAgentOutputGuardSettings(currentSettings.agentOutputGuard), ...guardPatch },
+      ...(guardPatch === undefined ? {} : { agentOutputGuard: { ...resolveAgentOutputGuardSettings(currentSettings.agentOutputGuard), ...guardPatch } }),
+      ...(observerPatch === undefined ? {} : { observerGuard: { ...resolveObserverGuardSettings(currentSettings.observerGuard), ...observerPatch } }),
     };
     const prospectiveSettings = validatedSettings && typeof validatedSettings === "object" && !Array.isArray(validatedSettings)
       ? { ...currentSettings, ...(validatedSettings as Partial<AppSettings>) }

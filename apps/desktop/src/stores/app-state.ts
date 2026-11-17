@@ -239,10 +239,11 @@ export type AppState = import("./slices/session-management-slice").SessionManage
     mode: Mode;
     providerId?: string;
     modelId?: string;
-    thinkingLevel: SessionThinkingLevel;
+    thinkingLevel?: SessionThinkingLevel;
     permissionMode?: PermissionMode;
     fastMode?: boolean;
-  }) => Promise<void>;
+    observerMode?: SessionSummary["observerMode"];
+  }, targetSessionId?: string) => Promise<void>;
   /** Returns true once accepted unless concurrent smart Stop restores it. */
   sendPrompt: (
     content: string,

@@ -2,6 +2,8 @@ import {
   ErrorCodes as SharedErrorCodes,
   isAgentOutputGuardSettings,
   resolveAgentOutputGuardSettings,
+  isObserverGuardSettings,
+  resolveObserverGuardSettings,
   SESSION_THINKING_LEVELS,
   defaultCommandShellForPlatform,
   isCommandShellId,
@@ -188,6 +190,7 @@ export function createProviderCatalogRuntime({
         (value as T & { autoContinueUnfinishedTodos?: unknown })
           .autoContinueUnfinishedTodos !== false,
       agentOutputGuard: resolveAgentOutputGuardSettings((value as { agentOutputGuard?: unknown }).agentOutputGuard),
+      observerGuard: resolveObserverGuardSettings((value as { observerGuard?: unknown }).observerGuard),
       scheduledTasksEnabled: (value as T & { scheduledTasksEnabled?: unknown })
         .scheduledTasksEnabled !== false,
       jevEnabled: (value as T & { jevEnabled?: unknown }).jevEnabled === true,
@@ -234,6 +237,10 @@ export function createProviderCatalogRuntime({
     if (Object.prototype.hasOwnProperty.call(value, "agentOutputGuard") &&
         !isAgentOutputGuardSettings((value as { agentOutputGuard?: unknown }).agentOutputGuard)) {
       throw Object.assign(new Error("agentOutputGuard is invalid"), { errorCode: ErrorCodes.INVALID_PARAMS });
+    }
+    if (Object.prototype.hasOwnProperty.call(value, "observerGuard") &&
+        !isObserverGuardSettings((value as { observerGuard?: unknown }).observerGuard)) {
+      throw Object.assign(new Error("observerGuard is invalid"), { errorCode: ErrorCodes.INVALID_PARAMS });
     }
     if (
       Object.prototype.hasOwnProperty.call(value, "defaultCommandShell") &&

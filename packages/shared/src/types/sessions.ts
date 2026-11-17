@@ -64,6 +64,8 @@ export type SessionSummary = {
    * omit it, meaning off.
    */
   fastMode?: boolean;
+  /** Local per-conversation Observer opt-in; absent and new/forked sessions are off. */
+  observerMode?: import("../observer-guard.js").ObserverGuardMode;
   /** Absent inherits global delegation; an empty custom pool disables it. */
   delegationModelKeys?: string[];
   /** Explicit human-selected approval rules for custom-pool members; absent follows global. */

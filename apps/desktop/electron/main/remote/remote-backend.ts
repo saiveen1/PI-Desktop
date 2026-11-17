@@ -269,8 +269,11 @@ export function createRemoteBackend(options: RemoteBackendOptions): RemoteBacken
       case IPC.invoke.sessionConfigure: {
         const remoteSessionId = remoteIdFor(args);
         const config = (args[1] ?? {}) as Partial<
-          Pick<SessionSummary, "mode" | "providerId" | "modelId" | "thinkingLevel" | "permissionMode" | "fastMode">
+          Pick<SessionSummary, "mode" | "providerId" | "modelId" | "thinkingLevel" | "permissionMode" | "fastMode" | "observerMode">
         >;
+        if (Object.prototype.hasOwnProperty.call(config, "observerMode")) {
+          throw capabilityUnavailable("Observer Guard is available only for local Desktop sessions");
+        }
         if (
           config.providerId !== undefined ||
           config.modelId !== undefined ||

@@ -53,6 +53,12 @@ export type OneShotCompleteOptions = {
   stream?: OneShotCompleteStream;
   /** Optional hard cap for callers whose response schema has a small bound. */
   maxOutputTokens?: number;
+  /** Independent assessors must not replay a failed request. Defaults preserve plugin behavior. */
+  disableRetries?: boolean;
+  /** Reject partial, tool-calling, or non-final output instead of accepting its text. */
+  requireComplete?: boolean;
+  /** Separate per-attempt accounting, including a consumed but rejected response. */
+  onUsage?: (usage: MessageUsage | undefined) => void;
   emptyErrorCode?: string;
   emptyErrorMessage?: string;
   /** Conversation id forwarded to OpenCode as `x-opencode-session`. */
@@ -148,11 +154,12 @@ export async function completeOneShot(
     sessionOptions,
     (retryOptions) => accountModelStream(model, () => streamSimple(model, context, retryOptions), {
       providerId: provider.id, nativeCost: provider.modelConfig?.nativeCost,
-      onUsage: attemptUsage => { usage = addUsage(usage, attemptUsage); },
+      onUsage: attemptUsage => { usage = addUsage(usage, attemptUsage); options.onUsage?.(usage); },
     }),
     {
+      allowOutputLimitRepair: () => !options.disableRetries,
       claim: (error, phase) => {
-        if (phase !== "request" || !error.retriable) return undefined;
+        if (options.disableRetries || phase !== "request" || !error.retriable) return undefined;
         if (error.code === "PROVIDER_RATE_LIMITED") {
           if (rateLimitRetryAttempt >= PROVIDER_RATE_LIMIT_MAX_RETRIES) {
             return undefined;
@@ -172,6 +179,10 @@ export async function completeOneShot(
       failure: () => providerFailure,
     },
   );
+  let finalTextResponse = false;
+  if (options.requireComplete) for await (const event of stream) {
+    if (event.type === "done") finalTextResponse = event.reason === "stop";
+  }
   const result = await stream.result();
 
   if (result.stopReason === "aborted") {
@@ -188,6 +199,12 @@ export async function completeOneShot(
       classified.details,
       classified.retriable,
     );
+  }
+
+  if (options.requireComplete && (!finalTextResponse || result.stopReason !== "stop" || result.content.some(block => block.type === "toolCall"))) {
+    throw Object.assign(completeError("INCOMPLETE_COMPLETION", "The completion was not a final text response."), {
+      usage: usage ?? usageFromPi(result.usage),
+    });
   }
 
   const text = assistantContent(result.content).text.trim();
