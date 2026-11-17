@@ -31,7 +31,8 @@
 
 .sidebar-conversation-group-header { display: flex; align-items: center; min-width: 0; }
 .sidebar-conversation-group-header .sidebar-conversation-group-title { flex: 1 1 auto; width: auto; }
-.sidebar-conversation-group-header:hover .sidebar-session-group-add, .sidebar-conversation-group-header:focus-within .sidebar-session-group-add { opacity: 1; }
+.sidebar-conversation-group-header:hover .sidebar-session-group-add,
+.sidebar-conversation-group-header:focus-within .sidebar-session-group-add { opacity: 1; pointer-events: auto; }
 .group-run-status { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 5px; margin-left: auto; }
 .group-run-status-item { display: inline-flex; align-items: center; gap: 2px; font-size: var(--text-xs); }
 .group-run-status-item.running { color: var(--ds-purple); }

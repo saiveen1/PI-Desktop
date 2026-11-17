@@ -4,6 +4,7 @@ import i18n from "i18next";
 import { I18nextProvider } from "react-i18next";
 import { SidebarSessionGroups } from "../../src/features/sessions/SidebarSessionGroups";
 import { ProjectGroupCreateButton } from "../../src/features/sessions/ProjectGroupCreateButton";
+import "../../src/styles/sessions.css";
 import "../../src/styles/sidebar-threads.css";
 
 await i18n.init({ lng: "en", resources: { en: { translation: { sessionGroups: { manage: "Manage", ungrouped: "Ungrouped" }, project: { newTask: "New task" }, nav: { projectRunningCount: "{{count}} running", projectNeedsActionCount: "{{count}} waiting", projectCompletedCount: "{{count}} completed", projectFailedCount: "{{count}} failed", groupTotalCount: "{{count}} total" } } } } });

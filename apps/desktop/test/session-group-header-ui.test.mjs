@@ -52,16 +52,23 @@ test("group headers and creation menu interactions", { timeout: 30000, skip: !br
     await send("Page.navigate", { url: `http://127.0.0.1:${server.address().port}/` }, sessionId);
     await loaded;
     const evaluate = async expression => { const result = await send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true }, sessionId); if (result.exceptionDetails) throw Error(result.exceptionDetails.exception?.description ?? result.exceptionDetails.text); return result.result.value; };
+    const point = await evaluate(`(async () => {
+      const frame = () => new Promise(resolve => requestAnimationFrame(resolve));
+      const selector = '[data-sidebar-session-group="a"] .sidebar-session-group-add';
+      for (let i = 0; i < 120 && !document.querySelector(selector); i++) await frame();
+      const rect = document.querySelector(selector).getBoundingClientRect();
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    })()`);
+    await send("Input.dispatchMouseEvent", { type: "mouseMoved", ...point }, sessionId);
+    await send("Input.dispatchMouseEvent", { type: "mousePressed", button: "left", clickCount: 1, ...point }, sessionId);
+    await send("Input.dispatchMouseEvent", { type: "mouseReleased", button: "left", clickCount: 1, ...point }, sessionId);
+    assert.deepEqual(await evaluate("window.created"), ["a"], "clicking the visible group + creates in that group");
     const result = await evaluate(`(async () => {
       const frame = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-      for (let i = 0; i < 120 && (!window.fixtureReady || !document.querySelector('[data-sidebar-session-group]')); i++) await frame();
-      if (!window.fixtureReady || !document.querySelector('[data-sidebar-session-group]')) throw Error('fixture did not render');
       const assert = (condition, message) => { if (!condition) throw Error(message); };
       const header = document.querySelector('[data-sidebar-session-group="a"]');
       assert(header.querySelector('[role=img]').getAttribute('aria-label') === '2 running · 2 total', 'full group summary');
       assert(!header.querySelector('button button'), 'nested button');
-      header.querySelector('.sidebar-session-group-add').click();
-      assert(window.created[0] === 'a', 'group create');
       header.querySelector('.sidebar-conversation-group-title').click(); await frame();
       assert(header.querySelector('[data-sessions]').textContent === '1', 'visible page');
       assert(document.querySelector('[aria-label="Disabled create"]').disabled, 'disabled trigger');
