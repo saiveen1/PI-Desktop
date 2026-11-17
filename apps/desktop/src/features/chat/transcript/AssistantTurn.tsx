@@ -55,7 +55,6 @@ import {
 } from "../../../lib/transcript-summary";
 import { AssistantTurnParts } from "./AssistantTurnParts";
 import { TurnProcess } from "./TurnProcess";
-import { TurnProcessActivity } from "./TurnProcessActivity";
 import { ActionSlotSide } from "./ActionBarSlots";
 import { EntryExtraStack } from "./EntryExtraStack";
 import { TurnChangesCard } from "./TurnChangesCard";
@@ -250,8 +249,9 @@ export const TranscriptTail = memo(function TranscriptTail({
 );
 
 /**
- * A `Bash`/run call rendered beside ordinary groups, still under the turn's
- * process disclosure. Its own detail stays closed until the user opens it.
+ * A `Bash`/run call rendered on its own, outside every process and activity
+ * disclosure. It stays visible with all disclosures collapsed, and its own
+ * detail stays closed until the user opens it.
  */
 const StandaloneRunRow = memo(function StandaloneRunRow({
   segment,
@@ -377,8 +377,8 @@ export const AssistantTurn = memo(function AssistantTurn({
     [process, displayMode],
   );
   // The one disclosure exists if it reveals anything at all. This uses the same
-  // helper the activity rows use: completed thinking is hidden under the
-  // preference, and a live reasoning indicator still counts. Prose never folds.
+  // helper the activity rows use: progress text counts, completed thinking is
+  // hidden under the preference, and a live reasoning indicator still counts.
   // Content facts come from the per-message cache, so a streaming delta reads
   // only its own message body rather than every earlier one.
   const visibleSteps = useMemo(
@@ -414,9 +414,7 @@ export const AssistantTurn = memo(function AssistantTurn({
           >
             {segments.map((segment) => {
               if (segment.kind === "run") {
-                return <TurnProcessActivity key={`run-${segment.key}`}>
-                  <StandaloneRunRow segment={segment} />
-                </TurnProcessActivity>;
+                return <StandaloneRunRow key={`run-${segment.key}`} segment={segment} />;
               }
               return (
                 <AssistantTurnParts key={`process-${segment.key}`} parts={segment.parts} {...partContext} />

@@ -8,70 +8,58 @@ import { SubagentTurnContent } from "../../apps/desktop/src/features/chat/transc
 import { buildTranscriptEntries } from "../../apps/desktop/src/lib/assistant-turns";
 import { useAppStore } from "../../apps/desktop/src/stores/app-store";
 
-/** Check actual reading order and visibility, not just textContent in a hidden subtree. */
+/** Protocol details belong to the affected bubble, never to the turn's folding policy. */
 export function checkProgressProse(i18n: i18n) {
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
   const settings = useAppStore.getState().settings;
   const tail = '<｜DSML｜ parameter name="timeout" string="false">60</｜DSML｜ parameter>\n</｜DSML｜ calls>';
-  const messages: UiMessage[] = ["Inspecting the input.", "one", `Checking the result.\n\n${tail}`, "two", "Finished."].map((content, i) => ({
-    id: `step-${i}`, role: i % 2 ? "tool" : "assistant", content: i % 2 ? "" : content,
-    createdAt: new Date(1_000 + i).toISOString(), status: "complete",
-    ...(i % 2 ? { toolName: "Bash", toolStatus: "success" as const, toolCallId: `test-${i}`, toolArgs: { command: content } } : {}),
-  }));
-  const entry = buildTranscriptEntries(messages).entries[0];
-  if (entry?.kind !== "assistant-turn") throw new Error("Missing fixture turn");
-  const childRows = messages.map(message => ({ kind: message.role === "tool" ? "tool" as const : "answer" as const, message }));
-  const check = (condition: unknown, description: string) => { if (!condition) throw new Error(description); };
   try {
     for (const mode of ["fully-folded", "command-first", "flat"] as const) {
-      flushSync(() => useAppStore.setState({ settings: { ...useAppStore.getState().settings!, transcriptDisplayMode: mode } }));
-      for (const child of [false, true]) {
-        const key = `${mode}:${child}`;
-        flushSync(() => root.render(<I18nextProvider key={key} i18n={i18n}>{child
-          ? <SubagentTurnContent id={key} rows={childRows} active={false} />
-          : <AssistantTurn entry={entry} isActive={false} />}</I18nextProvider>));
-        const toggle = container.querySelector<HTMLButtonElement>(".turn-process > button");
-        if (!toggle) throw new Error(`${key}: missing activity toggle`);
-        for (const open of [false, true, false]) {
-          if ((toggle.getAttribute("aria-expanded") === "true") !== open) flushSync(() => toggle.click());
-          const paragraphs = [...container.querySelectorAll<HTMLElement>(".assistant-turn-fragment .prose-chat")];
-          check(paragraphs.length === 3 && paragraphs.every(p => !p.closest('[hidden],[inert],[aria-hidden="true"]') && p.getBoundingClientRect().height > 0), `${key}: intermediate prose disappeared or was duplicated (open=${open})`);
-          check(paragraphs.map(p => p.textContent).join("|") === "Inspecting the input.|Checking the result.|Finished.", `${key}: wrong prose order`);
-          check(!container.querySelector<HTMLDetailsElement>(".dsml-protocol-details")?.open && !!container.querySelector(".dsml-protocol-details pre"), `${key}: missing or expanded protocol tail`);
-          if (!open) check([...container.querySelectorAll<HTMLElement>(".tool-row")].every(r => !r.getBoundingClientRect().height), `${key}: leaked tool row`);
-          if (open && !child && mode === "command-first") {
-            const ordered = [...container.querySelectorAll<HTMLElement>("[data-message-id]")].map(el => el.dataset.messageId);
-            check(messages.every((m, i) => ordered.indexOf(m.id) >= 0 && (!i || ordered.indexOf(messages[i - 1].id) < ordered.indexOf(m.id))), `${key}: command moved relative to its narration`);
-          }
-        }
-      }
-    }
-    // The user can fold a live turn before further activity arrives.
-    const renderLive = (rows: UiMessage[], active: boolean) => {
-      const next = buildTranscriptEntries(rows).entries[0];
-      if (next?.kind !== "assistant-turn") throw new Error("Missing live turn");
-      flushSync(() => root.render(<I18nextProvider key="live" i18n={i18n}>
-        <AssistantTurn entry={next} isActive={active} />
-      </I18nextProvider>));
-    };
-    const live = messages.map(m => ({ ...m, id: `live-${m.id}` }));
-    renderLive(live.slice(0, 3), true);
-    const toggle = container.querySelector<HTMLButtonElement>(".turn-process > button");
-    if (!toggle || toggle.getAttribute("aria-expanded") !== "true") throw new Error("Expected live activity open");
-    flushSync(() => toggle.click());
-    for (const [rows, active] of [[live.slice(0, 4), true], [live, false]] as const) {
-      renderLive(rows, active);
-      check(toggle.isConnected && toggle.getAttribute("aria-expanded") === "false", "Activity overrode manual collapse");
-      for (const id of ["live-step-0", "live-step-2"]) {
-        const bubble = container.querySelector<HTMLElement>(`.assistant-turn-fragment[data-message-id="${id}"]`);
-        check(bubble && bubble.getBoundingClientRect().height > 0 && !bubble.closest("[hidden],[inert]"), "Narration disappeared after a later tool");
+      flushSync(() => useAppStore.setState({ settings: { ...settings!, transcriptDisplayMode: mode } }));
+      for (const child of [false, true]) for (const suffix of ["", `\n\n${tail}`]) {
+        const key = `${mode}:${child}:${Boolean(suffix)}`;
+        const rows: UiMessage[] = ["Checking.", "one", `Found it.${suffix}`, "two", "Done."].map((content, i) => ({
+          id: `step-${i}`, role: i % 2 ? "tool" : "assistant", content: i % 2 ? "" : content,
+          status: "complete", createdAt: new Date(1000 + i).toISOString(),
+          ...(i % 2 ? { toolName: "Bash", toolStatus: "success" as const, toolCallId: `call-${i}`, toolArgs: { command: content } } : {}),
+        }));
+        const entry = buildTranscriptEntries(rows).entries[0];
+        if (entry?.kind !== "assistant-turn") throw new Error("Missing fixture turn");
+        const childRows = rows.map(message => ({ kind: message.role === "tool" ? "tool" as const : "answer" as const, message }));
+        const render = (active: boolean) => flushSync(() => root.render(<I18nextProvider key={key} i18n={i18n}>{child
+          ? <SubagentTurnContent id={key} rows={childRows} active={active} />
+          : <AssistantTurn entry={entry} isActive={active} />}</I18nextProvider>));
+        const check = (open: boolean) => {
+          const toggle = host.querySelector<HTMLButtonElement>(".turn-process > button");
+          if (toggle?.getAttribute("aria-expanded") !== String(open)) throw new Error(`${key}: wrong process state`);
+          const visible = [...host.querySelectorAll<HTMLElement>("[data-message-id]")]
+            .filter(el => el.getBoundingClientRect().height > 0 && !el.closest("[hidden],[inert]"));
+          const expected = open ? "step-0,step-1,step-2,step-3,step-4" : "step-4";
+          const ids = visible.map(el => el.dataset.messageId).join(",");
+          if (ids !== expected) throw new Error(`${key}: expected ${expected}; saw ${ids}`);
+          const details = host.querySelector<HTMLDetailsElement>(".dsml-protocol-details");
+          if (Boolean(details) !== Boolean(suffix) || details?.open) throw new Error(`${key}: wrong protocol disclosure`);
+          if (open && suffix && (details?.querySelector("pre")?.textContent !== tail ||
+            visible[2].querySelector(".prose-chat")?.textContent !== "Found it.")) throw new Error(`${key}: altered answer or tail`);
+          return toggle;
+        };
+        render(true);
+        check(true);
+        render(false);
+        const toggle = check(false);
+        flushSync(() => toggle.click());
+        check(true);
+        flushSync(() => toggle.click());
+        check(false);
+        // Start the next case with a fresh turn and no retained manual choice.
+        flushSync(() => root.render(null));
       }
     }
   } finally {
     flushSync(() => root.unmount());
-    container.remove();
+    host.remove();
     useAppStore.setState({ settings });
   }
 }

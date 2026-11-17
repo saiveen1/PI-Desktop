@@ -98,10 +98,13 @@ export function cachedVisibleActivityItems(items: readonly AssistantActivityItem
 export function cachedVisibleProcessSteps(parts: readonly AssistantTurnPart[], hideThinking: boolean, active: boolean) {
   let count = 0;
   for (const part of parts) {
-    if (part.kind !== "activity") continue;
-    for (const item of part.items) {
-      if (item.kind !== "thinking" || !hideThinking ||
-        (active && item.message.status === "streaming" && !messageContentFacts(item.message).hasContent)) count += 1;
+    if (part.kind === "message") {
+      if (messageContentFacts(part.message).hasContent) count += 1;
+    } else {
+      for (const item of part.items) {
+        if (item.kind !== "thinking" || !hideThinking ||
+          (active && item.message.status === "streaming" && !messageContentFacts(item.message).hasContent)) count += 1;
+      }
     }
   }
   return count;

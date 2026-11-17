@@ -1806,9 +1806,8 @@ this does not claim an installed full-app settings journey.
   progress paragraph B, and a multi-item command segment with adjacent Bash rows.
   2) Inspect the default-closed active group, open then close it during streaming.
   3) Complete the turn and confirm one outer process owns every pre-answer row;
-  close it to hide all groups/run rows. Paragraphs A and B must remain readable
-  exactly once, followed by the final answer if present. Reopen and verify the
-  original interleaving with tools and the retained group choice. 4) Open one completed group and one
+  close it to hide all groups/run rows, then
+  reopen and confirm the group choice returns. 4) Open one completed group and one
   item, copy its output, close and reopen the group, then open a sibling group
   independently. 5) Switch `Transcript display` across Flat, Commands first, and
   Fully folded and inspect the grouping, group boundaries, where the run rows

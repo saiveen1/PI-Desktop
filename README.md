@@ -156,8 +156,6 @@ This edition strengthens the existing framework rather than replacing it.
   while retaining authoritative corrections and refusals. An exact orphan DSML
   suffix keeps the streamed text and its diagnostic. In chat, recognizable trailing
   markup folds into **Protocol details**; tool cards report actual execution.
-  Folding tool activity keeps the assistant's progress paragraphs readable in
-  order, in both the main conversation and delegate transcripts.
   See the [diagnosis and limits](docs/maintenance/responses-terminal-content-loss.md);
   previously lost content cannot be recovered by this change.
 

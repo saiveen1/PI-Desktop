@@ -79,19 +79,22 @@ business operation. Never replay an already successful action to restore text.
    separately. Stop once the root cause and fix boundary are established. A
    cleared inflight checkpoint does not recover previously overwritten text.
 
-## When narration is stored but missing from the reading view
+## Ordinary turns: diagnose layout separately
 
-A separate incident had a completed answer and recorded paragraphs before tool
-calls. The process disclosure hid those paragraphs along with the commands when
-it closed. Check the visibility of **each intermediate assistant message**, not
-just the length of the last answer. Use a synthetic narration → tool → narration
-→ tool → answer turn and compare collapsed and expanded views. Each paragraph
-should remain readable once; opening activity should reveal the tools in order.
-The same check applies to delegates and does not require a provider request.
+A provider compatibility change must not change which rows a turn disclosure
+owns. Commit `afa278182` kept every intermediate message visible when the process
+was closed and hid only activity rows. Its condition tested for *any message*,
+not a DSML fragment. Consequently even an ordinary turn without one protocol tag
+showed a wall of progress paragraphs while its tool rows remained hidden. The
+regression tests for that change incorrectly treated this layout as success.
 
-A missing changed-files card is different: it summarizes recorded review
-snapshots, not filenames mentioned in answers or arbitrary shell writes. Do not
-infer missing conversation text or fabricate a diff from successful shell calls.
+Restore the original shared disclosure: intermediate prose and tools fold
+and expand together; the final answer stays outside. Only the message bubble
+recognizes an orphan DSML tail. Keep terminal-content reconciliation in the
+Responses adapter and leave file-change summaries tied to actual review records.
+Test plain and malformed input against the **same** fold/order assertions,
+including live-to-settled, reopen and reclose. The only expected difference
+is an inert, initially collapsed protocol disclosure on the affected message.
 
 ## Repair contract
 

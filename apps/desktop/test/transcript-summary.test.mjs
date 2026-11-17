@@ -120,7 +120,7 @@ test("activity summary and compact visibility preserve error, search and thinkin
       const parts = [{ kind: "activity", items: subset }, { kind: "message", message: message("progress", "progress") }];
       assert.equal(
         cachedVisibleProcessSteps(parts, compact, active),
-        cachedVisibleActivityItems(subset, compact, active).length,
+        1 + cachedVisibleActivityItems(subset, compact, active).length,
       );
     }
   }
