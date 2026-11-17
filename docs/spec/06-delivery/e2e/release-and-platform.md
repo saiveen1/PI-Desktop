@@ -1424,13 +1424,21 @@ Use synthetic Darwin x64/arm64 uname responses through production SSH bootstrap,
   `development-profile.test.mjs` retains Main's profile contract;
   `development-branding.test.mjs` retains the platform branding checks;
   `agent-policy-sync.test.mjs` covers the mirrored agent-safety requirement.
+- **Dependency build coverage:** `runtime-build-contract.test.mjs` executes the
+  production dependency-build command through Windows CMD with an external pnpm
+  argument probe. The filter must retain its caret, contain no literal quotes,
+  and request failure when nothing matches, so Dev cannot skip current sources.
 - **Windows fixed-entry coverage:** `scripts/start-local.test.ps1` exercises
   the local source launcher with scratch profiles and external CIM/pnpm doubles:
   existing-data validation, missing tools/dependencies, active-owner refusal,
-  confirmation cancellation, a late owner appearing after confirmation, WMI
-  return errors, quoted paths, cwd/environment restoration and nonzero command
-  exits. Check-only must neither prompt nor launch. No real WMI child, Desktop,
-  backup or installed profile is used by this fixture.
+  default launch with no backup and a locked database, explicit `-BackupConfig`
+  export, export failures, a late owner appearing during export, linked backup
+  roots, quoted paths, cwd/environment restoration and exact command exits through
+  the real CMD entry. Its fixture-private mutex must not collide with a live
+  source launcher. Check-only must neither prompt, export nor launch. Host Core
+  `config_backup::tests` verifies configuration-only JSON, conversation and secret
+  exclusion, read-only source access, no overwrite and missing/invalid databases.
+  No real WMI child, Desktop or installed profile is used by these fixtures.
 - **Specs:** [Process model](../../03-runtime/07-process-model.md),
   [explicit debugging](../06-release-runbook.md#explicit-data-dependent-debugging).
 - **Acceptance:** Offline launcher journey; no installed app, live profile,

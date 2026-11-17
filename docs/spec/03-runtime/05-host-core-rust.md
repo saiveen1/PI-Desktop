@@ -33,6 +33,12 @@ It does **not** replace pi. It provides safe host capabilities to:
     event synthesis, scoped screen capture, and the scope-grant broker
     ([computer-use](computer-use.md), ADR 0342)
 
+The explicit offline CLI `--backup-config <data-directory> <output.json>` exports
+portable application preferences and user-owned provider/model definitions only.
+It runs before AppState startup and reads SQLite without migrations, recovery or
+session queries. It never copies a database/profile or reads credential blobs;
+existing output files are refused. See the [Windows source launcher](../06-delivery/03-ai-development-workflow.md#windows-local-source-launcher).
+
 ## 3. Non-responsibilities
 
 - LLM provider SDKs

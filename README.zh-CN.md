@@ -132,9 +132,11 @@ pnpm dev
 共享可写源码或依赖目录。获准清理后，必须先拆除目录链接再让 Git 删除；详见
 [隔离与清理规则](docs/spec/06-delivery/03-ai-development-workflow.md#isolation-is-a-reason-not-a-ritual)。
 
-Windows 可使用 [start-local.cmd](start-local.cmd) 打开源码启动控制台，无需打包或安装。
-这是**显式使用已有配置目录**的入口：先配置被 Git 忽略的 `start-local.data-dir.local`，
-停止所有使用该目录的进程，并完成离线备份。启动器会要求确认，但不会替你备份或停止进程。
+Windows 运行 [start-local.cmd](start-local.cmd) 即可编译必要的当前源码并在同一控制台启动，
+无需打包、安装或输入确认。先配置被 Git 忽略的 `start-local.data-dir.local`，
+并退出所有使用该目录的进程。**默认不备份**；只有传入 `-BackupConfig` 才会将应用偏好、
+用户服务及模型定义导出到 `<data-directory>.config-backups`，不会复制数据库、会话、
+附件或凭证。依赖包会在启动前重建，匹配不到依赖时直接停止。启动器不会停止进程。
 使用前请阅读[启动器说明](docs/spec/06-delivery/03-ai-development-workflow.md#windows-local-source-launcher)；
 `start-local.cmd -CheckOnly` 仅检查前置条件，不启动应用。
 

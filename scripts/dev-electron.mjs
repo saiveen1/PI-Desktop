@@ -192,7 +192,7 @@ function run() {
   if (launch.inheritsDataDir) {
     console.warn(
       "WARNING: --inherit-data-dir grants Dev read/write access to PI_DESKTOP_DATA_DIR. " +
-      "Stop the Release/other owner and back up the complete profile first; prefer an offline copy. " +
+      "Stop the Release/other owner before starting Dev. This flag does not create backups. " +
       "Dev's Chromium profile remains separate. This is not read-only access or safe concurrent sharing.",
     );
   } else if (launch.clearedDataDir) {

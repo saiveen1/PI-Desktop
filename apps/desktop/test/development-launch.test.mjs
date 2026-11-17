@@ -157,6 +157,8 @@ test("the real launcher isolates plain dev then permits a fresh explicit opt-in"
   assert.deepEqual(optedIn.report, { dataDir: fixture.dataDir, development: "1", args: ["dev", "--port", "5184"] });
   assert.match(optedIn.stderr, /read\/write/);
   assert.match(optedIn.stderr, /Stop.*Release/);
+  assert.match(optedIn.stderr, /does not create backups/);
+  assert.doesNotMatch(optedIn.stderr, /back up the complete profile/);
   assert.ok(!optedIn.stderr.includes(fixture.dataDir));
 
   const again = fixture.run([]);

@@ -4,6 +4,7 @@ mod artifacts;
 mod audit;
 mod background_tasks;
 mod computer;
+mod config_backup;
 mod config_sync;
 mod data_relocation;
 mod db;
@@ -57,6 +58,9 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    if config_backup::run_cli()? {
+        return Ok(());
+    }
     if data_relocation::run_cli()? {
         return Ok(());
     }

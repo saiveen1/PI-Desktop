@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([switch]$LaunchWindow, [switch]$CheckOnly, [string]$DataDir)
+param([switch]$BackupConfig, [switch]$CheckOnly, [string]$DataDir)
 
 $script:LocalDesktopRoot = Split-Path -Parent $PSScriptRoot
 
@@ -15,8 +15,33 @@ function Assert-LocalDesktopStopped {
     }
 }
 
+function Backup-LocalDesktopConfig {
+    param([string]$DataDir)
+
+    if ($DataDir.TrimEnd('\', '/') -eq [IO.Path]::GetPathRoot($DataDir).TrimEnd('\', '/')) {
+        throw 'Configuration backup requires a profile directory below the volume or share root.'
+    }
+    $backupRoot = $DataDir.TrimEnd('\', '/') + '.config-backups'
+    $null = [IO.Directory]::CreateDirectory($backupRoot)
+    if ((Get-Item -LiteralPath $backupRoot -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) {
+        throw 'The configuration backup directory must not be a junction or symbolic link.'
+    }
+    $backup = Join-Path $backupRoot ((Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [guid]::NewGuid().ToString('N'))
+    $pending = $backup + '.partial'
+    $null = [IO.Directory]::CreateDirectory($pending)
+    $permissions = Get-Acl -LiteralPath $DataDir
+    $permissions.SetAccessRuleProtection($true, $true)
+    Set-Acl -LiteralPath $pending -AclObject $permissions
+    Write-Host 'Exporting application preferences and provider/model configuration only.'
+    & cargo.exe run --quiet --locked --manifest-path (Join-Path $script:LocalDesktopRoot 'Cargo.toml') -p host-core --bin pi-desktop-host-core -- --backup-config $DataDir (Join-Path $pending 'configuration.json') | Out-Host
+    if ($LASTEXITCODE -ne 0) { throw "Configuration export failed (exit $LASTEXITCODE)." }
+    Assert-LocalDesktopStopped
+    [IO.Directory]::Move($pending, $backup)
+    Write-Host "Configuration backup: $backup"
+}
+
 function Invoke-LocalDesktop {
-    param([switch]$LaunchWindow, [switch]$CheckOnly, [string]$DataDir)
+    param([switch]$BackupConfig, [switch]$CheckOnly, [string]$DataDir)
 
     $ErrorActionPreference = 'Stop'
     $root = $script:LocalDesktopRoot
@@ -31,6 +56,9 @@ function Invoke-LocalDesktop {
         throw 'The data directory must be one absolute Windows path.'
     }
     $DataDir = [IO.Path]::GetFullPath($DataDir)
+    if ($DataDir.Length -gt [IO.Path]::GetPathRoot($DataDir).Length) {
+        $DataDir = $DataDir.TrimEnd('\', '/')
+    }
     if (-not (Test-Path -LiteralPath (Join-Path $DataDir 'pi.sqlite') -PathType Leaf)) {
         throw 'The selected directory does not contain pi.sqlite. Refusing to create an empty profile.'
     }
@@ -49,30 +77,13 @@ function Invoke-LocalDesktop {
         Write-Host 'Preflight passed. Nothing was launched or backed up; no profile contents were read.'
         return 0
     }
-    if ($LaunchWindow) {
-        # Encode literal arguments instead of interpolating paths into shell syntax.
-        $scriptPath = Join-Path $PSScriptRoot 'start-local.ps1'
-        $payload = '. ''{0}''; try {{ $null = Invoke-LocalDesktop -DataDir ''{1}'' }} catch {{ Write-Host $_.Exception.Message -ForegroundColor Red }}' -f $scriptPath.Replace("'", "''"), $DataDir.Replace("'", "''")
-        $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($payload))
-        $command = '"{0}" -NoLogo -NoProfile -NoExit -ExecutionPolicy Bypass -EncodedCommand {1}' -f (Join-Path $PSHOME 'powershell.exe'), $encoded
-        $result = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = $command; CurrentDirectory = $root } -ErrorAction Stop
-        if ($result.ReturnValue -ne 0) { throw "WMI launch failed with code $($result.ReturnValue)." }
-        Write-Host "Launcher window requested (PID $($result.ProcessId)); inspect that window for build/startup results."
-        return 0
-    }
-
     $mutex = [Threading.Mutex]::new($false, 'Local\PI-Desktop-SharedProfileLauncher')
     $held = $false
     try {
         try { $held = $mutex.WaitOne(0) } catch [Threading.AbandonedMutexException] { $held = $true }
         if (-not $held) { throw 'Another shared-profile launcher is already active.' }
         Write-Warning 'This writes your real data and may migrate it. Chromium state remains separate in Dev.'
-        Write-Host 'Before continuing: fully exit all profile owners and make a complete offline profile backup.'
-        Write-Host 'This script does NOT create or verify a backup. Do not start the installed app while Dev is running.'
-        if ((Read-Host 'Type BACKED UP to confirm, or press Enter to cancel') -cne 'BACKED UP') {
-            Write-Host 'Cancelled. Nothing was launched.'
-            return 0
-        }
+        Write-Host 'Do not start the installed app while this source version is running.'
         Assert-LocalDesktopStopped
         $previous = @{}
         foreach ($name in @('PI_DESKTOP_DATA_DIR', 'ELECTRON_RUN_AS_NODE', 'NODE_OPTIONS')) {
@@ -83,6 +94,10 @@ function Invoke-LocalDesktop {
             $env:PI_DESKTOP_DATA_DIR = $DataDir
             [Environment]::SetEnvironmentVariable('ELECTRON_RUN_AS_NODE', $null, 'Process')
             [Environment]::SetEnvironmentVariable('NODE_OPTIONS', $null, 'Process')
+            if ($BackupConfig) {
+                Backup-LocalDesktopConfig -DataDir $DataDir
+                Assert-LocalDesktopStopped
+            }
             Write-Host 'Building required dependencies and starting Dev. Keep this console open for progress/errors.'
             # /d disables user CMD AutoRun hooks before invoking the existing pnpm shim.
             & $env:ComSpec /d /c ('"{0}" dev --inherit-data-dir' -f $pnpm) | Out-Host
@@ -103,8 +118,8 @@ function Invoke-LocalDesktop {
 
 if ($MyInvocation.InvocationName -ne '.') {
     try {
-        $code = Invoke-LocalDesktop -LaunchWindow:$LaunchWindow -CheckOnly:$CheckOnly -DataDir $DataDir
-        if ($code -ne 0) { throw "Source launch failed (exit $code). See the output above." }
+        $code = Invoke-LocalDesktop -BackupConfig:$BackupConfig -CheckOnly:$CheckOnly -DataDir $DataDir
+        exit $code
     } catch {
         Write-Error -Message $_.Exception.Message -ErrorAction Continue
         exit 1

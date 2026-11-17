@@ -53,6 +53,7 @@ scripts/check-release-docs.test.mjs`.
 | Script | Alias | Purpose |
 |---|---|---|
 | `dev-electron.mjs` | `pnpm dev`, through `predev` | Launch Electron against the dev server. On macOS it builds and reuses the fingerprinted branded host bundle under `.cache/electron-dev/` |
+| `start-local.ps1` | `start-local.cmd [-BackupConfig] [-CheckOnly] [-DataDir PATH]` | Start current source in the same console; backups off by default, optional configuration-only JSON export through Host Core |
 
 `pnpm dev` strips inherited `PI_DESKTOP_DATA_DIR` before starting Vite/Electron,
 even when launched by an agent inside a daily Release. The parent environment
@@ -61,9 +62,14 @@ nonempty variable; the flag is consumed by the launcher, not forwarded.
 Relative values are resolved against the launcher's working directory before
 the child changes directory. Empty values or conflicting case variants fail
 before Electron package discovery. This flag grants read/write access, not
-safe concurrent sharing: prefer an offline copy, or stop the Release/other
-owner and back up the complete profile first. Dev's Chromium userData remains
+safe concurrent sharing: stop the Release/other owner first. This flag does not
+create backups; choose backups separately. Dev's Chromium userData remains
 separate. Direct Electron/E2E temporary-profile overrides are unchanged.
+
+The Desktop dependency build quotes its selector for both Windows CMD and POSIX
+shells and uses `--fail-if-no-match`; a broken selector cannot silently skip the
+workspace packages before Cargo/Electron startup. The Windows command-argument
+fixture is in `apps/desktop/test/runtime-build-contract.test.mjs`.
 
 ## End-to-end
 

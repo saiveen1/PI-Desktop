@@ -102,25 +102,46 @@ from a Release installation. Missing `pi.sqlite`, workspace dependencies or
 Node/pnpm/Cargo fails before launch. `-CheckOnly` performs the same read-only
 preflight without opening a window, prompting, or running the build.
 
-The double-click entry uses WMI/CIM to open a visible PowerShell console. It
-conservatively refuses any running `PI-Desktop.exe` or `host-core.exe`, and
-checkout-local Electron (or Electron whose path cannot be inspected). A named
+The CMD entry runs PowerShell synchronously in the same console, with live build
+output and the exact Dev command exit code. Double-clicking uses the console
+Windows opens for CMD. It conservatively refuses any running `PI-Desktop.exe`
+or `host-core.exe`, and checkout-local Electron (or Electron whose path cannot be
+inspected). A named
 session mutex prevents duplicate launcher builds; the process check is repeated
-after confirmation. It never terminates processes. These checks are not a lock
-against an independently started application: do not start Release during Dev.
+before the build and after any optional configuration export. It never terminates
+processes. These checks are not a lock against an independently started
+application: do not start Release during Dev.
 
-Before each run, the user must type `BACKED UP` to attest that every profile
-owner is stopped and a complete offline profile backup exists. The launcher
-neither creates nor verifies that backup. Cancellation starts nothing. It runs
-the existing `pnpm dev --inherit-data-dir` workflow in the checkout, retains live
+Backups are disabled by default. Plain `start-local.cmd` does not export or copy
+any data and requires no confirmation. Only `start-local.cmd -BackupConfig`
+exports portable application preferences and user-owned provider/model definitions
+to `<data-directory>.config-backups/<timestamp>-<unique-id>/configuration.json`.
+This is a versioned JSON configuration export, not an automatic restore mechanism
+or a complete profile backup. Credentials, plugin-owned providers, MCP/skill
+files, session tables/transcripts, attachments, logs and caches are excluded.
+The database itself is never copied. The optional export uses
+`cargo run --locked -p host-core --bin pi-desktop-host-core -- --backup-config
+<data-directory> <output.json>` with the checkout's manifest; the Host CLI opens
+SQLite read-only before AppState initialization, without migrations or recovery.
+The application field allowlist is shared with portable configuration sync.
+Export directories receive the source profile's permissions with inheritance
+disabled before writing; linked backup roots and volume/share-root profiles are
+refused for backup. Failed exports keep a
+`.partial` suffix and prevent Dev startup; completed exports are retained.
+`-CheckOnly -BackupConfig` does not export, compile or launch anything.
+
+The launcher runs the existing `pnpm dev --inherit-data-dir` workflow in the
+checkout, retains live
 console output and reports the actual exit code. It clears inherited
 `ELECTRON_RUN_AS_NODE` and `NODE_OPTIONS` only for that invocation, disables CMD
 AutoRun with `/d` when invoking the pnpm shim, and restores the caller's
 environment and cwd afterward. Required compilation remains; no
 installer, registry, shortcuts, version bump or Chromium-profile reuse is added.
 
-Offline Windows verification: `powershell.exe -NoProfile -ExecutionPolicy Bypass
--File scripts/start-local.test.ps1`. The fixture substitutes CIM and pnpm, keeps
+Offline Windows verification: set `PI_SCRATCH_DIR` to a session-owned temporary
+directory, then run `powershell.exe -NoProfile -NonInteractive -ExecutionPolicy
+Bypass -File scripts/start-local.test.ps1`. The fixture substitutes CIM, Cargo
+and pnpm, keeps
 all mutable data under session scratch, and never starts real Desktop.
 
 ### R4.1 — Personal packaging is build-only

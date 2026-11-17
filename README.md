@@ -200,11 +200,14 @@ concurrent edits. Reuse caches, not cross-checkout links to mutable source or
 dependency directories. Authorized cleanup must detach directory links before
 Git removal; follow the [isolation and teardown rules](docs/spec/06-delivery/03-ai-development-workflow.md#isolation-is-a-reason-not-a-ritual).
 
-On Windows, [start-local.cmd](start-local.cmd) provides a source-launch console
-without packaging or installation. This is an **explicit existing-profile path**:
-configure the Git-ignored `start-local.data-dir.local`, stop all profile owners,
-and make a complete offline backup first. The launcher asks for confirmation but
-does not create the backup or stop processes. Read the
+On Windows, [start-local.cmd](start-local.cmd) builds the necessary current source
+and launches in the same console, without packaging, installation or a typed
+confirmation. Configure the Git-ignored `start-local.data-dir.local` and exit all
+profile owners first. **Backups are off by default.** Pass `-BackupConfig` to
+export application preferences and user provider/model definitions to
+`<data-directory>.config-backups`; this does not copy the database, conversations,
+attachments or credentials. Workspace dependencies rebuild before launch, and
+an empty dependency selection stops startup. It never stops processes. Read the
 [launcher instructions](docs/spec/06-delivery/03-ai-development-workflow.md#windows-local-source-launcher)
 before using it; `start-local.cmd -CheckOnly` checks prerequisites without launching.
 

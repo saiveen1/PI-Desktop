@@ -53,8 +53,9 @@ tree (D599, ADR 0094). The `pnpm dev` launcher clears inherited
 `PI_DESKTOP_DATA_DIR` before starting Vite/Electron. Only the explicit
 `pnpm dev --inherit-data-dir` flag permits that launch to retain a nonempty
 value for data-dependent debugging; no Release path is inferred. It warns of
-read/write access and requires the operator to stop the other owner and back
-up the profile first. Concurrent Release/Dev writes are not safe. The flag does
+read/write access and requires the operator to stop the other owner. The flag
+does not create backups; backup selection remains explicit. Concurrent
+Release/Dev writes are not safe. The flag does
 not share Chromium userData or copy the storage-location bootstrap.
 
 Main's direct `PI_DESKTOP_DATA_DIR` override remains unchanged for isolated
@@ -341,6 +342,9 @@ the next launch rather than changing the NSIS installer or writing into
   (`shared`, `i18n`, `plugin-sdk`, and `agent-runtime`) before host-core and
   Electron startup; Electron must never compile against or load stale ignored
   package artifacts from an earlier source revision
+- The dependency selector is double-quoted for Windows CMD and POSIX shells;
+  an empty match fails before Cargo or Electron instead of silently skipping
+  the workspace dependency build.
 - Electron 43+ no longer installs its binary during `pnpm install`;
   `scripts/dev-electron.mjs` resolves the development host through the
   `electron` package entry, which downloads and extracts the binary on demand

@@ -1,9 +1,13 @@
 import assert from "node:assert/strict";
+import { execSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 const desktopPackageUrl = new URL("../package.json", import.meta.url);
-const dependencyBuild = "pnpm --filter '@pi-desktop/desktop^...' build";
+const dependencyBuild = 'pnpm --filter "@pi-desktop/desktop^..." --fail-if-no-match run build';
 const depsScript = "pnpm run build:deps";
 
 const readScripts = async () => {
@@ -18,6 +22,25 @@ test("build:deps rebuilds every workspace dependency consumed by Electron", asyn
     (scripts["build:deps"] ?? "").includes(dependencyBuild),
     "build:deps must rebuild every workspace dependency consumed by Electron",
   );
+});
+
+test("Windows dependency builds pass the exact filter to pnpm and fail on no match", {
+  skip: process.platform !== "win32",
+}, async (t) => {
+  const scripts = await readScripts();
+  const root = mkdtempSync(join(tmpdir(), "pi dependency args "));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const probe = join(root, "arguments.mjs");
+  writeFileSync(probe, "console.log(JSON.stringify(process.argv.slice(2)));\n");
+  writeFileSync(join(root, "pnpm.cmd"), `@"${process.execPath}" "${probe}" %*\r\n`);
+  const output = execSync(scripts["build:deps"], {
+    cwd: root,
+    encoding: "utf8",
+    windowsHide: true,
+  });
+  assert.deepEqual(JSON.parse(output), [
+    "--filter", "@pi-desktop/desktop^...", "--fail-if-no-match", "run", "build",
+  ]);
 });
 
 test("desktop dev builds all workspace dependencies before Electron starts", async () => {
