@@ -32,7 +32,7 @@ function referencedDocs() {
 const docs = referencedDocs();
 
 function runGate(t, { overrides = {}, omitDocs = [] } = {}) {
-  const directory = mkdtempSync(join(tmpdir(), "pi-agent-policy-"));
+  const directory = mkdtempSync(join(process.env.PI_SCRATCH_DIR ?? tmpdir(), "pi-agent-policy-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   mkdirSync(join(directory, "scripts"));
   writeFileSync(join(directory, "scripts/check-agent-policy-sync.mjs"), gateSource);
@@ -137,6 +137,9 @@ test("safety anchors are enforced in the authoritative policy, not the entry poi
     ["SQLite is owned exclusively by Rust `host-core`.", "sqlite-host-core-only"],
     ["Electron Main must remain a thin orchestrator.", "main-thin-orchestrator"],
     ["Branches and worktrees are optional, not prerequisites for development.", "optional-worktree-isolation"],
+    ["Do not create cross-checkout junctions or directory symlinks for mutable workspace trees.", "worktree-mutable-isolation"],
+    ["Never recursively delete a worktree while it contains directory links.", "worktree-link-safe-teardown"],
+    ["Worktree removal never authorizes branch deletion.", "worktree-branch-authorization"],
     ["Dev launches must isolate inherited data by default.", "development-data-safety"],
     ["Personal packaging must use `pnpm dist:personal` in the current checkout.", "fixed-personal-packaging-entry"],
     [

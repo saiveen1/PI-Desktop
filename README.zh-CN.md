@@ -123,6 +123,10 @@ pnpm dev
 本版本的 `pnpm dev` 默认清除继承的数据目录覆盖设置，不要让它使用正在运行的安装版配置目录。
 检查命令与显式复用数据的规则见[开发流程](docs/spec/06-delivery/03-ai-development-workflow.md)。
 
+默认在当前工作区开发；确有并发修改时再按需使用 worktree。复用缓存，不用跨工作区链接
+共享可写源码或依赖目录。获准清理后，必须先拆除目录链接再让 Git 删除；详见
+[隔离与清理规则](docs/spec/06-delivery/03-ai-development-workflow.md#isolation-is-a-reason-not-a-ritual)。
+
 Windows 可使用 [start-local.cmd](start-local.cmd) 打开源码启动控制台，无需打包或安装。
 这是**显式使用已有配置目录**的入口：先配置被 Git 忽略的 `start-local.data-dir.local`，
 停止所有使用该目录的进程，并完成离线备份。启动器会要求确认，但不会替你备份或停止进程。

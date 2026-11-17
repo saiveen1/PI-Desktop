@@ -188,6 +188,11 @@ This edition's `pnpm dev` clears inherited data-directory overrides by default.
 Do not point it at a running installation's profile. For checks and opt-in data
 reuse rules, see the [development workflow](docs/spec/06-delivery/03-ai-development-workflow.md).
 
+Develop in the current checkout by default; worktrees are optional for genuine
+concurrent edits. Reuse caches, not cross-checkout links to mutable source or
+dependency directories. Authorized cleanup must detach directory links before
+Git removal; follow the [isolation and teardown rules](docs/spec/06-delivery/03-ai-development-workflow.md#isolation-is-a-reason-not-a-ritual).
+
 On Windows, [start-local.cmd](start-local.cmd) provides a source-launch console
 without packaging or installation. This is an **explicit existing-profile path**:
 configure the Git-ignored `start-local.data-dir.local`, stop all profile owners,

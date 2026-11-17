@@ -88,10 +88,10 @@ Branches and worktrees are optional, not prerequisites for development.
   to match upstream; record material decisions and test both retained fixes and
   adopted updates.
 - Retire optional worktrees only when authorized and after verifying their
-  changes are committed or safely migrated. Before removal, check shared pnpm
-  bin shims for paths into the worktree, repair affected shims to the primary
-  checkout, and verify the affected CLI entry points. Follow the shared-install
-  teardown check in `AGENTS.md`; do not delete the referenced worktree first.
+  changes are committed or safely migrated. Git-clean status and repaired shims
+  are not sufficient: follow §5's link-safe teardown, verify external targets,
+  and preserve unknown ignored content. Worktree and branch deletion require
+  their own authorization; do not delete another task's work.
 
 ### Windows local source launcher
 
@@ -426,9 +426,57 @@ the selected target repository's PR checks and integration validation, without
 discarding local changes. No upstream contribution is required for self-maintained
 local development. Do not force-push shared history.
 
-If an optional worktree is retired, verify all changes are retained in commits
-or the destination checkout before deleting it, and remove only the authorized
-worktree and branch. A migration is not permission to remove anyone else's work.
+### Isolation is a reason, not a ritual
+
+Use a branch/worktree only for an explicit request or genuine concurrent edits.
+State the owner, base revision and non-overlapping write scope first. A branch
+name does not isolate files in a shared checkout. Capture staged, unstaged and
+untracked work before integration: merging an ancestor branch tip does not
+import its dirty feature. Pause competing writers before snapshots or merges.
+
+Reuse compatible package stores, downloaded binaries and caches. Do not turn
+source/package directories, `node_modules` or build outputs into cross-checkout
+junctions or directory symlinks. An existing shared install is not permission
+to run install/relink/bin-generation from the secondary checkout: it can rewrite
+the primary's shims. Use existing tool entry points without mutating the shared
+installation; keep generated outputs local to their owning checkout. If that
+cannot be done safely, state the limitation instead of improvising another
+environment or weakening E2E isolation.
+
+### Link-safe retirement
+
+1. **Preserve and authorize.** Identify the exact worktree, branch and retained
+   commits; compare them with the destination. Check staged, unstaged, untracked
+   and ignored content without descending into links. Preserve screenshots and
+   other non-regenerable ignored files with checksums; unknown files are not
+   automatically caches. A clean Git status alone is insufficient.
+2. **Inspect both directions.** Use link-aware metadata (`lstat` and Windows
+   reparse-point inspection), never a traversal that follows junctions. Record
+   each directory link and its target; stop on an unrecognized reparse type.
+   Check surviving source/dependency links and POSIX, CMD and PowerShell shims
+   for references into the retiring root, resolving relative and absolute paths.
+   Searching only the literal `worktrees/` misses Windows and relative paths.
+3. **Detach, then remove.** Repair surviving references first. Remove only
+   verified link entries with a non-recursive, link-only primitive whose behavior
+   has been checked in scratch on this OS; never recurse into their targets.
+   Verify external targets and affected CLI commands still work, then rescan.
+   Only a link-free retiring tree may reach ordinary `git worktree remove`.
+   Worktree removal does not authorize deleting the branch.
+4. **Stop on unexpected effects.** A lock, partial deletion or changed external
+   target requires diagnosis before any retry. Do not add `--force`, use a
+   recursive shell-delete fallback, raise timeouts or reinstall packages just
+   to finish cleanup. Check the owned process and actual filesystem/Git state;
+   do not replay an uncertain destructive command.
+5. **Verify survivors.** Check the worktree list, directory absence, surviving
+   checkout status, retained history, preserved ignored files and affected
+   toolchain entry points. Ordinary successful cleanup needs no full build;
+   actual shared-environment damage needs explicit recovery and appropriate
+   verification, not a claim that Git status proves dependencies intact.
+
+The policy gate checks these rules' presence, not shell calls. See the
+[cleanup incident and recovery limits](../../maintenance/upstream-integration-047c4eab1.md#worktree-cleanup-follow-up-2026-11-18)
+for the observed Windows junction traversal. These maintenance rules do not
+change the application's per-session worktree isolation behavior.
 
 ---
 

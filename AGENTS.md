@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Policy-Sync: 2026-11-17.personal-edition.1
+Policy-Sync: 2026-11-18.personal-edition.1
 
 Mandatory rules for AI coding agents and maintainers working in PI-Desktop.
 
@@ -246,25 +246,30 @@ runtime environment solely to execute E2E. Isolate mutable test state
 the user's live state. Install or rebuild only for missing or incompatible
 dependencies, and record why. Clean CI/release runners may use lockfiles.
 
-### Shared install teardown
+### Worktree isolation and safe teardown
 
-A worktree that shares the primary checkout's `node_modules` also shares
-its pnpm bin shims. Shims written from inside the worktree record absolute
-worktree paths, so removing the worktree silently breaks `tsc`, `electron`,
-`vitest`, `electron-builder`, and every other package script in the primary
-checkout.
+Reuse package stores and download caches, not another checkout's mutable
+workspace.
+Do not create cross-checkout junctions or directory symlinks for mutable workspace trees.
+This includes source, package directories, `node_modules`, and build outputs.
+Do not install, relink, or regenerate shims through an existing shared install;
+use the primary toolchain without rewriting it, or report the isolation limit.
 
-Before removing a worktree, confirm no shim still references one:
+Never recursively delete a worktree while it contains directory links.
+Git-clean status and a shim scan do not prove filesystem isolation. Before an
+authorized removal, preserve tracked/untracked work and non-regenerable ignored
+files; prove source commits are retained; inventory junctions, symlinks and
+reparse points without traversing them. Check surviving checkouts for links and
+POSIX/Windows shim paths into the retiring tree, not just strings `worktrees/`.
+Repair references, detach only verified link entries without touching targets,
+and verify external targets and affected CLI entry points before removal.
 
-```bash
-grep -h "worktrees/" node_modules/.bin/* apps/*/node_modules/.bin/* \
-  packages/*/node_modules/.bin/* | grep -v "^# cmd-shim-target="
-```
-
-The command must print nothing. If it does, rewrite the offending shims
-back to the primary checkout path, then verify `tsc --version` and
-`electron --version` actually run. Never delete the worktree first and
-leave the shared shims dangling.
+Use ordinary `git worktree remove` only after that preflight. On a lock,
+partial deletion or unexpected target change, stop and inspect; never escalate
+automatically to force removal, recursive shell deletion, or package reinstall.
+After removal, verify surviving checkout status, dependencies and Git history.
+Worktree removal never authorizes branch deletion.
+Detailed procedure: `docs/spec/06-delivery/03-ai-development-workflow.md` §5.
 
 ### Optional upstream contribution
 

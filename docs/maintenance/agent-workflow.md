@@ -20,6 +20,11 @@ second rulebook.
 restates more than two safety anchors, when an anchor disappears from
 `AGENTS.md`, when either file references a `.md` document that does not exist, or
 when the two `Policy-Sync:` tokens differ.
+The worktree isolation, directory-link teardown and separate branch-deletion
+anchors have negative fixtures as well. This is policy-presence validation,
+not a filesystem preflight or an interceptor for destructive shell commands;
+follow [the lifecycle procedure](../spec/06-delivery/03-ai-development-workflow.md#link-safe-retirement)
+when optional isolation is actually used.
 
 Durable project rules belong in tracked documents. Do not rely on an untracked
 local file or assume a client automatically reads it; configure machine-specific

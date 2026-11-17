@@ -94,6 +94,21 @@ const REQUIRED_ANCHORS = [
     why: "worktrees remain optional, never a gate",
   },
   {
+    id: "worktree-mutable-isolation",
+    anyOf: ["Do not create cross-checkout junctions or directory symlinks for mutable workspace trees."],
+    why: "worktree isolation must not alias another checkout's writable directories",
+  },
+  {
+    id: "worktree-link-safe-teardown",
+    anyOf: ["Never recursively delete a worktree while it contains directory links."],
+    why: "a clean Git index or shim scan cannot protect directory-link targets",
+  },
+  {
+    id: "worktree-branch-authorization",
+    anyOf: ["Worktree removal never authorizes branch deletion."],
+    why: "retiring a checkout must not implicitly delete its branch",
+  },
+  {
     id: "process-model",
     anyOf: ["Renderer → Preload IPC → Electron Main → Rust Host Core / Node Agent Runtime"],
     why: "the frozen process model must stay stated",

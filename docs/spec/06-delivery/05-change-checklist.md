@@ -201,12 +201,23 @@ Local development does not require a remote merge or a dedicated branch/worktree
 
 Apply only when cleanup of an optional worktree or branch is requested:
 
-- [ ] All changes are retained in verified commits or the destination checkout.
-- [ ] Migrated files were checked for completeness before source removal.
-- [ ] Only the authorized worktree/branch was removed.
-- [ ] `git worktree list` no longer contains that worktree.
-- [ ] No unrelated user or agent changes were removed.
-- [ ] A cleanup request did not trigger installation or restart of the daily app.
+- [ ] Tracked, staged and untracked changes are retained in verified commits
+      or the destination; source commits remain reachable there.
+- [ ] Non-regenerable ignored files are preserved with checksums; unknown
+      ignored content was not classified as disposable without inspection.
+- [ ] Directory junctions/symlinks/reparse points were inventoried without
+      following them; surviving checkouts and all shim forms have no references
+      into the retiring root.
+- [ ] Verified links were detached without touching their targets; external
+      targets and affected CLI entry points passed checks before removal.
+- [ ] Ordinary `git worktree remove` only received a link-free retiring tree;
+      errors did not trigger force deletion or a recursive shell fallback.
+- [ ] Only the authorized worktree was removed; branch deletion was separately
+      requested, not inferred from worktree cleanup.
+- [ ] `git worktree list` and directory absence confirm the requested removal.
+- [ ] Surviving checkout status, history, dependencies and preserved ignored
+      files remain intact; unexpected effects stopped cleanup for diagnosis.
+- [ ] No daily app was installed, launched or restarted as cleanup verification.
 
 ---
 

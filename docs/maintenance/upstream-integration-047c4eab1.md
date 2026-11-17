@@ -119,3 +119,34 @@ The actual `pnpm check:release-docs` command passed for source
 passed, including rejection of mismatched source versions, locale catalogs,
 highlight counts, test pins and README lines. No version, catalog entry or
 personal release-history record was changed.
+
+## Worktree cleanup follow-up (2026-11-18)
+
+After explicitly requested commit and cleanup, the release-doc repair was saved
+as `ec936b7ed`. Both source branches remained reachable from main. Three ignored
+screenshots were copied to the primary `.artifacts/subagent-ux` directory and
+verified byte-for-byte and by SHA-256 before removal.
+
+The teardown preflight repaired twelve primary i18n shims, but did not detach
+the worktree's directory junctions. The subsequent Windows `git worktree remove`
+followed shared dependencies and workspace-package links into the primary tree,
+deleting 747 tracked files and ignored dependency/build content. Shim checks and
+a clean index were insufficient; the deletion should not have started.
+
+With the pre-operation primary tree clean and committed, the exact deleted
+tracked-path set was restored from that commit; the surviving index and history
+were not reset. Ordinary offline installation did not repair partially emptied
+package directories. A forced frozen-lockfile offline reinstall re-materialized
+833 packages without registry downloads; Electron's binary entry then recovered
+from its local cache. Full JS build, desktop typecheck, 24 release regressions
+and the release-doc check passed after recovery. Both retired directories and
+Git worktree registrations were removed; the source branches and screenshots
+remained. This does not establish exhaustive recovery of all ignored content or
+installed-application behavior.
+
+The revised maintenance policy forbids new cross-checkout mutable-directory
+links, requires no-follow inventory and link-only detachment before ordinary
+Git removal, and stops cleanup on unexpected effects. Negative policy fixtures
+cover removal of the isolation, teardown and separate branch-authorization
+rules. This is a documented operational correction and policy-presence check,
+not a runtime shell interceptor or proof that arbitrary deletion commands are safe.
