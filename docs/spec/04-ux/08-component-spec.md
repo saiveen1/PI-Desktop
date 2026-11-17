@@ -972,6 +972,13 @@ can reclassify provisional answer text into the process without changing the
 stored message. Assistant errors and stopped trailing partial answers also stay
 outside it. User/system messages and compaction boundaries are unchanged.
 
+A recognizable orphan DSML suffix in assistant prose is collapsed by default.
+Expanding protocol details reveals the original fragment as inert text. It never
+changes copy/export, stored history, reasoning or tool execution. Markdown code
+and quotations remain visible as authored. A fragment is not a failed tool row:
+show same-response tool-use evidence separately from the fragment, and defer the
+actual outcome to the tool card. Keep unrelated assistant errors visible.
+
 The disclosure owns every row the turn produced before its answer: ordinary
 activity groups and `Bash` run rows alike. A turn therefore renders exactly one
 top-level process disclosure, including a Bash-only turn; no run row is a sibling

@@ -154,7 +154,8 @@ This edition strengthens the existing framework rather than replacing it.
 - **Responses stream content preservation.** The local compatibility repair
   protects meaningful streamed thinking and answers from blank terminal items,
   while retaining authoritative corrections and refusals. An exact orphan DSML
-  suffix keeps the streamed text and its diagnostic, not an executable tool call.
+  suffix keeps the streamed text and its diagnostic. In chat, recognizable trailing
+  markup folds into **Protocol details**; tool cards report actual execution.
   See the [diagnosis and limits](docs/maintenance/responses-terminal-content-loss.md);
   previously lost content cannot be recovered by this change.
 

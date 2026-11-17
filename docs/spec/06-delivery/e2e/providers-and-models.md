@@ -727,6 +727,11 @@ with only Host API controlled. Running-turn configuration remains queued.
   the full text and diagnostic, never becomes a tool call. Other nonempty revisions
   and explicit refusals stay authoritative. Intermediate events, final snapshots,
   signatures, tool order, usage, stop/error and cancellation semantics remain intact.
+- **Transcript check**: Render an answer followed by an orphan `timeout` parameter
+  and closing `calls` tag, with and without same-response tool-use evidence.
+  The answer is readable with protocol details closed; expanding reveals the exact
+  fragment as text. Genuine tool status and unrelated errors stay available.
+  Quoted/fenced examples are not folded. Copy/export retains the original source.
 - **Automated coverage**: `packages/agent-runtime/src/responses-terminal-content.test.ts`
   and `packages/agent-runtime/src/responses-terminal-content-runtime.test.ts`:
   24 cases passed through the real adapter and local HTTP runtime fixture.

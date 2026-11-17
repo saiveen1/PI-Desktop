@@ -9,6 +9,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveElectronBinary } from "./e2e/boot.mjs";
 
+const protocolDetailsOnly = process.argv.includes("--protocol-details");
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(
   join(root, "packages/agent-runtime/package.json"),
@@ -202,6 +203,7 @@ app.whenReady().then(async () => {
 
   try {
     await window.loadFile(path.join(__dirname, "index.html"));
+    if (${protocolDetailsOnly}) return finish(await runPhase("protocolDetails", "globalThis.transcriptRenderProbe(true)"));
     await window.webContents.executeJavaScript("window.addEventListener('error', event => console.error(event.error?.stack ?? event.message)); window.addEventListener('unhandledrejection', event => console.error(event.reason?.stack ?? String(event.reason)));");
     for (const [name, expression] of phases) {
       outcomes[name] = await runPhase(name, expression);
@@ -267,33 +269,19 @@ app.whenReady().then(async () => {
     true,
     `transcript scenario failed; phases=${JSON.stringify(result.phases)} phaseErrors=${JSON.stringify(result.phaseErrors)}`,
   );
-  // The merged result above already carries the geometry snapshots; this turns
-  // a failed scenario into a message that names the checks that failed.
-  // check can be read from the scenario output alone.
-  assert.equal(
-    result.runtimeSlot?.ok,
-    true,
-    `runtime status slot scenario failed: ${JSON.stringify(result.runtimeSlot?.failures)}`,
-  );
-  assert.equal(
-    result.turnProcess?.ok,
-    true,
-    `turn process scenario failed: ${JSON.stringify(result.turnProcess?.checks)}`,
-  );
-  assert.equal(
-    result.smoothText?.ok,
-    true,
-    `smooth text cadence scenario failed: ${JSON.stringify(result.smoothText)}`,
-  );
-  assert.equal(
-    result.contextOverflowRecovery?.ok,
-    true,
-    `context overflow recovery scenario failed: ${JSON.stringify(result.contextOverflowRecovery)}`,
-  );
+  if (protocolDetailsOnly) {
+    assert.equal(result.value?.protocolDetails, true, "protocol details interaction did not finish");
+  } else {
+    for (const phase of ["runtimeSlot", "turnProcess", "smoothText", "contextOverflowRecovery"]) {
+      assert.equal(result[phase]?.ok, true, `${phase} scenario failed: ${JSON.stringify(result[phase])}`);
+    }
+  }
 } finally {
   await rm(temp, { recursive: true, force: true });
 }
 
 // Keep history paging's real native-input regression in the existing CI suite.
-await import("./e2e-transcript-history-loading.mjs");
-await import("./e2e-transcript-anchor-repair.mjs");
+if (!protocolDetailsOnly) {
+  await import("./e2e-transcript-history-loading.mjs");
+  await import("./e2e-transcript-anchor-repair.mjs");
+}

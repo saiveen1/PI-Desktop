@@ -2085,6 +2085,21 @@
    `--ds-tile` card belongs only to `.tool-activity-group.has-subagents`
    (D319) and the nested `.subagent-run`. */
 
+.dsml-protocol-details {
+  margin-top: 8px;
+  color: var(--ds-text-secondary);
+  font-size: var(--text-sm);
+}
+
+.dsml-protocol-details > summary {
+  cursor: pointer;
+}
+
+.dsml-protocol-details > pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .message-output-notice {
   margin: 12px 0 0;
   color: var(--ds-warning);

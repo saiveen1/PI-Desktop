@@ -34,6 +34,14 @@ import { beginRenderDiagnostic } from "./render-diagnostics.ts";
 export const markdownRemarkPlugins = [remarkGfm, remarkCjkFriendly, remarkMath];
 const parser = unified().use(remarkParse).use(markdownRemarkPlugins);
 
+/** Verify a rare protocol-tail candidate against the same block grammar as transcript prose. */
+export function isTopLevelProseOffset(source: string, offset: number): boolean {
+  const last = parser.parse(source).children.at(-1);
+  return last?.type === "paragraph" && last.children.some((child) =>
+    child.type === "text" && child.position !== undefined &&
+    (child.position.start.offset ?? Infinity) <= offset && (child.position.end.offset ?? 0) > offset);
+}
+
 export type MarkdownBlockSplit = {
   /** Source slices that concatenate back to the input. */
   blocks: string[];

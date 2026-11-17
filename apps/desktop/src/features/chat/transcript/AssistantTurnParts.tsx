@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { AgentActivity, UiMessage } from "@pi-desktop/shared";
 import type { AssistantTurnPart } from "../../../lib/assistant-turns";
@@ -15,6 +15,8 @@ import { AssistantErrorMessage } from "./shared";
 import { useRenderBlocks, type RenderBlock } from "./render-blocks";
 import { earlyEndAdvisory } from "../../../lib/output-guard-advisory";
 import { ObserverGuardDisclosure } from "./ObserverGuardDisclosure";
+import { splitDsmlProtocolTail } from "../../../lib/dsml-protocol-tail";
+import { useDisclosureAnchorNotifier } from "../../../lib/disclosure-anchor-context";
 
 /** Message bubble that optionally applies smooth text release. */
 const SmoothMessageBubble = memo(function SmoothMessageBubble({ message, streaming, turnActive }: {
@@ -29,7 +31,10 @@ const SmoothMessageBubble = memo(function SmoothMessageBubble({ message, streami
   const prefersReducedMotion = typeof window !== "undefined" &&
     window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const enabled = smoothStreaming && !prefersReducedMotion;
-  const displayContent = useSmoothText(message.content || "", streaming, enabled);
+  // A live suffix may still become prose. Only scan settled text, never smooth-release frames.
+  const protocol = useMemo(() => streaming ? undefined : splitDsmlProtocolTail(message.content || ""),
+    [streaming, message.content]);
+  const displayContent = useSmoothText(protocol?.prose ?? (message.content || ""), streaming, enabled);
   const showCursor = streaming && enabled && Boolean(displayContent);
   const genUi = useGenUiSplit(displayContent, streaming, inlineVisualizations);
   // Cards load the pane session's own copy, never the session a path names.
@@ -38,6 +43,11 @@ const SmoothMessageBubble = memo(function SmoothMessageBubble({ message, streami
     isGenUiRemoteOwner(sessionId, s.sessions.find((session) => session.id === sessionId)),
   );
   const advisory = earlyEndAdvisory(message, streaming || turnActive);
+  const notifyAnchor = useDisclosureAnchorNotifier();
+  const termination = message.runDiagnostics?.termination;
+  const sameResponseToolUse = termination?.messageId === message.id && termination.stopReason === "toolUse";
+  const error = message.error ? <AssistantErrorMessage message={message} /> : null;
+  const protocolError = protocol && message.error?.code === "TOOL_CALL_NOT_EXECUTED";
   return (
     <div
       className={`message-bubble assistant-turn-fragment${streaming ? " streaming" : ""}${showCursor ? " smooth-cursor" : ""}`}
@@ -52,7 +62,16 @@ const SmoothMessageBubble = memo(function SmoothMessageBubble({ message, streami
         <p className="message-output-notice" role="status">{t(`outputGuard.${advisory}`)}</p>
       ) : null}
       <ObserverGuardDisclosure message={message} sessionId={sessionId} />
-      {message.error ? <AssistantErrorMessage message={message} /> : null}
+      {protocol ? (
+        <details className="dsml-protocol-details">
+          <summary onClick={(event) => notifyAnchor?.(event.currentTarget)}>
+            {sameResponseToolUse ? t("chat.dsmlToolActivity") : <>{t("chat.dsmlProtocolDetails")} — {t("chat.dsmlFragmentNotExecuted")}</>}
+          </summary>
+          <pre className="selectable">{protocol.tail}</pre>
+          {protocolError ? error : null}
+        </details>
+      ) : null}
+      {protocolError ? null : error}
     </div>
   );
 });

@@ -34,7 +34,7 @@ import { useAppStore } from "../../apps/desktop/src/stores/app-store";
 
 declare global {
   var __activityGroupRenders: string[];
-  var transcriptRenderProbe: () => Promise<unknown>;
+  var transcriptRenderProbe: (protocolDetailsOnly?: boolean) => Promise<unknown>;
   var transcriptRuntimeSlotProbe: () => Promise<unknown>;
   var smoothTextThrottleProbe: () => Promise<unknown>;
   var transcriptLongHistoryProbe: typeof runLongHistoryProbe;
@@ -410,7 +410,7 @@ globalThis.contextOverflowRecoveryProbe = async (events) => {
 };
 
 /** Real React DOM + production transcript components; no component/hook mocks. */
-globalThis.transcriptRenderProbe = async () => {
+globalThis.transcriptRenderProbe = async (protocolDetailsOnly = false) => {
   const i18n = createInstance();
   await i18n.init({
     lng: "en",
@@ -456,6 +456,26 @@ globalThis.transcriptRenderProbe = async () => {
     );
   };
   try {
+    const tail = '<｜DSML｜ parameter name="timeout" string="false">200</｜DSML｜ parameter>\n</｜DSML｜ calls>';
+    const diagnostic = message("orphan-answer", "assistant", `Kept answer.\n\n${tail}`, {
+      status: "error", error: { code: "TOOL_CALL_NOT_EXECUTED", message: "Original diagnostic", retriable: true },
+    });
+    render([message("orphan-user", "user", "Check"), diagnostic]);
+    const details = container.querySelector<HTMLDetailsElement>(".dsml-protocol-details");
+    const summary = details?.querySelector("summary");
+    assert(details && summary && !details.open, "protocol details must start collapsed");
+    assert(container.querySelector(".prose-chat")?.textContent === "Kept answer.", "protocol leaked into prose");
+    summary.click();
+    const raw = details.querySelector(":scope > pre");
+    assert(details.open && raw?.textContent === tail && !raw.childElementCount, "expansion lost inert raw text");
+    const dismiss = details.querySelector<HTMLButtonElement>(".message-error-dismiss");
+    assert(dismiss && details.textContent?.includes("Original diagnostic"), "matching diagnostic actions lost");
+    flushSync(() => dismiss.click());
+    assert(!details.querySelector(".message-error") && raw.isConnected, "dismiss should affect only the error");
+    summary.click();
+    assert(!details.open, "summary must close the disclosure again");
+    if (protocolDetailsOnly) return { ok: true, protocolDetails: true };
+
     const groups = 100;
     // The render-count regression needs ordinary activity groups. A Bash row is
     // standalone and bypasses ActivityGroup, so this fixture uses Read rows; the

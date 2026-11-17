@@ -89,8 +89,12 @@ shared by the Responses adapters, rather than a renderer workaround:
 - An empty, omitted, or whitespace-only terminal answer must not erase meaningful
   accumulated answer text from the same output item.
 - An orphan DSML terminal tail may preserve an already streamed full answer only
-  when it is an exact suffix of that answer. Keep the tail and the existing
-  diagnostic visible; do not turn markup into executable tools or invent text.
+  when it is an exact suffix of that answer. Retain the original tail and diagnostic;
+  do not turn markup into executable tools or invent text. The transcript folds
+  recognizable trailing fragments into protocol details. Expand the disclosure
+  to inspect the exact text; use structured tool records, not markup, to check
+  execution. This display rule also applies to short parameter-plus-`calls` tails
+  that did not trigger a runtime diagnostic.
 - Other nonempty final replacements, including shorter corrected answers, remain
   authoritative. Explicit refusals remain authoritative, including blank refusals.
   This is not a global "longest string wins" policy.
@@ -106,6 +110,9 @@ shared by the Responses adapters, rather than a renderer workaround:
 - Patch: `patches/@earendil-works__pi-ai@1.5.0.patch`.
 - Final projection: `packages/agent-runtime/src/runtime.ts` (`nextText`,
   `nextThinking`, and `message_end`).
+- Transcript presentation: `node --test apps/desktop/test/dsml-protocol-tail.test.mjs apps/desktop/test/dsml-transcript-rendering.test.mjs`.
+  With the existing built renderer assets, `node scripts/e2e-transcript-render.mjs --protocol-details`
+  checks native expand, dismiss and collapse in an isolated Electron fixture.
 - Diagnostic: `packages/agent-runtime/src/text-tool-call.ts`.
 - Optional local operator entry: `.agents/skills/pi-desktop-live-turn-diagnosis/SKILL.md`.
   That machine-local skill directory is ignored by Git; the repeatable procedure
