@@ -19,6 +19,17 @@ test("sidebar renders global pins once, outside project folding and history limi
     optimizeDeps: { noDiscovery: true, include: [] },
     plugins: [
       {
+        name: "sidebar-notification-snapshot",
+        enforce: "pre",
+        transform(code, id) {
+          if (!id.replaceAll("\\", "/").endsWith("/stores/runtime/notification-runtime.ts")) return;
+          // Native notification subscriptions need a fixed server snapshot in SSR.
+          const next = code.replace("    () => pendingSnapshot,", "    () => pendingSnapshot,\n    () => pendingSnapshot,");
+          assert.notEqual(next, code, "notification snapshot fixture must match its boundary");
+          return next;
+        },
+      },
+      {
         name: "sidebar-notification-center-stub",
         enforce: "pre",
         resolveId(source, importer) {
@@ -164,7 +175,7 @@ test("sidebar renders global pins once, outside project folding and history limi
     );
     assert.ok(rows(openGroup).length > 0, "an expanded group renders its rows");
     assert.doesNotMatch(openGroup, /sidebar-time-group-header/);
-    assert.match(openGroup, /class="sidebar-load-more"/);
+    assert.match(openGroup, /class="[^"]*\bsidebar-load-more\b[^"]*"/);
 
     const datedGroup =
       unpinned.match(/data-sidebar-project-group="\/dated"[\s\S]*?<\/section>/)?.[0] ?? "";

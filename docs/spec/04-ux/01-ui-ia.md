@@ -317,9 +317,11 @@ destination, chat as the home surface, tools and permissions inline.
   an empty pool disables delegation; restoring global inheritance clears both
   model and approval overrides. The dialog is inspectable while busy but saves
   only while idle, retains failures and closes on conversation switch.
-- **Conversation list**: each project group shows the ten most-recent sessions
-  in the active sort order by default; the remainder folds behind a **Load N
-  more…** row. The list has no time-group headings. Rows show the title and a
+- **Conversation list**: each local project's conversation groups count all
+  eligible members, then independently show up to ten rows in the active sort
+  order; each remainder folds behind that group's **Load N more…** row. A group
+  with four conversations immediately shows four rows and a count of four.
+  The list has no time-group headings. Rows show the title and a
   localized last-reply age through seven calendar days, then a concrete date;
   hovering or focusing a row replaces the date with its session actions. Pinned
   rows precede unpinned rows and are never pushed behind the fold; expansion is

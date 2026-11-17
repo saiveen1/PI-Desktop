@@ -4,7 +4,7 @@ import { cleanSessionLabels, type SessionLabel, type SessionColor } from "./sess
 export type SessionGroup = { id: string; name: string; color: SessionColor };
 export type SessionOrganizationCatalog = { groups: SessionGroup[]; labels: SessionLabel[] };
 export type SessionOrganization = { version: 1; scopes: Record<string, SessionOrganizationCatalog> };
-export type SidebarSessionGroup<T extends { id: string } = { id: string }> = { group: SessionGroup | null; sessions: T[] };
+export type SidebarSessionGroup<T extends { id: string } = { id: string }> = { group: SessionGroup | null; sessions: T[]; visibleSessions?: T[] };
 
 // Kept dependency-free to avoid a preferences/organization import cycle.
 function pathKey(path?: string | null): string | null {
@@ -72,5 +72,5 @@ export function groupSessionsByGroup<T extends { id: string }>(sessions: readonl
 
 export const sessionGroupKey = (scope: string, groupId: string | null) => JSON.stringify([scope, groupId]);
 export function visibleGroupedSessionIds(groups: readonly SidebarSessionGroup[], scope: string, collapsed: ReadonlySet<string>): string[] {
-  return groups.flatMap(row => collapsed.has(sessionGroupKey(scope, row.group?.id ?? null)) ? [] : row.sessions.map(session => session.id));
+  return groups.flatMap(row => collapsed.has(sessionGroupKey(scope, row.group?.id ?? null)) ? [] : (row.visibleSessions ?? row.sessions).map(session => session.id));
 }

@@ -594,28 +594,31 @@ journeys cover successful reads, saves and directory browsing.
 - **Milestone**: M5
 - **Status**: Host RPC integration-covered; full UI scenario Draft
 
-## E2E-048A: Project session lists fold after the ten most recent rows
+## E2E-048A: Project conversation groups retain complete counts and page independently
 
-- **Preconditions**: One retained project contains more than ten durable
-  sessions with distinct updated timestamps; the sidebar uses the default
-  Recently updated sort; another retained project has ten or fewer sessions.
-- **Steps**: 1) Inspect the large project's session rows and count them. Check
-  rows with recent and older replies. Hover a row, then focus one with the
-  keyboard. 2) Select the **Load N more…** control. 3) Switch the sort to Name
-  and inspect the same group before expanding. 4) Restart the app and inspect
-  the group again.
-- **Expected**: The group shows exactly ten session rows by default plus a
-  **Load N more…** control (N = remaining session count); there are no time-group
-  headers. Every row places the title before a divider and the localized last
-  reply date. Replies within seven calendar days show an exact relative day
-  (including 0–7 days); older replies show a concrete localized date. Hovering
-  or focusing a row hides its date and reveals the session action. The ten rows
-  are the first rows in the active sort order, so pinned rows are never pushed
-  behind unpinned rows and a Name sort folds everything after the first ten
-  alphabetically; selecting Load more expands the flat list and the control
-  disappears. Expansion is per group and resets on restart (not persisted); the
-  project with ten or fewer sessions shows no fold control.
-- **Specs linked**: `04-ux/01-ui-ia.md`, `04-ux/09-interaction-patterns.md`
+- **Preconditions**: One retained local project contains a 12-session group,
+  a four-session group ordered after it, and 14 ungrouped sessions. Include
+  empty groups, global pins, archived rows, running rows and a second project.
+- **Steps**: Inspect the first render without waiting or clicking Load more.
+  Refresh the unchanged session list. Load more in the large group, select
+  visible rows, fold/reopen that group, then collapse/reopen the whole project.
+  Load more in Ungrouped. Repeat with Name and Activity order and a multi-root
+  logical project; exercise the existing relative-date/action affordances.
+- **Expected**: Headings show full eligible counts (12, 4 and 14), never page
+  lengths. Each group initially shows at most ten rows independently; all four
+  rows of the small group are present immediately. Empty groups remain visible.
+  Load more reveals only its own remaining rows without changing any count;
+  its control disappears. Selection excludes unloaded/folded rows and global
+  pins are not duplicated. Running-first display preserves stored order and
+  membership. Subgroup folding retains its page; whole-project collapse resets
+  only that project's pages, without reducing counts. Expansion is not persisted.
+  Archive filters and global-pin exclusion precede counting; temporary/remote
+  lists retain their existing behavior. Reloading identical data causes no count
+  or row change. No transcript, project binding, or persisted metadata is changed.
+- **Automation**: `sidebar-group-pagination.test.mjs`,
+  `sidebar-project-sessions.test.mjs`, `sidebar-conversation-groups.test.mjs`,
+  and the isolated grouping fixture in `session-organization-user-path.test.mjs`.
+- **Specs linked**: `04-ux/01-ui-ia.md`, `04-ux/08-component-spec.md`, `04-ux/09-interaction-patterns.md`
 - **Acceptance**: C (session organization)
 - **Milestone**: M5
 - **Status**: Scenario Documented

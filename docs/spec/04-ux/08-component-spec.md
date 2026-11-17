@@ -696,7 +696,7 @@ visually distinct from list content.
   manager).
 - Pinned conversations appear once in a global section above Sessions and
   Projects, independent of project session dates, project collapse, retained
-  tabs, and each project's ten-row history limit. Each pin shows its project
+  tabs, and each conversation group's ten-row history limit. Each pin shows its project
   display name (full path on hover), or Temporary space for a path-less conversation.
   The section is omitted when empty and scrolls within `min(233px, 30vh)` when
   needed. Its rows reuse normal selection, status, hover, and overflow actions.
@@ -839,7 +839,7 @@ controls.
 | Project archive | omitted from default view; restorable from archived view |
 | Project delete | the row-menu danger action always opens a confirmation dialog naming the project and session count; X, Cancel, Escape, and backdrop dismiss without changes; explicit confirmation stops listed running sessions before removing the durable project row, owned sessions/transcripts, and project memory; the folder is never deleted; deleting a root of a stored multi-folder project group is refused until the root is detached through Edit project. Chats on a detached root remain available as a standalone project. A path the host no longer knows is still removed from the list. |
 | Project memory | row-menu editor reads and saves a compact list of titled or untitled memory cards for the exact project path; cards can be added, edited, and removed, the context is available in later chats, and it is never a higher-priority instruction |
-| Session list | exact-path matches only; no basename grouping; the latest ten unpinned sessions appear initially without time-group headings, and Load more reveals the remaining history; when Session time is enabled, project rows use the relative-age and calendar-date rules in §3.4; hovering or focusing the row replaces that date with session actions in the same slot; collapsing the project clears the expanded-list state so the next expansion returns to the initial ten |
+| Session list | resolve logical-project roots before grouping; each conversation group initially shows up to ten unpinned sessions with a complete count, and its own Load more reveals the remaining rows; when Session time is enabled, project rows use the relative-age and calendar-date rules in §3.4; hovering or focusing the row replaces that date with session actions in the same slot; collapsing the project resets only its group pages, not their counts |
 | Active group | exactly one group reflects the selected host workspace |
 | Task state | In-progress, selected, completed, and failed indicators update by session without replacing the visible transcript; precedence is in-progress, selected, then terminal outcome |
 
@@ -1580,8 +1580,13 @@ independently of the last-reply timestamp. Each project owns an ordered group
 catalog; a conversation has at most one group, and appears once regardless of
 its labels. Unknown or absent membership renders under Ungrouped. Group headings
 are independently collapsible, including empty groups; global pins stay flat.
-Project paging counts original conversations before grouping. Selection excludes
-folded and unloaded rows. Existing labels are retained, never guessed into groups.
+Each local project's conversation groups (including Ungrouped) count their full
+membership after visibility filters and global-pin exclusion, then independently
+show their first ten rows. Load more belongs to that group, reveals its remaining
+rows, and never changes another group's page or a heading's count. Collapsing the
+project resets its group pages; subgroup folding retains its page. Selection
+excludes folded and unloaded rows. Temporary and remote lists retain their
+existing unpaged behavior. Existing labels are retained, never guessed into groups.
 
 A compact Manage entry and the project menu open a scoped Groups/Labels editor.
 Names, colors and order are editable; confirmed group deletion moves conversations

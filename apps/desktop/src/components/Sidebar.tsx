@@ -48,8 +48,10 @@ import {
   sessionPinned,
 } from "../lib/sidebar-session-groups";
 import {
-  getVisibleProjectSessions,
-  updateProjectSessionExpansion,
+  expandSessionGroup,
+  paginateSessionGroups,
+  resetSessionGroupExpansion,
+  type SessionGroupExpansion,
 } from "../lib/sidebar-project-sessions";
 import { listableSessions } from "../lib/session-origin";
 import {
@@ -350,7 +352,7 @@ export function Sidebar({
     keepVisible: keepSessionHoverCardVisible,
     registerDismissGuard: registerSessionHoverCardDismissGuard,
   } = useSessionHoverCard();
-  const [expandedProjectSessions, setExpandedProjectSessions] = useState<Record<string, boolean>>({});
+  const [expandedSessionGroups, setExpandedSessionGroups] = useState<SessionGroupExpansion>({});
   const [collapsedSessionGroups, setCollapsedSessionGroups] = useState<ReadonlySet<string>>(() => new Set());
   const toggleSessionGroup = useCallback((key: string) => setCollapsedSessionGroups(previous => {
     const next = new Set(previous);
@@ -1067,17 +1069,18 @@ export function Sidebar({
   ), [filtered, pinnedSessionIds, compareSessions]);
   const sessionGroupsByScope = useMemo(() => {
     const groups = new Map<string, SidebarSessionGroup<SessionSummary>[]>();
-    const add = (scope: string, rows: SessionSummary[]) => groups.set(scope, groupSessionsByGroup(prioritizeRunningSessions(rows, runningSessions),
-      sessionOrganizationCatalog(sessionOrganization, scope, sessionLabels).groups, sessionMeta));
+    const add = (scope: string, rows: SessionSummary[], paged = false) => {
+      const grouped = groupSessionsByGroup(prioritizeRunningSessions(rows, runningSessions),
+        sessionOrganizationCatalog(sessionOrganization, scope, sessionLabels).groups, sessionMeta);
+      groups.set(scope, paged ? paginateSessionGroups(grouped, expandedSessionGroups[scope]) : grouped);
+    };
     add("temporary", temporarySessionHistory);
     for (const entry of projectEntries) {
-      const history = prioritizeRunningSessions(entry.sessions.filter(session => !pinnedSessionIds.has(session.id)), runningSessions);
-      const { visibleSessions } = getVisibleProjectSessions(history, expandedProjectSessions[entry.key] ?? false);
-      add(projectOrganizationScope(entry.path, sidebarProjectGroups), visibleSessions);
+      add(projectOrganizationScope(entry.path, sidebarProjectGroups), entry.sessions.filter(session => !pinnedSessionIds.has(session.id)), true);
     }
     for (const group of remoteProjectGroups) add(`remote:${group.project.key}`, group.sessions);
     return groups;
-  }, [temporarySessionHistory, projectEntries, pinnedSessionIds, expandedProjectSessions, remoteProjectGroups, sessionLabels, sessionMeta, sessionOrganization, sidebarProjectGroups, runningSessions]);
+  }, [temporarySessionHistory, projectEntries, pinnedSessionIds, expandedSessionGroups, remoteProjectGroups, sessionLabels, sessionMeta, sessionOrganization, sidebarProjectGroups, runningSessions]);
   const flatSessionOrder = useMemo(() => {
     const ids = pinnedSessions.map(session => session.id);
     const add = (scope: string) => ids.push(...visibleGroupedSessionIds(sessionGroupsByScope.get(scope) ?? [], scope, collapsedSessionGroups));
@@ -1228,8 +1231,8 @@ export function Sidebar({
     const normalized = normalizeProjectPath(path) || path;
     setProjectCollapsed(normalized, value);
     if (value) {
-      setExpandedProjectSessions((previous) =>
-        updateProjectSessionExpansion(previous, normalized, false),
+      setExpandedSessionGroups((previous) =>
+        resetSessionGroupExpansion(previous, projectOrganizationScope(path, sidebarProjectGroups)),
       );
     }
   };
@@ -1244,12 +1247,6 @@ export function Sidebar({
     const next = !showArchived;
     setSessionArchiveVisibility(next);
     closeMenus();
-  };
-
-  const expandProjectSessions = (projectKey: string) => {
-    setExpandedProjectSessions((previous) =>
-      updateProjectSessionExpansion(previous, projectKey, true),
-    );
   };
 
   const toggleSessionPin = (session: SessionSummary) => {
@@ -2120,6 +2117,7 @@ export function Sidebar({
 
   const renderGroupedSessionRows = (scope: string, options?: Parameters<typeof renderSessionRows>[1]) => (
     <SidebarSessionGroups key={scope} groups={sessionGroupsByScope.get(scope) ?? []}
+      onLoadMore={groupId => setExpandedSessionGroups(previous => expandSessionGroup(previous, scope, groupId))}
       scope={scope} collapsed={collapsedSessionGroups} onToggle={toggleSessionGroup}
       onManage={() => setOrganizationFor({ scope, name: projectEntries.find(entry => projectOrganizationScope(entry.path, sidebarProjectGroups) === scope)?.name
         ?? remoteProjectGroups.find(group => `remote:${group.project.key}` === scope)?.project.label ?? t("nav.sessions") })}
@@ -2131,14 +2129,6 @@ export function Sidebar({
     const projectId = projectDomId(entry.key);
     const isMenuOpen = projectMenu === entry.key;
 
-    // Show the initial page by default; the remaining sessions stay folded
-    // behind the Load more affordance.
-    const sessionsExpanded = expandedProjectSessions[entry.key] ?? false;
-    const history = prioritizeRunningSessions(entry.sessions.filter((session) => !pinnedSessionIds.has(session.id)), runningSessions);
-    const { visibleSessions, hiddenCount } = getVisibleProjectSessions(
-      history,
-      sessionsExpanded,
-    );
 
     // The live counts cover every session in the group, including pinned and
     // folded ones, because the header answers for the whole project.
@@ -2156,28 +2146,6 @@ export function Sidebar({
     // the badge when it is switched off, so both on never prints them twice.
     const showRunCount = runningAffordances.railCount && runIsLive;
 
-    const renderProjectSessions = (sessions: SessionSummary[]) => {
-      const result: React.ReactNode[] = [
-        renderGroupedSessionRows(projectOrganizationScope(entry.path, sidebarProjectGroups), {
-          projectPath: entry.path,
-          showLastReplyDate,
-        }),
-      ];
-      // Add "load more" button if there are hidden sessions
-      if (hiddenCount > 0) {
-        result.push(
-          <button
-            key="load-more"
-            type="button"
-            className="sidebar-load-more"
-            onClick={() => expandProjectSessions(entry.key)}
-          >
-            {t("nav.loadMoreCount", { count: hiddenCount })}
-          </button>
-        );
-      }
-      return result;
-    };
 
     return (
       <section
@@ -2324,7 +2292,7 @@ export function Sidebar({
         >
           <div className="sidebar-session-group-clip">
             <div className="sidebar-session-group-list">
-              {renderProjectSessions(visibleSessions)}
+              {renderGroupedSessionRows(projectOrganizationScope(entry.path, sidebarProjectGroups), { projectPath: entry.path, showLastReplyDate })}
               {entry.sessions.length === 0 ? <div className="sidebar-session-empty">{t("nav.noProjectSessions")}</div> : null}
             </div>
           </div>

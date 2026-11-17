@@ -178,10 +178,10 @@ window.sidebarLabelGroupingProbe = async () => {
   check(useAppStore.getState().sessions.length === original.sessions.length, "grouping duplicated stored conversations");
   click(document.querySelector('[data-action="select-sessions"]'));
   click(checkbox("Select visible", toolbar()));
-  check(document.querySelector(".session-selection-count").textContent.includes("14"), "visible selection duplicated conversations");
+  check(document.querySelector(".session-selection-count").textContent.includes("16"), "visible selection duplicated conversations");
   click(group("investigation").querySelector(".sidebar-conversation-group-title"));
   await waitFor(() => !chosen().includes("project-01") && !chosen().includes("project-00"), "folding removes hidden group members from selection");
-  check(rows().length === 0 && chosen().length === 12, "folded conversations stayed visible or selected");
+  check(rows().length === 0 && chosen().length === 14, "folded conversations stayed visible or selected");
   check(document.querySelector('.sidebar-conversation-group[data-group-scope="temporary"][data-sidebar-session-group="investigation"] .thread-item'), "folding leaked into another scope");
   await done();
   click(group("investigation").querySelector(".sidebar-conversation-group-title"));
@@ -211,14 +211,47 @@ window.sidebarLabelGroupingProbe = async () => {
       check(document.activeElement === header, "group heading is not keyboard focusable");
     }
   }
+  const pagedSessions = Array.from({ length: 30 }, (_, index) => session(`page-${String(index).padStart(2, "0")}`, "D:/fixture"));
+  const pagedMeta = Object.fromEntries(pagedSessions.map((item, index) => [item.id, {
+    groupId: index < 12 ? "investigation" : index < 16 ? "fix" : undefined,
+  }]));
+  flushSync(() => useAppStore.setState({ sessions: pagedSessions, sessionMeta: pagedMeta,
+    activeProjectPath: "D:/fixture", workspace: { path: "D:/fixture", name: "Fixture" }, runningSessions: {} }));
+  const count = id => Number(group(id).querySelector(".sidebar-conversation-group-count").textContent);
+  const visible = id => group(id).querySelectorAll("[data-sidebar-session-row]").length;
+  check(count("investigation") === 12 && count("fix") === 4 && count("") === 14, "group counts used a project page");
+  check(visible("investigation") === 10 && visible("fix") === 4 && visible("") === 10, "groups do not page independently");
+  check(row("page-12") && row("page-15") && !row("page-10"), "a small group lost rows behind another group's page");
+  flushSync(() => useAppStore.setState({ sessions: [...pagedSessions] }));
+  check(count("fix") === 4 && visible("fix") === 4, "refresh changed a complete group's count");
+  click(group("investigation").querySelector(".sidebar-load-more"));
+  check(visible("investigation") === 12 && visible("") === 10, "load more affected another group");
+  check(count("investigation") === 12 && !group("investigation").querySelector(".sidebar-load-more"), "loading more changed the count");
+  click(document.querySelector('[data-action="select-sessions"]'));
+  click(checkbox("Select visible", toolbar()));
+  check(chosen().length === 26 && chosen().includes("page-11") && !chosen().includes("page-26"), "selection included unloaded rows");
+  click(group("investigation").querySelector(".sidebar-conversation-group-title"));
+  await waitFor(() => chosen().length === 14, "folded group removed from paged selection");
+  check(count("investigation") === 12, "folding changed the group count");
+  click(group("investigation").querySelector(".sidebar-conversation-group-title"));
+  check(visible("investigation") === 12, "folding a subgroup lost its loaded rows");
+  await done();
+  click(project.querySelector('[data-action="toggle-project-collapse"]'));
+  await waitFor(() => project.classList.contains("is-collapsed"), "project collapsed");
+  click(project.querySelector('[data-action="toggle-project-collapse"]'));
+  await waitFor(() => !project.classList.contains("is-collapsed"), "project reopened");
+  check(count("investigation") === 12 && visible("investigation") === 10 && visible("fix") === 4, "project collapse did not reset group pages with stable counts");
+  click(group("").querySelector(".sidebar-load-more"));
+  check(visible("") === 14 && visible("investigation") === 10 && count("") === 14, "ungrouped pagination leaked into another group");
   flushSync(() => useAppStore.setState({
+    sessions: original.sessions, activeProjectPath: original.activeProjectPath, workspace: original.workspace, runningSessions: original.runningSessions,
     sessionMeta: original.sessionMeta, sessionLabels: original.sessionLabels,
     sessionOrganization: original.sessionOrganization,
     selectSession: original.selectSession, activeSessionId: original.activeSessionId,
   }));
   document.documentElement.dataset.theme = "light";
   document.getElementById("root").style.width = "300px";
-  return { passed: true, uniqueRows: 1, uniqueSelected: 14, layouts: 6 };
+  return { passed: true, uniqueRows: 1, uniqueSelected: 16, layouts: 6, pagination: true };
 };
 
 window.organizationProbe = async () => {

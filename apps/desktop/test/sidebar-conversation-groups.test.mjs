@@ -87,10 +87,10 @@ test("the production sidebar keeps running rows and complete status counts acros
   const { useAppStore } = await ssr.load("/src/stores/app-store.ts");
   const { Sidebar } = await ssr.load("/src/components/Sidebar.tsx");
   const roots = [{ path: "/app", name: "App", position: 0 }, { path: "/plugins", name: "Plugins", position: 1 }];
-  const sessions = Array.from({ length: 12 }, (_, index) => ({ id: `root-${index}`, title: `Conversation ${index}`, projectPath: roots[index % 2].path,
+  const sessions = Array.from({ length: 16 }, (_, index) => ({ id: `root-${index}`, title: `Conversation ${index}`, projectPath: roots[index % 2].path,
     mode: "agent", createdAt: "2026-11-08T10:00:00Z", updatedAt: "2026-11-08T10:00:00Z" }));
   const sessionMeta = Object.fromEntries(sessions.map((session, index) => [session.id, {
-    order: index, groupId: index === 11 || index === 1 ? "investigation" : undefined,
+    order: index, groupId: index !== 0 && index !== 14 ? "investigation" : undefined,
     ...(index === 0 ? { pinned: true, labelIds: ["a", "b"] } : {}),
   }]));
   useAppStore.setState({ sessions, openProjectPaths: ["/app", "/plugins"], openProjects: roots.map(root => ({ path: root.path, name: root.name })),
@@ -115,7 +115,8 @@ test("the production sidebar keeps running rows and complete status counts acros
   assert.ok(pinnedRow.indexOf('class="session-row-labels"') < pinnedRow.indexOf('class="thread-item-title"'), "label dots precede the title in the production row");
   assert.equal((html.match(/data-sidebar-session-row="root-1"/g) ?? []).length, 1);
   assert.equal((html.match(/data-sidebar-session-row="root-11"/g) ?? []).length, 1);
-  assert.doesNotMatch(html, /data-sidebar-session-row="root-10"/);
+  assert.match(html, /data-sidebar-session-row="root-14"/);
+  assert.doesNotMatch(html, /data-sidebar-session-row="root-15"/);
   assert.ok(html.indexOf('data-sidebar-session-row="root-11"') < html.indexOf('data-sidebar-session-row="root-1"'));
   const assertCounts = markup => {
     for (const state of ["running", "waiting", "completed", "failed"]) {
