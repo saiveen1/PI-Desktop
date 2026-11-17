@@ -43,6 +43,22 @@ describe("delegation history boundary", () => {
     expect(isDelegationRunHistoryPage({ entries: [entry(), entry()], nextOffset: null })).toBe(false);
   });
 
+  it("keeps a recorded effective thinking level optional and strictly typed", () => {
+    // Legacy rows recorded none: the property must stay missing, not defaulted.
+    expect(isDelegationRunHistoryEntry(entry())).toBe(true);
+    expect("thinkingLevel" in entry()).toBe(false);
+    // Recorded concrete levels, explicit off and explicit omit stay distinct.
+    for (const thinkingLevel of ["off", "minimal", "low", "medium", "high", "xhigh", "max", "omit"]) {
+      const recorded = entry({ thinkingLevel });
+      expect(isDelegationRunHistoryEntry(recorded)).toBe(true);
+      expect((recorded as { thinkingLevel?: string }).thinkingLevel).toBe(thinkingLevel);
+    }
+    // Unknown or malformed values never enter the typed entry.
+    for (const thinkingLevel of ["turbo", "OFF", " high", "", null, 0, true, {}, ["high"], { level: "high" }]) {
+      expect(isDelegationRunHistoryEntry(entry({ thinkingLevel }))).toBe(false);
+    }
+  });
+
   it("validates optional recorded execution times and usage without inventing legacy facts", () => {
     expect(isDelegationRunHistoryEntry(entry({ startedAt: "2026-11-05T12:00:00.000Z",
       usage: { inputTokens: 50, outputTokens: 10, totalTokens: 60 }, turns: 2, toolCalls: 1 }))).toBe(true);

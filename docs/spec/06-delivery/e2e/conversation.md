@@ -5065,9 +5065,11 @@ Build two actual runtimes with identical configuration and different scratch dir
      text. Inspect the compact file count/diff header; expand inline, test hidden
      focus and independent disclosure choices, and route a path to Review.
      Repeat inside a child task turn and with more than twelve files.
-  5. Inspect chronological single-line task activity in the conversation and
+  5. Inspect chronological compact task activity in the conversation and
      Active / Needs attention / Completed counts in the side-panel index.
-     Check description-first labels, stable identity colors and explicit outcomes.
+     Check description-first labels, robot/Subagent identity cues, stable accents,
+     explicit outcomes and recorded model/effort without expansion. Missing
+     historical effort must not be guessed; `off` and `omit` remain distinct.
      Lifecycle rows must not create tasks; starting a Task must not open a tab.
   6. Open a task, use All tasks, choose another, and return to a resumed task.
      Verify source-session tabs coexist, the latest Task handle owns current

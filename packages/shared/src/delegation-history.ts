@@ -1,5 +1,7 @@
 import { isDelegationApprovalPrompt, type DelegationApprovalPrompt } from "./delegation-approval.js";
 import type { MessageUsage } from "./types/messages.js";
+import type { SessionThinkingLevel } from "./types/models.js";
+import { isSessionThinkingLevel } from "./thinking-levels.js";
 import { parseSubagentObservation, type SubagentObservation } from "./delegation-observability.js";
 
 export type DelegationRunHistoryQuery = {
@@ -10,6 +12,12 @@ export type DelegationRunHistoryEntry = {
   delegationId: string; messageId: string; agentName: string; description: string;
   status: "running" | "completed" | "failed" | "stopped" | "aborted" | "timed_out" | "interrupted";
   createdAt: string; completedAt?: string; modelId?: string; modelReason?: string; requestedModel?: string;
+  /**
+   * Effective thinking level the run recorded in its own Task result, which is
+   * neither the requested configuration nor the current session setting.
+   * Absent for legacy rows that recorded none; `off` and `omit` stay distinct.
+   */
+  thinkingLevel?: SessionThinkingLevel;
   /** Actual recorded start, unlike createdAt which can fall back to the Task row timestamp. */
   startedAt?: string;
   usage?: Pick<MessageUsage, "inputTokens" | "outputTokens" | "totalTokens">;
@@ -75,6 +83,7 @@ export function isDelegationRunHistoryEntry(v: unknown): v is DelegationRunHisto
   for (const key of ["projectTitle", "modelId", "modelReason", "requestedModel"] as const) {
     if (v[key] !== undefined && !text(v[key])) return false;
   }
+  if (v.thinkingLevel !== undefined && !isSessionThinkingLevel(v.thinkingLevel)) return false;
   if (v.report !== undefined && !text(v.report)) return false;
   if (v.error !== undefined && (!record(v.error) || !text(v.error.code, 256) || !text(v.error.message))) return false;
   for (const key of ["taskTruncated", "reportTruncated"] as const) {

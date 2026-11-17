@@ -8,6 +8,9 @@ import { ConversationTopbar } from "../../src/components/ConversationTopbar";
 import { SubagentTranscriptTab } from "../../src/components/workpanel/SubagentTranscriptTab";
 import { SessionDelegationsPanel } from "../../src/features/delegations/SessionDelegationsPanel";
 import { sessionDelegationsSource } from "../../src/features/delegations/session-delegations-source";
+import { delegationApprovalState } from "../../src/lib/delegation-approval-state";
+import { SubagentTaskList } from "../../src/features/chat/transcript/SubagentTaskList";
+import { ThinkingRow } from "../../src/features/chat/transcript/shared";
 import { api } from "../../src/lib/api";
 import { useAppStore } from "../../src/stores/app-store";
 import { switchWorkPanelContextState } from "../../src/lib/work-panel-tabs";
@@ -21,16 +24,17 @@ import "../../src/styles/work-panel.css";
 await i18n.use(initReactI18next).init({ lng: "en", resources: Object.fromEntries(Object.entries(catalogs).map(([locale, catalog]) => [locale, { translation: catalog }])) });
 window.piDesktop = { platform: "win32", invoke: async () => ({ ok: true, data: {} }), on: () => () => {} };
 const events = new Set(), approvalEvents = new Set(), calls = [];
-let rows = [], messages = [], approvals = [], failure = false, detailFailure = false, delayed;
+let rows = [], messages = [], approvals = [], failure = false, detailFailure = false, delayed, delayedApproval;
 const stamp = "2026-11-12T10:00:00.000Z";
 const task = (id, status = "running") => ({ id: `task-${id}`, role: "tool", content: "", createdAt: stamp,
   toolName: "Task", toolCallId: `call-${id}`, toolStatus: "success", status: "complete",
   toolArgs: { agent: "reviewer", description: `Review ${id}`, task: `Validate ${id}` },
-  toolResult: { details: { delegationId: id, status, ...(status === "failed" ? { error: { code: "FIXTURE", message: "Fixture failure" } } : {}) } },
+  toolResult: { details: { delegationId: id, status, modelId: 'fixture/effective-model-with-long-name', ...(id === 'old' ? {} : { thinkingLevel: id === 'done' ? 'off' : id === 'stopped' ? 'omit' : 'high' }), ...(status === "failed" ? { error: { code: "FIXTURE", message: "Fixture failure" } } : {}) } },
 });
 const row = (id, status = "running", sessionId = "alpha") => ({ id, sessionId, sessionTitle: sessionId,
   messageId: `task-${id}`, delegationId: id, agentName: "reviewer", description: `Review ${id}`, task: `Validate ${id}`,
   report: id === "old" ? "Retained historical report" : undefined, createdAt: stamp, status,
+  modelId: 'fixture/effective-model-with-long-name', ...(id === 'old' ? {} : { thinkingLevel: id === 'done' ? 'off' : id === 'stopped' ? 'omit' : 'high' }),
 });
 const approval = (sessionId, requestId) => ({ sessionId, requestId, revision: 2, status: "pending", createdAt: stamp,
   expiresAt: new Date(Date.now() + 3600000).toISOString(), description: `Approval ${sessionId}`,
@@ -38,13 +42,16 @@ const approval = (sessionId, requestId) => ({ sessionId, requestId, revision: 2,
 });
 api.listDelegationHistory = async query => {
   calls.push({ kind: "history", query });
-  if (delayed && query.sessionId === "alpha") { const promise = delayed.promise; delayed = null; return promise; }
+  if (delayed && query.sessionId === "alpha") { const read = delayed; delayed = null; read.onRead?.(); return read.promise; }
   if (failure) throw Error("Fixture read failure");
   const selected = rows.filter(item => item.sessionId === query.sessionId);
   return query.offset === 0 ? { entries: selected.filter(item => item.delegationId !== "old"), nextOffset: selected.some(item => item.delegationId === "old") ? 100 : null }
     : { entries: selected.filter(item => item.delegationId === "old"), nextOffset: null };
 };
-api.listDelegationApprovals = async () => ({ requests: approvals });
+api.listDelegationApprovals = async () => {
+  if (delayedApproval) { const read = delayedApproval; delayedApproval = null; read.onRead?.(); return read.promise; }
+  return { requests: approvals };
+};
 api.onDelegationApprovalChanged = callback => { approvalEvents.add(callback); return () => approvalEvents.delete(callback); };
 api.onAgentEvent = callback => { events.add(callback); return () => events.delete(callback); };
 api.getSession = async (sessionId, options) => {
@@ -77,7 +84,11 @@ function Harness() {
   return <main className="fixture-shell">
     <section className="fixture-main"><ConversationTopbar sidebarCollapsed={false} workPanelOpen={open}
       onToggleSidebar={() => {}} onNewTask={() => {}} onOpenSearch={() => {}} onOpenDelegations={() => { globalHistory++; }} />
-      <div className="fixture-chat"><div style={{ height: 1500 }}>Parent conversation stays in place.</div></div>
+      <div className="fixture-chat">
+        <ThinkingRow message={{ id: 'fixture-thought', role: 'assistant', content: '', thinking: 'Fixture reasoning', status: 'complete' }} streaming={false} />
+        <SubagentTaskList items={[task('live'), task('done', 'completed')].map(message => ({ kind: 'tool', message: { ...message, id: `inline-${message.id}` } }))} />
+        <div style={{ height: 1500 }}>Parent conversation stays in place.</div>
+      </div>
     </section><aside className="fixture-panel"><Panel /></aside>
   </main>;
 }
@@ -108,6 +119,12 @@ async function populate() {
   publishApprovals([approval("alpha", "own"), approval("beta", "foreign")].map(request => ({ ...request, revision })));
   await sessionDelegationsSource(api, "alpha").reload(); await settle();
 }
+function heldRead() {
+  let resolve, onRead;
+  const promise = new Promise(done => { resolve = done; });
+  const started = new Promise(done => { onRead = done; });
+  return { promise, resolve, onRead, started };
+}
 window.sessionDelegationsProbe = async stage => {
   if (stage === "prepare") {
     await settle();
@@ -117,12 +134,56 @@ window.sessionDelegationsProbe = async stage => {
   } else if (stage === "navigate") {
     await settle();
     check(document.querySelector(".session-subagents-empty"), `Keyboard entry did not open the empty index: ${JSON.stringify({ focus: document.activeElement?.outerHTML, tabs: useAppStore.getState().workPanelTabs, active: useAppStore.getState().activeWorkPanelTabId, panel: document.querySelector(".fixture-panel")?.textContent })}`);
+    const emptyRead = heldRead(); delayed = emptyRead;
+    await click('.session-subagents-heading button');
+    check(query('.session-subagents-empty'), 'Hydrated empty state disappeared during manual refresh');
+    check(!query('.session-subagents-scroll').textContent.includes(i18n.t('delegationHistory.loading')), 'Empty refresh flashed first-load text');
+    check(!query('.session-subagents-button').textContent.includes(i18n.t('subagentControls.loading')), 'Empty topbar flashed loading');
+    check(query('.session-subagents-heading button').disabled && query('.session-subagents-heading button').getAttribute('aria-busy') === 'true', 'Manual refresh has no bounded button feedback');
+    emptyRead.resolve({ entries: [], nextOffset: null }); await settle();
+    check(!query('.session-subagents-heading button').disabled, 'Manual refresh stayed disabled');
     await populate();
     const label = query(".session-subagents-button").getAttribute("aria-label");
     check(label.includes("1 running") && label.includes("1 awaiting approval") && !label.includes("2 running"), "Counts mix approvals, creation or other sessions");
     check(document.querySelectorAll('.session-subagents-panel [data-message-id="task-live"]').length === 1, "History/live snapshots duplicated");
     check(query('.session-subagents-panel [data-message-id="task-old"]'), "Index omitted history outside the chat window");
     check(!document.querySelector('[data-message-id="task-poll"], [data-message-id="task-nested"], [data-message-id="task-foreign"]'), "Index contains lifecycle or foreign tasks");
+    check(query('[data-message-id="task-live"] .subagent-task-kind').textContent === i18n.t('subagentControls.taskLabel'), 'Task identity is missing');
+    check(query('[data-message-id="task-live"] .subagent-task-icon .lucide-bot'), 'Delegation still looks like a thinking row');
+    check(query('[data-message-id="task-live"] .subagent-model-info').textContent.includes('fixture/effective-model-with-long-name'), 'Index hides effective model');
+    check(query('[data-message-id="task-live"] .subagent-model-effort').textContent.includes('high'), 'Index hides effective effort');
+    check(query('[data-message-id="task-old"] .subagent-model-effort').textContent.includes(i18n.t('subagentControls.notRecorded')), 'Legacy effort was guessed');
+    check(query('[data-message-id="task-done"] .subagent-model-effort').textContent.includes('off'), 'Explicit off was lost');
+    check(query('[data-message-id="task-stopped"] .subagent-model-effort').textContent.includes('omit'), 'Explicit omit was lost');
+    for (const trigger of ['history', 'lifecycle', 'approval']) {
+      const liveRow = query('[data-message-id="task-live"]');
+      const liveButton = liveRow.querySelector('.subagent-task-open');
+      liveButton.focus();
+      const beforeRefresh = liveRow.getBoundingClientRect().top;
+      const scrollBefore = query('.session-subagents-scroll').scrollTop;
+      const read = heldRead();
+      if (trigger === 'approval') { delayedApproval = read; void delegationApprovalState(api).reload(); }
+      else {
+        delayed = read;
+        if (trigger === 'history') void sessionDelegationsSource(api, 'alpha').reload();
+        else for (const listener of events) listener({ sessionId: 'alpha', event: { type: 'tool_end', toolCallId: 'poll-refresh', result: { details: { delegationId: 'live' } } } });
+      }
+      await read.started; await settle();
+      check(!query('.session-subagents-scroll').textContent.includes(i18n.t('delegationHistory.loading')), `${trigger}: background refresh inserted a loading paragraph`);
+      check(liveRow === query('[data-message-id="task-live"]') && document.activeElement === liveButton, `${trigger}: refresh replaced the task or lost focus`);
+      check(Math.abs(liveRow.getBoundingClientRect().top - beforeRefresh) < 1 && query('.session-subagents-scroll').scrollTop === scrollBefore, `${trigger}: refresh shifted reading position`);
+      read.resolve(trigger === 'approval' ? { requests: approvals } : { entries: rows.filter(item => item.sessionId === 'alpha'), nextOffset: null });
+      await settle();
+      check(document.activeElement === liveButton, `${trigger}: settlement lost keyboard focus`);
+    }
+    const creatingRow = query('[data-message-id="task-starting"]');
+    const creatingButton = creatingRow.querySelector('.subagent-task-open');
+    const creatingTone = creatingRow.dataset.tone;
+    creatingButton.focus();
+    messages = messages.map(message => message.id === 'task-starting' ? task('starting') : message);
+    flushSync(() => useAppStore.setState({ messages })); await settle();
+    check(creatingRow === query('[data-message-id="task-starting"]') && document.activeElement === creatingButton, 'Receiving a delegation handle replaced the row or lost focus');
+    check(creatingRow.dataset.tone === creatingTone, 'Result arrival changed task identity color');
     await click(".session-subagents-button");
     check(useAppStore.getState().workPanelTabs.filter(tab => tab.kind === "subagents").length === 1, "Repeated entry duplicated the index");
     await click(".session-subagents-approval button");
@@ -150,6 +211,7 @@ window.sessionDelegationsProbe = async stage => {
     await click('[aria-label="All tasks"]');
     await click('[data-message-id="task-live"] .subagent-task-open');
     check(query(".subagent-transcript-tab").textContent.includes("Live child evidence"), "Existing child transcript is not reused");
+    check(query('.subagent-transcript-heading .subagent-model-info').textContent.includes('fixture/effective-model-with-long-name'), 'Detail model differs from the list');
     await click('.subagent-transcript-heading .stop-btn');
     check(calls.some(call => call.kind === "stop" && call.request.sessionId === "alpha" && call.request.delegationIds[0] === "live"), "Stop lost session/task identity");
     rows = rows.map(item => item.delegationId === "live" ? { ...item, status: "completed" } : item);
@@ -170,13 +232,22 @@ window.sessionDelegationsProbe = async stage => {
     switchSession("alpha", messages); await settle();
     failure = true; await sessionDelegationsSource(api, "alpha").reload(); await settle();
     check(query(".session-subagents-panel [role=alert]") && query(".session-subagents-button").textContent.includes("Status unavailable"), "Read error pretends success");
-    failure = false; await click(".session-subagents-heading button");
+    failure = false;
+    const recovery = heldRead(); delayed = recovery;
+    await click('.session-subagents-heading button');
+    check(query('.session-subagents-panel [role=alert]'), 'Retry cleared stale warning before success');
+    check(document.querySelector('[data-message-id="task-old"]'), 'Refresh failure discarded existing history');
+    recovery.resolve({ entries: rows.filter(item => item.sessionId === 'alpha'), nextOffset: null }); await settle();
     check(!document.querySelector(".session-subagents-panel [role=alert]"), "Refresh did not recover");
     rows = rows.filter(item => item.sessionId === "alpha").map(item => ({ ...item, status: "completed" }));
     publishApprovals(approvals.map(item => ({ ...item, status: "approved" })));
     flushSync(() => useAppStore.setState({ messages: [task("live", "completed"), task("failed", "completed"), task("done", "completed"), task("stopped", "completed")], runningSessions: {} }));
     await sessionDelegationsSource(api, "alpha").reload(); await settle();
     check(query(".session-subagents-button").textContent.includes("History 5"), "Settled entry vanished or history count is wrong");
+    const settledRead = heldRead(); delayed = settledRead;
+    const settling = sessionDelegationsSource(api, 'alpha').reload(); await settle();
+    check(query('.session-subagents-button').textContent.includes('History 5'), 'Background refresh replaced settled count with loading');
+    settledRead.resolve({ entries: rows, nextOffset: null }); await settling; await settle();
     await click('.ct-actions [aria-label="Global delegations"]'); check(globalHistory === 1, "Global history is no longer reachable");
   }
   return { stage, passed: true };
@@ -186,6 +257,12 @@ window.sessionDelegationsLayout = async (theme, language) => {
   await i18n.changeLanguage(language);
   await populate();
   await click(".session-subagents-button");
+  query('.fixture-chat').scrollTop = 0;
+  for (const element of document.querySelectorAll('.subagent-task-row, .subagent-model-info')) {
+    check(element.scrollWidth <= element.clientWidth + 1, `${element.className} overflows at ${innerWidth}px`);
+  }
+  check(query('.fixture-chat .thinking .lucide-sparkles'), 'Thinking icon changed');
+  check(query('.fixture-chat .subagent-task-icon .lucide-bot'), 'Inline task still uses a thinking icon');
   for (const selector of [".conversation-topbar", ".session-subagents-panel", ".session-subagents-heading"]) {
     const element = query(selector);
     check(element.scrollWidth <= element.clientWidth + 1, `${selector} overflows`);

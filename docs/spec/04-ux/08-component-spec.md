@@ -1507,6 +1507,13 @@ opens automatically. A second row activation does not close the tab.
   of the parent's visible history/search range. Lifecycle tools, nested child
   tools and background Bash jobs never inflate counts. The shared subscription
   releases on unmount; stale requests cannot publish after refresh or switching.
+  First-load feedback appears only before a successful read and without usable
+  task/approval rows. Refresh-only transitions retain populated or empty
+  snapshots without loading paragraphs, row replacement, focus loss or layout
+  shifts; actual task additions and status changes still update immediately. Manual refresh reports busy state on its existing button. Failed reads
+  retain prior information and a stale-status warning until a successful read;
+  retries alone never clear that warning. Topbar history counts also stay visible
+  during background refresh.
 - The index uses existing task rows and authorized controls, plus this session's
   live approvals targeting their exact request/revision. Missing historical
   details use a bounded, local session read without moving the parent transcript.
@@ -1515,10 +1522,12 @@ opens automatically. A second row activation does not close the tab.
   A retained report is shown when its original child answer is not in the loaded
   range; truncation remains explicit. Read errors expose Retry.
 - The selected detail header shows the task description as its title, with
-  role/name fallback, its stable identity icon, passive effective model plus
-  concrete non-`off` thinking text, and authorized Stop/failed Retry controls.
-  `off`, `omit`, or unsupported reasoning adds no thinking suffix. Model data
-  comes from the selected Task's recorded metadata, never current Settings.
+  role/name fallback, a robot identity icon and explicit Subagent label, passive
+  recorded model/effort metadata, and authorized Stop/failed Retry controls.
+  The shared metadata line shows canonical values including explicit `off` and
+  `omit`; absent/invalid values are labeled not recorded, never inferred from
+  requested models or current Settings. The session index uses the same fields,
+  including optional recorded `thinkingLevel` from Host history.
   The detail footer contains the real direct-child composer and the admitted
   failure-policy summary; the task index contains neither. There is no model
   picker or placeholder input. Active children show Send; settled chains show
@@ -2797,7 +2806,7 @@ and fan-out topology presentation in D265/D268/D271/D302/D319/D323 and
 runtime, attribution, permission, or lifecycle contracts. See
 [the task-first ADR](../../adr/task-first-transcript-presentation.md).
 
-`SubagentTaskList` keeps chronological single-line task activity in the main
+`SubagentTaskList` keeps chronological compact task activity in the main
 conversation. In the side-panel index it renders **Active**, **Needs attention**,
 and **Completed** sections with counts; empty sections are omitted. The latest
 snapshot determines its section: running/creating is active, `completed` is
@@ -2805,18 +2814,22 @@ completed, and other outcomes need attention. Only Task starts create entries;
 lifecycle rows never create tasks or inflate these counts.
 
 - Prefer the Task's short `description` as the primary label, then its requested
-  role/agent name, then a localized unnamed fallback. Side-panel labels wrap;
-  inline labels truncate before their explicit outcome and retain the full title.
+  role/agent name, then a localized unnamed fallback. Labels and metadata wrap
+  within narrow panels; the localized outcome remains explicit.
 - Each row writes its actual localized outcome, including creation, completion,
   failure, denial, timeout, stop, or abort. Neutral skipped/interrupted/context
   results keep their own text and do not claim execution or successful work.
-- Four stable identity icon colors (lavender, teal, blue, amber) derive from task
-  identity, not outcome or row order. Failures and warnings retain semantic ink
+- Four stable identity icon colors (lavender, teal, blue, amber) derive from the
+  original Task message ID, shared by live and historical projections, never
+  outcome or row order. Failures and warnings retain independent semantic ink
   and text; a completed task does not turn its identity green.
-- There is no coordinator root, connector, dotted canvas, per-row model/step
-  metadata, or enclosing task-group disclosure. A lone task uses the same list
-  language as parallel work. Parent thinking, workspace tools, and lifecycle
-  rows remain ordinary process activity around the task list.
+- Robot icons and a visible Subagent label distinguish tasks from Sparkles
+  thinking disclosures. A navigation arrow indicates opening the task detail.
+  Recorded model and effort occupy a secondary line shared with that detail.
+  There is no coordinator root, connector, dotted canvas, step-count metadata
+  or enclosing task-group disclosure. A lone task uses the same list language
+  as parallel work. Parent thinking, workspace tools, and lifecycle rows remain
+  ordinary process activity around the task list.
 - A row opens or activates its source session's dedicated `subagent` work-panel
   tab. It is navigation, not a node/result disclosure or a second-click close
   toggle. Existing tabs coexist and retain normal reorder/close behavior;

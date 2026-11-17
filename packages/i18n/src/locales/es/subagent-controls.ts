@@ -1,4 +1,9 @@
 export const subagentControls = {
+  taskLabel: "Subagente",
+  effort: "Esfuerzo: {{level}}",
+  notRecorded: "No registrado",
+  modelUnrecorded: "Modelo no registrado",
+  refreshFailed: "No se pudo actualizar el estado. Se conserva la información anterior; actualiza para reintentar.",
   failureTitle: "Política de fallos",
   mode: "Si falla el subagente",
   inherit: "Seguir el comportamiento actual / de sesión",

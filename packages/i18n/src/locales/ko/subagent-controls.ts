@@ -1,4 +1,9 @@
 export const subagentControls = {
+  taskLabel: "하위 에이전트",
+  effort: "추론 강도: {{level}}",
+  notRecorded: "기록 없음",
+  modelUnrecorded: "모델 기록 없음",
+  refreshFailed: "상태 업데이트에 실패했습니다. 이전 정보를 유지합니다. 새로 고침하여 다시 시도하세요.",
   failureTitle: "실패 정책",
   mode: "하위 에이전트 실패 시",
   inherit: "기존 / 세션 동작 따르기",

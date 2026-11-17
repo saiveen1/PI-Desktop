@@ -436,6 +436,8 @@
 }
 
 .subagent-transcript-model {
+  order: 1;
+  flex-basis: 100%;
   color: var(--ds-text-muted);
   font-size: var(--text-xs-plus);
   font-weight: var(--font-weight-normal);

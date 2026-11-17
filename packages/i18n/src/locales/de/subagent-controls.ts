@@ -1,4 +1,9 @@
 export const subagentControls = {
+  taskLabel: "Unteragent",
+  effort: "Denkaufwand: {{level}}",
+  notRecorded: "Nicht aufgezeichnet",
+  modelUnrecorded: "Modell nicht aufgezeichnet",
+  refreshFailed: "Statusaktualisierung fehlgeschlagen. Zuvor geladene Informationen bleiben erhalten; zum Wiederholen aktualisieren.",
   failureTitle: "Fehlerstrategie",
   mode: "Bei Unteragentenfehler",
   inherit: "Bisherigem / Sitzungsverhalten folgen",

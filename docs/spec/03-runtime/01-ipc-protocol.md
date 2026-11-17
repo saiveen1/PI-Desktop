@@ -520,6 +520,14 @@ delegation/message identity, recorded task/model/result/status/timestamps and
 explicit task/report truncation flags. Details are a projection, never live
 authorization. Sender and shared payload validation remain mandatory.
 
+Run entries may include optional `thinkingLevel: SessionThinkingLevel`, copied
+only from the selected Task result's recorded effective value. Canonical levels
+including `off` and `omit` stay distinct. Host projection omits unknown/malformed
+values; shared validation rejects an invalid present field. Legacy absence stays
+absent, never inferred from requested parameters or current Settings. This is an
+additive read projection of existing message metadata, with no storage migration,
+new channel or protocol-version bump.
+
 Receipt lists contain only terminal prompts with `settledAt` and optional
 `readAt`; main awaits its serialized Host write queue before listing. Receipt
 recording is internal and not exposed to renderer IPC. Read/clear never call

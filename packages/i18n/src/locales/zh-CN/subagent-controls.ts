@@ -1,4 +1,9 @@
 export const subagentControls = {
+  taskLabel: "子代理",
+  effort: "effort：{{level}}",
+  notRecorded: "未记录",
+  modelUnrecorded: "模型未记录",
+  refreshFailed: "状态更新失败，已保留上次读取的信息；点击刷新重试。",
   failureTitle: "失败策略",
   mode: "子代理失败时",
   inherit: "沿用现有／会话行为",

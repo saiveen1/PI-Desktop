@@ -1,4 +1,9 @@
 export const subagentControls = {
+  taskLabel: "Sous-agent",
+  effort: "Effort : {{level}}",
+  notRecorded: "Non enregistré",
+  modelUnrecorded: "Modèle non enregistré",
+  refreshFailed: "Échec de la mise à jour du statut. Les informations précédentes sont conservées ; actualisez pour réessayer.",
   failureTitle: "Politique d’échec",
   mode: "En cas d’échec du sous-agent",
   inherit: "Suivre le comportement actuel / de session",

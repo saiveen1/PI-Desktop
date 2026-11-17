@@ -27,7 +27,7 @@ function SessionButton({ sessionId }: { sessionId: string }) {
   else if (state.starting) parts.push(t("subagentControls.startingCount", { count: state.starting }));
   if (state.attention) parts.push(`${t("chat.taskGroups.attention")} ${state.attention}`);
   if (state.error || approvals.loadError) parts.push(t("subagentControls.statusUnavailable"));
-  else if (!parts.length && (state.loading || approvals.loading)) parts.push(t("subagentControls.loading"));
+  else if (!parts.length && ((state.loading && !state.loaded) || (approvals.loading && !approvals.loaded))) parts.push(t("subagentControls.loading"));
   else if (!parts.length && state.total) parts.push(t("subagentControls.historyCount", { count: state.total }));
   const summary = parts.join(" · ");
   const label = [t("subagentControls.indexLabel"), summary].filter(Boolean).join(" · ");

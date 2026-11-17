@@ -159,3 +159,21 @@ test("settlement message_end refreshes tasks outside the loaded transcript witho
   assert.equal(reads, 2); assert.equal(source.getSnapshot().entries[0].status, "completed");
   release();
 });
+
+test("live and historical task metadata agree without filling legacy gaps from a request", () => {
+  for (const thinkingLevel of [undefined, "off", "omit", "high", "max"]) {
+    const metadata = { modelId: "effective-model", ...(thinkingLevel === undefined ? {} : { thinkingLevel }) };
+    const recorded = { ...entry("a", "completed"), requestedModel: "requested-model", ...metadata };
+    const live = { ...task("a", "completed"), toolArgs: { model: "requested-model" },
+      toolResult: { details: { delegationId: "a", status: "completed", ...metadata } } };
+    const history = sessionDelegationTasks("one", [recorded], [], false).tasks[0].message.toolResult.details;
+    const current = sessionDelegationTasks("one", [], [live], false).tasks[0].message.toolResult.details;
+    assert.equal(history.modelId, current.modelId);
+    assert.equal(history.thinkingLevel, current.thinkingLevel);
+    assert.equal(Object.hasOwn(history, "thinkingLevel"), thinkingLevel !== undefined);
+    const stale = sessionDelegationTasks("one", [recorded], [task("a")], true).tasks[0].message.toolResult.details;
+    assert.equal(stale.status, "completed");
+    assert.equal(stale.modelId, "effective-model");
+    assert.equal(stale.thinkingLevel, thinkingLevel);
+  }
+});

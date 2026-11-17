@@ -1081,13 +1081,18 @@ and `fully-folded` layouts remain supported. See
   | `--ds-task-blue` | `#91bfff` | `#3d70b0` |
   | `--ds-task-amber` | `#e9c07e` | `#96631d` |
 
-- Identity derives from stable task identity, not row order, status, model, or
-  list grouping. Main-chat task activity is single-line and chronological; only
-  the side-panel index groups **Active**, **Needs attention**, and **Completed**
-  with counts. Outcomes remain explicit text with independent failure/diff ink.
-- The task description is the primary label, with role/name fallback. Rows have
-  no model/step metadata or enclosing task-group disclosure; details are reached
-  through the source session's normal work-panel tabs.
+- Identity derives from the original Task message ID, shared by live/history
+  projections, not row order, status, or model. Robot icons and a visible
+  Subagent label differ from the Sparkles thinking disclosure. Main-chat rows
+  remain chronological; only the index groups Active / Needs attention / Completed.
+- The description is primary, with role/name fallback and explicit outcome.
+  A secondary line shows recorded model and effort, including `off`/`omit` or
+  a localized not-recorded value. Long labels wrap instead of overflowing.
+  No step-count metadata or enclosing task disclosure is added; a navigation
+  arrow leads to the source session's normal work-panel detail tab.
+- Refresh-only transitions preserve list geometry, focus, and populated or
+  empty snapshots. First-load feedback is separate from manual-refresh button
+  feedback; stale-data errors remain visible until recovery.
 - Changed files start as a compact, content-sized count/diff/caret control.
   Expansion sets `data-expanded="true"` and grows an inline list to
   `min(100%, 520px)`, never a floating popover. The file rows retain semantic

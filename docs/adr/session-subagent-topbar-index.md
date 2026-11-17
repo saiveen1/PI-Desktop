@@ -39,6 +39,24 @@ explicit earlier/later pagination and retry, independently of the parent chat's
 scroll/search range. Retained reports remain visible when their original answer
 is outside that range; do not invent completeness or suppress truncation.
 
+### Refresh stability and execution metadata amendment
+
+Initial hydration is distinct from background synchronization for both history
+and approvals. Successful empty snapshots are hydrated too. Keep existing rows,
+empty states, focus and layout during refresh; indicate manually requested work
+only on the refresh button. Preserve failed-read warnings until success, not
+just until another request starts. Do not trade freshness for cosmetic throttling.
+
+Task rows and details share robot icons, a Subagent label and passive recorded
+model/effort metadata, separate from the Sparkles thinking disclosure. The
+original Task message ID supplies the identity accent across live/history reads.
+Canonical `off`/`omit` are visible and distinct from missing/invalid values.
+This amends the task-first presentation's hidden-model/effort rule without
+introducing another display mode or execution owner. Host history may return
+optional validated `thinkingLevel` from existing Task result metadata; old
+records remain readable and are never filled from Settings. No storage migration,
+model-policy change or new IPC channel is required.
+
 ## Compatibility and validation
 
 The new query field is optional. Existing global history, source attribution,

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/ui";
 import { IconBot } from "../../components/icons";
@@ -21,16 +22,24 @@ function SessionIndex({ sessionId }: { sessionId: string }) {
   const approvals = useDelegationApprovals();
   const pending = approvals.requests.filter(request => request.sessionId === sessionId && approvalIsLive(request, approvals.now));
   const error = state.error || approvals.loadError;
+  const initialLoading = (state.loading && !state.loaded) || (approvals.loading && !approvals.loaded);
+  const [refreshing, setRefreshing] = useState(false);
+  const refresh = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try { await Promise.all([state.reload(), approvals.reload()]); }
+    finally { setRefreshing(false); }
+  };
   return <section className="session-subagents-panel" aria-label={t("subagentControls.indexTitle")}>
     <header className="session-subagents-heading">
       <IconBot size={17} /><h2>{t("subagentControls.indexTitle")}</h2>
-      <Button variant="ghost" size="sm" onClick={() => { void state.reload(); void approvals.reload(); }}>
+      <Button variant="ghost" size="sm" disabled={refreshing} aria-busy={refreshing} onClick={() => void refresh()}>
         {t("delegationHistory.refresh")}
       </Button>
     </header>
     <div className="session-subagents-scroll">
-      {error ? <p role="alert">{t("delegationHistory.loadFailed")}</p> : null}
-      {state.loading || approvals.loading ? <p role="status">{t("delegationHistory.loading")}</p> : null}
+      {error ? <p role="alert">{t(state.total || state.loaded ? "subagentControls.refreshFailed" : "delegationHistory.loadFailed")}</p> : null}
+      {initialLoading && !state.total && !pending.length && !error ? <p role="status">{t("delegationHistory.loading")}</p> : null}
       {pending.length ? <section className="subagent-task-group" aria-label={t("delegationHistory.pending")}>
         <h3 className="subagent-task-group-label">{t("delegationHistory.pending")} · {pending.length}</h3>
         {pending.map(request => <div className="session-subagents-approval" key={request.requestId}>
@@ -44,7 +53,7 @@ function SessionIndex({ sessionId }: { sessionId: string }) {
         </div>)}
       </section> : null}
       <SubagentTaskList grouped items={state.tasks} delegationStatuses={state.statuses} />
-      {!state.loading && !approvals.loading && !error && !state.total && !pending.length
+      {!initialLoading && !error && !state.total && !pending.length
         ? <p className="session-subagents-empty">{t("subagentControls.emptySession")}</p> : null}
     </div>
   </section>;

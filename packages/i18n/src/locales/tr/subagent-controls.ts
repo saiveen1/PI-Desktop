@@ -1,4 +1,9 @@
 export const subagentControls = {
+  taskLabel: "Alt ajan",
+  effort: "Akıl yürütme çabası: {{level}}",
+  notRecorded: "Kaydedilmedi",
+  modelUnrecorded: "Model kaydedilmedi",
+  refreshFailed: "Durum güncellenemedi. Önceki bilgiler korunuyor; yeniden denemek için yenileyin.",
   failureTitle: "Hata politikası",
   mode: "Alt ajan başarısız olduğunda",
   inherit: "Mevcut / oturum davranışını izle",

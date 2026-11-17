@@ -3,10 +3,15 @@ import { delegationIdForMessage } from "../../lib/subagent-panel";
 import { collectDelegationStatuses, delegationIsCreating, isDelegationActivityItem, type DelegationActivityItem } from "../../lib/subagent-topology";
 import { subagentTaskOutcome } from "../../lib/subagent-task-presentation";
 
-/** Project only recorded start/end values; createdAt may be a Task-row fallback. */
+/**
+ * Project only recorded start/end values; createdAt may be a Task-row fallback.
+ * A recorded effective thinking level is copied verbatim, and an unrecorded one
+ * stays absent so current settings can never fill a legacy gap.
+ */
 export function delegationHistoryDiagnostics(entry: DelegationRunHistoryEntry) {
   return {
     modelId: entry.modelId, scheduling: { requestedModel: entry.requestedModel },
+    ...(entry.thinkingLevel === undefined ? {} : { thinkingLevel: entry.thinkingLevel }),
     startedAt: entry.startedAt ? Date.parse(entry.startedAt) : undefined,
     completedAt: entry.status !== "interrupted" && entry.completedAt ? Date.parse(entry.completedAt) : undefined,
     usage: entry.usage, turns: entry.turns, toolCalls: entry.toolCalls, observation: entry.observation,
