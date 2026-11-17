@@ -4,7 +4,7 @@ import { PlanHistoryCard } from "./PlanHistoryCard";
 import { planSubmission } from "../../../lib/plan-history";
 import { reviewChangeFromMessage } from "../../../lib/workspace-review";
 import { ToolResultImages } from "./ToolResultImages";
-import { toolImagesInDetails } from "../../../lib/tool-image-groups";
+import { isInspectionRead } from "../../../lib/tool-image-groups";
 import "../../../styles/generated-images.css";
 import { memo, useCallback, useId, useLayoutEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
@@ -128,7 +128,7 @@ function HostToolRow({
   const action = getToolAction(message.toolName);
   // Classify the result once; execution and persisted statuses stay untouched.
   const toolStatus = getToolStatus(message);
-  const imagesInDetails = toolImagesInDetails(message);
+  const inspectionRead = isInspectionRead(message);
   const neutralStatus = toolStatus.kind === "skipped" || toolStatus.kind === "interrupted" || toolStatus.kind === "context-required";
   const notStarted = delegationWasPreempted(message);
   // A tool call never opens itself: the payload waits for the user, and a
@@ -334,18 +334,18 @@ function HostToolRow({
             </button>
           ) : null}
         </div>
-      {open && (blocks && blocks.length > 0 || imagesInDetails) ? (
+      {inspectionRead && disclosure.parentVisible && <ToolResultImages message={message} />}
+      {blocks && blocks.length > 0 ? (
         <div className="tool-row-body" id={detailsId} ref={disclosure.bodyRef} {...disclosure.bodyEvents}>
           <DisclosureCollapseRail
             label={t("chat.collapseToolOutput")}
             onCollapse={collapseRow}
           />
           {action === "delegate" && !lifecycle ? <DelegationSelectionSummary payload={toolResultPayload(message)} /> : null}
-          {blocks ? <ToolDetailBlocks blocks={blocks} plain={runHead} streaming={status === "running"} /> : null}
-          {imagesInDetails ? <ToolResultImages message={message} /> : null}
+          <ToolDetailBlocks blocks={blocks} plain={runHead} streaming={status === "running"} />
         </div>
       ) : null}
-      {!imagesInTurn && !imagesInDetails && <ToolResultImages message={message} />}
+      {!imagesInTurn && !inspectionRead && <ToolResultImages message={message} />}
       {open && delegate ? (
         <SubagentRunRows
           run={delegate}

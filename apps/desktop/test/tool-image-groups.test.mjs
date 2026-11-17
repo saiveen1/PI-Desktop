@@ -2,14 +2,14 @@ import assert from "node:assert/strict";
 import { register } from "node:module";
 import test from "node:test";
 register(new URL("./helpers/ts-import-hooks.mjs", import.meta.url));
-const { toolImagesInDetails, turnToolImageMessages } = await import("../src/lib/tool-image-groups.ts");
+const { isInspectionRead, turnToolImageMessages } = await import("../src/lib/tool-image-groups.ts");
 const { buildTranscriptEntries } = await import("../src/lib/assistant-turns.ts");
 const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=";
 const read = (id, extra = {}) => ({ id, role: "tool", content: "", toolName: "Read", toolCallId: `call-${id}`,
   toolStatus: "success", createdAt: "2026-11-12T10:00:00Z", toolResult: { images: [{ mimeType: "image/png", data: png }] }, ...extra });
 const activity = (...messages) => ({ kind: "activity", items: messages.map(message => ({ kind: "tool", message })) });
 
-test("Read inspection belongs to details regardless of lifecycle, diagnostics or restored history", () => {
+test("Read inspection belongs to its row regardless of lifecycle, diagnostics or restored history", () => {
   for (const extra of [
     {}, { toolStatus: "running" }, { toolStatus: undefined }, { toolStatus: "error", isError: true },
     { toolResult: { images: [{ data: png, mimeType: "image/png" }], imageInput: { issues: [{ code: "MODEL_NO_VISION" }] } } },
@@ -18,7 +18,7 @@ test("Read inspection belongs to details regardless of lifecycle, diagnostics or
   ]) {
     const message = JSON.parse(JSON.stringify(read("input", extra)));
     const before = JSON.stringify(message);
-    assert.equal(toolImagesInDetails(message), true);
+    assert.equal(isInspectionRead(message), true);
     assert.deepEqual(turnToolImageMessages([activity(message)]), []);
     assert.equal(JSON.stringify(message), before);
   }
@@ -31,7 +31,7 @@ test("generated contracts and other tool images remain outside process details",
       read(kind, { toolResult: { kind, results: [] } }),
       read(`${kind}-envelope`, { toolResult: { details: { kind, results: [] } } }),
     ])];
-  for (const message of messages) assert.equal(toolImagesInDetails(message), false);
+  for (const message of messages) assert.equal(isInspectionRead(message), false);
   assert.deepEqual(turnToolImageMessages([activity(read("input"), ...messages, read("another"))]), messages);
 });
 

@@ -5474,11 +5474,12 @@ See ADR 0344.
 - The additive settings/status contract and compatibility boundaries are recorded
   in [the decision](../../adr/provider-stream-idle-policy.md).
 
-## Read inspection previews stay in tool details
+## Read inspection previews stay with the tool call
 
 Ordinary `Read` images are process inputs, not delivered artifacts. Render their
-previews and image-input diagnostics only inside manually expanded tool details;
-collapsing the row removes its preview and viewer. Apply the same placement to
+previews and image-input diagnostics directly below the visible call header so
+readers need not expand raw details to identify the image. Folding the containing
+process or activity hides the preview and closes its viewer. Apply this to
 live/restored history, standalone rows, all display modes and subagent turns.
 Generated-result contracts and other tools' image outputs retain their existing
 turn-level cards. Do not mutate image bytes, model input or stored tool records.

@@ -5221,17 +5221,18 @@ Build two actual runtimes with identical configuration and different scratch dir
   Open thumbnails, navigate with left/right, close with Escape, switch sessions
   with identical message IDs, and open process details. Return six consecutive
   successful Read images and confirm none is promoted outside process details.
-  Expand a Read, view its image, collapse it and switch sessions with its viewer
-  open. Repeat live/restored, in all display modes, standalone and subagent rows.
+  View the thumbnail before opening Read details. Toggle details, fold the
+  process with the viewer open, then switch sessions. Repeat live/restored,
+  in all display modes, standalone and subagent rows.
   Return a six-image MCP output; collapse/reopen its gallery, navigate and append
   an image while viewing. Check wrapping at 280 pixels in light/dark themes.
   Repeat with missing refs and a generated-image batch containing successes and failures.
 - **Expected:** Image bytes reach a compatible model; unsupported/invalid/oversize
   images produce explicit omission feedback without claiming analysis. Compact
   thumbnails remain associated with the originating call and appear only once.
-  Read previews appear only inside manually expanded tool details, never as
-  delivered images at the turn footer. Collapsing Read removes the preview and
-  viewer without changing stored image content. Main, standalone and subagent
+  Read shows its count and thumbnails at the visible call, never at the turn
+  footer. Toggling raw details leaves the preview in place; folding the activity
+  or process hides it and closes the viewer. Main, standalone and subagent
   views agree in live and restored history across all display modes.
   MCP/plugin output galleries retain accessible filenames, horizontal wrapping,
   collapse, keyboard navigation and call attribution. Appending preserves

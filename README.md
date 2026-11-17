@@ -141,8 +141,8 @@ This edition strengthens the existing framework rather than replacing it.
   attachment handling; references still require normal tool permissions and are
   not snapshots.
 - **Tool-image continuity.** Add generic tool-result galleries and preserve historical
-  previews. Keep ordinary image Reads inside expanded tool details, rather than
-  echoing input images as delivered output. Fix image retention and delivery across
+  previews. Show image counts and thumbnails at the Read call without opening its
+  details or repeating inspected images below the answer. Fix image retention and delivery across
   follow-up requests and child-model contexts, with explicit omission notices when
   model capability or image limits prevent delivery. Native Responses image results
   are now saved and linked instead of being silently discarded; image-only replies

@@ -147,9 +147,10 @@ download, setup navigation and partial-failure behavior.
 
 Inspection results show a localized image count, the originating tool and
 80-pixel thumbnails. Ordinary `Read` results are input/process context: their
-images and image-input diagnostics render only inside the manually expanded
-tool details, never as a turn-level delivered-image gallery. Collapsing the row
-removes its preview and viewer. This applies to live and restored messages,
+images and image-input diagnostics appear at the visible call without expanding
+its raw details. Folding the containing activity or process hides these previews
+and closes their viewer; they never appear in the turn's delivered-image gallery.
+This applies to live and restored messages,
 standalone rows, all transcript display modes and subagent turns. Generated
 result contracts remain outside process details even if their tool is named
 `Read`; MCP/plugin image outputs retain their existing turn-level galleries.

@@ -155,23 +155,30 @@ Object.assign(window, { toolImagesProbe: async (stage: string) => {
         const before = JSON.stringify(input);
         const session = `read-${mode}-${owner}-${active}`;
         render([input], session, owner, active);
-        check(!document.querySelector(".tool-result-images"), `${session}: collapsed Read echoes input`);
         const process = document.querySelector<HTMLButtonElement>(".turn-process > .tool-activity-header");
         if (process?.getAttribute("aria-expanded") === "false") flushSync(() => process.click());
         const row = document.querySelector<HTMLButtonElement>('[data-message-id="input-read"] .tool-row-header')!;
         check(row && row.getAttribute("aria-expanded") === "false", "Read must start collapsed");
-        flushSync(() => row.click()); await decodeThumbnails();
-        check(document.querySelectorAll(".tool-result-image-thumb").length === 1, "Opening Read lost or duplicated its image");
-        check(thumb().closest(".tool-row-body"), "Read image must belong to its tool details");
-        flushSync(() => thumb().click());
-        check(dialog()?.open, "Read detail image no longer opens");
+        const preview = thumb();
+        check(preview && preview.closest(".tool-row") === row.closest(".tool-row") && !preview.closest(".tool-row-body, [hidden]"), `${session}: visible Read has no inline thumbnail before opening details`);
+        check(preview.closest(".tool-result-images")?.textContent?.includes(i18n.t("toolImages.returned", { count: 1 })), "Read feedback lacks the returned image count");
+        await decodeThumbnails();
         flushSync(() => row.click());
-        check(!dialog() && !document.querySelector(".tool-result-image-thumb"), "Collapsing Read leaves a hanging image or viewer");
+        check(document.querySelectorAll(".tool-result-image-thumb").length === 1 && thumb() === preview, "Opening Read duplicated or replaced its preview");
+        flushSync(() => row.click());
+        flushSync(() => preview.click());
+        await waitForSelectedImage(redUrl);
+        check(dialog()?.open, "Collapsed Read cannot open its original image");
+        if (process) {
+          flushSync(() => process.click());
+          check(!dialog() && !thumb(), "Folding the process left a Read preview or viewer behind");
+          flushSync(() => process.click());
+          flushSync(() => thumb().click());
+        }
         check(JSON.stringify(input) === before, "Read disclosure mutated stored input");
-        flushSync(() => row.click()); await decodeThumbnails();
-        flushSync(() => thumb().click());
-        render([input], `${session}-switched`, owner, active);
-        check(!dialog() && !document.querySelector(".tool-result-image-thumb"), `${session}: Read preview leaked across sessions`);
+        render([message(input.id, { images: [blue] })], `${session}-switched`, owner, true);
+        await decodeThumbnails();
+        check(!dialog() && thumb()?.querySelector("img")?.src === blueUrl, `${session}: Read preview leaked across sessions`);
         console.log(`READ_DISCLOSURE_CASE ${session} passed`);
       }
     }
@@ -181,9 +188,15 @@ Object.assign(window, { toolImagesProbe: async (stage: string) => {
     await decodeThumbnails();
     check(document.querySelectorAll(".tool-result-images").length === 1, "Turn promotes an inspection image or loses MCP output");
     check(document.querySelectorAll(".tool-result-image-thumb").length === 2, "Images are associated with the wrong tool call");
-    const details = document.querySelector<HTMLButtonElement>(".turn-process button");
-    if (details) flushSync(() => details.click());
-    check(document.querySelectorAll(".tool-result-images").length === 1, "Opening process details duplicates images");
+    const process = document.querySelector<HTMLButtonElement>(".turn-process > .tool-activity-header")!;
+    flushSync(() => process.click());
+    const group = document.querySelector<HTMLButtonElement>(".process-activity-group.grouped > .tool-activity-header");
+    if (group?.getAttribute("aria-expanded") === "false") flushSync(() => group.click());
+    check(document.querySelectorAll(".tool-result-image-thumb").length === 3 && document.querySelector('[data-message-id="read"] .tool-result-image-thumb'), "Opening the process lost the Read preview or duplicated the MCP output");
+    if (group) {
+      flushSync(() => group.click());
+      check(document.querySelectorAll(".tool-result-image-thumb").length === 2, "Folding the activity group must hide only the inspected input");
+    }
   } else if (stage === "group") {
     document.getElementById("root")!.style.cssText = "width:280px;margin:24px";
     render([gallery], "session-a", true); await decodeThumbnails(); await frame();
