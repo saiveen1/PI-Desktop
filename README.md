@@ -139,7 +139,10 @@ This edition strengthens the existing framework rather than replacing it.
   previews. Keep ordinary image Reads inside expanded tool details, rather than
   echoing input images as delivered output. Fix image retention and delivery across
   follow-up requests and child-model contexts, with explicit omission notices when
-  model capability or image limits prevent delivery.
+  model capability or image limits prevent delivery. Native Responses image results
+  are now saved and linked instead of being silently discarded; image-only replies
+  and delivery failures do not automatically repeat generation. Existing preview
+  limits still apply, with file access for larger retained images.
 
 ### Fixes that matter in daily use
 

@@ -1,5 +1,6 @@
 import { readProviderIdleTimeout } from "./provider-stream-idle-error.js";
 import { readOutputRepetition } from "./model-output-repetition.js";
+import { readHostedImageFailure } from "./image-generation/hosted-images.js";
 /**
  * Provider/model error classification for the agent path.
  *
@@ -555,6 +556,15 @@ export function classifyAgentError(err: unknown, responseStatus?: number): Class
     (err instanceof Error && err.name === "AbortError") ||
     envelope?.stopReason === "aborted" ||
     local?.causeName === "AbortError";
+  const imageFailure = readHostedImageFailure(err);
+  if (imageFailure && !explicitlyAborted) {
+    return {
+      code: "HOSTED_IMAGE_OUTPUT_FAILED",
+      message: `Hosted image output could not be fully delivered (${imageFailure.errorCode}). Completed images are retained; automatic replay stopped to avoid duplicate generation.`,
+      retriable: false,
+      details: { origin: "local", phase: "response-output", ...imageFailure },
+    };
+  }
   const repetition = readOutputRepetition(err);
   if (repetition && !explicitlyAborted) {
     return {

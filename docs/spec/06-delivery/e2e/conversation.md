@@ -4613,7 +4613,7 @@ command, a delegate, and an explicit Stop. Accepted input is delivered once.
 
 ## E2E-IMAGE-generation-and-editing
 
-- **Preconditions:** Built task candidate containing latest origin/main; isolated
+- **Preconditions:** Built current task candidate; isolated
   host data directory, local image HTTP fixture, no production credentials.
 - **Steps:** Choose a model in Advanced, cancel and verify no change; save and
   replace it through another provider's Advanced settings. Clear the binding via
@@ -4642,6 +4642,31 @@ command, a delegate, and an explicit Stop. Accepted input is delivered once.
 | E2E-IMAGE-generation-and-editing | Image capability and recovery | 03-runtime/21-image-generation | Host and UI suites above |
 | E2E-IMAGES-result-download | Download and locate a generated result | 03-runtime/21-image-generation | `scripts/e2e-image-chat.mjs` |
 | E2E-IMAGES-tool-inspection | Local read, truthful input feedback and historical previews | Runtime/image/storage specs | Runtime images; tool-result-images-user-path.test.mjs |
+| E2E-IMAGES-native-responses | Hosted-image receipt, persistence and non-replay | 03-runtime/21-image-generation | Runtime parser and public prompt regression suites |
+
+## E2E-IMAGES-native-responses
+
+- **Preconditions:** Current task candidate, isolated session scratch, synthetic
+  Responses SSE and no production credentials.
+- **Steps:** Return `image_generation_call` plus final text, then image-only output.
+  Repeat the item in the terminal snapshot; test terminal-only output, multiple
+  images, invalid/truncated/oversized images, unavailable storage and a scratch
+  symlink escape. End or cancel after a completed image. Restore the assistant
+  row and continue the conversation. Exercise the same path through a subagent.
+- **Expected:** Completed images are written once and referenced in ordinary
+  assistant Markdown, with existing preview/file actions and no Base64 in replay.
+  Image-only replies do not trigger silent-response recovery. Failed delivery
+  cannot replay generation; valid siblings and completed files survive errors or
+  cancellation. Missing or larger-than-preview files use the existing chip fallback.
+  No configured image model, local tool invocation or new generation is required.
+- **Specs:** `03-runtime/21-image-generation.md`, native Responses image output.
+- **Acceptance:** C / E; visible output, history continuity and no duplicate paid work.
+- **Milestone:** Post-MVP.
+- **Status:** Parser/filesystem and public prompt/subagent paths automated in
+  `packages/agent-runtime/src/image-generation/hosted-images.test.ts` and
+  `hosted-image-runtime.test.ts`. Existing Markdown image contracts are covered by
+  `markdown-image-paths.test.mjs` and `message-image-display.test.mjs`. Native
+  Desktop visual interaction and live paid-provider verification remain opt-in.
 
 ## E2E-IMAGES-result-download
 

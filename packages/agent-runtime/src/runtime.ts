@@ -343,6 +343,7 @@ import {
   providerSetupRetryDelayMs,
 } from "./provider-retry.js";
 import { streamIdleTimeoutMs, withProviderStreamIdleTimeout } from "./provider-stream-idle.js";
+import { withHostedImageOutputs } from "./image-generation/hosted-images.js";
 import { withModelOutputGuard } from "./model-output-guard.js";
 
 import {
@@ -2242,7 +2243,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           (retryOptions) => {
             const attempt = diagnosticAttempt;
             if (diagnostics === this.runDiagnostics) diagnostics?.setOutputLimit(retryOptions.maxTokens);
-            return withModelOutputGuard(m, retryOptions, guardedOptions => withProviderStreamIdleTimeout(m, guardedOptions,
+            return withHostedImageOutputs(m, retryOptions, this.scratchDir, imageOptions => withModelOutputGuard(m, imageOptions, guardedOptions => withProviderStreamIdleTimeout(m, guardedOptions,
               streamIdleTimeoutMs(this.providerStreamIdleTimeoutMinutes), timedOptions => accountModelStream(m, () =>
               this.thinkingLevel === "omit"
                 ? this.models.stream(omitThinkingModel(m), requestContext, timedOptions)
@@ -2258,7 +2259,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
               }), since => {
                 if (!this.disposed && !this.runCancelled && diagnostics === this.runDiagnostics)
                   this.setAgentActivity({ phase: "waiting-model", since, slow: true });
-              }), this.turnCorrections.settings);
+              }), this.turnCorrections.settings));
           },
           {
             claim: (error, phase) => this.claimProviderRetry(error, phase),

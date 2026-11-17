@@ -600,6 +600,7 @@ export class SubagentRun {
       provider,
       thinkingLevel,
       sessionId: this.opts.sessionId,
+      scratchDir: this.opts.scratchDir,
       maxTokens: this.opts.definition.maxTokens,
       agentOutputGuard: this.opts.agentOutputGuard,
       onUsage: usage => this.recordUsage(usage),

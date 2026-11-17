@@ -37,3 +37,22 @@ process loss.
   history ownership.
 - A shell or API-only skill: rejected; it would bypass model settings and require
   scripts to handle credentials, files, and retries.
+
+## 2026-11-17 amendment: receive provider-hosted image results
+
+Responses chat providers can return native `image_generation_call` items even
+when no local image tool runs. Pi's chat projection currently discards those
+items, so tool-count history is not evidence that no billable image was produced.
+
+Use the existing raw provider-event hook in the main/delegate runtime to validate
+and save completed hosted images into the Host-supplied session scratch directory.
+Deliver contained local Markdown references through existing assistant text,
+history and preview contracts. Keep bytes out of provider replay and avoid a new
+message type, attachment store, IPC method or dependency patch. The configured
+GenerateImages operation and its approval boundary remain unchanged.
+
+The receipt wrapper does not advertise or request hosted generation. It preserves
+completed output on cancellation and makes delivery failures terminal to automatic
+replay. Existing inline-preview limits still apply; larger files remain accessible
+through the file-chip fallback. This accepts providers' native output without
+pretending that a local function tool executed.

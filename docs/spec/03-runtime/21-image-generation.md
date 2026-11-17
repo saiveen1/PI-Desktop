@@ -198,4 +198,42 @@ vendor's Codex image routes (`{baseUrl}/codex/images/generations` and
 input images inline as data URLs. Every other OAuth account stays ineligible,
 and the adapter cannot fabricate entitlement or fall back to another account.
 The candidate disappears as soon as the account's credential is removed.
-Unknown pricing remains unknown. Images never route through the chat selector.
+Unknown pricing remains unknown. Configured Images operations never route through
+the chat selector; provider-hosted image output in a chat response is separate.
+
+## Native Responses image output
+
+Main sessions and subagents preserve `image_generation_call` items returned by
+Responses-compatible chat providers. This is receipt of an existing hosted
+operation, not a call to `GenerateImages`: it neither injects a hosted tool nor
+selects an image model, changes approval policy, or issues a second request.
+
+The runtime observes raw provider events before Pi projects them to chat content.
+It accepts completed items from `response.output_item.done` and terminal response
+output arrays (including Codex `response.done`), deduplicates repeated item
+identities within each request, and
+ignores partial-image previews. At most ten outputs are retained per response.
+Each image is standard Base64, at most 16 MiB decoded, and PNG/JPEG/WebP identified
+from its bytes. Shared dimension limits and complete raster decoding apply before
+writing. Provider filenames, paths, URLs and format labels never select a target.
+
+Validated bytes are saved with exclusive UUID filenames under the Host-supplied
+session scratch directory after realpath containment checks. No scratch directory
+means an explicit storage failure, not a fallback to cwd or an installed profile.
+Completed files survive cancellation. The assistant's text receives local Markdown
+image references, reusing existing transcript persistence, contained preview reads,
+file actions and model-context replay without embedding Base64. The current 5 MiB
+inline-preview limit is unchanged: larger retained files use the existing file-chip
+fallback. Deleting the referenced file makes the preview unavailable; no automatic
+regeneration occurs. There is no database or message-schema migration.
+
+Image-only success is visible output, never a silent-response retry. Invalid,
+oversized, incomplete or unsavable results surface a bounded local diagnostic;
+completed siblings remain linked. A failed response after hosted-image activity
+cannot automatically replay generation. Cancellation retains its aborted status,
+and events arriving after finalization cannot save additional files.
+
+Offline coverage: `hosted-images.test.ts` drives the actual Responses parser and
+filesystem; `hosted-image-runtime.test.ts` enters the public prompt path, checks
+one-request delivery/recovery, history projection and subagent bindings. No paid
+provider or daily Desktop profile is required.

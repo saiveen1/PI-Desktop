@@ -125,6 +125,17 @@ deduplication on top of the existing core notification preferences, not a new
 notification subsystem. Source-level tests and isolated fixtures do not establish
 physical audio, installed-app behavior or pure model-generation performance.
 
+The native-image receipt fix starts from personal source `f28653e41`, compared
+read-only with locally recorded upstream `047c4eab1c97a349b3cf8c734229b64ed9d87764`
+(no fetch). That revision has no native `image_generation_call` receiver in the
+runtime/image-generation/subagent binding surfaces. The local increment uses Pi's
+existing raw-event hook and the inherited Markdown preview/persistence contracts;
+it does not originate image generation or the viewer. See the
+[decision amendment](../adr/image-generation-capability.md),
+[receiver](../../packages/agent-runtime/src/image-generation/hosted-images.ts) and
+[public-path regression](../../packages/agent-runtime/src/image-generation/hosted-image-runtime.test.ts).
+This describes current source, not an installed release or a live-provider test.
+
 | Local increment | Originating local commits | Contrast with the audited upstream | Current implementation / coverage evidence |
 | --- | --- | --- | --- |
 | Broader repeated mutation/command failure protection | `d9bf50fa1` | Upstream already guards repeated Edit and shell-patch failures. Local work extends accounting to Write and identical ordinary Bash failures while preserving upstream owner isolation, and permits meaningful retests after successful file changes. This is not a blanket three-command limit. | [Guard](../../packages/agent-runtime/src/mutation-recovery-guard.ts), [runtime coverage](../../packages/agent-runtime/src/runtime-tool-recovery.test.ts). |

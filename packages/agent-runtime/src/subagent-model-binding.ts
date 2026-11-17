@@ -1,6 +1,7 @@
 import { createToolCallIdentity } from "./tool-call-dedupe.js";
 import { accountModelStream, type UsageObserver } from "./request-usage.js";
 import { withModelOutputGuard } from "./model-output-guard.js";
+import { withHostedImageOutputs } from "./image-generation/hosted-images.js";
 import {
   buildProviderModel,
   copilotRequestHeaders,
@@ -42,6 +43,7 @@ export function subagentModelBinding(opts: {
   provider: RuntimeProviderConfig;
   thinkingLevel: SubagentThinkingLevel;
   sessionId: string;
+  scratchDir?: string;
   maxTokens?: number;
   agentOutputGuard?: AgentOutputGuardSettings;
   onUsage?: UsageObserver;
@@ -124,7 +126,7 @@ export function subagentModelBinding(opts: {
         m,
         requestContext,
         sessionOptions,
-        (retryOptions) => withModelOutputGuard(m, retryOptions, guardedOptions => {
+        (retryOptions) => withHostedImageOutputs(m, retryOptions, opts.scratchDir, imageOptions => withModelOutputGuard(m, imageOptions, guardedOptions => {
           const createStream = () => omitThinking
             ? models.stream(omitThinkingModel, requestContext, guardedOptions)
             : models.streamSimple(m, requestContext, guardedOptions);
@@ -133,7 +135,7 @@ export function subagentModelBinding(opts: {
             nativeCost: opts.provider.modelConfig?.nativeCost,
             onUsage: opts.onUsage,
           });
-        }, opts.agentOutputGuard),
+        }, opts.agentOutputGuard)),
         {
           allowOutputLimitRepair: retry.allowOutputLimitRepair,
           onRetry: retry.onRetry,
