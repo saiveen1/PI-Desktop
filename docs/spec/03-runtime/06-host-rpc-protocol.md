@@ -11,9 +11,20 @@ Host verifies canonical message/turn ownership and meaningful reply activity;
 a refused retract leaves history intact. Repeating an already completed deletion
 or retraction does not delete another prompt. No history array is required.
 
-`session.editAssistantReply({ sessionId, messageId, expectedContent, content })`
-returns `{ ok: true }` after replacing the final eligible assistant reply in an
-idle local conversation. The Host compares the original text exactly and checks
+`session.editAssistantReply({ sessionId, messageId, expectedContent, content,
+thinkingContext? })` accepts `thinkingContext: "reply" | "turn" | "keep"`.
+Omitting it preserves the original text-only operation and `{ ok: true }` reply.
+An explicit choice also returns `thinkingContextUpdates`, a list of changed
+`{ messageId, excludeThinkingFromContext }` flags for renderer mirrors. The
+Host derives the current turn, not the renderer's loaded window. `reply`
+excludes only the target's reasoning and restores other assistant reasoning in
+the same turn; `turn` excludes the whole turn's assistant reasoning; `keep`
+restores it. Earlier turns and tool results remain unchanged. Thinking stays
+in canonical history for display, not in model context when excluded.
+Same-text saves may change this choice. Invalid values fail before mutation.
+
+The operation replaces the final eligible assistant reply in an idle local
+conversation. The Host compares the original text exactly and checks
 the durable tail under the mutation lock; stale edits cannot overwrite a newer
 reply. The new text must not be blank. No history array, user message, model
 turn, schema migration or new revision is required.

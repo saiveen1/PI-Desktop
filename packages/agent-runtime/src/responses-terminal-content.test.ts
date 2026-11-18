@@ -26,7 +26,7 @@ function thinkingOf(result: Awaited<ReturnType<typeof decode>>["result"]) {
 }
 
 describe("Responses terminal content preservation", () => {
-  it.each([undefined, "", " ", "\n\t"])("retains streamed thinking with blank final summary %j", async (summary) => {
+  it.each([undefined, "", " ", "\n\t", "\u200b", " \u200b\u200c\u200d\u2060\ufeff"])("retains streamed thinking with blank final summary %j", async (summary) => {
     const frames = reasoningFrames(0, reasoning, summary);
     const { seen, result } = await decode(frames);
     expect(seen).toContainEqual(expect.objectContaining({ type: "thinking_delta", delta: reasoning }));

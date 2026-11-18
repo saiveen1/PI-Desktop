@@ -27,6 +27,21 @@ function message(id, role, content, extra = {}) {
   };
 }
 
+test("zero-width-only thinking is not a disclosure, while real thinking stays lossless", () => {
+  for (const thinking of ["\u200b", " \u200b\u200c\u200d\u2060\ufeff\n", "[reasoning not retained for this turn]\u200b"]) {
+    const reply = message("reply", "assistant", "Visible answer", { thinking, status: "complete" });
+    assert.equal(messageThinking(reply), "");
+    const { entries } = buildTranscriptEntries([message("user", "user", "Continue"), reply]);
+    assert.equal(entries[1].kind, "assistant-turn");
+    assert.equal(entries[1].parts.some(part => part.kind === "activity" && part.items.some(item => item.kind === "thinking")), false);
+    assert.equal(reply.thinking, thinking);
+  }
+  for (const thinking of ["\u200b真实的新思考\u200b", "Text with a joiner: a\u200db", "Only excluded from context"]) {
+    const reply = message("reply", "assistant", "", { thinking, excludeThinkingFromContext: true });
+    assert.equal(messageThinking(reply), thinking);
+  }
+});
+
 test("groups assistant fragments and tools into one conversational turn", () => {
   const { entries } = buildTranscriptEntries([
     message("user", "user", "Fix the issue"),

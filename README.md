@@ -122,7 +122,11 @@ This edition strengthens the existing framework rather than replacing it.
 
 - **Edit the last assistant reply.** In an idle local conversation, save a
   corrected answer and continue with that text as the assistant's reply, without
-  rerunning the model. For an older answer, fork at the reply and edit the copy.
+  rerunning the model. Choose whether to exclude only the final answer's thinking
+  (default), all thinking used to produce this answer, or keep it all in future
+  context. Earlier turns are unaffected; original thinking stays visible in
+  history. For an older answer, fork at the reply
+  and edit the copy.
 
 - **Project-scoped groups, colored labels, and deliberate ordering.** Groups
   control placement; multiple labels do not duplicate conversations. Local project
@@ -173,6 +177,8 @@ This edition strengthens the existing framework rather than replacing it.
 
 - **Responses stream content preservation.** The local compatibility repair
   protects meaningful streamed thinking and answers from blank terminal items,
+  including zero-width-only reasoning summaries. Invisible placeholders no longer
+  produce empty thinking disclosures; later real thinking remains visible,
   while retaining authoritative corrections and refusals. An exact orphan DSML
   suffix keeps the streamed text and its diagnostic. In chat, recognizable trailing
   markup folds into **Protocol details**; tool cards report actual execution.

@@ -3208,12 +3208,12 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
         // A replay placeholder the model echoed is not its reasoning; sending
         // it back is what kept the model continuing it (#1945).
         const rawThinking = m.thinking ?? "";
-        const thinking = withoutReasoningReplayPlaceholder(rawThinking);
+        const thinking = m.excludeThinkingFromContext ? "" : withoutReasoningReplayPlaceholder(rawThinking);
         // Signed blocks restore the request the live runtime sent, so a
         // rebuild keeps the provider's prompt cache (#1972). Rows that were
         // cleaned above, or whose text no longer matches, keep the plain path.
-        const replayed = thinking === rawThinking
-          ? restoreAssistantProviderReplay(m.providerReplay, rawThinking, m.content ?? "")
+        const replayed = m.excludeThinkingFromContext || thinking === rawThinking
+          ? restoreAssistantProviderReplay(m.providerReplay, rawThinking, m.content ?? "", m.excludeThinkingFromContext)
           : undefined;
         if (replayed) {
           const firstText = replayed.findIndex((block) => block.type === "text");

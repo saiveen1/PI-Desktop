@@ -8,7 +8,8 @@ import {
 } from "./test-support/responses-terminal-fixture.js";
 
 describe("Responses terminal content through a Desktop turn", () => {
-  it.each(["blank", "dsml-tail"])("settles visible content without replaying the sibling tool: %s", async (finalKind) => {
+  it.each(["blank", "zero-width", "dsml-tail"])("settles visible content without replaying the sibling tool: %s", async (finalKind) => {
+    const finalThinking = finalKind === "zero-width" ? "\u200b" : " ";
     const text = finalKind === "dsml-tail" ? `${answer}\n${dsmlTail}` : answer;
     const requests: string[] = [];
     const events: AgentEventEnvelope["event"][] = [];
@@ -22,7 +23,7 @@ describe("Responses terminal content through a Desktop turn", () => {
         return;
       }
       const frames = requests.length === 1 ? [
-        ...reasoningFrames(0, reasoning, " "),
+        ...reasoningFrames(0, reasoning, finalThinking),
         ...messageFrames(1, text, [{ type: "output_text", text: finalKind === "dsml-tail" ? dsmlTail : "" }]),
         ...toolFrames(2),
       ] : messageFrames(0, "The requested work is complete.", [{ type: "output_text", text: "The requested work is complete." }]);
@@ -73,7 +74,7 @@ describe("Responses terminal content through a Desktop turn", () => {
       const replay = settled[0].providerReplay?.blocks.find((block) => block.type === "thinking");
       expect(replay).toMatchObject({ length: reasoning.length });
       if (!replay || replay.type !== "thinking" || !replay.signature) throw new Error("Missing preserved reasoning replay");
-      expect(JSON.parse(replay.signature).summary).toEqual([{ type: "summary_text", text: " " }]);
+      expect(JSON.parse(replay.signature).summary).toEqual([{ type: "summary_text", text: finalThinking }]);
     } finally {
       await runtime.dispose();
       server.closeAllConnections();

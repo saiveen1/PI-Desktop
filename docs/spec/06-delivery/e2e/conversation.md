@@ -2517,12 +2517,22 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
   prompt. 4) Reopen the source and inspect it. 5) Append a prompt to the child,
   restart and inspect both. 6) Repeat during a later source turn. 7) Repeat toolbar
   and context-menu Fork after paging/search/reading restoration reveals an old reply.
+  8) On a reply with several thinking/tool iterations, inspect the footer's
+  default reply-only selection, save unchanged text, then repeat with turn-wide
+  exclusion and keep-all. Cancel a changed selection and inject a save failure.
+  Reopen after each save and capture the next provider request.
 - **Expected**: A historical completed assistant response offers Copy, Fork and
   Regenerate, but not Delete or in-place Edit. On a local idle child, edit its
   final reply, cancel once and then save. The child keeps the edited text after
   reopening; the next provider request carries that text as the assistant's
   message, not the original or an appended user correction. Saving alone makes
-  no provider request. Fork
+  no provider request. Reply-only excludes the selected row's reasoning, never
+  the last earlier row that contains thinking. Turn-wide excludes all top-level
+  assistant reasoning in this turn; keep-all restores it. Original thinking
+  remains visible, earlier turns/tool pairs stay intact, and no covering
+  checkpoint or signed reasoning resurrects excluded content. Same-text saves
+  work, cancellation writes nothing, and failed saves retain the draft/choice.
+  Fork
   activates a separately titled child ending at the selected response; later source
   turns are absent. Completed historical prefixes stay forkable during a later turn;
   anchors in that active turn are rejected. Both entry points use reading-range
@@ -2538,7 +2548,12 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
   `session-fork.test.mjs`, `session-fork-running.test.mjs`, `transcript-style.test.mjs`).
   `scripts/e2e-edit-assistant-reply.mjs` covers the IPC edit of a forked long
   reply, stale-save rejection, compaction invalidation, Host restart and the
-  next provider request using synthetic data. Full restart UI scenario Draft.
+  next provider request using synthetic data. Its thinking-context fixture adds
+  three model calls with paired tools, same-text saves, turn-to-reply/keep
+  restoration, no-thinking final replies and checkpoint invalidation. Runtime
+  tests also cover signed/encrypted reasoning and DeepSeek field compatibility;
+  standalone Chromium tests cover footer layout and select/save/cancel behavior.
+  Full restart UI scenario Draft.
 
 ## E2E-071b: Forked session retains messages after the first AI turn completes
 

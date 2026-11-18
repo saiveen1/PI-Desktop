@@ -71,7 +71,9 @@ export function messageThinking(message: UiMessage): string {
   if (typeof message.thinking !== "string") return "";
   // An echoed replay placeholder is not the model's reasoning (#1945).
   const thinking = withoutReasoningReplayPlaceholder(message.thinking);
-  return thinking.trim() ? thinking : "";
+  // Some providers emit only a zero-width placeholder, not visible reasoning.
+  // Test visibility without altering real text or its joiners/signatures.
+  return /[^\s\p{Default_Ignorable_Code_Point}]/u.test(thinking) ? thinking : "";
 }
 
 function isVisibleMessage(message: UiMessage): boolean {

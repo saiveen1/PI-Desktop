@@ -44,6 +44,32 @@ structured tools. Successful tool completion records prove those tools ran;
 this turn ran." Tool exit code zero does not establish success of every nested
 business operation. Never replay an already successful action to restore text.
 
+## Zero-width terminal follow-up
+
+A later read-only report showed an expandable but visually empty thinking row.
+The affected Responses record had `excludeThinkingFromContext` unset, and its
+saved terminal reasoning signature contained exactly one U+200B zero-width
+space. Later records were also not context-excluded. The session's current
+thinking level remained `high`; this snapshot is not proof of every historical
+request's settings. Invisible placeholder records also existed before reply
+editing, so temporal coincidence alone does not establish an exclusion leak.
+
+The whitespace-only repair used `trim()`, which does not recognize U+200B.
+Synthetic adapter and real runtime-turn regressions reproduced loss of streamed
+reasoning when that terminal placeholder arrived. The repair now tests for a
+character outside whitespace and Unicode default-ignorable code points in both
+terminal summary and reasoning content. Meaningful corrections still win,
+original signatures remain intact, and no already executed tool is replayed.
+Renderer grouping uses the same visibility rule so a placeholder-only record
+cannot create an empty disclosure; real text keeps its original joiners and
+other characters. Context exclusions still apply only to the selected historical
+rows, not subsequently generated reasoning.
+
+No retained raw stream was available for the reported message, so the exact
+pre-terminal text cannot be recovered or asserted. A record with no reasoning
+block does not by itself prove whether the provider omitted it or an earlier
+stage lost it. No live provider request or profile write was made to infer one.
+
 ## Repeatable read-only investigation
 
 1. Confirm the exact session/turn and the known data root. Inspect only that

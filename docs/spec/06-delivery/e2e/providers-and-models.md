@@ -719,8 +719,8 @@ with only Host API controlled. Running-turn configuration remains queued.
 - **Preconditions**: A synthetic Responses SSE stream and fake fetch exercise the
   real provider adapter; a runtime fixture exercises the user-facing settlement path.
 - **Steps**: Stream meaningful thinking and answer text, then vary terminal items:
-  blank reasoning summary with meaningful content fallback, empty/missing/blank
-  answer, an exact orphan DSML suffix, a shorter nonempty correction, and explicit
+  blank or zero-width-only reasoning summary with meaningful content fallback,
+  empty/missing/blank answer, an exact orphan DSML suffix, a shorter nonempty correction, and explicit
   refusals including blank refusal. Include structured sibling tools and replay data.
 - **Expected**: Blank terminal fields cannot erase meaningful same-item streamed
   content; meaningful reasoning content is a fallback. The exact DSML suffix keeps
@@ -734,7 +734,11 @@ with only Host API controlled. Running-turn configuration remains queued.
   Quoted/fenced examples are not folded. Copy/export retains the original source.
 - **Automated coverage**: `packages/agent-runtime/src/responses-terminal-content.test.ts`
   and `packages/agent-runtime/src/responses-terminal-content-runtime.test.ts`:
-  24 cases passed through the real adapter and local HTTP runtime fixture.
+  27 cases passed through the real adapter and local HTTP runtime fixture.
+  `assistant-thinking-context.test.ts` also covers two newly generated replies
+  after historical exclusions through both Responses and Completions, with
+  `high` retained on Responses requests. Renderer tests reject zero-width-only
+  disclosures without changing raw historical or newly generated reasoning.
   Electron and live-provider verification: NOT RUN. Neither a synthetic pass
   nor a source change proves an installed fix or recovers history.
 - **Specs linked**: `03-runtime/02-agent-runtime.md` (§5c);

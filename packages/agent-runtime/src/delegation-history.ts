@@ -270,7 +270,7 @@ export function chainRowsToMessages(
       const content: AssistantMessage["content"] = [];
       // Same rule as session history: an echoed replay placeholder is not
       // reasoning to hand back (#1945).
-      const thinking = withoutReasoningReplayPlaceholder(row.thinking ?? "");
+      const thinking = row.excludeThinkingFromContext ? "" : withoutReasoningReplayPlaceholder(row.thinking ?? "");
       if (thinking.trim()) {
         content.push({
           type: "thinking",

@@ -128,20 +128,38 @@ test('transcript history demand and inline reply editing', { timeout: 30000, ski
       assert.equal(after.calls, 1);
       assert.equal(after.rows, before.rows + 1);
     });
-    await t.test('Edit reply opens only the canonical last answer and Cancel never saves', async () => {
+    await t.test('Edit reply saves each thinking choice explicitly, including unchanged text', async () => {
       const result = await evaluate('exerciseReplyEdit()');
       const original = '  **Final reply**\n';
       const corrected = '  **Corrected reply**\n';
       assert.equal(result.actionCount, 1);
       assert.equal(result.source, original);
       assert.equal(result.focused, true);
-      assert.equal(result.unchangedDisabled, true);
+      assert.equal(result.unchangedCanSave, true);
+      assert.deepEqual(result.dropdown, { value: 'reply', label: 'Thinking context',
+        options: [['reply', "Exclude only the final answer's thinking"], ['turn', 'Exclude all thinking used for this answer'], ['keep', 'Keep all thinking used for this answer']],
+        hint: 'Only this answer; earlier turns and saved thinking are unchanged.' });
+      assert.deepEqual(result.layout, [
+        { wrapped: false, right: true, left: true, fits: true },
+        { wrapped: true, right: true, left: true, fits: true },
+      ]);
       assert.deepEqual(result.afterCancel, { writes: 0, content: original });
-      assert.equal(result.afterFailure, corrected);
+      assert.equal(result.beforeExplicitSave, 1);
+      assert.deepEqual(result.pending, { writes: 2, readOnly: true, cancelDisabled: true, saveDisabled: true });
+      assert.deepEqual(result.afterFailure, { text: corrected, mode: 'turn', enabled: true });
       assert.deepEqual(result.errors, ['Reply changed']);
-      const write = { sessionId: 'reply-edit', messageId: 'answer', expectedContent: original, content: corrected };
-      assert.deepEqual(result.writes, [write, write]);
+      const write = { sessionId: 'reply-edit', messageId: 'answer', expectedContent: original, content: corrected, thinkingContext: 'turn' };
+      assert.deepEqual(result.writes, [
+        { ...write, content: original, thinkingContext: 'reply' }, write, write,
+        { ...write, expectedContent: corrected, thinkingContext: 'keep' },
+      ]);
       assert.deepEqual(result.ids, ['older-prompt', 'older-answer', 'prompt', 'narration', 'tool', 'answer']);
+      if (process.env.PI_REPLY_EDITOR_SCREENSHOT) {
+        await send('Emulation.setDeviceMetricsOverride', { width: 1000, height: 800, deviceScaleFactor: 1, mobile: false });
+        const clip = await evaluate('previewReplyEditor()');
+        const shot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true, clip: { ...clip, scale: 1 } });
+        await writeFile(process.env.PI_REPLY_EDITOR_SCREENSHOT, Buffer.from(shot.data, 'base64'));
+      }
     });
   } finally {
     if (socket?.readyState === WebSocket.OPEN) {

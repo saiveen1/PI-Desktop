@@ -156,6 +156,7 @@ export function restoreAssistantProviderReplay(
   replay: unknown,
   thinking: string,
   text: string,
+  excludeThinking = false,
 ): ReplayContent[] | undefined {
   const blocks = validBlocks(replay);
   if (!blocks) return undefined;
@@ -173,6 +174,7 @@ export function restoreAssistantProviderReplay(
   let textOffset = 0;
   for (const block of blocks) {
     if (block.type === "thinking") {
+      if (excludeThinking) continue;
       const slice = thinking.slice(thinkingOffset, thinkingOffset + block.length);
       thinkingOffset += block.length;
       // An empty unsigned block carries nothing a provider could use.

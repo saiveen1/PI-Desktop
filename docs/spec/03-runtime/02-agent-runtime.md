@@ -1228,7 +1228,8 @@ criterion-by-criterion report of what was met and the evidence observed.
   deltas every 16ms, and flushes before tool/terminal/abort/error/retry
   boundaries. `message_end` is the authoritative snapshot (D412).
 - The shared pi-ai Responses compatibility patch reconciles terminal items before
-  this snapshot: a whitespace-only final reasoning summary cannot overwrite
+  this snapshot: a final reasoning summary containing only whitespace or Unicode
+  default-ignorable characters (such as U+200B) cannot overwrite
   meaningful streamed thinking, and meaningful final reasoning content remains a
   fallback. An empty, missing, or whitespace-only terminal message cannot erase
   meaningful streamed answer text from the same output item. An orphan DSML
@@ -1315,6 +1316,12 @@ transient and never restored into durable UI messages or transcript records.
   invalidates that session's cached runtime. The next prompt reconstructs the
   assistant message from the edited transcript, not the old provider replay or
   a checkpoint containing the replaced response.
+- `UiMessage.excludeThinkingFromContext === true` leaves the stored/displayed
+  reasoning intact but omits its thinking content from restored model messages.
+  This also filters signed, redacted and encrypted reasoning blocks; text and
+  function-call signatures remain where needed for tool-pair replay. The same
+  exclusion applies to history-based context seeding. DeepSeek's existing empty
+  or placeholder reasoning-field compatibility remains, never the excluded text.
 
 ## 5f. Subagent delegation (D201, ADR 0062, ADR 0089)
 

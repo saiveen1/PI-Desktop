@@ -2237,13 +2237,23 @@ Single message render — either user (plaintext) or assistant (markdown streami
 - Thinking: separate lightweight disclosure above the answer with no card
   background or outer border. Its Sparkles/chevron trigger uses secondary text,
   and the expanded markdown is indented by a subtle theme-token left rule. It
-  is never concatenated into answer markdown.
+  is never concatenated into answer markdown. Whitespace or Unicode
+  default-ignorable characters alone (such as U+200B) do not create a thinking
+  disclosure. Real thinking retains its original characters, including joiners;
+  context-excluded history and later newly generated thinking remain displayable.
 - Hover actions: quiet icon-only action chips under the bubble — Copy on idle
   assistant turns; Fork and Regenerate on completed assistant turns; Edit and
   Delete on user turns. A streaming assistant turn omits its Copy action until
   the response settles. The last completed text reply in an idle, editable local
   Desktop conversation also offers Edit: Save replaces the assistant's answer
-  in the transcript and next model context; Cancel leaves it unchanged. Neither
+  in the transcript and next model context; Cancel leaves it unchanged. The
+  editor footer places a labeled Thinking context select before Cancel/Save:
+  exclude only the final answer's thinking (default), exclude all thinking used
+  for this answer, or keep all thinking used for this answer. The hint explicitly
+  limits the choice to this answer, leaves earlier turns unaffected, and confirms
+  that original thinking stays in history. The footer wraps on narrow panes.
+  An explicit selection may be saved with unchanged text. Selection alone never
+  saves or starts a model request. Neither
   action retries the prompt. Older replies require Fork first; the source and
   its later turns remain unchanged. Assistant rows never offer Delete. Chips
   render the glyph

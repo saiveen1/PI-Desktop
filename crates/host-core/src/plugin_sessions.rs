@@ -314,6 +314,7 @@ fn parse_message(
         hosted_search: None,
         model_system: None,
         provider_replay: None,
+        exclude_thinking_from_context: None,
         session_message: None,
     })
 }

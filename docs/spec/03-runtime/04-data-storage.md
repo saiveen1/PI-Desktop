@@ -396,6 +396,16 @@ precedence, then a preceding anchor, then the record's continuation position.
 Forks remap surviving anchor IDs. Normal system notices remain visible; internal
 model-state rows do not produce transcript bubbles or search text.
 
+Assistant rows may carry optional `meta.excludeThinkingFromContext`, projected
+as the same optional `UiMessage` boolean. `true` excludes this row's reasoning
+from subsequent model context while leaving its original thinking blocks visible
+and reversible. Missing/false keeps legacy replay. Reply edits atomically update
+this metadata and invalidate covering compactions (including retained reasoning)
+from the earliest affected row. Forks and revisions preserve it. This is additive
+metadata in transcript schema 2 and needs no SQLite schema change or backfill.
+Older runtimes ignore the flag and may replay the original thinking; downgrading
+is not guaranteed to preserve the exclusion.
+
 Assistant rows may carry `meta.providerReplay = { version: 1, blocks: [...] }`
 (#1972). Each block is `{ type: "thinking", length, signature?, redacted? }` or
 `{ type: "text", length, signature? }` in content order; `length` counts UTF-16

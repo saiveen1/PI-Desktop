@@ -13,6 +13,7 @@ import {
   isModeId,
   isObserverGuardMode,
   type EditAssistantReplyRequest,
+  type EditAssistantReplyResult,
   type ObserverGuardMode,
   type ModelConfigImportDraft,
   type Mode,
@@ -617,17 +618,23 @@ export function registerSessionIpc({
   );
   handle(IPC.invoke.sessionEditAssistantReply, async (input: EditAssistantReplyRequest) => {
     if (!host) throw new Error("host unavailable");
-    const { sessionId, messageId, expectedContent, content } = input ?? {};
+    const { sessionId, messageId, expectedContent, content, thinkingContext } = input ?? {};
     if (typeof sessionId !== "string" || !sessionId.trim() || typeof messageId !== "string" ||
         !messageId.trim() || typeof expectedContent !== "string" || typeof content !== "string" || !content.trim()) {
       throw Object.assign(new Error("Invalid assistant reply edit"), { errorCode: ErrorCodes.INVALID_ARGUMENT });
+    }
+    if (thinkingContext !== undefined && !["reply", "turn", "keep"].includes(thinkingContext)) {
+      throw Object.assign(new Error("Invalid reply thinking context option"), { errorCode: ErrorCodes.INVALID_ARGUMENT });
     }
     if (sessionId.startsWith("remote:")) {
       throw Object.assign(new Error("Remote reply editing is unavailable"), { errorCode: ErrorCodes.CAPABILITY_UNAVAILABLE });
     }
     const currentHost = host;
     return runTranscriptRewrite(sessionId, "assistant reply editing", currentHost,
-      () => currentHost.call<{ ok: true }>("session.editAssistantReply", { sessionId, messageId, expectedContent, content }),
+      () => currentHost.call<EditAssistantReplyResult>("session.editAssistantReply", {
+        sessionId, messageId, expectedContent, content,
+        ...(thinkingContext === undefined ? {} : { thinkingContext }),
+      }),
       { strictDrain: true, requireDisposal: true });
   });
   handle(

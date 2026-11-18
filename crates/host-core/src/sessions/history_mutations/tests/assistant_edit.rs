@@ -1,6 +1,8 @@
 use super::*;
 use std::io::Write;
 
+mod thinking_context;
+
 fn edit(db: &Database, session: &str, id: &str, before: &str, after: &str) -> Result<()> {
     edit_assistant_reply(
         db,
@@ -9,8 +11,10 @@ fn edit(db: &Database, session: &str, id: &str, before: &str, after: &str) -> Re
             message_id: id.into(),
             expected_content: before.into(),
             content: after.into(),
+            thinking_context: None,
         },
     )
+    .map(|_| ())
 }
 
 fn checkpoint(db: &Database, session: &str, id: &str, anchor: &str, summary: &str) {

@@ -1919,6 +1919,36 @@
   padding: 4px 8px 8px;
 }
 
+.message-edit-actions-with-options {
+  justify-content: flex-start;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.message-edit-thinking-context {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+
+.message-edit-thinking-context .field-select {
+  min-height: var(--ds-control-size);
+  padding: 4px 8px;
+  font-size: var(--text-sm);
+}
+
+.message-edit-thinking-hint {
+  margin-block-start: 4px;
+  color: var(--ds-text-secondary);
+  font-size: var(--text-xs);
+}
+
+.message-edit-submit-actions {
+  display: flex;
+  gap: 4px;
+  margin-inline-start: auto;
+}
+
 .message-edit-cancel {
   height: 28px;
   min-height: 28px;

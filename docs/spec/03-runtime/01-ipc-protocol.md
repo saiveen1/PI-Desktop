@@ -1476,7 +1476,11 @@ grants, or regenerate revisions. The source session remains unchanged.
 Message-scoped Fork uses this option so the child receives its own session id
 and cannot mutate the source runtime. To change an older reply, fork through
 that reply first. `session/editAssistantReply({ sessionId, messageId,
-expectedContent, content }) -> { ok: true }` edits only the idle local tail,
+expectedContent, content, thinkingContext? }) -> { ok: true,
+thinkingContextUpdates? }` edits only the idle local tail.
+The optional `"reply" | "turn" | "keep"` choice follows the
+[Host mutation contract](06-host-rpc-protocol.md#bounded-existing-history-operations-1868),
+including same-text saves and authoritative per-message exclusion updates,
 under the same session-operation lock as prompt admission. It strictly drains
 pending writes and requires disposal of any cached runtime before committing
 the Host edit. It does not start a turn or fork a session.

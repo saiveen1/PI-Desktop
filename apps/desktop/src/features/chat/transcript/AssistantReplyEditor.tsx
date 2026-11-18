@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import type { AssistantReplyThinkingContext } from "@pi-desktop/shared";
+import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Button, Textarea } from "../../../components/ui";
+import { Button, Field, Select, Textarea } from "../../../components/ui";
 import { useAppStore } from "../../../stores/app-store";
 import { getEditableAssistantReply } from "../../../stores/runtime/transcript-action";
 
-type ReplyDraft = { messageId: string; source: string; value: string; saving: boolean };
+const THINKING_CONTEXTS = ["reply", "turn", "keep"] as const satisfies readonly AssistantReplyThinkingContext[];
+type ReplyDraft = { messageId: string; source: string; value: string; thinkingContext: AssistantReplyThinkingContext; saving: boolean };
 
 export function useAssistantReplyEditor(sessionId: string, messageId?: string) {
   const editable = useAppStore((state) => messageId !== undefined &&
@@ -12,6 +14,7 @@ export function useAssistantReplyEditor(sessionId: string, messageId?: string) {
   const [loading, setLoading] = useState(false);
   const [draft, setDraft] = useState<ReplyDraft | null>(null);
   const owner = useRef<AbortController | null>(null);
+  const saving = useRef(false);
   useEffect(() => () => owner.current?.abort(), [sessionId, messageId]);
 
   const begin = async () => {
@@ -27,6 +30,7 @@ export function useAssistantReplyEditor(sessionId: string, messageId?: string) {
     request.signal.addEventListener("abort", () => {
       unsubscribe();
       owner.current = null;
+      saving.current = false;
       setLoading(false);
       setDraft(null);
     }, { once: true });
@@ -34,21 +38,29 @@ export function useAssistantReplyEditor(sessionId: string, messageId?: string) {
     if (request.signal.aborted) return;
     if (source === null) { request.abort(); return; }
     setLoading(false);
-    setDraft({ messageId, source, value: source, saving: false });
+    setDraft({ messageId, source, value: source, thinkingContext: "reply", saving: false });
   };
   const cancel = () => owner.current?.abort();
   const save = async () => {
     const request = owner.current;
-    if (!request || !messageId || !editable || !draft || draft.saving || !draft.value.trim() || draft.value === draft.source) return;
+    if (!request || !messageId || !editable || draft?.messageId !== messageId || saving.current || !draft.value.trim()) return;
+    saving.current = true;
     setDraft({ ...draft, saving: true });
-    const saved = await useAppStore.getState().editAssistantReply(sessionId, messageId, draft.source, draft.value, request.signal);
+    const saved = await useAppStore.getState().editAssistantReply(
+      sessionId, messageId, draft.source, draft.value, request.signal, draft.thinkingContext,
+    );
     if (request.signal.aborted) return;
     if (saved) request.abort();
-    else setDraft(draft);
+    else {
+      saving.current = false;
+      setDraft(draft);
+    }
   };
   return {
     editable, loading, draft: draft?.messageId === messageId ? draft : null, begin, cancel, save,
     change: (value: string) => setDraft((current) => current ? { ...current, value } : current),
+    changeThinkingContext: (thinkingContext: AssistantReplyThinkingContext) =>
+      setDraft((current) => current ? { ...current, thinkingContext } : current),
   };
 }
 
@@ -57,7 +69,8 @@ export function AssistantReplyEditor({ messageId, editor }: {
   editor: ReturnType<typeof useAssistantReplyEditor>;
 }) {
   const { t } = useTranslation();
-  const { draft, editable, cancel, save, change } = editor;
+  const hintId = useId();
+  const { draft, editable, cancel, save, change, changeThinkingContext } = editor;
   if (!draft) return null;
   return (
     <div className="message-bubble assistant-turn-fragment" data-message-id={messageId}>
@@ -85,15 +98,28 @@ export function AssistantReplyEditor({ messageId, editor }: {
             }
           }}
         />
-        <div className="message-edit-actions">
-          <Button type="button" variant="ghost" size="sm" disabled={draft.saving} onClick={cancel}>
-            {t("common.cancel")}
-          </Button>
-          <Button type="submit" variant="primary" size="sm"
-            disabled={!editable || draft.saving || !draft.value.trim() || draft.value === draft.source}
-          >
-            {t(draft.saving ? "common.saving" : "common.save")}
-          </Button>
+        <div className="message-edit-actions message-edit-actions-with-options">
+          <div className="message-edit-thinking-context">
+            <Field label={t("chat.editReplyThinkingContext.label")}>
+              <Select value={draft.thinkingContext} disabled={draft.saving} aria-describedby={hintId}
+                onChange={(event) => {
+                  const mode = THINKING_CONTEXTS.find((option) => option === event.currentTarget.value);
+                  if (mode) changeThinkingContext(mode);
+                }}
+              >
+                {THINKING_CONTEXTS.map((mode) => <option key={mode} value={mode}>{t(`chat.editReplyThinkingContext.${mode}`)}</option>)}
+              </Select>
+            </Field>
+            <div id={hintId} className="message-edit-thinking-hint">{t("chat.editReplyThinkingContext.hint")}</div>
+          </div>
+          <div className="message-edit-submit-actions">
+            <Button type="button" variant="ghost" size="sm" disabled={draft.saving} onClick={cancel}>
+              {t("common.cancel")}
+            </Button>
+            <Button type="submit" variant="primary" size="sm" disabled={!editable || draft.saving || !draft.value.trim()}>
+              {t(draft.saving ? "common.saving" : "common.save")}
+            </Button>
+          </div>
         </div>
       </form>
     </div>

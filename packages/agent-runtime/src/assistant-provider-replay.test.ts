@@ -42,6 +42,18 @@ describe("assistant provider replay", () => {
     ]);
   });
 
+  it("excludes signed and opaque thinking without changing text signatures or stored blocks", () => {
+    const replay = captureAssistantProviderReplay(signedContent);
+    const original = structuredClone(replay);
+    const { text, thinking } = assistantContent(signedContent);
+    expect(restoreAssistantProviderReplay(replay, thinking, text, true)).toEqual([
+      { type: "text", text: "Hello ", textSignature: "msg-1" },
+      { type: "text", text: "world" },
+    ]);
+    expect(replay).toEqual(original);
+    expect(restoreAssistantProviderReplay(replay, thinking, text)).toEqual(signedContent);
+  });
+
   it("records nothing when no block carries a signature", () => {
     expect(
       captureAssistantProviderReplay([
@@ -219,6 +231,15 @@ describe("rebuilt runtime request", () => {
     expect(input).toContainEqual(expect.objectContaining({ type: "message", role: "assistant", id: "msg_real_1" }));
   });
 
+  it("does not replay encrypted reasoning after it is excluded from context", async () => {
+    const stored = historyRow({ excludeThinkingFromContext: true });
+    const input = await firstRequestInput(stored);
+    expect(input.some((item) => (item as { type?: string }).type === "reasoning")).toBe(false);
+    expect(JSON.stringify(input)).not.toContain("enc-1");
+    expect(input).toContainEqual(expect.objectContaining({ type: "message", role: "assistant", id: "msg_real_1" }));
+    expect(stored[1]!.thinking).toBe("think");
+  });
+
   it("keeps the previous rebuild for rows without replay data", async () => {
     const input = await firstRequestInput(historyRow({ providerReplay: undefined }));
     expect(input.some((item) => (item as { type?: string }).type === "reasoning")).toBe(false);
@@ -350,6 +371,28 @@ describe("Gemini function-call signatures across a rebuild", () => {
     expect(bodies).toHaveLength(1);
     return bodies[0].contents;
   }
+
+  it("preserves a function-call signature when its carrier's thinking is excluded", async () => {
+    const content: AssistantMessage["content"] = [
+      { type: "thinking", thinking: "exclude this", thinkingSignature: "reason-signature" },
+      { type: "toolCall", id: "c1", name: "Read", arguments: { path: "one" }, thoughtSignature: Buffer.from("call-signature").toString("base64") },
+    ];
+    const runtime = googleRuntime([
+      { id: "u", role: "user", content: "Read one file", createdAt: "2026-11-18T00:00:00Z" },
+      { id: "a", role: "assistant", content: "", thinking: "exclude this", excludeThinkingFromContext: true,
+        providerReplay: captureAssistantProviderReplay(content), createdAt: "2026-11-18T00:00:00Z" },
+      { id: "t", role: "tool", content: "file receipt", toolResult: { content: "file receipt" }, toolCallId: "c1", toolName: "Read", toolArgs: { path: "one" }, createdAt: "2026-11-18T00:00:00Z" },
+    ]);
+    try {
+      const entries = (runtime as unknown as { fullEntries: { message: unknown }[] }).fullEntries;
+      const contents = await requestContents(runtime, entries.map(entry => entry.message));
+      const parts = contents.flatMap(message => message.parts);
+      expect(parts.find(part => part.functionCall)?.thoughtSignature).toBe(Buffer.from("call-signature").toString("base64"));
+      expect(JSON.stringify(contents)).not.toContain("exclude this");
+      expect(JSON.stringify(contents)).not.toContain("reason-signature");
+      expect(JSON.stringify(contents)).toContain("file receipt");
+    } finally { await runtime.dispose(); }
+  });
 
   /**
    * Runs one live call-making turn, persists what the Host would (the

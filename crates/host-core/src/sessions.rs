@@ -260,6 +260,9 @@ pub struct UiMessage {
     pub created_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub thinking: Option<String>,
+    /// Context-only exclusion; absent/false includes the preserved thinking blocks.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exclude_thinking_from_context: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<String>,
     /// Additive transcript metadata; older records have no truncation marker.
@@ -462,6 +465,9 @@ pub(crate) fn ui_to_record(message: &UiMessage) -> (MessageRecord, Option<String
     if let Some(replay) = &message.provider_replay {
         meta_obj.insert("providerReplay".into(), replay.clone());
     }
+    if let Some(excluded) = message.exclude_thinking_from_context {
+        meta_obj.insert("excludeThinkingFromContext".into(), json!(excluded));
+    }
     if let Some(command) = &message.command {
         meta_obj.insert("command".into(), json!(command));
     }
@@ -634,6 +640,9 @@ pub(crate) fn record_to_ui(record: MessageRecord) -> UiMessage {
     let meta = record.meta.unwrap_or(Value::Null);
     let model_system = meta.get("modelSystem").cloned();
     let provider_replay = meta.get("providerReplay").cloned();
+    let exclude_thinking_from_context = meta
+        .get("excludeThinkingFromContext")
+        .and_then(Value::as_bool);
     let command = meta
         .get("command")
         .and_then(Value::as_str)
@@ -795,6 +804,7 @@ pub(crate) fn record_to_ui(record: MessageRecord) -> UiMessage {
             steering,
             created_at: record.created_at,
             thinking,
+            exclude_thinking_from_context,
             status,
             model_id,
             provider_id,
@@ -854,6 +864,7 @@ pub(crate) fn record_to_ui(record: MessageRecord) -> UiMessage {
             steering,
             created_at: record.created_at,
             thinking,
+            exclude_thinking_from_context,
             status,
             model_id,
             provider_id,
@@ -4867,6 +4878,7 @@ mod tests {
             hosted_search: None,
             model_system: None,
             provider_replay: None,
+            exclude_thinking_from_context: None,
             session_message: None,
         }
     }
@@ -5841,6 +5853,7 @@ mod tests {
             hosted_search: None,
             model_system: None,
             provider_replay: None,
+            exclude_thinking_from_context: None,
             session_message: None,
         };
         append_message(&db, &session.id, &tool, None).unwrap();
@@ -6711,6 +6724,7 @@ mod tests {
             hosted_search: None,
             model_system: None,
             provider_replay: None,
+            exclude_thinking_from_context: None,
             session_message: None,
         };
         append_message(&db, &session.id, &assistant, None).unwrap();
@@ -6858,6 +6872,7 @@ mod tests {
             agent_name: None,
             model_system: None,
             provider_replay: None,
+            exclude_thinking_from_context: None,
             hosted_search: Some(json!({
                 "status": "completed",
                 "rounds": [

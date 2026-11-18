@@ -3250,13 +3250,14 @@ async fn handle_request(
                 serde_json::from_value(params).map_err(|_| {
                     rpc_err(
                         1002,
-                        "expected sessionId, messageId, expectedContent and content strings",
+                        "expected sessionId, messageId, expectedContent, content strings and optional thinkingContext reply/turn/keep",
                         "INVALID_PARAMS",
                     )
                 })?;
             let st = state.lock().await;
-            sessions::edit_assistant_reply(&st.db, &edit).map_err(session_collaboration_rpc_err)?;
-            Ok(json!({ "ok": true }))
+            let result = sessions::edit_assistant_reply(&st.db, &edit)
+                .map_err(session_collaboration_rpc_err)?;
+            serde_json::to_value(result).map_err(|e| rpc_err(1000, e.to_string(), "INTERNAL"))
         }
         "session.deleteMessage" | "session.retractPendingPrompt" => {
             let session_id = params
@@ -6048,6 +6049,9 @@ mod tests {
             ("expectedContent", json!(5)),
             ("content", Value::Null),
             ("messages", json!([])),
+            ("thinkingContext", json!("invalid")),
+            ("thinkingContext", json!(true)),
+            ("thinkingContext", Value::Null),
         ] {
             let mut bad = request.clone();
             bad[field] = value;
@@ -6061,6 +6065,15 @@ mod tests {
             call(request).await.unwrap_err().data.unwrap()["errorCode"],
             "CONFLICT"
         );
+        for mode in ["reply", "turn", "keep"] {
+            assert_eq!(
+                call(json!({"sessionId":session.id, "messageId":"reply",
+                "expectedContent":"  new\n", "content":"  new\n", "thinkingContext":mode}))
+                .await
+                .unwrap(),
+                json!({"ok":true,"thinkingContextUpdates":[]})
+            );
+        }
         let st = state.lock().await;
         assert_eq!(
             sessions::get_session(&st.db, &session.id)

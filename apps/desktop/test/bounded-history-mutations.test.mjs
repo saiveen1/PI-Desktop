@@ -101,6 +101,24 @@ for (const [channel, method, input] of [
     assert.deepEqual(h.events, [["lock"], ["fence"], ["strict-drain", "s"], ["rollback"], ["release"]]);
   });
 }
+for (const thinkingContext of ["reply", "turn", "keep"]) {
+  test(`reply edit forwards ${thinkingContext} and returns authoritative thinking updates`, async () => {
+    const result = { ok: true, thinkingContextUpdates: [{ messageId: "a1", excludeThinkingFromContext: thinkingContext !== "keep" }] };
+    const h = ipcHarness(false, result);
+    const input = { sessionId: "s", messageId: "a2", expectedContent: "answer", content: "answer", thinkingContext };
+    assert.deepEqual(await h.invoke("sessionEditAssistantReply", input), result);
+    assert.deepEqual(h.events.find(([method]) => method === "session.editAssistantReply"), ["session.editAssistantReply", input]);
+  });
+}
+test("reply edit rejects malformed thinking context choices before draining or writing", async () => {
+  const h = ipcHarness();
+  for (const thinkingContext of [null, 1, [], "all", ""]) {
+    await assert.rejects(h.invoke("sessionEditAssistantReply", {
+      sessionId: "s", messageId: "a", expectedContent: "old", content: "new", thinkingContext,
+    }), { errorCode: "INVALID_ARGUMENT" });
+  }
+  assert.deepEqual(h.events, []);
+});
 test("editing fails closed if the old model context cannot be discarded", async () => {
   const h = ipcHarness(false, undefined, { disposeError: new Error("runtime still warm") });
   await assert.rejects(h.invoke("sessionEditAssistantReply", { sessionId: "s", messageId: "a", expectedContent: "old", content: "new" }), /runtime still warm/);

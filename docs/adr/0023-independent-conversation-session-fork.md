@@ -58,6 +58,24 @@ Older answers use the existing explicit Fork action, then the same tail edit on
 the child. Rewriting later history or building a second revision tree would not
 improve this infrequent path. User-prompt Edit/Retry stays unchanged.
 
+The editor offers a thinking-context selector in its footer: exclude only the
+edited reply (default), exclude all thinking in this turn, or keep all thinking
+in this turn. This is a reversible context choice, not deletion: original
+thinking remains in history. The current reply means its exact assistant row,
+not the last earlier row that happened to contain thinking. Host-owned turn
+boundaries keep prior turns, delegated output and tool results outside this
+mutation. Explicit choices may be saved without changing the answer text.
+
+An additive `excludeThinkingFromContext` message metadata flag controls runtime
+restoration. Excluded rows omit plain, signed and encrypted reasoning; tool
+call signatures and results remain. Host invalidates checkpoints covering the
+changed context, including retained reasoning, and Electron disposes the warm
+runtime before continuing. Old requests that omit the option remain text-only;
+old rows without the flag retain their behavior. No database backfill or
+transcript format migration is needed for this optional metadata. Older apps
+that do not understand the flag will replay original thinking: this is not
+secure deletion or a cross-version redaction guarantee.
+
 ## Alternatives
 
 - Renderer-owned `create + replaceMessages`: not atomic across the host-owned

@@ -2,7 +2,7 @@ import i18n from "i18next";
 import type { UiMessage } from "@pi-desktop/shared";
 import { api } from "../../lib/api";
 import { sessionAllows } from "../../lib/remote-session-safety";
-import { registerSessionMessageReplacement } from "../../lib/session-transcript-updates";
+import { getSessionMessageSnapshot, registerSessionMessageReplacements } from "../../lib/session-transcript-updates";
 import { TRANSCRIPT_CONTENT_LIMIT } from "../../lib/transcript-reading";
 import type { AppState } from "../app-state";
 import type { SessionRuntime } from "./session-runtime";
@@ -106,43 +106,66 @@ export async function editAssistantReply(
   { get, set }: StoreAccess,
   runtime: SessionRuntime,
   saving: Set<string>,
-  ...[sessionId, messageId, expectedContent, content, signal]: Parameters<AppState["editAssistantReply"]>
+  ...[sessionId, messageId, expectedContent, content, signal, thinkingContext]: Parameters<AppState["editAssistantReply"]>
 ): Promise<boolean> {
   const source = getEditableAssistantReply(get(), sessionId);
-  if (signal?.aborted || saving.has(sessionId) || !content.trim() || content === expectedContent) return false;
+  const bodyChanged = content !== expectedContent;
+  if (signal?.aborted || saving.has(sessionId) || !content.trim() || (!bodyChanged && thinkingContext === undefined)) return false;
   if (source?.id !== messageId || !matchesReplySource(source.content, expectedContent)) {
     reportReplyEditError(get(), sessionId);
     return false;
   }
   saving.add(sessionId);
   try {
-    await api.editAssistantReply({ sessionId, messageId, expectedContent, content });
+    const { thinkingContextUpdates } = await api.editAssistantReply({
+      sessionId, messageId, expectedContent, content,
+      ...(thinkingContext === undefined ? {} : { thinkingContext }),
+    });
+    if (thinkingContext !== undefined && !Array.isArray(thinkingContextUpdates)) {
+      throw new Error(i18n.t("chat.editReplyThinkingContext.unconfirmed"));
+    }
+    const flags = new Map(thinkingContextUpdates?.map((update) => [update.messageId, update.excludeThinkingFromContext]));
+    if (!bodyChanged && !flags.size) return true;
+    const changedIds = new Set(flags.keys());
+    if (bodyChanged) changedIds.add(messageId);
     const current = get();
     const replace = (messages: UiMessage[]) => {
-      const index = messages.findIndex((message) => message.id === messageId);
-      const message = messages[index];
-      if (!message || !isEditableReply(message) || !matchesReplySource(message.content, expectedContent)) return messages;
-      const next = messages.slice();
-      next[index] = { ...message, content, providerReplay: undefined };
-      return registerSessionMessageReplacement(messages, next, index);
+      const { positions } = getSessionMessageSnapshot(messages);
+      const changed: number[] = [];
+      let next: UiMessage[] | undefined;
+      for (const id of changedIds) {
+        const index = positions.get(id);
+        if (index === undefined) continue;
+        const message = messages[index];
+        const body = bodyChanged && id === messageId && isEditableReply(message) &&
+          matchesReplySource(message.content, expectedContent);
+        const flag = flags.get(id);
+        if (!body && (flag === undefined || flag === message.excludeThinkingFromContext)) continue;
+        next ??= messages.slice();
+        next[index] = {
+          ...message,
+          ...(body ? { content, providerReplay: undefined } : {}),
+          ...(flag === undefined ? {} : { excludeThinkingFromContext: flag }),
+        };
+        changed.push(index);
+      }
+      return next ? registerSessionMessageReplacements(messages, next, changed) : messages;
     };
-    // Patch only the confirmed row in the latest projections. A read/turn
-    // started during the write can have added rows or changed the window.
-    const active = current.activeSessionId === sessionId;
+    // Keep each projection's window and patch only the Host-confirmed identities.
+    const active = current.activeSessionId === sessionId ? current.messages : undefined;
     const retained = current.retainedTranscripts[sessionId];
-    const cached = active ? current.messages : runtime.sessionTranscriptCache.get(sessionId) ?? retained;
-    const updated = cached && replace(cached);
-    if (updated && updated !== cached) {
-      runtime.recordConfirmedReplyEdit(sessionId);
-      runtime.cacheSessionTranscript(sessionId, updated);
-    }
+    const cached = runtime.sessionTranscriptCache.get(sessionId) ?? retained;
+    const updatedActive = active && replace(active);
+    const updatedCache = cached && (cached === active ? updatedActive : replace(cached));
+    runtime.recordConfirmedReplyEdit(sessionId);
+    if (updatedCache && updatedCache !== cached) runtime.cacheSessionTranscript(sessionId, updatedCache);
     const view = current.transcriptViews[sessionId];
     const reading = view && replace(view.messages);
-    const updatedRetained = retained && (retained === cached ? updated : replace(retained));
+    const updatedRetained = retained && (retained === active ? updatedActive : retained === cached ? updatedCache : replace(retained));
     set({
-      ...(active && updated && updated !== cached ? { messages: updated } : {}),
+      ...(updatedActive && updatedActive !== active ? { messages: updatedActive } : {}),
       ...(updatedRetained && updatedRetained !== retained ? { retainedTranscripts: { ...current.retainedTranscripts, [sessionId]: updatedRetained } } : {}),
-      ...(view && reading && (reading !== view.messages || (active && updated !== cached)) ? {
+      ...(view && reading && (reading !== view.messages || updatedActive !== active || view.loading) ? {
         transcriptViews: { ...current.transcriptViews, [sessionId]: { ...view, messages: reading, loading: null } },
       } : {}),
     });

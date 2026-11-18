@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { DesktopAgentRuntime } from "../packages/agent-runtime/dist/runtime.js";
 import { transcriptRewriteHarness } from "../apps/desktop/test/helpers/transcript-rewrite-harness.mjs";
 import { Host, resolveHostBinary } from "./e2e/host.mjs";
+import { verifyThinkingContext } from "./e2e/assistant-thinking-context.mjs";
 
 const data = await mkdtemp(join(process.env.PI_SCRATCH_DIR || tmpdir(), "pi-reply-edit-"));
 const host = new Host(resolveHostBinary(), data);
@@ -78,6 +79,8 @@ try {
   assert.ok(JSON.stringify(requests[0].at(-1).content).includes(followup));
   assert.ok(!JSON.stringify(requests[0]).includes("Discard this answer."));
   console.log("Next provider request contains only the corrected assistant answer");
+  await runtime.dispose(); runtime = undefined;
+  await verifyThinkingContext(host, data);
 } finally {
   globalThis.fetch = originalFetch;
   try { await runtime?.dispose(); } finally {

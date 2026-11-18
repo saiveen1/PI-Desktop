@@ -1392,11 +1392,27 @@ pub(crate) fn update_message_lines(
     record: &MessageRecord,
     changed_suffix: Option<&std::collections::HashSet<&str>>,
 ) -> Result<bool> {
+    update_messages_lines(data_dir, session_id, &[record], changed_suffix)
+}
+
+/// Batch metadata/text edits share one atomic splice and checkpoint invalidation.
+pub(crate) fn update_messages_lines(
+    data_dir: &Path,
+    session_id: &str,
+    records: &[&MessageRecord],
+    changed_suffix: Option<&std::collections::HashSet<&str>>,
+) -> Result<bool> {
+    let Some(record) = records.first() else {
+        return Ok(false);
+    };
     let path = transcript_path(data_dir, session_id)?;
     if binary_migration::prepare(&path, Some(&header_line(session_id, &record.created_at)?))? {
         layout::invalidate(data_dir, session_id);
     }
-    let replacement = tagged("message", record)?;
+    let replacements: std::collections::HashMap<_, _> = records
+        .iter()
+        .map(|record| Ok((record.id.as_str(), (*record, tagged("message", record)?))))
+        .collect::<Result<_>>()?;
     // Fast path. A message is decided by the *last* occurrence of its id, so
     // when that occurrence is already the file's last line, appending the
     // replacement is indistinguishable from replacing it in place: same id, same
@@ -1404,7 +1420,8 @@ pub(crate) fn update_message_lines(
     // whole-file rewrite below, which measured 4.5 ms at 1.3 MB and 27 ms at
     // 21 MB — about 1.3 s at 1 GB by the same arithmetic — and that rewrite, not
     // the device, is what bounds a reply in a session holding hundreds of MB.
-    if changed_suffix.is_none() {
+    if changed_suffix.is_none() && records.len() == 1 {
+        let replacement = tagged("message", record)?;
         if let Some(last) = read_last_line(&path)? {
             if last != replacement && line_carries(&last, &record.id) {
                 append_line(&path, None, replacement)?;
@@ -1421,7 +1438,7 @@ pub(crate) fn update_message_lines(
     };
     let tmp = path.with_extension("jsonl.tmp");
     let mut rewrote = false;
-    let mut carries_target = false;
+    let mut found = std::collections::HashSet::new();
     {
         let file = File::create(&tmp)?;
         let mut writer = BufWriter::new(file);
@@ -1451,8 +1468,13 @@ pub(crate) fn update_message_lines(
                         rewrote = true;
                         continue;
                     }
-                } else if head.kind == "message" && head.id.as_deref() == Some(&record.id) {
-                    carries_target = true;
+                } else if let Some((record, replacement)) = head
+                    .id
+                    .as_deref()
+                    .filter(|_| head.kind == "message")
+                    .and_then(|id| replacements.get(id))
+                {
+                    found.insert(record.id.as_str());
                     // Preserve future top-level fields on edited rows as well as
                     // the open-set metadata and blocks. Never project through UiMessage.
                     let edited_line;
@@ -1469,7 +1491,7 @@ pub(crate) fn update_message_lines(
                         edited_line = tagged("message", &original)?;
                         &edited_line
                     } else {
-                        &replacement
+                        replacement
                     };
                     if line.trim_ascii_end() != replacement.as_bytes() {
                         writeln!(writer, "{replacement}")?;
@@ -1481,12 +1503,13 @@ pub(crate) fn update_message_lines(
             writer.write_all(&line)?;
         }
         writer.flush()?;
-        if !carries_target || !rewrote {
+        let carries_targets = found.len() == replacements.len();
+        if !carries_targets || !rewrote {
             // Nothing to swap in: the id is absent, or every copy already
             // carries exactly this metadata. Leave the live transcript alone.
             drop(writer);
             let _ = fs::remove_file(&tmp);
-            return Ok(carries_target);
+            return Ok(carries_targets);
         }
         writer.get_ref().sync_data()?;
     }

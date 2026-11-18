@@ -7,7 +7,11 @@ Against locally recorded upstream `3dd8b955a`, response-level Fork is inherited:
 prompts. The current upstream `AssistantTurn.tsx` has Fork and Regenerate but
 no assistant text editor. The local increment is the idle-tail editor and its
 `session.editAssistantReply` compare-and-replace path; neither the fork nor
-user-prompt retry is attributed to this change.
+user-prompt retry is attributed to this change. The later thinking-context
+selector and per-message replay exclusion extend local commit `20fe2008a`.
+Compared with locally recorded upstream `0ca811242`, those identifiers and
+context-exclusion behavior are absent; the underlying signed reasoning and
+function-call replay remain inherited mechanisms.
 
 ## Audit boundary
 

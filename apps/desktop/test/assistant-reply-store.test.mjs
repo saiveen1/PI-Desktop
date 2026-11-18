@@ -45,7 +45,7 @@ function setup(overrides = {}) {
   const transcript = createTranscriptSlice({ ...access, runtime });
   const sessions = createSessionSlice({ ...access, runtime, ...createSessionCoordination({ ...access, runtime, withoutRecordKey }) });
   runtime.cacheSessionTranscript(id, state.messages, window);
-  return { ...access, runtime, transcript, sessions, toasts };
+  return { ...access, runtime, transcript, sessions, reading: reading.actions, toasts };
 }
 
 test("edits the canonical action fragment, preserving window, rows and metadata", async t => {
@@ -77,6 +77,91 @@ test("edits the canonical action fragment, preserving window, rows and metadata"
   assert.equal(state.retainedTranscripts[id], state.messages);
   assert.equal(state.isRunning, false);
   assert.deepEqual(h.toasts, []);
+});
+
+test("does not report an unacknowledged thinking choice as saved by an older host", async t => {
+  const h = setup();
+  t.mock.method(api, "editAssistantReply", async () => ({ ok: true }));
+  const before = h.get().messages;
+  assert.equal(await h.transcript.editAssistantReply(id, answer.id, answer.content, answer.content, signal(), "turn"), false);
+  assert.equal(h.get().messages, before);
+  assert.equal(h.toasts.length, 1);
+});
+
+test("applies only Host-confirmed thinking flags and preserves raw thinking and replay for unchanged bodies", async t => {
+  const signed = (message, thinking) => ({ ...message, thinking,
+    providerReplay: { version: 1, blocks: [{ type: "thinking", length: thinking.length, signature: message.id }] } });
+  const previousTurn = signed(history[1], "previous work");
+  const earlier = signed(history[3], "pre-tool work");
+  const selected = signed(answer, "final check");
+  const tool = history[4];
+  const full = [history[0], previousTurn, history[2], earlier, tool, selected];
+  const messages = full.slice(-2);
+  const focus = { messageId: earlier.id, requestId: 1 };
+  const view = { messages: full, focus, loading: null, messageStart: 43, messageEnd: 49, hasMoreBefore: true };
+  const h = setup({ messages, retainedTranscripts: { [id]: messages }, transcriptViews: { [id]: view } });
+  const calls = [];
+  const flag = (row, excludeThinkingFromContext) => ({ messageId: row.id, excludeThinkingFromContext });
+  const results = [
+    [flag(selected, true)], [flag(earlier, true)], [flag(earlier, false), flag(selected, false)], [],
+  ];
+  t.mock.method(api, "editAssistantReply", async (input) => {
+    calls.push(input);
+    return { ok: true, thinkingContextUpdates: results.shift() };
+  });
+  const save = (thinkingContext, content = selected.content, abortSignal) =>
+    h.transcript.editAssistantReply(id, selected.id, selected.content, content, abortSignal, thinkingContext);
+  assert.equal(await save(undefined), false, "legacy identical text remains a no-op");
+  assert.equal(await save("reply", selected.content, AbortSignal.abort()), false);
+  assert.deepEqual(calls, []);
+
+  const reading = () => h.get().transcriptViews[id];
+  const expectRows = (earlierFlag, selectedFlag) => {
+    const state = h.get();
+    const currentReply = { ...selected, excludeThinkingFromContext: selectedFlag };
+    assert.deepEqual(state.messages, [tool, currentReply]);
+    assert.equal(state.retainedTranscripts[id], state.messages);
+    assert.equal(h.runtime.sessionTranscriptCache.get(id), state.messages);
+    assert.deepEqual(reading().messages[3], earlierFlag === undefined ? earlier : { ...earlier, excludeThinkingFromContext: earlierFlag });
+    assert.equal(reading().messages[3].providerReplay, earlier.providerReplay);
+    assert.equal(reading().messages[5].providerReplay, selected.providerReplay);
+    assert.equal(reading().messages[1], previousTurn);
+    assert.equal(reading().messages[4], tool);
+    assert.deepEqual(reading().messages[5], currentReply);
+    assert.equal(reading().focus, focus);
+    assert.equal(reading().messageStart, view.messageStart);
+    assert.equal(h.runtime.sessionHistoryCache.get(id), window);
+  };
+  assert.equal(await save("reply"), true);
+  expectRows(undefined, true);
+  assert.equal(await save("turn"), true);
+  expectRows(true, true);
+  assert.equal(await save("keep"), true);
+  expectRows(false, false);
+
+  assert.equal(await save("keep", replacement), true);
+  assert.deepEqual(h.get().messages.at(-1), { ...selected, content: replacement, excludeThinkingFromContext: false, providerReplay: undefined });
+  assert.equal(reading().messages[3].providerReplay, earlier.providerReplay);
+  assert.deepEqual(calls.map(({ thinkingContext, expectedContent, content }) => [thinkingContext, expectedContent === content]),
+    [["reply", true], ["turn", true], ["keep", true], ["keep", false]]);
+});
+
+test("a context-only save invalidates a stale reading request outside the changed rows", async t => {
+  const oldRows = history.slice(0, 2);
+  const view = { messages: oldRows, focus: null, loading: null, messageStart: 43, messageEnd: 45, hasMoreAfter: true };
+  const h = setup({ transcriptViews: { [id]: view } });
+  const detail = Promise.withResolvers();
+  t.mock.method(api, "getSession", () => detail.promise);
+  t.mock.method(api, "editAssistantReply", async () => ({ ok: true, thinkingContextUpdates: [
+    { messageId: answer.id, excludeThinkingFromContext: true },
+  ] }));
+  const paging = h.reading.loadTranscriptPage(id, "after");
+  assert.equal(h.get().transcriptViews[id].loading, "after");
+  assert.equal(await h.transcript.editAssistantReply(id, answer.id, answer.content, answer.content, undefined, "reply"), true);
+  detail.resolve({ session: { ...session, messages: history, messageStart: 43, hasMoreBefore: true } });
+  await paging;
+  assert.deepEqual(h.get().transcriptViews[id], view);
+  assert.equal(h.get().messages.find(row => row.id === answer.id).excludeThinkingFromContext, true);
 });
 
 test("does not open or submit for old, wrong-source, busy, stale or non-text targets", async t => {
@@ -146,23 +231,26 @@ test("a confirmed save never touches the other pane or joins a stale detail pref
   t.mock.method(api, "editAssistantReply", () => mutation.promise);
   const read = t.mock.method(api, "getSession", () => detail.promise);
   const controller = new AbortController();
-  const saving = h.transcript.editAssistantReply(id, answer.id, answer.content, replacement, controller.signal);
+  const saving = h.transcript.editAssistantReply(id, answer.id, answer.content, replacement, controller.signal, "turn");
   const otherMessages = [row("other", "user")];
   h.set({ activeSessionId: "other", messages: otherMessages });
   controller.abort();
   // Warm this session's normal bounded detail read while the write is pending.
   void h.runtime.loadSessionDetail(id, { messageLimit: 100, contentLimit: 65536 });
-  mutation.resolve({ ok: true });
+  mutation.resolve({ ok: true, thinkingContextUpdates: [{ messageId: answer.id, excludeThinkingFromContext: true }] });
   assert.equal(await saving, true);
   assert.equal(h.get().messages, otherMessages);
   assert.equal(h.get().retainedTranscripts[id][5].content, replacement);
+  assert.equal(h.get().retainedTranscripts[id][5].excludeThinkingFromContext, true);
+  assert.equal(h.runtime.sessionTranscriptCache.get(id)[5].excludeThinkingFromContext, true);
   read.mock.mockImplementationOnce(async () => ({ session: { ...session, messages: history.map((row) =>
-    row === answer ? { ...answer, content: replacement } : row), messageStart: 43, hasMoreBefore: true } }));
+    row === answer ? { ...answer, content: replacement, excludeThinkingFromContext: true } : row), messageStart: 43, hasMoreBefore: true } }));
   const selecting = h.sessions.selectSession(id);
   detail.resolve({ session: { ...session, messages: history, messageStart: 43, hasMoreBefore: true } });
   await selecting;
   assert.equal(h.get().messages[5].content, replacement);
   assert.equal(h.runtime.sessionTranscriptCache.get(id)[5].content, replacement);
+  assert.equal(h.get().messages[5].excludeThinkingFromContext, true);
   assert.deepEqual(h.get().sessionHistory[id], window);
   assert.equal(read.mock.callCount(), 2);
 });

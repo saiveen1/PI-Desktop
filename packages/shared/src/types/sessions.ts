@@ -20,11 +20,20 @@ import type { SessionWorktreeSummary } from "./worktree.js";
  */
 export type SessionSource = "desktop" | "pi-native" | "remote";
 
+export type AssistantReplyThinkingContext = "reply" | "turn" | "keep";
+
 export type EditAssistantReplyRequest = {
   sessionId: string;
   messageId: string;
   expectedContent: string;
   content: string;
+  /** Omitted preserves the legacy text-only edit. */
+  thinkingContext?: AssistantReplyThinkingContext;
+};
+
+export type EditAssistantReplyResult = {
+  ok: true;
+  thinkingContextUpdates?: Array<{ messageId: string; excludeThinkingFromContext: boolean }>;
 };
 
 export type SessionCapabilities = {
