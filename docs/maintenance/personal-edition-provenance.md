@@ -35,6 +35,14 @@ from executable validation. The historical audit boundary above is unchanged.
 
 ## Local harness and delegation increments
 
+On personal source `2000e8ce2`, compared with locally recorded upstream
+`047c4eab1c97a349b3cf8c734229b64ed9d87764` (no fetch), the developer console
+and dev/test render-stage diagnostics are existing foundations. Neither tree
+contained a developer process sampler or recording/export IPC at that base.
+The personal increment is the opt-in, window-owned resource recording,
+release-mode numeric UI measurements and user-previewed local report, not the
+original profiling hooks. See the [observability contract](../spec/03-runtime/09-logging-and-observability.md#on-demand-performance-diagnostics).
+
 The configurable local output guards start from personal base `722bdf630`,
 compared read-only with locally recorded upstream
 `aa35fee4b15c354303bb5a0c77c9c33a731d097f` (no fetch). At that revision the

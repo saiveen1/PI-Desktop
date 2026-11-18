@@ -68,6 +68,8 @@ export type SettingsNavEntry = {
   group: SettingsNavGroupId;
   /** i18n keys of the rows inside the tab; search matches their translations. */
   keywordKeys: string[];
+  /** Additional rows that exist only when developer mode is enabled. */
+  developerKeywordKeys?: string[];
   /**
    * Destination only exists while `AppSettings.developerMode` is on; the
    * rail, the page, and settings search drop it together.
@@ -448,6 +450,7 @@ export const SETTINGS_NAV: SettingsNavEntry[] = [
       "toolObserver.title",
       "toolObserver.description",
     ],
+    developerKeywordKeys: ["performanceDiagnostics.title", "performanceDiagnostics.description"],
   },
 ];
 
@@ -518,7 +521,7 @@ export function searchSettings(
     if (t(entry.labelKey).toLowerCase().includes(q)) {
       hits.push({ tab: entry.id, tabLabelKey: entry.labelKey, rowKey: null });
     }
-    for (const key of entry.keywordKeys) {
+    for (const key of [...entry.keywordKeys, ...(developerMode ? entry.developerKeywordKeys ?? [] : [])]) {
       if (t(key).toLowerCase().includes(q)) {
         hits.push({ tab: entry.id, tabLabelKey: entry.labelKey, rowKey: key });
       }

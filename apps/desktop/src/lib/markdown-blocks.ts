@@ -3,7 +3,7 @@ import remarkParse from "remark-parse";
 import remarkGfm from "remark-gfm";
 import remarkCjkFriendly from "remark-cjk-friendly/parseOnly";
 import remarkMath from "remark-math";
-import { beginRenderDiagnostic } from "./render-diagnostics.ts";
+import { beginRenderDiagnostic, renderDiagnosticSamplesEnabled } from "./render-diagnostics.ts";
 
 // Share the grammar with ReactMarkdown. A different block lexer can split a
 // valid math node at a list, quote, heading, or blank line inside its TeX.
@@ -177,16 +177,16 @@ export function advanceMarkdownBlocks(
   source: string,
   maxTailCodeUnits = Number.POSITIVE_INFINITY,
 ): MarkdownBlockCache {
-  const finishDiagnostic = beginRenderDiagnostic("markdown-split", {
+  const finishDiagnostic = beginRenderDiagnostic("markdown-split", renderDiagnosticSamplesEnabled ? {
     sourceLength: source.length,
-  });
+  } : undefined);
   const appended =
     cache.blocks.length > 0 &&
     source.length >= cache.consumed.length &&
     source.startsWith(cache.consumed);
   // Latched one-way; see above for why a stale latch costs speed, not output.
   if (appended && cache.singleUnit) {
-    finishDiagnostic({ reason: "document-scoped-definition" });
+    finishDiagnostic(renderDiagnosticSamplesEnabled ? { reason: "document-scoped-definition" } : undefined);
     return { consumed: source, blocks: [source], singleUnit: true };
   }
   let stable: string[] = [];
@@ -201,7 +201,7 @@ export function advanceMarkdownBlocks(
   // every streaming frame. Keep the stable prefix and render this tail raw
   // until it either closes or streaming ends.
   if (tail.length > maxTailCodeUnits) {
-    finishDiagnostic({ sourceLength: tail.length, reason: "tail-limit" });
+    finishDiagnostic(renderDiagnosticSamplesEnabled ? { sourceLength: tail.length, reason: "tail-limit" } : undefined);
     return {
       consumed: source,
       blocks: [...stable, tail],
@@ -215,9 +215,9 @@ export function advanceMarkdownBlocks(
     : { blocks: [], hasDocumentScopedDefinition: false };
   const singleUnit = split.hasDocumentScopedDefinition;
   const blocks = singleUnit ? [source] : [...stable, ...split.blocks];
-  finishDiagnostic({
+  finishDiagnostic(renderDiagnosticSamplesEnabled ? {
     sourceLength: tail.length,
     reason: singleUnit ? "document-scoped-definition" : undefined,
-  });
+  } : undefined);
   return { consumed: source, blocks, singleUnit };
 }

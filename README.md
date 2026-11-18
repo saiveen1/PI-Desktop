@@ -30,6 +30,10 @@ This edition strengthens the existing framework rather than replacing it.
   and background completions from bounded local logs. Inspect grouped facts and
   append a sanitized report to a conversation draft without automatic sending,
   model calls, or command replay. Coverage limits and unknown results stay visible.
+- **Local performance diagnostics.** In Settings → Info, enable developer mode
+  to inspect local process CPU and memory. Record up to 30 seconds while
+  reproducing a stall in chat, then preview and save the report yourself.
+  Missing measurements are not zero; no chat content is recorded or uploaded.
 
 - **Broader repeated-failure protection.** Extend the existing Edit/patch guard to
   Write and repeated identical Bash failures. Successful file changes allow a

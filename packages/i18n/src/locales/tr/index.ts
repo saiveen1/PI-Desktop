@@ -10,6 +10,7 @@ export const tr = {
   outputGuard: outputGuard.tr,
   observerGuard: observerGuard.tr,
   toolObserver: en.toolObserver,
+  performanceDiagnostics: en.performanceDiagnostics,
   toolImages: {
     title: "Araç görselleri", image: "Görsel {{index}}", returned: "{{count}} görsel döndürüldü",
     returned_one: "{{count}} görsel döndürüldü", returned_other: "{{count}} görsel döndürüldü",

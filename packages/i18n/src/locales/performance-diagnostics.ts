@@ -1,0 +1,85 @@
+const en = {
+  title: "Performance diagnostics",
+  description: "Inspect local process usage and record a short performance trace.",
+  open: "Open diagnostics", close: "Close diagnostics",
+  privacy: "The report contains app and system details, process IDs, usage, timings and known plugin identifiers. Preview it before sharing.",
+  recordingHint: "Samples about once per second for up to 30 seconds. Closing this panel does not stop a recording. Starting a new recording replaces the previous report.",
+  loading: "Reading performance diagnostics…", working: "Updating diagnostics…", retry: "Retry",
+  status: { idle: "Not recording", recording: "Recording", complete: "Recording complete" },
+  start: "Start recording", startNew: "Start new recording", stop: "Stop recording", mark: "Add marker",
+  preview: "Preview report", save: "Save previewed report", saving: "Saving…",
+  saved: "Report saved.", cancelled: "Save cancelled. The preview is still available.",
+  previewLabel: "Read-only report preview", previewHint: "Save writes the completed report shown here using your system’s save dialog.",
+  samples: "Samples", markers: "Markers", mainDelay: "Max main-process delay", uiDelay: "Max UI delay",
+  began: "Started", deadline: "Stops by", completed: "Completed", unavailable: "Unavailable",
+  delayValue: "{{value}} ms",
+  snapshotTime: "Last snapshot: {{time}}", empty: "No process measurements are available yet.",
+  truncated: "The process list was limited; some processes are not shown.",
+  processTable: "Local process measurements", process: "Process", cpu: "CPU (total machine %)",
+  workingSet: "Working set (MiB)", privateMemory: "Private memory (MiB)", pid: "PID {{pid}}",
+  processStarted: "Started {{time}}", owner: "Plugin: {{owner}}",
+  roles: { main: "Main", mainRenderer: "Main window", renderer: "Renderer", browser: "Browser", plugin: "Plugin", gpu: "GPU", host: "Rust Host", agent: "Node Agent", utility: "Utility", other: "Other" },
+  errors: {
+    snapshot: "Could not read performance diagnostics. Retry to refresh.",
+    start: "Could not start recording. Try again.", stop: "Could not stop recording. Try again.",
+    mark: "Could not add the marker. Try again.", preview: "Could not preview the report. Try again.",
+    save: "Could not save the report. The preview is still available; try again.",
+  },
+};
+
+type CopyShape<T> = { [K in keyof T]: T[K] extends string ? string : CopyShape<T[K]> };
+type Copy = CopyShape<typeof en>;
+
+const zhCN: Copy = {
+  title: "性能诊断", description: "查看本机进程用量并记录一段短时性能数据。",
+  open: "打开诊断", close: "关闭诊断",
+  privacy: "报告包含应用和系统信息、进程 ID、用量、耗时及已知插件标识。分享前请先预览。",
+  recordingHint: "约每秒采样一次，最多记录 30 秒。关闭面板不会停止记录。开始新记录会替换上一份报告。",
+  loading: "正在读取性能诊断…", working: "正在更新诊断…", retry: "重试",
+  status: { idle: "未记录", recording: "记录中", complete: "记录已完成" },
+  start: "开始记录", startNew: "开始新记录", stop: "停止记录", mark: "添加标记",
+  preview: "预览报告", save: "保存预览的报告", saving: "正在保存…",
+  saved: "报告已保存。", cancelled: "已取消保存，预览仍可查看。",
+  previewLabel: "只读报告预览", previewHint: "保存会通过系统保存对话框写入此处显示的已完成报告。",
+  samples: "采样数", markers: "标记数", mainDelay: "主进程最大延迟", uiDelay: "界面最大延迟",
+  delayValue: "{{value}} 毫秒",
+  began: "开始时间", deadline: "最晚停止时间", completed: "完成时间", unavailable: "不可用",
+  snapshotTime: "最近快照：{{time}}", empty: "暂无可用的进程测量数据。",
+  truncated: "进程列表已达到上限，部分进程未显示。",
+  processTable: "本机进程测量数据", process: "进程", cpu: "CPU（整机 %）",
+  workingSet: "工作集（MiB）", privateMemory: "私有内存（MiB）", pid: "进程 ID {{pid}}",
+  processStarted: "开始于 {{time}}", owner: "插件：{{owner}}",
+  roles: { main: "主进程", mainRenderer: "主界面", renderer: "渲染进程", browser: "浏览器", plugin: "插件", gpu: "GPU", host: "Rust 宿主", agent: "Node Agent", utility: "工具进程", other: "其他" },
+  errors: {
+    snapshot: "无法读取性能诊断，请重试刷新。", start: "无法开始记录，请重试。", stop: "无法停止记录，请重试。",
+    mark: "无法添加标记，请重试。", preview: "无法预览报告，请重试。", save: "无法保存报告，预览仍可查看，请重试。",
+  },
+};
+
+const zhTW: Copy = {
+  title: "效能診斷", description: "查看本機程序用量並記錄短時間的效能資料。",
+  open: "開啟診斷", close: "關閉診斷",
+  privacy: "報告包含應用程式和系統資訊、程序 ID、用量、耗時及已知外掛識別碼。分享前請先預覽。",
+  recordingHint: "約每秒取樣一次，最多記錄 30 秒。關閉面板不會停止記錄。開始新記錄會取代上一份報告。",
+  loading: "正在讀取效能診斷…", working: "正在更新診斷…", retry: "重試",
+  status: { idle: "未記錄", recording: "記錄中", complete: "記錄已完成" },
+  start: "開始記錄", startNew: "開始新記錄", stop: "停止記錄", mark: "新增標記",
+  preview: "預覽報告", save: "儲存預覽的報告", saving: "正在儲存…",
+  saved: "報告已儲存。", cancelled: "已取消儲存，預覽仍可查看。",
+  previewLabel: "唯讀報告預覽", previewHint: "儲存會透過系統儲存對話框寫入此處顯示的已完成報告。",
+  delayValue: "{{value}} 毫秒",
+  samples: "取樣數", markers: "標記數", mainDelay: "主程序最大延遲", uiDelay: "介面最大延遲",
+  began: "開始時間", deadline: "最晚停止時間", completed: "完成時間", unavailable: "無法取得",
+  snapshotTime: "最近快照：{{time}}", empty: "目前沒有可用的程序測量資料。",
+  truncated: "程序清單已達上限，部分程序未顯示。",
+  processTable: "本機程序測量資料", process: "程序", cpu: "CPU（整台電腦 %）",
+  workingSet: "工作集（MiB）", privateMemory: "私人記憶體（MiB）", pid: "程序 ID {{pid}}",
+  processStarted: "開始於 {{time}}", owner: "外掛：{{owner}}",
+  roles: { main: "主程序", mainRenderer: "主介面", renderer: "繪製程序", browser: "瀏覽器", plugin: "外掛", gpu: "GPU", host: "Rust 主機", agent: "Node Agent", utility: "公用程序", other: "其他" },
+  errors: {
+    snapshot: "無法讀取效能診斷，請重試重新整理。", start: "無法開始記錄，請重試。", stop: "無法停止記錄，請重試。",
+    mark: "無法新增標記，請重試。", preview: "無法預覽報告，請重試。", save: "無法儲存報告，預覽仍可查看，請重試。",
+  },
+};
+
+export const performanceDiagnostics = { en, "zh-CN": zhCN, "zh-TW": zhTW };

@@ -10,6 +10,7 @@ export const ptBR = {
   outputGuard: outputGuard["pt-BR"],
   observerGuard: observerGuard["pt-BR"],
   toolObserver: en.toolObserver,
+  performanceDiagnostics: en.performanceDiagnostics,
   toolImages: {
     title: "Imagens da ferramenta", image: "Imagem {{index}}", returned: "{{count}} imagens retornadas",
     returned_one: "{{count}} imagem retornada", returned_other: "{{count}} imagens retornadas",

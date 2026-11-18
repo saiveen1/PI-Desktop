@@ -10,6 +10,7 @@ export const ko = {
   outputGuard: outputGuard.ko,
   observerGuard: observerGuard.ko,
   toolObserver: en.toolObserver,
+  performanceDiagnostics: en.performanceDiagnostics,
   toolImages: {
     title: "도구 이미지", image: "이미지 {{index}}", returned: "이미지 {{count}}개 반환됨",
     returned_one: "이미지 {{count}}개 반환됨", returned_other: "이미지 {{count}}개 반환됨",

@@ -239,6 +239,22 @@ test("unscoped plugin browser operations still require a visible Browser view", 
   assert.equal(h.loads.length, 1, "hidden navigation must not reach the page");
 });
 
+test("resource inventory includes background guest PIDs without creating or navigating pages", async () => {
+  const h = harness();
+  assert.deepEqual(h.host.processIds, []);
+  await open(h, "A", "first", "first.html");
+  await open(h, "B", "second", "second.html");
+  h.panes[0].getWebContents = () => ({ getOSProcessId: () => 41 });
+  h.panes[1].getWebContents = () => ({ getOSProcessId: () => 42 });
+  assert.deepEqual(h.host.processIds, [41, 42]);
+  h.panes[1].getWebContents = () => ({ getOSProcessId: () => 41 });
+  assert.deepEqual(h.host.processIds, [41]);
+  h.panes[0].getWebContents = () => null;
+  h.panes[1].getWebContents = () => null;
+  assert.deepEqual(h.host.processIds, []);
+  assert.equal(h.loads.length, 2);
+});
+
 test("closing a tab and disposing the host cancel pending ownership and release pages", async () => {
   const h = harness(); await open(h, "A", "a", "A.html");
   h.host.setChromeSession("A", "pending", "pending.html"); const root = h.roots.at(-1);

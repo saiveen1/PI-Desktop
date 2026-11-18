@@ -1195,6 +1195,12 @@ system while preserving their different data ownership:
   - disabling developer mode closes an open console and disables or removes
     every entry point; Settings search indexes the card, switch, and console
     action
+  - In developer mode, open **Performance diagnostics** for a local process
+    table. The expanded, visible panel refreshes about every two seconds;
+    a blank or unavailable measurement is not zero. A separate explicit
+    30-second recording continues after leaving Settings. Reopen the panel to
+    stop, mark, preview or save the completed report. Disabling developer mode
+    discards it. See [collection scope](../03-runtime/09-logging-and-observability.md#on-demand-performance-diagnostics).
 - The Updates row always exposes a Release notes action. It opens a modal
   containing the complete shipped stable changelog in newest-first order,
   localized to the product language and marking the current and available

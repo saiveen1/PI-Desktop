@@ -14,6 +14,7 @@ import { useChatFileMenu } from "../../../hooks/use-chat-file-menu";
 import { ContextMenu } from "../../../components/ContextMenu";
 import { useFollowScroll } from "../../../hooks/use-follow-scroll";
 import { getToolPreviewTarget } from "../../../lib/chat-links";
+import { recordPerformanceToolOpen } from "../../../lib/performance-ui-probe";
 import { disclosureKey } from "./disclosure";
 import {
   getToolAction,
@@ -141,8 +142,13 @@ function HostToolRow({
   );
   const { open, toggle: toggleDisclosure, collapse: collapseDisclosure } = disclosure;
   const titleRef = disclosure.titleRef;
+  const diagnosticOpen = useRef(open);
+  const diagnosticParentVisible = useRef(disclosure.parentVisible);
+  diagnosticOpen.current = open;
+  diagnosticParentVisible.current = disclosure.parentVisible;
   const toggleRow = useCallback(() => {
     onUserInteraction?.();
+    if (!diagnosticOpen.current && diagnosticParentVisible.current) recordPerformanceToolOpen();
     toggleDisclosure();
   }, [onUserInteraction, toggleDisclosure]);
   const collapseRow = useCallback(() => {

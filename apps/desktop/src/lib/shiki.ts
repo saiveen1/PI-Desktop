@@ -7,7 +7,7 @@ import type {
 import { createHighlighterCore } from "shiki/core";
 import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
 import { inspectHighlightLimits } from "./render-content-limits.ts";
-import { beginRenderDiagnostic } from "./render-diagnostics.ts";
+import { beginRenderDiagnostic, renderDiagnosticSamplesEnabled } from "./render-diagnostics.ts";
 
 /*
  * Singleton Shiki highlighter for chat code blocks.
@@ -243,16 +243,16 @@ export function tokenizeIncremental(
   lang: string,
   theme: string,
 ): LineCache | null {
-  const finishDiagnostic = beginRenderDiagnostic("code-highlight", {
+  const finishDiagnostic = beginRenderDiagnostic("code-highlight", renderDiagnosticSamplesEnabled ? {
     sourceLength: code.length,
-  });
+  } : undefined);
   if (!highlighter || !readyLangs.has(lang)) {
-    finishDiagnostic({ reason: "language-unavailable" });
+    finishDiagnostic(renderDiagnosticSamplesEnabled ? { reason: "language-unavailable" } : undefined);
     return null;
   }
   const limits = inspectHighlightLimits(code);
   if (!limits.within) {
-    finishDiagnostic({ longestLine: limits.longestLine, inputNodeCount: limits.lineCount, reason: limits.reason });
+    finishDiagnostic(renderDiagnosticSamplesEnabled ? { longestLine: limits.longestLine, inputNodeCount: limits.lineCount, reason: limits.reason } : undefined);
     return null;
   }
 
@@ -267,11 +267,11 @@ export function tokenizeIncremental(
   while (start < reusable && cache!.lines[start] === lines[start]) start += 1;
 
   if (cache && start === lines.length && cache.lines.length === lines.length) {
-    finishDiagnostic({
+    finishDiagnostic(renderDiagnosticSamplesEnabled ? {
       longestLine: limits.longestLine,
       inputNodeCount: lines.length,
       reason: "cache-hit",
-    });
+    } : undefined);
     return cache;
   }
 
@@ -292,6 +292,6 @@ export function tokenizeIncremental(
     outStates.push(highlighter.getLastGrammarState(rows));
   }
 
-  finishDiagnostic({ longestLine: limits.longestLine, inputNodeCount: lines.length });
+  finishDiagnostic(renderDiagnosticSamplesEnabled ? { longestLine: limits.longestLine, inputNodeCount: lines.length } : undefined);
   return { lang, theme, lines: outLines, tokens: outTokens, states: outStates };
 }

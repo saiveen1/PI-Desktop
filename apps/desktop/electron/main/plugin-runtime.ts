@@ -282,6 +282,7 @@ export type PluginPanelBridgeContext = {
 
 /** Transport to one plugin host process (ADR 0008). */
 export type PluginProcessHandle = {
+  readonly processId?: number | null;
   postMessage: (message: unknown) => void;
   onMessage: (handler: (message: any) => void) => void;
   onExit: (handler: (code: number) => void) => void;
@@ -1432,6 +1433,7 @@ const spawnUtilityProcess: PluginProcessSpawner = async ({ pluginId, entry }) =>
     env: pluginChildEnv(pluginId),
   });
   return {
+    get processId() { return child.pid ?? null; },
     postMessage: (message) => child.postMessage(message),
     onMessage: (handler) => child.on("message", handler),
     onExit: (handler) => child.on("exit", (code) => handler(code ?? 0)),
@@ -1893,6 +1895,16 @@ export class PluginRuntime {
 
   getLoaded(pluginId: string): LoadedPlugin | undefined {
     return this.loaded.get(pluginId);
+  }
+
+  /** Only live Desktop-owned utility children, keyed by their OS process ID. */
+  getPerformanceProcessOwners(): ReadonlyMap<number, string> {
+    const owners = new Map<number, string>();
+    for (const [pluginId, loaded] of this.loaded) {
+      const pid = loaded.disposing ? null : loaded.child?.processId;
+      if (pid) owners.set(pid, pluginId);
+    }
+    return owners;
   }
 
   /** OAuth provider entries exposed to the Host's provider sign-in surface. */

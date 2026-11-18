@@ -1,4 +1,4 @@
-import { beginRenderDiagnostic } from "./render-diagnostics.ts";
+import { beginRenderDiagnostic, renderDiagnosticSamplesEnabled } from "./render-diagnostics.ts";
 
 /**
  * Bounded candidate scanning for transcript links.
@@ -430,9 +430,9 @@ export function scanChatLinkCandidates<T>(
   resolve: (raw: string) => T | null,
   disposition: ChatLinkCandidateDispositionResolver,
 ): { candidates: ScannedChatLink<T>[]; stats: ChatLinkScanStats } {
-  const finishDiagnostic = beginRenderDiagnostic("chat-link-scan", {
+  const finishDiagnostic = beginRenderDiagnostic("chat-link-scan", renderDiagnosticSamplesEnabled ? {
     sourceLength: text.length,
-  });
+  } : undefined);
   const candidates: ScannedChatLink<T>[] = [];
   const stats = createStats();
   let index = 0;
@@ -588,7 +588,7 @@ export function scanChatLinkCandidates<T>(
     if (!spend(budget, stats, width, "scan")) break;
     index += width;
   }
-  finishDiagnostic({
+  finishDiagnostic(renderDiagnosticSamplesEnabled ? {
     workCodeUnits: stats.workCodeUnits,
     linkCount: stats.linkCount,
     reason: budget.links >= CHAT_LINK_SCAN_LIMITS.maxLinks
@@ -596,7 +596,7 @@ export function scanChatLinkCandidates<T>(
       : budget.workCodeUnits >= CHAT_LINK_SCAN_LIMITS.maxScanWorkCodeUnits
         ? "scan-budget"
         : undefined,
-  });
+  } : undefined);
   return { candidates, stats };
 }
 

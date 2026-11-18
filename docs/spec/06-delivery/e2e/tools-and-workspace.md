@@ -2854,6 +2854,21 @@ session data is used.
 - **Status:** Candidate checks are reported with delivery; source tests do not
   establish acceptance by an older installed Desktop.
 
+## E2E-PERFORMANCE-DIAGNOSTICS: Local process resources and a bounded capture
+
+- With isolated configuration and synthetic data, open Settings → Info. The
+  panel and direct IPC must be unavailable with developer mode off. Enable it,
+  expand Performance diagnostics, compare the main/renderer/child PIDs and
+  wait for a second sample before interpreting CPU. Missing counters stay unknown.
+- Start a recording, leave Settings, switch sessions and open a tool detail.
+  Reopen the panel, add a marker and stop, or allow the deadline to stop it.
+  Check measured stages, nullable maxima and marker timestamps. Only a completed,
+  previewed capture can be saved. Cancel does not write; saving reproduces the
+  preview. A replaced capture, reload or revocation invalidates pending export.
+- Coverage: isolated Electron/preload fixture `scripts/e2e-performance-diagnostics.mjs`,
+  settings interaction, recorder IPC, sampler and renderer-probe regression tests.
+  These checks do not operate on an installed profile or prove a particular app bottleneck.
+
 ## E2E-TOOL-OBSERVER: Local observations and explicit draft reference
 
 - **Preconditions**: Isolated data directory; developer mode available; synthetic

@@ -241,6 +241,16 @@ export class BrowserHost {
     return this.active ? this.contextFor(this.active) : {};
   }
 
+  /** Live guest processes, including background tabs; never creates a pane or reads a URL. */
+  get processIds(): number[] {
+    const ids = new Set<number>();
+    for (const page of this.pages.values()) {
+      const pid = page.pane.getWebContents()?.getOSProcessId();
+      if (pid && pid > 0) ids.add(pid);
+    }
+    return [...ids];
+  }
+
   private contextFor(page: BrowserPage): { sessionId?: string; tabId?: string } {
     return {
       ...(page.sessionId ? { sessionId: page.sessionId } : {}),

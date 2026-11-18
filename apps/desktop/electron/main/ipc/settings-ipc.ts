@@ -96,6 +96,8 @@ export function registerSettingsIpc({
     let result: AppSettings;
     try {
       result = await host.call<AppSettings>("settings.set", validatedSettings);
+      // Revoke diagnostics as soon as Host commits the setting, before unrelated async work.
+      applyDeveloperMode(result);
       await delegationSettingsWritten?.();
       await liveCallService?.settingsWritten(result);
     } finally {
@@ -138,7 +140,6 @@ export function registerSettingsIpc({
         fontScale?: unknown;
       } | null,
     );
-    applyDeveloperMode(validatedSettings as { developerMode?: unknown } | null);
     return result;
   };
   handle(IPC.invoke.settingsSet, (settings: unknown) => {

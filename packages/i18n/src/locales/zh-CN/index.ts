@@ -1,3 +1,4 @@
+import { performanceDiagnostics } from "../performance-diagnostics.js";
 import { outputGuard } from "../output-guard.js";
 import { observerGuard } from "../observer-guard.js";
 import { toolObserver } from "./tool-observer.js";
@@ -10,6 +11,7 @@ import { en, type EnglishCatalog } from "../en/index.js";
 export const zhCN = {
   outputGuard: outputGuard["zh-CN"],
   observerGuard: observerGuard["zh-CN"],
+  performanceDiagnostics: performanceDiagnostics["zh-CN"],
   toolObserver,
   toolImages: {
     title: "工具图像", image: "图像 {{index}}", returned: "已返回 {{count}} 张图像",

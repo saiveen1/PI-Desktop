@@ -324,7 +324,7 @@ export class PluginPanelHost {
    * which outlives the host's record of open windows; the resolvers cover the
    * docked work-panel views owned by `PluginViewHost`.
    */
-  private pluginIdForSender(senderId: number): string | null {
+  pluginIdForSender(senderId: number): string | null {
     const own = this.senders.pluginFor(senderId);
     if (own) return own;
     for (const resolve of this.senderResolvers) {

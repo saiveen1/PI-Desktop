@@ -6,6 +6,7 @@ import { api } from "../../lib/api";
 import { Button, SegmentedControl, SettingsToggle } from "../../components/ui";
 import { SettingsCard, SettingsRow } from "./primitives";
 import { ToolObserverSection } from "./ToolObserverSection";
+import { PerformanceDiagnosticsSection } from "./PerformanceDiagnosticsSection";
 
 export function DeveloperSection({
   settings,
@@ -49,6 +50,7 @@ export function DeveloperSection({
         </SettingsRow>
       </SettingsCard>
       {enabled ? <ToolObserverSection /> : null}
+      {enabled ? <PerformanceDiagnosticsSection /> : null}
     </>
   );
 }

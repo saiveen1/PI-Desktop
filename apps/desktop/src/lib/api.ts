@@ -1752,6 +1752,22 @@ export const api = {
   executeCommand: (commandId: string) =>
     invoke(IPC.invoke.commandPaletteExecute, commandId),
   openLogs: () => invoke(IPC.invoke.logOpenFolder),
+  performanceDiagnostics: (action: import("@pi-desktop/shared").PerformanceAction, id?: number) =>
+    invoke<import("@pi-desktop/shared").PerformanceDiagnosticsState>(IPC.invoke.performanceDiagnostics,
+      ...(id === undefined ? [action] : [action, id])),
+  previewPerformanceReport: (id: number) => invoke<string>(IPC.invoke.performanceReportPreview, id),
+  exportPerformanceReport: (id: number) => invoke<{ saved: boolean }>(IPC.invoke.performanceReportExport, id),
+  sendPerformancePulse: (pulse: import("@pi-desktop/shared").PerformanceUiPulse) =>
+    invoke<void>(IPC.invoke.performancePulse, pulse),
+  onPerformanceCapture: (listener: (signal: import("@pi-desktop/shared").PerformanceCaptureSignal | null) => void) =>
+    window.piDesktop?.on(IPC.event.performanceCapture, (value: unknown) => {
+      if (value === null) return listener(null);
+      if (value && typeof value === "object" && "id" in value && typeof value.id === "number" &&
+        Number.isSafeInteger(value.id) && value.id > 0 && "deadline" in value &&
+        typeof value.deadline === "number" && Number.isFinite(value.deadline)) {
+        listener({ id: value.id, deadline: value.deadline });
+      }
+    }) ?? (() => undefined),
   getToolObservations: (query: import("@pi-desktop/shared").ToolObservationQuery) =>
     invoke<import("@pi-desktop/shared").ToolObservationReport>(IPC.invoke.toolObservationsRead, query),
   /** What the next launch would play as its boot animation (D679). */

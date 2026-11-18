@@ -27,7 +27,7 @@ import {
   type ChatLinkScanBudget,
   type ChatLinkScanStats,
 } from "./chat-link-scanner.ts";
-import { beginRenderDiagnostic } from "./render-diagnostics.ts";
+import { beginRenderDiagnostic, renderDiagnosticSamplesEnabled } from "./render-diagnostics.ts";
 
 const KNOWN_EXTS = new Set([
   "ts", "tsx", "js", "jsx", "mjs", "cjs", "json", "css", "scss", "less",
@@ -520,7 +520,7 @@ export function linkifyMdastTree(
   let inputNodeCount = 0;
   let sourceLength = 0;
   walk(tree, false);
-  finishDiagnostic({
+  finishDiagnostic(renderDiagnosticSamplesEnabled ? {
     inputNodeCount,
     sourceLength,
     linkCount: budget.links,
@@ -530,7 +530,7 @@ export function linkifyMdastTree(
       : budget.links >= CHAT_LINK_SCAN_LIMITS.maxLinks
         ? "link-limit"
         : undefined,
-  });
+  } : undefined);
 
   function walk(node: MdastNode | null | undefined, skip: boolean) {
     if (!node || typeof node.type !== "string") return;

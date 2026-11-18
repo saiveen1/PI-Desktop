@@ -211,6 +211,12 @@ export class AgentSidecar {
     );
   }
 
+  get processId(): number | null {
+    return !this.closed && !this.child.killed && this.child.exitCode === null && this.child.signalCode === null
+      ? this.child.pid ?? null
+      : null;
+  }
+
   private recordStderr(text: string) {
     for (const line of text.split(/\r?\n/)) {
       if (!line.trim()) continue;

@@ -1,3 +1,4 @@
+import { performanceDiagnostics } from "../performance-diagnostics.js";
 import { outputGuard } from "../output-guard.js";
 import { observerGuard } from "../observer-guard.js";
 import { toolObserver } from "./tool-observer.js";
@@ -8,6 +9,7 @@ import { sessionLabels, sessionGroups, sessionDelegation, delegationDetails } fr
 export const en = {
   outputGuard: outputGuard.en,
   observerGuard: observerGuard.en,
+  performanceDiagnostics: performanceDiagnostics.en,
   toolObserver,
   toolImages: {
     title: "Tool images", image: "Image {{index}}", returned: "Returned {{count}} images",

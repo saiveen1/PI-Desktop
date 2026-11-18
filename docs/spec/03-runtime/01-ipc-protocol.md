@@ -1,5 +1,20 @@
 # 01. IPC Protocol
 
+### Developer performance diagnostics (local desktop only)
+
+The trusted main window's top frame can invoke `diagnostics/performance`
+(`snapshot` or `start` without arguments; `stop` or `mark` with the current
+numeric recording ID). Main pushes `diagnostics/event/performanceCapture`
+with `{id, deadline}` or `null`. `diagnostics/performancePulse` accepts only
+the fixed, numeric UI measurement schema for that recording. Old pulses do
+not start a recording or attach to its successor. `performancePreview(id)`
+and `performanceExport(id)` in the same namespace operate on the completed
+Main-owned recording: export requires a preview and a native save dialog.
+No path or report bytes come from the renderer. All four invokes check
+developer mode and sender ownership, and are absent from external-agent
+invocation. There is no Host RPC/schema migration, MCP capability or implicit
+telemetry. See the [observability contract](09-logging-and-observability.md#on-demand-performance-diagnostics).
+
 ### Private native window snapping
 
 `window.enableNativeSnap` is Main-to-Host only: `{nativeHandle: string, ownerPid: number}`

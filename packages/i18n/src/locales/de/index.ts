@@ -10,6 +10,7 @@ export const de = {
   outputGuard: outputGuard.de,
   observerGuard: observerGuard.de,
   toolObserver: en.toolObserver,
+  performanceDiagnostics: en.performanceDiagnostics,
   toolImages: {
     title: "Werkzeugbilder", image: "Bild {{index}}", returned: "{{count}} Bilder zurückgegeben",
     returned_one: "{{count}} Bild zurückgegeben", returned_other: "{{count}} Bilder zurückgegeben",

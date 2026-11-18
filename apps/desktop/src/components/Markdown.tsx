@@ -35,6 +35,8 @@ import { isMarkdownSourceTooLarge } from "../lib/render-content-limits";
 import { MarkdownPlainPreview } from "./MarkdownPlainPreview";
 import {
   beginRenderDiagnostic,
+  isRenderDiagnosticEnabled,
+  renderDiagnosticSamplesEnabled,
   recordRenderDiagnostic,
 } from "../lib/render-diagnostics";
 import { useTranslation } from "react-i18next";
@@ -944,6 +946,7 @@ const Block = memo(function MarkdownBlock({
     <Profiler
       id="transcript-markdown-block"
       onRender={(_id, phase, actualDuration, baseDuration, startTime, commitTime) => {
+        if (!isRenderDiagnosticEnabled()) return;
         recordRenderDiagnostic("markdown-react-render", {
           sourceLength: raw.length,
           durationMs: actualDuration,
@@ -1007,11 +1010,11 @@ export const Markdown = memo(function Markdown({
   // same math grammar as rendering, including unclosed streaming math blocks.
   const normalizedSource = useMemo(
     () => {
-      const finishDiagnostic = beginRenderDiagnostic("markdown-normalize", {
+      const finishDiagnostic = beginRenderDiagnostic("markdown-normalize", renderDiagnosticSamplesEnabled ? {
         sourceLength: source.length,
-      });
+      } : undefined);
       if (fullSourceTooLarge) {
-        finishDiagnostic({ reason: "source-limit" });
+        finishDiagnostic(renderDiagnosticSamplesEnabled ? { reason: "source-limit" } : undefined);
         return "";
       }
       const normalized = normalizeLatexMathDelimiters(source);

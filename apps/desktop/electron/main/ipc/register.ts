@@ -10,6 +10,7 @@ import { readNpmPath, writeNpmPath } from "../npm-preferences";
 import { registerAgentIpc } from "./agent-ipc";
 import { registerAppIpc } from "./app-ipc";
 import { registerDiagnosticsIpc } from "./diagnostics-ipc";
+import { registerDesktopPerformance } from "../performance/desktop-performance";
 import { registerStartupAnimationIpc } from "./startup-animation-ipc";
 import { registerMarketIpc } from "./market-ipc";
 import { registerMcpIpc } from "./mcp-ipc";
@@ -313,6 +314,13 @@ export function registerIpcHandlers(dependencies: RegisterIpcDependencies) {
     stripWinLongPrefix,
     modeCatalog: dependencies.modeServices.catalog,
   });
+  const clearPerformance = registerDesktopPerformance({ registrar, isDeveloperMode, getMainWindow,
+    getHostPid: () => getHost()?.processId ?? null,
+    getAgentPid: () => getSidecar()?.processId ?? null,
+    getBrowserPids: () => browserHost.processIds,
+    pluginForContents: id => pluginPanels.pluginIdForSender(id),
+    getPluginProcessOwners: () => plugins.getPerformanceProcessOwners(),
+  });
   registerSettingsIpc({
     registrar,
     getHost,
@@ -324,7 +332,10 @@ export function registerIpcHandlers(dependencies: RegisterIpcDependencies) {
     applyNetworkProxyFromAppSettings,
     currentNetworkProxy,
     applyApplicationMenuSettings,
-    applyDeveloperMode,
+    applyDeveloperMode(settings) {
+      applyDeveloperMode(settings);
+      if (!isDeveloperMode()) clearPerformance();
+    },
     applyPreventScreenSleep,
     applyKeepAwakeWhileRunning,
     applyUpdatePreference: (preference) => updater.setPreference(preference),

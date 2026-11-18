@@ -214,6 +214,10 @@ export class HostProcess {
     );
   }
 
+  get processId(): number | null {
+    return this.isAvailable() && this.child.signalCode === null ? this.child.pid ?? null : null;
+  }
+
   onExit(handler: ProcessExitHandler): () => void {
     if (this.closed) return () => undefined;
     this.exitHandlers.add(handler);

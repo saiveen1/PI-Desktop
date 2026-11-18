@@ -7,6 +7,41 @@
 3. Avoid leaking secrets.
 4. Keep the MVP local-first and quiet during normal operation.
 
+### On-demand performance diagnostics
+
+Developer mode alone does not start a sampler. The expanded, visible Settings
+panel requests single-flight process snapshots. A separate explicit capture is
+owned by Main and continues when the panel is closed. It aims for one process
+snapshot per second for 30 seconds, retains at most 64 process rows per snapshot
+and 32 manual timestamps, and stops on request or deadline. Main-frame reload,
+renderer exit, window destruction, and developer-mode revocation discard the
+recording. Only one in-memory capture is retained; no timing log is revived.
+
+Rows identify live local processes by PID and creation time when known. CPU is
+percent of all logical CPUs over successive samples, not percent of one core.
+The first interval and unavailable counters are `null`. Working set and private
+memory are distinct (KiB in JSON, MiB on screen); do not sum working sets as
+unique RAM. A CPU interval longer than five seconds starts a new baseline.
+Core child roles come from the local supervisors. Main identifies its primary
+renderer, registered plugin workers, docked/floating plugin pages, and live browser
+pages (including background tabs) without reading page titles or URLs. Multiple
+plugin owners on one PID do not imply exclusive attribution to any one plugin.
+Windows sidecars expose process times and memory when the native query succeeds;
+Linux x64/arm64 uses procfs for sidecar CPU/RSS and approximate start time. On
+macOS, a sidecar not covered by Electron has a PID/role but unknown counters.
+This is not a machine-wide, remote-host, or shell-descendant process inventory.
+
+Main and visible UI timer lateness are scheduling indicators, not input-to-paint
+latency, GPU memory or definitive root causes. The UI reports bounded numerical
+counts and maxima from instrumented rendering stages, session switches and
+opened tool details; unsent partial intervals or unavailable stages may be
+absent. In particular, normal production React need not emit Profiler commits;
+this does not disable instrumented Markdown parsing or code highlighting.
+The JSON contains build/platform, peak measured processes, timing and
+coverage counts. It excludes transcript text, file paths, commands, credentials,
+URLs and window titles. Preview and explicitly save to share; nothing is
+uploaded, appended to a prompt or persisted automatically.
+
 ## 2. Log levels
 
 - `debug`
