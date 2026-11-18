@@ -117,6 +117,8 @@ export async function completeOneShot(
         ),
         ...(options.signal ? { signal: options.signal } : {}),
         maxRetries: 0,
+        // Routing may share a session id; independent calls must not replace its thread.
+        disableContinuation: true,
         reasoning: requestThinkingLevel(model, thinkingLevel),
         fetch: providerRequestFetch(
           model.api,

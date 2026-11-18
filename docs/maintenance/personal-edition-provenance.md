@@ -46,6 +46,14 @@ compares personal `c1d9e306ff473f82d513b7e7a4650177714d8b9c` with upstream
 (including saved role-level skills) and distinguishes documentation reconciliation
 from executable validation. The historical audit boundary above is unchanged.
 
+The [Pi 1.5.2 integration record](upstream-integration-0ca811242.md) compares
+personal `6463d87d9` with fetched upstream `0ca811242`. The package upgrade and
+main/delegate/compaction thread handling are inherited. The local increment
+sets `disableContinuation` for independent one-shot completions, including
+Observer reviews: upstream's `one-shot-complete.ts` does not set it. The
+loopback `pi-anthropic-message-threads.test.ts` regression verifies both the
+independent request and preservation of the next main-turn continuation.
+
 ## Local harness and delegation increments
 
 Compared with locally recorded upstream `047c4eab1`, the personal runtime adds

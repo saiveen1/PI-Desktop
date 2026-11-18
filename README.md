@@ -64,6 +64,8 @@ This edition strengthens the existing framework rather than replacing it.
   unknown legacy reasons stay unknown. Short continuation requests include a
   bounded, redacted window of earlier task goals and the latest answer, with
   distinct historical evidence IDs; missing context still cannot authorize work.
+  Independent reviews do not consume or replace the conversation's provider-side
+  message thread.
   Off adds no requests; enabled assessments add cost/latency, do not recheck
   continued output, and are not proof of completion.
 - **Configurable degenerate-output protection.** Interrupt long whitespace/symbol

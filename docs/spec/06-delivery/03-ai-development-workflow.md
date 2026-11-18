@@ -622,3 +622,43 @@ This workflow spec itself is accepted when:
       changing the app version.
 
 - [ ] All indexes updated (NAV, delivery README, spec README, docs README, BOARD).
+
+## 9. Issue Automation (`@pi`)
+
+Two inherited workflows in `.github/workflows` drive upstream issue triage and
+answer mentions. Both jobs are restricted to `vastsa/PI-Desktop`; they do not run
+in this personal fork, including on manual dispatch. Enabling external-provider
+automation here requires a separate explicit decision and credential setup.
+Both call the public [pi-agent-action](https://github.com/Tioit-Wang/pi-agent-action)
+at the `v1` tag, so an action release reaches the upstream workflow without a
+commit here.
+
+- `pi.yml` — someone with write access comments `@pi <request>` and the agent
+  answers in the tracking comment. Analysis only: the tool set is
+  `read,grep,find,ls` and there is no turn budget, so `timeout-minutes` is the
+  only bound. A greeting returns a sentence; a task returns an investigation.
+- `pi-triage.yml` — a newly opened issue gets a type label and a priority, and
+  when it duplicates an earlier issue the two are linked in both directions.
+  This one is silent: it posts no comment unless it finds a duplicate.
+
+```text
+.github/pi-triage.yml             label vocabulary and comment templates
+.github/workflows/pi.yml          mention-triggered answers
+.github/workflows/pi-triage.yml   opened-issue triage
+```
+
+The label vocabulary lives in `.github/pi-triage.yml` rather than in the action,
+so this repository decides its own words. The action enforces three rules at
+startup: `bug` must be one of the type labels, a duplicate label must be named,
+and every label mentioned must exist in the repository.
+
+Requirements before these workflows can run:
+
+- the `API_KEY` repository secret, holding the provider credential;
+- the labels listed in `.github/pi-triage.yml`;
+- `issues: write` for both jobs and `pull-requests: write` for the mention job,
+  already declared in the respective files.
+
+The upstream triage workflow can be dispatched with `issue_number` set to an
+existing issue. This invokes the normal label/comment pipeline and is not a
+read-only dry run; it requires authorization for those remote effects.

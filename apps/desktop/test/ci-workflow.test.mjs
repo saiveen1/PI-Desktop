@@ -30,6 +30,22 @@ const [
   read("../../../scripts/export-linux-asar.mjs"),
 ]);
 
+test("upstream issue automation does not invoke providers on the personal fork", async () => {
+  const mentions = await read("../../../.github/workflows/pi.yml");
+  const triage = await read("../../../.github/workflows/pi-triage.yml");
+  assert.match(
+    mentions,
+    /^  pi:\n    if: \|\n      github\.repository == 'vastsa\/PI-Desktop' && \(\n[\s\S]*?\n      \)\n    runs-on:/m,
+    "the repository guard must wrap every mention-trigger alternative",
+  );
+  assert.match(
+    triage,
+    /^  triage:\n    if: github\.repository == 'vastsa\/PI-Desktop'\n    runs-on:/m,
+    "manual and issue-triggered triage must share the upstream-only guard",
+  );
+  assert.match(mentions, /allowed_tools: read,grep,find,ls/);
+});
+
 test("CI skips documentation-only pushes and pull requests", () => {
   assert.equal(
     (ciWorkflowSource.match(/- 'docs\/\*\*'/g) ?? []).length,

@@ -2503,3 +2503,31 @@ Image-model marking explains chat/default-menu exclusion and distinguishes gener
 - **Acceptance:** Long-context waits remain usable without unbounded replay.
 - **Milestone / status:** Personal beta maintenance; controlled-clock and
   component checks, real provider/installed UI verification remains opt-in.
+
+## E2E-PI-152-kernel-upgrade
+
+- **Preconditions:** Exact Pi 1.5.2 release-group pins and rebased package
+  patches in the current checkout, isolated fixture state, and no real provider
+  credentials.
+- **Steps:** Run the runtime, native Pi session, identity, and patch-gate
+  suites against the installed 1.5.2 packages. Drive an Anthropic-compatible
+  loopback gateway with message threads enabled through a main turn, a
+  delegate request, a compaction summary and an independent one-shot review
+  that share the session id, then a second main turn. Dispose the runtime and
+  start a new one for the same session id.
+- **Expected:** The main conversation creates one thread and continues it with
+  only the new turn; delegate, summary and one-shot requests send no `thread`
+  field and leave the conversation's continuation intact. After disposal the next
+  runtime creates a new thread. Hosted-search capture and local request-error
+  mapping from the Desktop patches remain intact. Identity headers report
+  1.5.2. No provider credentials or live services are used.
+- **Coverage:** `pi-anthropic-message-threads.test.ts`,
+  `pi-upstream-1.5-identity.test.ts`, `pi-upstream-1.5-contract.test.ts`,
+  `pi-1.5-adapter-features.test.ts`, `pi-anthropic-strict-fallback.test.ts`,
+  `pi-ai-provider-sync.test.ts`, `provider-presets.test.ts`,
+  `scripts/pi-patch-hash.test.mjs`, `pnpm check:pi-patches`,
+  `pnpm check:pi-dependencies`.
+- **Specs:** [Pi dependency boundary](../../02-architecture/06-pi-runtime-dependency-boundary.md).
+- **Acceptance:** Offline runtime/contract validation.
+- **Milestone:** Maintenance.
+- **Status:** Candidate validation recorded in `docs/project/pi-152-adoption.md`.

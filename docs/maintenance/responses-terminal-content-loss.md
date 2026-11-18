@@ -150,7 +150,7 @@ shared by the Responses adapters, rather than a renderer workaround:
 
 - Adapter regression: `packages/agent-runtime/src/responses-terminal-content.test.ts`.
 - Runtime user path: `packages/agent-runtime/src/responses-terminal-content-runtime.test.ts`.
-- Patch: `patches/@earendil-works__pi-ai@1.5.0.patch`.
+- Patch: `patches/@earendil-works__pi-ai@1.5.2.patch`.
 - Final projection: `packages/agent-runtime/src/runtime.ts` (`nextText`,
   `nextThinking`, and `message_end`).
 - Transcript presentation: `node --test apps/desktop/test/dsml-protocol-tail.test.mjs apps/desktop/test/dsml-transcript-rendering.test.mjs`.
