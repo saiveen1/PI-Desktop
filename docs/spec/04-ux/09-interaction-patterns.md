@@ -1721,6 +1721,11 @@ Project drag/drop follows these patterns:
   earlier fragments prepend. Existing message, page, mounted-window, snapshot,
   and retained session-pane data caches remain unchanged, with no idle TTL or
   session-data reclamation.
+- Opening, revealing, restoring a reading position or bookmark, and layout
+  changes alone never extend older history. The top **Show earlier messages**
+  button and minimap continuation each advance boundedly; a fetched page must
+  become reachable in that same user action. A visible boundary or underfilled
+  viewport cannot autonomously drain history while the reader is stationary.
 - Assistant prose may release its Markdown renderer outside a five-screen
   retention buffer and restore it inside a three-screen entry buffer, keeping
   measured-height message/prose shells. Measurements must match the current
@@ -1754,11 +1759,12 @@ Project drag/drop follows these patterns:
   back to the message anchor without inventing an equivalent sentence. Boundary
   fallback rebases the held target so repeated restores do not repeat writes.
 - All paging paths leave `overflow-y` and input untouched, including the
-  `<= 120px` hard edge, explicit earlier-history actions, and the underfilled
-  top-boundary observer. Wheel/trackpad, touch and keyboard input continue
-  through IO and the three stable layout frames used for settlement. Nested
-  scroll owners, editable fields, and title activation retain their own input.
-  The loading label keeps identical layout space when hidden; there is no
+  `<= 120px` hard edge and explicit earlier-history actions. Boundary observation
+  may support an active user-initiated operation but is not itself a trigger.
+  Wheel/trackpad, touch and keyboard input continue through IO and the three
+  stable layout frames used for settlement. Nested scroll owners, editable
+  fields, and title activation retain their own input.
+  The top action shows the loading label while an older page is pending; there is no
   early-threshold observer or eager page draining at rest.
 - Search/minimap navigation, return-to-latest, manual disclosure, a new turn
   outside a historical reading window, pane hide, and unmount retire the hold;

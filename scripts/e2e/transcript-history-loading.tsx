@@ -61,7 +61,7 @@ async function finishNativeInput() {
   return inspect();
 }
 const scroller = () => host.querySelector<HTMLElement>(".thread-scroll")!;
-const busy = () => host.querySelector('.transcript-history-loading[aria-hidden="false"]') !== null;
+const busy = () => host.querySelector('.transcript-history-loading[aria-busy="true"]') !== null;
 const offset = () => anchor!.getBoundingClientRect().top - scroller().getBoundingClientRect().top;
 const onLoadOlder = () => new Promise<void>((resolve, reject) => {
   calls++; finish = resolve; fail = () => reject(new Error("Synthetic history read failed"));

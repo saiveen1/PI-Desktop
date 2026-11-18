@@ -181,6 +181,8 @@ This edition strengthens the existing framework rather than replacing it.
   reading intent or discard loaded ranges. Branch from paged, searched, or
   restored replies outside the latest-message cache without rewriting the source
   transcript or stopping a later turn.
+  Opening or restoring a long conversation no longer starts paging backward. Scroll
+  up or choose **Show earlier messages** to read more, even when the tail fits on one screen.
 - **Clearer execution outcomes.** Distinguish failed, denied, skipped, interrupted,
   and context-required tool results; retain phase/retry diagnostics and clear stale
   running indicators and retry badges. Also fix rename-input reselection and

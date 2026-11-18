@@ -68,7 +68,7 @@ globalThis.transcriptHistoryNavigationProbe = async (reducedOnly = false) => {
     },
   };
   const scroller = () => host.querySelector<HTMLDivElement>(".thread-scroll")!;
-  const busy = () => host.querySelector('.transcript-history-loading[aria-hidden="false"]') !== null;
+  const busy = () => host.querySelector('.transcript-history-loading[aria-busy="true"]') !== null;
   const bottom = () => Math.abs(scroller().scrollHeight - scroller().clientHeight - scroller().scrollTop) <= 2;
   // Arrival replaces the prepared identity; connected history data may survive.
   const latestArrival = () => {

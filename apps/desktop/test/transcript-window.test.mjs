@@ -208,10 +208,6 @@ test("the transcript bounds mounted history and escalates at the top", () => {
   );
   // Reaching the top mounts more of what is loaded first, and only fetches an
   // older page once the window already covers it.
-  assert.match(
-    transcript,
-    /isHistoryRevealPosition\(el, pinnedRef\.current && !gesturing\)/,
-  );
   const reachTop = transcript.match(
     /const reachTop = useCallback\(\(\) => \{([\s\S]*?)\n  \}, \[[^\]]*\]\);/,
   )?.[1];
@@ -219,13 +215,13 @@ test("the transcript bounds mounted history and escalates at the top", () => {
   assert.match(reachTop, /growTranscriptWindow\(windowSize, historyLengthRef\.current\)/);
   assert.match(reachTop, /preserveHistory\(\(\) => setWindowSize\(grown\), windowSize\)/);
   assert.match(reachTop, /setWindowSize\(grown\)/);
-  assert.match(reachTop, /loadOlder\(\)/);
+  assert.match(reachTop, /return onLoadOlder\(\)/);
 });
 
 test("mounting rows above the viewport is anchored like a fetched page", () => {
   // Both transitions use one viewport owner; the real DOM/native-wheel
   // behavior is exercised by e2e-transcript-history-loading.mjs.
-  assert.match(transcript, /preserveHistory\(onLoadOlder, windowSize, true\)/);
+  assert.match(transcript, /return onLoadOlder\(\);\s*\}, windowSize, true\)/);
   assert.match(transcript, /useTranscriptHistoryPaging\(\{/);
   assert.doesNotMatch(transcript, /prependHeightRef|el\.scrollTop \+= delta/);
 });
@@ -260,22 +256,10 @@ test("the minimap keeps message dashes reachable and represents withheld history
   );
 });
 
-test("a visible history boundary advances without waiting for a scroll event", () => {
-  assert.match(transcript, /ref=\{historyBoundaryRef\}/);
-  assert.match(transcript, /new IntersectionObserver\(/);
-  assert.match(transcript, /advanceIfHistoryBoundaryVisible\(\);/);
-  // An IntersectionObserver does not re-notify while the boundary stays visible,
-  // so window growth (which changes neither the intersection nor messages.length)
-  // must re-run the effect or a still-underfilled transcript advances once and
-  // stalls with loaded rows unmounted.
-  assert.match(
-    transcript,
-    /hasEarlierHistory,[\s\S]*?hydrationTick,[\s\S]*?loadingOlder,[\s\S]*?messages\.length,[\s\S]*?reachTop,[\s\S]*?sessionId,[\s\S]*?transcriptWindow\.hiddenAbove,/,
-  );
-  // Escalation is bounded per run: one growth step or one page request, and the
-  // effect only re-runs when that step actually changed the projection.
-  assert.match(transcript, /!isHistoryRevealPosition\(root, pinnedRef\.current\)/);
-  assert.match(transcript, /observer\.disconnect\(\)/);
+test("the top row offers an explicit alternative when scrolling is impossible", () => {
+  assert.match(transcript, /onClick=\{revealEarlierHistory\}/);
+  assert.match(transcript, /t\("chat.showEarlierMessages"\)/);
+  assert.doesNotMatch(transcript, /advanceIfHistoryBoundaryVisible|historyBoundaryRef/);
 });
 
 test("the hydration spacer stays scoped to the first commit", () => {

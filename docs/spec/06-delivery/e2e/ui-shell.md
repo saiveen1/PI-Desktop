@@ -2619,13 +2619,14 @@
      and the jump-to-latest pill appears.
   6. Hover and click conversation minimap dashes at several heights, then switch
      to another session and back.
-  7. Activate a long session whose newest page collapses to less than one
-     viewport (one tool-heavy turn) and confirm the outline is present with its
-     earlier-history continuation, that clicking it reveals earlier turns, and
-     that it keeps advancing without a manual scroll gesture until the whole
-     history is loaded and mounted.
-  8. Confirm the continuation disappears once nothing earlier remains, and that a
-     short completed conversation that fits one viewport still shows no rail.
+  7. Activate an underfilled long session and wait without input. Reveal it,
+     restore a reading position and bookmark, and resize or change layout; verify
+     neither the mounted older range nor Host page requests advance on their own.
+  8. Click the top **Show earlier messages** button, then the minimap continuation
+     separately. Each action advances boundedly, and any fetched older rows are
+     reachable in that same action. Wait after each action: no further automatic
+     steps occur. Repeat actions until exhausted; real upward scrolling may
+     prefetch. Confirm a short completed conversation still shows no rail.
 - **Expected**: Mounted transcript rows stay bounded by the window rather than
   growing with how far back the user scrolled, so the recorded row count and heap
   usage after paging far back stay close to the values recorded before it.
@@ -2633,19 +2634,19 @@
   the viewport anchored to the row being read. Every minimap message dash jumps to
   a real row. Streaming stays smooth with the composer responsive, pinned-follow
   and jump-to-latest behave as specified, and switching away and back paints the
-  retained pane at the position it was left. Earlier history is never stranded: with rows withheld or an older
-  page pending, the outline stays available with an actionable earlier-history
-  continuation and keeps advancing when the top boundary remains visible, even
-  when the mounted tail does not overflow one viewport (D269). The continuation
-  and the rail disappear once the full history is loaded and mounted and the
-  transcript fits one page.
+  retained pane at the position it was left. Earlier history is never stranded:
+  the top action and minimap continuation advance boundedly, including in an
+  underfilled viewport, and fetched rows become reachable in the same action.
+  Boundary visibility alone never drains history while stationary. The
+  continuation and rail disappear once the full history is loaded and mounted
+  and the transcript fits one page (D269, clarified by ADR 0130).
 - **Specs linked**: `04-ux/08-component-spec.md` §7 and §8,
   `03-runtime/04-data-storage.md`, ADR 0120, ADR 0127, ADR 0130, D108, D269
 - **Acceptance**: C (conversation), H (diagnostics), Quality
 - **Milestone**: M6+
-- **Status**: Unit-covered (`transcript-window.test.mjs`,
-  `conversation-minimap.test.mjs`, `interaction-performance.test.mjs`); rendered
-  desktop journey and the low-memory Windows measurement pending
+- **Status**: Window and minimap unit coverage plus isolated Chromium demand and
+  same-action reachability coverage (`transcript-history-demand.test.mjs`);
+  the full desktop journey and low-memory Windows measurement remain pending.
 
 ## E2E-160: Dragging the window across displays keeps the dropped position
 

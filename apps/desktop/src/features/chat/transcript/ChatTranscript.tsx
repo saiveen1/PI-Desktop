@@ -6,7 +6,7 @@ import { proposalKindForMode } from "@pi-desktop/shared";
 import { ConversationMinimap } from "../../../components/ConversationMinimap";
 import { RadialMenu, type RadialMenuSlot } from "../../../components/RadialMenu";
 import { PermissionCard } from "../../../components/PermissionCard";
-import { TooltipButton } from "../../../components/ui";
+import { Button, TooltipButton } from "../../../components/ui";
 import { TurnOutcomeCard } from "../../../components/TurnOutcomeCard";
 import {
   IconArrowDown,
@@ -173,7 +173,6 @@ function TranscriptBody({
     scrollRef,
     wrapRef,
     contentRef,
-    historyBoundaryRef,
     loadingOlder,
     historyPending,
     showJump,
@@ -467,15 +466,13 @@ function TranscriptBody({
         aria-live="polite"
       >
         <div className="thread-content" ref={contentRef}>
-          <div
-            ref={historyBoundaryRef}
-            className="transcript-history-loading"
-            role="status"
-            aria-live="polite"
-            aria-hidden={!loadingOlder}
-            style={{ visibility: loadingOlder ? "visible" : "hidden" }}
-          >
-            {t("chat.loadingEarlierMessages")}
+          <div className="transcript-history-loading" aria-live="polite" aria-busy={loadingOlder}>
+            {hasEarlierHistory || loadingOlder ? (
+              <Button type="button" variant="ghost" size="sm" disabled={historyPending}
+                onClick={revealEarlierHistory}>
+                {loadingOlder ? t("chat.loadingEarlierMessages") : t("chat.showEarlierMessages")}
+              </Button>
+            ) : null}
           </div>
           {hydrationBounded ? (
             // One viewport of slack, not a per-entry estimate. The spacer exists

@@ -3517,14 +3517,23 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
   5. Return after loading older pages, then scroll upward again. Reveal a real
      turn-changes card during the trip and compare with layout growth above the
      visible text. Continue with live output and a canonical rewrite.
+  6. With an underfilled older-history window, open and reveal the session,
+     restore a reading position and bookmark, and change layout while stationary.
+     Observe the mounted range and Host requests. Click the top **Show earlier
+     messages** button and minimap continuation separately, waiting after each;
+     repeat until exhausted, and compare with real upward-scroll prefetch.
 - **Expected**: Ahead-loading mounts cached withheld history before Host IO,
   stays single-flight, does not set `overflow-y: hidden` or discard main scroll
   input, tracks the newest actual message anchor across ongoing upward movement,
   and keeps that message within `2px` when the page prepends; there is no
-  early-threshold observer or eager draining at rest. The `<= 120px` hard edge,
-  explicit earlier-history action, and underfilled observer use the same moving
-  anchor without locking overflow or discarding input. Native wheel movement
-  must occur during IO, with insertion preserving the resulting reading point.
+  early-threshold observer or eager draining at rest. Opening, revealing,
+  restoring a reading position or bookmark, layout changes and boundary
+  visibility alone never extend older history. Each top button or minimap
+  continuation action advances boundedly, including an underfilled viewport;
+  fetched older rows become reachable in that same action. The `<= 120px` hard
+  edge and explicit actions use the same moving anchor without locking overflow
+  or discarding input. Native wheel movement must occur during IO, with insertion
+  preserving the resulting reading point.
   Nested scrolling, editable fields and title activation remain independent.
   Return-to-latest uses the same browser-native smooth scrolling as conversation
   turn markers (`auto` under reduced motion), without custom easing, timing, or
@@ -3539,6 +3548,8 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
   rechecks the current bottom and smoothly finishes any remaining distance after
   a late card or layout change, without a full-height instantaneous jump.
   Runtime `isRunning` and mounted-window bounds remain unchanged, without idle TTL or reclamation.
+  `transcript-history-demand.test.mjs` covers idle opening, restored near-top
+  reading after layout, bounded top/minimap actions, and native upward wheel input.
 - **Automation**: `node scripts/e2e-transcript-history-loading.mjs`, also run by
   `e2e-transcript-render.mjs`, plus `transcript-latest-navigation.test.mjs`,
   `transcript-reading.test.mjs`, and `transcript-scroll.test.mjs`. The direct

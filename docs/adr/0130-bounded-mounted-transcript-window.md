@@ -3,7 +3,7 @@
 - Status: Accepted
 - Date: 2026-08-27
 - Related: ADR 0120, ADR 0127, D108, D247, D258, D261, D269, E2E-159
-- Amended by: D269 (history continuation and boundary-driven escalation)
+- Amended by: D269, clarified below for demand-driven history continuation
 
 ## Context
 
@@ -23,11 +23,14 @@ mounted entry on each streamed token.
 `TRANSCRIPT_INITIAL_MOUNT` rows for the first commit after a session switch and
 `TRANSCRIPT_WINDOW_MIN` in steady state.
 
-### 2. Reaching the top escalates in two stages
+### 2. User demand escalates in two stages
 
 `growTranscriptWindow` adds cached rows in `TRANSCRIPT_WINDOW_STEP` increments
 while the window is partial, and only a window covering all loaded history calls
-`loadOlder`, because mounting loaded rows is cheaper than an IPC round trip.
+`onLoadOlder`, because mounting loaded rows is cheaper than an IPC round trip.
+A real upward scroll may prefetch; the top **Show earlier messages** button and
+minimap continuation explicitly advance one bounded step. A fetched page must
+become reachable in that same action, not remain entirely outside the window.
 
 ### 3. Growth and fetched pages share one pre-paint anchor
 
@@ -60,11 +63,12 @@ dotted earlier-history continuation that runs the two-stage escalation of clause
 2, and D108's two-marker-plus-overflow rule resumes once no earlier history
 remains.
 
-### 6b. Hard-edge escalation observes the top boundary (amended by D269)
+### 6b. Boundary visibility is not user demand (clarifies D269)
 
-Escalation reacts to the visibility of the top loading boundary as well as the
-near-top check, because an underfilled page, a page whose rows all fall outside
-the mounted window, or a window transition can each leave `scrollTop` unchanged.
+An underfilled page or a visible top boundary alone must not advance history.
+Opening, revealing, restoring a reading position or bookmark, and layout changes
+must not extend older history. An observer may support an active user-initiated
+operation, but cannot autonomously repeat growth or requests while stationary.
 
 ### 7. The entry projection arrays are memoized on `entries`
 

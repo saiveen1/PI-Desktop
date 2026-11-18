@@ -2611,9 +2611,10 @@ Renderer: `apps/desktop/src/components/Markdown.tsx` + `apps/desktop/src/lib/shi
   settle veil (D287): late row heights (Markdown, code blocks,
   `content-visibility` placeholders) are measured under it rather than painted.
 - **Bounded mounted history**: the mounted history is a trailing window over the
-  loaded history, not all of it. Reaching the top escalates in two stages —
-  mount more of what is already loaded, and fetch an older page only once the
-  window covers all of it. Both stages add height above the reading position, so
+  loaded history, not all of it. User demand escalates in two stages — mount more
+  of what is already loaded, and fetch an older page only once the window covers
+  all of it. A fetched page becomes reachable in the same user action. Both stages
+  add height above the reading position, so
   both take the same pre-paint scroll anchor. The window resets per session, and
   the spacer stays scoped to the first commit: a permanent spacer under the
   steady-state window would make the user scroll a blank viewport to reach the
@@ -2629,13 +2630,12 @@ Renderer: `apps/desktop/src/components/Markdown.tsx` + `apps/desktop/src/lib/shi
   continuation control that triggers the same escalation. Without it the rail
   disappeared exactly when navigation was most needed — a bounded tail holding a
   single tool-heavy turn has fewer than two markers and often does not overflow.
-- **History advances on boundary visibility** (D269): the top loading row is
-  observed inside the scroller with the same near-top threshold the scroll handler
-  uses. An underfilled tail page, a page whose fetched rows all land outside the
-  mounted window, and a window transition can leave `scrollTop` untouched, so a
-  scroll-only trigger could never fire again. A collapsed scroller and a pinned
-  overflowing transcript whose `scrollTop` has been reset to 0 are not treated as
-  "at the top", so opening or revealing a session cannot page back to the start.
+- **History advances on demand** (clarifies D269): real upward scrolling may
+  prefetch; the top **Show earlier messages** button and minimap continuation
+  each advance boundedly. Boundary visibility, opening, revealing, restoring a
+  reading position or bookmark, and layout changes alone cannot grow the window
+  or request older pages. An underfilled viewport must not drain history while
+  stationary, even when the top boundary remains visible.
 - **Minimap hover cost**: dash magnification is applied by writing a custom
   property per dash, and dash centers are measured in a separate read-only pass.
   Reading a dash's geometry inside the same loop that writes to it forces one
