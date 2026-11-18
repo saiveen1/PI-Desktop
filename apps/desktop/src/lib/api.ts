@@ -1242,6 +1242,8 @@ export const api = {
     ),
   replaceSessionMessages: (sessionId: string, messages: UiMessage[]) =>
     invoke(IPC.invoke.sessionReplaceMessages, { sessionId, messages }),
+  editAssistantReply: (input: import("@pi-desktop/shared").EditAssistantReplyRequest) =>
+    invoke<{ ok: true }>(IPC.invoke.sessionEditAssistantReply, input),
   deleteSessionMessage: (input: { sessionId: string; messageId: string }) =>
     invoke<{ ok: true; deleted: boolean; deletedCount: number }>(IPC.invoke.sessionDeleteMessage, input),
   retractPendingSessionPrompt: (input: {

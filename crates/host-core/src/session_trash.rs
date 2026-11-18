@@ -37,8 +37,8 @@ pub fn is_trashed(db: &Database, id: &str) -> Result<bool> {
     )?)
 }
 
-pub fn ensure_idle(db: &Database, id: &str) -> Result<()> {
-    let busy: bool = db.conn().query_row(
+pub(crate) fn has_pending_work(db: &Database, id: &str) -> Result<bool> {
+    Ok(db.conn().query_row(
         "SELECT EXISTS(SELECT 1 FROM turns WHERE session_id = ?1 AND status = 'running')
           OR EXISTS(SELECT 1 FROM turn_queue WHERE session_id = ?1)
           OR EXISTS(SELECT 1 FROM plan_approvals WHERE session_id = ?1
@@ -47,8 +47,11 @@ pub fn ensure_idle(db: &Database, id: &str) -> Result<()> {
                     AND status IN ('queued', 'running'))",
         [id],
         |row| row.get(0),
-    )?;
-    if busy {
+    )?)
+}
+
+pub fn ensure_idle(db: &Database, id: &str) -> Result<()> {
+    if has_pending_work(db, id)? {
         return Err(anyhow!(
             "AGENT_BUSY: stop running work and clear pending work before recycling"
         ));

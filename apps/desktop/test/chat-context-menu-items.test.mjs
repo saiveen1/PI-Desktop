@@ -118,6 +118,18 @@ test("a completed assistant turn offers copy, select, regenerate, and branch", (
   assert.equal(items.find((item) => item.id === "regenerate").separatorBefore, true);
 });
 
+test("only eligible completed answers add Edit reply without replacing manual branching", () => {
+  const calls = [];
+  const items = assistantTurnMenuItems({
+    t, answer: "Final reply", selectTarget: null, complete: true, actions,
+    onEdit: () => calls.push("edit"), onRegenerate: noop, onBranch: () => calls.push("branch"),
+  });
+  assert.deepEqual(ids(items), ["copy", "select-text", "edit-reply", "regenerate", "branch"]);
+  assert.equal(items[2].label, "chat.editReply");
+  items[2].onSelect();
+  assert.deepEqual(calls, ["edit"]);
+});
+
 test("a streaming assistant turn without a settled answer offers no items", () => {
   const items = assistantTurnMenuItems({
     t,

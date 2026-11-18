@@ -564,6 +564,8 @@ export const fr = {
     "retry": "Régénérer la branche",
     "forkResponse": "à partir de cette réponse",
     "editMessage": "Modifier et renvoyer",
+    "editReply": "Modifier la réponse",
+    "editReplyUnavailable": "Cette réponse ne peut plus être modifiée.",
     "cancelEdit": "Annuler",
     "retryEdit": "Réessayer",
     "retryingEdit": "Réessayer…",

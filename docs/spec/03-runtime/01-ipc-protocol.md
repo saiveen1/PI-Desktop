@@ -1473,9 +1473,13 @@ The host assigns a new session id, message ids, and tool-call ids; it copies
 the durable project/provider/model/mode/thinking/permission configuration but
 does not copy turns, notifications, artifacts, scratch data, permission
 grants, or regenerate revisions. The source session remains unchanged.
-Message-scoped assistant Fork/Edit uses this option so the child receives a
-new session id and therefore cannot reuse or mutate the source pi runtime or
-its provider cache.
+Message-scoped Fork uses this option so the child receives its own session id
+and cannot mutate the source runtime. To change an older reply, fork through
+that reply first. `session/editAssistantReply({ sessionId, messageId,
+expectedContent, content }) -> { ok: true }` edits only the idle local tail,
+under the same session-operation lock as prompt admission. It strictly drains
+pending writes and requires disposal of any cached runtime before committing
+the Host edit. It does not start a turn or fork a session.
 
 Protocol version 9 adds the checkpoint Plan contract: `SubmitPlan`, unique
 `.pi/plan/*.md` artifact metadata, approve/reject-only responses, absolute

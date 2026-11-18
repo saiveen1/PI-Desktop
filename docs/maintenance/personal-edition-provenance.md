@@ -1,5 +1,14 @@
 # Personal-edition change provenance
 
+## In-place assistant reply editing
+
+Against locally recorded upstream `3dd8b955a`, response-level Fork is inherited:
+`a52166dae` previously edited by forking; `007cc482f` moved editing to user
+prompts. The current upstream `AssistantTurn.tsx` has Fork and Regenerate but
+no assistant text editor. The local increment is the idle-tail editor and its
+`session.editAssistantReply` compare-and-replace path; neither the fork nor
+user-prompt retry is attributed to this change.
+
 ## Audit boundary
 
 This is the evidence map for the root bilingual README, not release notes or a

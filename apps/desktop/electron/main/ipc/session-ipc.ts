@@ -12,6 +12,7 @@ import {
   isModelConfigImportSource,
   isModeId,
   isObserverGuardMode,
+  type EditAssistantReplyRequest,
   type ObserverGuardMode,
   type ModelConfigImportDraft,
   type Mode,
@@ -160,7 +161,7 @@ export function registerSessionIpc({
     purpose: string,
     currentHost: HostProcess,
     run: () => Promise<T>,
-    options: { strictDrain?: boolean; didRewrite?: (result: T) => boolean } = {},
+    options: { strictDrain?: boolean; requireDisposal?: boolean; didRewrite?: (result: T) => boolean } = {},
   ): Promise<T> => {
     rejectNativeMutation(sessionId, purpose);
     const releaseSessionOperation = await acquireSessionOperation(sessionId);
@@ -178,12 +179,13 @@ export function registerSessionIpc({
       } else {
         await persistenceOutbox.prepareSessionReplacement(sessionId, () => currentHost);
       }
-      if (sidecar) {
-        sidecar.clearProjectInstructionRoot(sessionId);
-        sidecar.clearVendorAuthBindings(sessionId);
-        await sidecar
-          .call("agent.disposeSession", { sessionId })
-          .catch(() => undefined);
+      const currentSidecar = getSidecar();
+      if (currentSidecar) {
+        currentSidecar.clearProjectInstructionRoot(sessionId);
+        currentSidecar.clearVendorAuthBindings(sessionId);
+        const disposal = currentSidecar.call("agent.disposeSession", { sessionId });
+        if (options.requireDisposal) await disposal;
+        else await disposal.catch(() => undefined);
       }
       const result = await run();
       if (options.didRewrite?.(result) === false) rewriteFence.rollback();
@@ -613,6 +615,21 @@ export function registerSessionIpc({
       );
     },
   );
+  handle(IPC.invoke.sessionEditAssistantReply, async (input: EditAssistantReplyRequest) => {
+    if (!host) throw new Error("host unavailable");
+    const { sessionId, messageId, expectedContent, content } = input ?? {};
+    if (typeof sessionId !== "string" || !sessionId.trim() || typeof messageId !== "string" ||
+        !messageId.trim() || typeof expectedContent !== "string" || typeof content !== "string" || !content.trim()) {
+      throw Object.assign(new Error("Invalid assistant reply edit"), { errorCode: ErrorCodes.INVALID_ARGUMENT });
+    }
+    if (sessionId.startsWith("remote:")) {
+      throw Object.assign(new Error("Remote reply editing is unavailable"), { errorCode: ErrorCodes.CAPABILITY_UNAVAILABLE });
+    }
+    const currentHost = host;
+    return runTranscriptRewrite(sessionId, "assistant reply editing", currentHost,
+      () => currentHost.call<{ ok: true }>("session.editAssistantReply", { sessionId, messageId, expectedContent, content }),
+      { strictDrain: true, requireDisposal: true });
+  });
   handle(
     IPC.invoke.sessionDeleteMessage,
     async (input: { sessionId: string; messageId: string }) => {

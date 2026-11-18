@@ -566,6 +566,8 @@ export const ptBR = {
     retry: "Regenerar",
     forkResponse: "Criar ramificação a partir desta resposta",
     editMessage: "Editar e reenviar",
+    editReply: "Editar resposta",
+    editReplyUnavailable: "Esta resposta não pode mais ser editada.",
     cancelEdit: "Cancelar",
     retryEdit: "Tentar novamente",
     retryingEdit: "Tentando novamente…",

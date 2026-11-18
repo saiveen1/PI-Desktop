@@ -75,11 +75,11 @@ for (const outcome of ["success", "exception", "reply_started"]) {
 const { registerSessionIpc } = load("../electron/main/ipc/session-ipc.ts", {
   electron: { shell: {} }, "node:fs": fs, "node:path": path, "@pi-desktop/shared": { ErrorCodes, IPC }, "../importers": {}, "../services/session-collaboration": {}, "../bootstrap/remote-hosts.js": {}, "../services/session-search": {},
 });
-function ipcHarness(pending = false, result = { ok: true }) {
+function ipcHarness(pending = false, result = { ok: true }, { disposeError, activeTurns = new Map() } = {}) {
   const handlers = new Map(); const events = [];
   const host = { call: async (method, input) => { events.push([method, input]); return typeof result === "function" ? result(method) : result; } };
   registerSessionIpc({ registrar: { handle: (channel, handler) => handlers.set(channel, handler) }, getHost: () => host,
-    getSidecar: () => ({ clearProjectInstructionRoot() {}, clearVendorAuthBindings() {}, call: async () => { events.push(["dispose"]); } }), activeTurns: new Map(),
+    getSidecar: () => ({ clearProjectInstructionRoot() {}, clearVendorAuthBindings() {}, call: async () => { events.push(["dispose"]); if (disposeError) throw disposeError; } }), activeTurns,
     persistenceOutbox: { prepareSessionMutation: async (id) => { events.push(["strict-drain", id]); if (pending) throw new Error("pending write"); }, prepareSessionReplacement: async () => { events.push(["replacement-drain"]); } },
     acquireSessionOperation: async () => { events.push(["lock"]); return () => events.push(["release"]); },
     beginTranscriptRewrite: () => { events.push(["fence"]); return { commit: () => events.push(["commit"]), rollback: () => events.push(["rollback"]) }; }, sessionProjects: new Map(), logger: {}, plugins: {},
@@ -87,6 +87,7 @@ function ipcHarness(pending = false, result = { ok: true }) {
   return { events, invoke: (channel, input) => { assert.equal(typeof handlers.get(IPC.invoke[channel]), "function"); return handlers.get(IPC.invoke[channel])(input); } };
 }
 for (const [channel, method, input] of [
+  ["sessionEditAssistantReply", "session.editAssistantReply", { sessionId: "s", messageId: "a2", expectedContent: "old", content: "  corrected\n" }],
   ["sessionDeleteMessage", "session.deleteMessage", { sessionId: "s", messageId: "u1" }],
   ["sessionRetractPendingPrompt", "session.retractPendingPrompt", { sessionId: "s", userMessageId: "u2", turnId: "turn" }],
   ["sessionActivateRevision", "session.activateRevision", { sessionId: "s", rootUserId: "u1", revisionIndex: 2, requireCanonicalPrefix: true }],
@@ -100,6 +101,20 @@ for (const [channel, method, input] of [
     assert.deepEqual(h.events, [["lock"], ["fence"], ["strict-drain", "s"], ["rollback"], ["release"]]);
   });
 }
+test("editing fails closed if the old model context cannot be discarded", async () => {
+  const h = ipcHarness(false, undefined, { disposeError: new Error("runtime still warm") });
+  await assert.rejects(h.invoke("sessionEditAssistantReply", { sessionId: "s", messageId: "a", expectedContent: "old", content: "new" }), /runtime still warm/);
+  assert.deepEqual(h.events, [["lock"], ["fence"], ["strict-drain", "s"], ["dispose"], ["rollback"], ["release"]]);
+});
+test("a reply edit rejects unsupported targets, malformed text and a running turn before rewriting", async () => {
+  const h = ipcHarness(false, undefined, { activeTurns: new Map([["s", "turn"]]) });
+  const req = { sessionId: "s", messageId: "a", expectedContent: "old", content: "new" };
+  for (const [patch, errorCode] of [
+    [{ sessionId: "native-pi:parent" }, "INVALID_ARGUMENT"], [{ sessionId: "remote:host:s" }, "CAPABILITY_UNAVAILABLE"],
+    [{ expectedContent: null }, "INVALID_ARGUMENT"], [{ content: "  " }, "INVALID_ARGUMENT"], [{}, "AGENT_BUSY"],
+  ]) await assert.rejects(h.invoke("sessionEditAssistantReply", { ...req, ...patch }), { errorCode });
+  assert.deepEqual(h.events, [["lock"], ["release"]]);
+});
 test("legacy replace and explicit prefix activation retain old wire shapes", async () => {
   const h = ipcHarness(); await h.invoke("sessionReplaceMessages", { sessionId: "s", messages: previous });
   await h.invoke("sessionActivateRevision", { sessionId: "s", rootUserId: "u2", revisionIndex: 1, prefix: previous });
@@ -152,7 +167,7 @@ test("new ID mutations preserve the existing remote read-only capability boundar
   const { guardRemoteInvocation } = load("../src/lib/remote-ipc-safety.ts", {
     "@pi-desktop/shared": { IPC }, i18next: { default: { t: () => "Remote history is read-only" } },
   });
-  for (const channel of [IPC.invoke.sessionDeleteMessage, IPC.invoke.sessionRetractPendingPrompt]) {
+  for (const channel of [IPC.invoke.sessionEditAssistantReply, IPC.invoke.sessionDeleteMessage, IPC.invoke.sessionRetractPendingPrompt]) {
     assert.throws(() => guardRemoteInvocation(channel, { sessionId: "remote:host:session", messageId: "m" }), { code: "CAPABILITY_UNAVAILABLE" });
     assert.doesNotThrow(() => guardRemoteInvocation(channel, { sessionId: "local-session", messageId: "m" }));
   }
@@ -190,9 +205,10 @@ test("the real store/API/preload/IPC path uploads bounded ids with more than 64 
     electron: { contextBridge: { exposeInMainWorld: (_name, value) => { bridge = value; } }, webUtils: {}, ipcRenderer: { invoke: async (channel, input) => {
       wire.push(JSON.stringify({ channel, input }));
       const key = Object.keys(IPC.invoke).find((key) => IPC.invoke[key] === channel);
-      assert.ok(["sessionDeleteMessage", "sessionRetractPendingPrompt", "sessionActivateRevision"].includes(key));
+      assert.ok(["sessionEditAssistantReply", "sessionDeleteMessage", "sessionRetractPendingPrompt", "sessionActivateRevision"].includes(key));
       return { ok: true, data: await ipc.invoke(key, input) };
     } } }, "@pi-desktop/shared": shared, "@pi-desktop/shared/protocol": shared,
+    "../composer-file-selection": load("../electron/composer-file-selection.ts", {}),
     // Boot-animation descriptor decoding (D679); no argument, nothing to read.
     "@pi-desktop/shared/startup-animation": { decodeStartupAnimationArgument: () => null },
   });
@@ -220,7 +236,8 @@ test("the real store/API/preload/IPC path uploads bounded ids with more than 64 
   await stop.actions.abort();
   assert.equal(await submitted.abortResolution, true);
   assert.equal(stop.state().messages[1].content, huge[1].content);
-  assert.equal(wire.length, 3);
+  await api.editAssistantReply({ sessionId: "s", messageId: "a2", expectedContent: "a2", content: "corrected" });
+  assert.equal(wire.length, 4);
   assert.ok(wire.every((frame) => Buffer.byteLength(frame) < 256));
 });
 

@@ -1381,6 +1381,17 @@ fn swap_into_place(tmp: &Path, path: &Path) -> Result<()> {
 /// a 3.9 ms rewrite into a 1.0 ms read at 1.3 MB and a 25 ms one into 19 ms at
 /// 21 MB, measured against the always-rewrite splice on the same fixture.
 pub fn update_message(data_dir: &Path, session_id: &str, record: &MessageRecord) -> Result<bool> {
+    update_message_lines(data_dir, session_id, record, None)
+}
+
+/// An answer edit also invalidates summaries covering its old bytes. Splice all
+/// physical copies and remove the affected checkpoint chain in the same rename.
+pub(crate) fn update_message_lines(
+    data_dir: &Path,
+    session_id: &str,
+    record: &MessageRecord,
+    changed_suffix: Option<&std::collections::HashSet<&str>>,
+) -> Result<bool> {
     let path = transcript_path(data_dir, session_id)?;
     if binary_migration::prepare(&path, Some(&header_line(session_id, &record.created_at)?))? {
         layout::invalidate(data_dir, session_id);
@@ -1393,26 +1404,18 @@ pub fn update_message(data_dir: &Path, session_id: &str, record: &MessageRecord)
     // whole-file rewrite below, which measured 4.5 ms at 1.3 MB and 27 ms at
     // 21 MB — about 1.3 s at 1 GB by the same arithmetic — and that rewrite, not
     // the device, is what bounds a reply in a session holding hundreds of MB.
-    if let Some(last) = read_last_line(&path)? {
-        if last != replacement && line_carries(&last, &record.id) {
-            append_line(&path, None, replacement)?;
-            return Ok(true);
+    if changed_suffix.is_none() {
+        if let Some(last) = read_last_line(&path)? {
+            if last != replacement && line_carries(&last, &record.id) {
+                append_line(&path, None, replacement)?;
+                return Ok(true);
+            }
         }
     }
     #[cfg(test)]
     WHOLE_FILE_READS.with(|reads| reads.set(reads.get() + 1));
-    let raw = match fs::read(&path) {
-        Ok(bytes) => match String::from_utf8(bytes) {
-            Ok(raw) => raw,
-            // A crash mid-append can tear a multi-byte character in the tail.
-            // Every reader in this file tolerates that (`read_line_tolerant`)
-            // and `append_line` repairs the tail on the next append, so an
-            // update must not be the one path that answers InvalidData for it.
-            Err(error) => {
-                let bytes = error.into_bytes();
-                String::from_utf8_lossy(&bytes).into_owned()
-            }
-        },
+    let mut reader = match File::open(&path) {
+        Ok(file) => BufReader::new(file),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(false),
         Err(e) => return Err(e).with_context(|| format!("read {}", path.display())),
     };
@@ -1422,28 +1425,63 @@ pub fn update_message(data_dir: &Path, session_id: &str, record: &MessageRecord)
     {
         let file = File::create(&tmp)?;
         let mut writer = BufWriter::new(file);
-        for line in raw.lines() {
-            let trimmed = line.trim();
-            let is_target = !trimmed.is_empty()
-                && serde_json::from_str::<Value>(trimmed).is_ok_and(|value| {
-                    value.get("type").and_then(Value::as_str) == Some("message")
-                        && value.get("id").and_then(Value::as_str) == Some(record.id.as_str())
-                });
-            if is_target {
-                carries_target = true;
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct LineHead {
+            #[serde(rename = "type")]
+            kind: String,
+            id: Option<String>,
+            through_message_id: Option<String>,
+        }
+        let mut line = Vec::new();
+        let mut invalidated = false;
+        loop {
+            line.clear();
+            if reader.read_until(b'\n', &mut line)? == 0 {
+                break;
             }
-            if is_target && line != replacement {
-                // A retried append can leave the same id on two lines; keep-last
-                // dedupe means every copy has to carry the new metadata.
-                writer.write_all(replacement.as_bytes())?;
-                rewrote = true;
-            } else {
-                writer.write_all(line.as_bytes())?;
+            if let Ok(head) = serde_json::from_slice::<LineHead>(&line) {
+                if head.kind == "compaction" {
+                    invalidated |= changed_suffix.is_some_and(|ids| {
+                        head.through_message_id
+                            .as_deref()
+                            .is_some_and(|id| ids.contains(id))
+                    });
+                    if invalidated {
+                        rewrote = true;
+                        continue;
+                    }
+                } else if head.kind == "message" && head.id.as_deref() == Some(&record.id) {
+                    carries_target = true;
+                    // Preserve future top-level fields on edited rows as well as
+                    // the open-set metadata and blocks. Never project through UiMessage.
+                    let edited_line;
+                    let replacement = if changed_suffix.is_some() {
+                        let mut original = binary_storage::decode(serde_json::from_slice(&line)?)?;
+                        let fields = original.as_object_mut().context("invalid message record")?;
+                        fields.remove("type");
+                        fields.insert("blocks".into(), record.blocks.clone());
+                        if let Some(meta) = &record.meta {
+                            fields.insert("meta".into(), meta.clone());
+                        } else {
+                            fields.remove("meta");
+                        }
+                        edited_line = tagged("message", &original)?;
+                        &edited_line
+                    } else {
+                        &replacement
+                    };
+                    if line.trim_ascii_end() != replacement.as_bytes() {
+                        writeln!(writer, "{replacement}")?;
+                        rewrote = true;
+                        continue;
+                    }
+                }
             }
-            writer.write_all(b"\n")?;
+            writer.write_all(&line)?;
         }
         writer.flush()?;
-        if !rewrote {
+        if !carries_target || !rewrote {
             // Nothing to swap in: the id is absent, or every copy already
             // carries exactly this metadata. Leave the live transcript alone.
             drop(writer);
@@ -1452,6 +1490,7 @@ pub fn update_message(data_dir: &Path, session_id: &str, record: &MessageRecord)
         }
         writer.get_ref().sync_data()?;
     }
+    drop(reader);
     swap_into_place(&tmp, &path)?;
     binary_integrity::invalidate(&path);
     layout::invalidate(data_dir, session_id);

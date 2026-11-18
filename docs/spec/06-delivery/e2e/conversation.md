@@ -2517,8 +2517,12 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
   prompt. 4) Reopen the source and inspect it. 5) Append a prompt to the child,
   restart and inspect both. 6) Repeat during a later source turn. 7) Repeat toolbar
   and context-menu Fork after paging/search/reading restoration reveals an old reply.
-- **Expected**: The completed-assistant toolbar contains Copy, Fork, and
-  Regenerate only — no Delete and no Edit (D137 moved Edit to user turns). Fork
+- **Expected**: A historical completed assistant response offers Copy, Fork and
+  Regenerate, but not Delete or in-place Edit. On a local idle child, edit its
+  final reply, cancel once and then save. The child keeps the edited text after
+  reopening; the next provider request carries that text as the assistant's
+  message, not the original or an appended user correction. Saving alone makes
+  no provider request. Fork
   activates a separately titled child ending at the selected response; later source
   turns are absent. Completed historical prefixes stay forkable during a later turn;
   anchors in that active turn are rejected. Both entry points use reading-range
@@ -2531,8 +2535,10 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
 - **Acceptance**: C (chat stream/sessions), F (persistence), Quality
 - **Milestone**: M5
 - **Status**: Unit-covered (`sessions::tests::message_scoped_fork_stops_at_selected_assistant_response`,
-  `session-fork.test.mjs`, `session-fork-running.test.mjs`, `transcript-style.test.mjs`);
-  full restart UI scenario Draft
+  `session-fork.test.mjs`, `session-fork-running.test.mjs`, `transcript-style.test.mjs`).
+  `scripts/e2e-edit-assistant-reply.mjs` covers the IPC edit of a forked long
+  reply, stale-save rejection, compaction invalidation, Host restart and the
+  next provider request using synthetic data. Full restart UI scenario Draft.
 
 ## E2E-071b: Forked session retains messages after the first AI turn completes
 

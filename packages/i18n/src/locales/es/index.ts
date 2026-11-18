@@ -564,6 +564,8 @@ export const es = {
     "retry": "Regenerar",
     "forkResponse": "Rama de esta respuesta",
     "editMessage": "Editar y reenviar",
+    "editReply": "Editar respuesta",
+    "editReplyUnavailable": "Esta respuesta ya no se puede editar.",
     "cancelEdit": "Cancelar",
     "retryEdit": "Reintentar",
     "retryingEdit": "Reintentar…",

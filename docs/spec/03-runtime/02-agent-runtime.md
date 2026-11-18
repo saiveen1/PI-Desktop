@@ -1309,10 +1309,11 @@ transient and never restored into durable UI messages or transcript records.
 - A forked session receives a new session id and no shared runtime. Its first
   prompt creates a fresh pi runtime and restores context only from the child
   transcript, including the remapped tool call/result pairs.
-- Message-scoped assistant Fork/Edit follows the same rule: the child
-  transcript may stop at or replace the selected assistant response, but its
-  next prompt cannot reuse the source session's runtime/provider cache because
-  the session id and remapped transcript identities are independent (D134).
+- Message-scoped Fork stops the independent child at the selected reply.
+  Editing its last reply (or the last reply of the original idle conversation)
+  invalidates that session's cached runtime. The next prompt reconstructs the
+  assistant message from the edited transcript, not the old provider replay or
+  a checkpoint containing the replaced response.
 
 ## 5f. Subagent delegation (D201, ADR 0062, ADR 0089)
 

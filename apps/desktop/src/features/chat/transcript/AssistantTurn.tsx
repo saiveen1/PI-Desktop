@@ -31,7 +31,7 @@ import { reviewChangeFromMessage } from "../../../lib/workspace-review";
 import { cachedVisibleProcessSteps } from "../../../lib/transcript-activity-summary";
 import { useSlotSessionId } from "../../../plugins/renderer-slots/use-slots";
 import { useAppStore } from "../../../stores/app-store";
-import { IconBranch, IconReview } from "../../../components/icons";
+import { IconBranch, IconPencil, IconReview } from "../../../components/icons";
 import { TooltipButton } from "../../../components/ui";
 import {
   CopyButton,
@@ -54,6 +54,7 @@ import {
   reuseReferences,
 } from "../../../lib/transcript-summary";
 import { AssistantTurnParts } from "./AssistantTurnParts";
+import { AssistantReplyEditor, useAssistantReplyEditor } from "./AssistantReplyEditor";
 import { ObserverGuardTurnSummary } from "./ObserverGuardDisclosure";
 import { splitAtAnsweredQuestions } from "../../../lib/turn-question-sections";
 import { AskHistoryCard } from "../../../components/ToolDetails";
@@ -296,6 +297,9 @@ export const AssistantTurn = memo(function AssistantTurn({
   const modelId = modelSource?.modelId;
   const responseModelId = modelSource?.responseModelId;
   const complete = !isActive && !summary.hasError && summary.hasContent && Boolean(actionMessage);
+  const answerId = complete && summary.responses.at(-1)?.message === actionMessage ? actionMessage?.id : undefined;
+  const replyEditor = useAssistantReplyEditor(paneSessionId, answerId);
+  const editingMessageId = replyEditor.draft ? answerId : undefined;
   // A live reply is joined only on menu/copy demand. Finished reply plugins
   // still receive exactly the text that the completed turn's Copy action uses.
   const content = useMemo(
@@ -316,6 +320,7 @@ export const AssistantTurn = memo(function AssistantTurn({
     owned by a single message part could not offer them honestly.
   */
   const onContextMenu = (event: ReactMouseEvent<HTMLDivElement>) => {
+    if (editingMessageId) { event.stopPropagation(); return; }
     openTranscriptMenu(event, {
       label: t("chat.messageMenu"),
       items: assistantTurnMenuItems({
@@ -329,6 +334,7 @@ export const AssistantTurn = memo(function AssistantTurn({
           ].at(-1) ?? null,
         complete: complete && Boolean(actionMessage) && canEditMessages,
         actions: { copyText, selectText },
+        onEdit: replyEditor.editable && !replyEditor.loading ? () => void replyEditor.begin() : undefined,
         onRegenerate: () => {
           if (actionMessage) void retryAssistantMessage(actionMessage.id);
         },
@@ -425,7 +431,8 @@ export const AssistantTurn = memo(function AssistantTurn({
         })}
         {/* The answer stays outside the process disclosure: it is what the turn
             produced, not part of what it did. */}
-        <AssistantTurnParts parts={responses} {...partContext} />
+        {editingMessageId ? <AssistantReplyEditor messageId={editingMessageId} editor={replyEditor} /> :
+          <AssistantTurnParts parts={responses} {...partContext} />}
         <ObserverGuardTurnSummary parts={entry.parts} sessionId={paneSessionId} />
         <TurnToolImages parts={entry.parts} />
         {/* Recorded work remains reachable during streaming and after interruption. */}
@@ -444,11 +451,20 @@ export const AssistantTurn = memo(function AssistantTurn({
           <RunStatusIndicator key={metaMessage.runDiagnostics.turnId} diagnostics={metaMessage.runDiagnostics}
             summary label={t("chat.runDetails.title")} />
         ) : null}
-        {complete && actionMessage ? (
+        {complete && actionMessage && !editingMessageId ? (
           <div className="message-actions">
             <MessageTimestamp createdAt={actionMessage.createdAt} />
             <ActionSlotSide slot="assistantAction" side="left" message={slotReply} />
             <CopyButton text={content} label={t("chat.copy")} />
+            {replyEditor.editable ? <TooltipButton
+              className="copy-btn icon"
+              tooltip={t("chat.editReply")}
+              ariaLabel={t("chat.editReply")}
+              disabled={replyEditor.loading}
+              onClick={() => void replyEditor.begin()}
+            >
+              <IconPencil size={13} />
+            </TooltipButton> : null}
             {canEditMessages ? <TooltipButton
               className="copy-btn icon"
               tooltip={t("chat.forkResponse")}

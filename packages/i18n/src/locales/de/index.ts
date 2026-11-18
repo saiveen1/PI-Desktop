@@ -564,6 +564,8 @@ export const de = {
     "retry": "Neu generieren",
     "forkResponse": "Zweig aus dieser Antwort",
     "editMessage": "Bearbeiten und erneut senden",
+    "editReply": "Antwort bearbeiten",
+    "editReplyUnavailable": "Diese Antwort kann nicht mehr bearbeitet werden.",
     "cancelEdit": "Abbrechen",
     "retryEdit": "Wiederholen",
     "retryingEdit": "Erneuter Versuch…",

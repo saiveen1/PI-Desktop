@@ -19,7 +19,7 @@ import { withReviewChangeState } from "../../lib/workspace-review";
 import { settleStoppedAssistantMetrics } from "../../lib/context-usage";
 import type { AppState } from "../app-state";
 import type { SessionRuntime } from "../runtime/session-runtime";
-import { prepareTranscriptAction } from "../runtime/transcript-action";
+import { editAssistantReply, prepareAssistantReplyEdit, prepareTranscriptAction } from "../runtime/transcript-action";
 import type { StoreAccess } from "./types";
 
 export type TranscriptSliceDependencies = StoreAccess & {
@@ -45,6 +45,8 @@ export function createTranscriptSlice({
   AppState,
   | "compactContext"
   | "retryAssistantMessage"
+  | "prepareAssistantReplyEdit"
+  | "editAssistantReply"
   | "editUserMessage"
   | "prepareUserMessageEdit"
   | "retryLastPrompt"
@@ -57,6 +59,7 @@ export function createTranscriptSlice({
   // Keep each delete's read/optimistic update/Host result together. Main's
   // mutation lock alone cannot prevent a second renderer read of old history.
   const pendingMessageDeletes = new Map<string, Promise<void>>();
+  const pendingAssistantReplyEdits = new Set<string>();
   const canEdit = () => {
     const state = get();
     return sessionAllows(state.sessions.find((session) => session.id === state.activeSessionId)
@@ -120,6 +123,10 @@ export function createTranscriptSlice({
       const root = state.messages[userIndex];
       await get().editUserMessage(root.id, root.content, root.attachments);
     },
+
+    prepareAssistantReplyEdit: (...args) => prepareAssistantReplyEdit({ get, set }, ...args),
+
+    editAssistantReply: (...args) => editAssistantReply({ get, set }, runtime, pendingAssistantReplyEdits, ...args),
 
     prepareUserMessageEdit: async (messageId, signal) => {
       if (!canEdit()) return null;

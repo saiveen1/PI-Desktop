@@ -1883,7 +1883,8 @@
   padding: 0;
 }
 
-.message-edit-input {
+.message-edit-input,
+.message-edit .field-textarea.message-edit-input {
   display: block;
   width: 100%;
   min-height: 3lh;
@@ -1903,7 +1904,9 @@
 }
 
 .message-edit-input:focus,
-.message-edit-input:focus-visible {
+.message-edit-input:focus-visible,
+.message-edit .field-textarea.message-edit-input:focus {
+  background: transparent;
   outline: none;
   box-shadow: none;
 }

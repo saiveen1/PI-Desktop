@@ -139,9 +139,10 @@ turn that has ended.
    idle with no turn or waiting-permission state. Other busy forks return host
    `CONFLICT` / IPC `AGENT_BUSY`; native Pi keeps its ownership/idle guard.
    No refused fork produces a partial child.
-11. Supplying `throughMessageId` changes only the snapshot boundary. Assistant
-    Fork/Edit still creates a new idle session id with no shared turn,
-    permission wait, runtime, or provider-cache state (D134).
+11. Supplying `throughMessageId` changes only the fork boundary. The child is
+    idle with no shared turn, permission wait or runtime (D134). Editing the
+    last completed assistant reply instead keeps the existing session idle,
+    invalidates its runtime and does not create a child or start a turn.
 12. `EnterPlanMode`, `EnterGoalMode`, `SubmitPlan`, and `SubmitGoal` must be the
     only tool call in their
     assistant batch. A submit tool preserves exact Markdown bytes in a new

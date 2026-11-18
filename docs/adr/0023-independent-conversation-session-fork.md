@@ -29,8 +29,8 @@ would let an older host fail only when the new command runs.
   the references rewritten before indexing, so pasted inputs survive source deletion
   without widening scratch access.
 - No parent/child lineage is stored: this is an independent copy, not a message tree.
-  Response Fork uses the bounded snapshot, and Response Edit builds the same child and
-  stores original and edited tails in its linear revision store.
+  Response Fork uses the bounded snapshot. The original D134 edit-on-fork
+  workflow was retired by D137; see the in-place editing amendment below.
 - Whole-session fork stays idle-only. A desktop message-scoped fork may copy a
   completed assistant prefix while a later turn runs (issue #837): under the same host
   lock as append/publication, a non-assistant, streaming/error, or live-turn anchor is
@@ -46,8 +46,17 @@ would let an older host fail only when the new command runs.
   child reseeds its own pi runtime instead of reusing source cache state.
 - Storage cost tracks the copied transcript, its pasted inputs, and child-only
   revision payloads.
-- There is no ancestry UI, merge operation, or message-level branch tree; Edit
-  rollback stays a two-entry linear revision family (D109).
+- There is no ancestry UI, merge operation, or message-level branch tree.
+
+## Amendment: edit the idle assistant tail in place
+
+A user may correct the text of the last completed local assistant reply without
+starting a turn, appending a user correction or creating a revision. The Host
+owns the compare-and-replace, including validating the target and discarding
+stale replay data. The next prompt must seed from the saved conversation.
+Older answers use the existing explicit Fork action, then the same tail edit on
+the child. Rewriting later history or building a second revision tree would not
+improve this infrequent path. User-prompt Edit/Retry stays unchanged.
 
 ## Alternatives
 

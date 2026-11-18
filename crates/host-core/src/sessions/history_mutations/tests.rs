@@ -1,5 +1,7 @@
 use super::*;
 
+mod assistant_edit;
+
 fn fixture() -> (tempfile::TempDir, Database, String) {
     let dir = tempfile::tempdir().unwrap();
     let db = Database::open(&dir.path().join("test.sqlite")).unwrap();

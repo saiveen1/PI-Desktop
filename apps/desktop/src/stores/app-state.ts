@@ -272,6 +272,8 @@ export type AppState = import("./slices/session-management-slice").SessionManage
   applyQueueChanged: (event: AgentQueueChangedEvent) => void;
   compactContext: () => Promise<void>;
   retryAssistantMessage: (messageId: string) => Promise<void>;
+  prepareAssistantReplyEdit: (sessionId: string, messageId: string, signal: AbortSignal) => Promise<string | null>;
+  editAssistantReply: (sessionId: string, messageId: string, expectedContent: string, content: string, signal?: AbortSignal) => Promise<boolean>;
   /** Read canonical text before opening a user-message editor. */
   prepareUserMessageEdit: (messageId: string, signal?: AbortSignal) => Promise<UiMessage | null>;
   /** Replace a user prompt and regenerate from it. */

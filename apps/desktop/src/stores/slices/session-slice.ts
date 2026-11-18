@@ -474,6 +474,7 @@ export function createSessionSlice({
       try {
         if (!runtime.navigationIntentIsCurrent(intent)) return;
         const summary = get().sessions.find((session) => session.id === id);
+        const replyEditVersion = runtime.confirmedReplyEdits.get(id);
         const detailPromise = runtime.loadSessionDetail(id, {
           messageLimit: 100,
           contentLimit: 64 * 1024,
@@ -570,19 +571,15 @@ export function createSessionSlice({
             }
           : { messageStart: 0, hasMoreBefore: false };
         const currentState = get();
-        // An idle-session edit (message delete, revision switch) that landed
-        // while this selection aligned the workspace or awaited the bounded
-        // read replaces the transcript cache entry; committing the stale
-        // window now would revert that edit on screen. loadSessionDetail
-        // already refuses to cache such a read, but its baseline predates this
-        // selection's own provisional commits, so the caller keeps its own.
-        // An entry that vanished (cache eviction) is not an edit.
+        // Keep a confirmed reply edit over a read started before it, even when
+        // the cached tail still carries live provenance from its completed turn.
+        const replyEditedWhileReading = runtime.confirmedReplyEdits.get(id) !== replyEditVersion;
+        // Other idle edits replace the cache while alignment or the read waits.
         const transcriptNow = runtime.sessionTranscriptCache.get(id);
         const supersedingTranscript =
           transcriptNow !== undefined &&
-          transcriptNow !== transcriptBeforeAlignment &&
-          !runtime.liveSessionTranscripts.has(id) &&
-          currentState.runningSessions[id] !== true
+          (replyEditedWhileReading || (transcriptNow !== transcriptBeforeAlignment &&
+            !runtime.liveSessionTranscripts.has(id) && currentState.runningSessions[id] !== true))
             ? transcriptNow
             : undefined;
         const transcriptMovedWhileReading = supersedingTranscript !== undefined;

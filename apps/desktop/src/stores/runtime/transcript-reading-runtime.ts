@@ -225,6 +225,8 @@ export function createTranscriptReadingRuntime({ get, set }: StoreAccess, read: 
         state.runningSessions[id] &&
         !previous.runningSessions[id];
       const rewritten =
+        // An in-place edit updates the loaded window atomically with the tail.
+        state.transcriptViews[id] === previous.transcriptViews[id] &&
         state.activeSessionId === id &&
         previous.activeSessionId === id &&
         !state.runningSessions[id] &&

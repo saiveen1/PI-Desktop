@@ -48,6 +48,8 @@ export type SessionSelection = { id: string; intent: number };
 export type SessionRuntime = {
   readonly pendingNewSessionRequests: Map<string, Promise<string | null>>;
   readonly sessionTranscriptCache: Map<string, UiMessage[]>;
+  readonly confirmedReplyEdits: ReadonlyMap<string, symbol>;
+  recordConfirmedReplyEdit: (sessionId: string) => void;
   readonly liveSessionTranscripts: Set<string>;
   readonly sessionHistoryCache: Map<string, SessionHistoryWindow>;
   readonly submittedComposerDrafts: Map<string, SubmittedComposerDraft>;
@@ -128,6 +130,7 @@ export function createSessionRuntime({ get, set }: StoreAccess): SessionRuntime 
 
   const pendingNewSessionRequests = new Map<string, Promise<string | null>>();
   const sessionTranscriptCache = new Map<string, UiMessage[]>();
+  const confirmedReplyEdits = new Map<string, symbol>();
   const liveSessionTranscripts = new Set<string>();
   const sessionHistoryCache = new Map<string, SessionHistoryWindow>();
   const submittedComposerDrafts = new Map<string, SubmittedComposerDraft>();
@@ -151,6 +154,7 @@ export function createSessionRuntime({ get, set }: StoreAccess): SessionRuntime 
       const oldestId = sessionTranscriptCache.keys().next().value;
       if (typeof oldestId !== "string") break;
       sessionTranscriptCache.delete(oldestId);
+      confirmedReplyEdits.delete(oldestId);
       sessionHistoryCache.delete(oldestId);
       liveSessionTranscripts.delete(oldestId);
     }
@@ -167,8 +171,10 @@ export function createSessionRuntime({ get, set }: StoreAccess): SessionRuntime 
     const active = sessionDetailLoads.get(id);
     if (active && options?.messageBefore === undefined) return active;
     const previous = sessionTranscriptCache.get(id);
+    const replyEditVersion = confirmedReplyEdits.get(id);
     const request = api.getSession(id, options).then((detail) => {
       if (detail.session && options?.messageBefore === undefined) {
+        if (confirmedReplyEdits.get(id) !== replyEditVersion) return detail;
         const state = get();
         const liveMessages =
           sessionTranscriptCache.get(id) ?? state.retainedTranscripts[id];
@@ -401,6 +407,12 @@ export function createSessionRuntime({ get, set }: StoreAccess): SessionRuntime 
   return {
     pendingNewSessionRequests,
     sessionTranscriptCache,
+    confirmedReplyEdits,
+    recordConfirmedReplyEdit: (id) => {
+      confirmedReplyEdits.set(id, Symbol());
+      // Later selections must not join a read issued before this save.
+      sessionDetailLoads.delete(id);
+    },
     liveSessionTranscripts,
     sessionHistoryCache,
     syncTranscriptProjection,

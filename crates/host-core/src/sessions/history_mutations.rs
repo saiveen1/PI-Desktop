@@ -1,8 +1,166 @@
-//! ID-only mutations of canonical history. RPC callers hold the Host state lock.
+//! Targeted mutations of canonical history. RPC callers hold the Host state lock.
 use super::*;
 
 #[cfg(test)]
 mod tests;
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditAssistantReply {
+    session_id: String,
+    message_id: String,
+    expected_content: String,
+    content: String,
+}
+
+/// Edit the last conversational record, not an earlier fragment or a tool carrier.
+/// System journal rows and non-message events do not close the editing window.
+pub fn edit_assistant_reply(db: &Database, edit: &EditAssistantReply) -> Result<()> {
+    let session = edit.session_id.as_str();
+    if session.trim().is_empty()
+        || edit.message_id.trim().is_empty()
+        || edit.content.trim().is_empty()
+    {
+        return Err(anyhow!(
+            "INVALID_PARAMS: sessionId, messageId and content must not be blank"
+        ));
+    }
+    let local = db
+        .conn()
+        .query_row(
+            "SELECT COALESCE(NULLIF(s.source, ''), 'desktop') = 'desktop'
+             AND NOT EXISTS(SELECT 1 FROM session_import_origins WHERE session_id = s.id)
+             AND NOT EXISTS(SELECT 1 FROM task_runs WHERE session_id = s.id)
+         FROM sessions s WHERE s.id = ?1 AND s.deleted_at IS NULL",
+            [session],
+            |row| row.get::<_, bool>(0),
+        )
+        .optional()?
+        .ok_or_else(|| anyhow!("NOT_FOUND: session not found"))?;
+    if !local || session.starts_with("remote:") || session.starts_with("native-pi:") {
+        return Err(anyhow!(
+            "PERMISSION_DENIED: only a local Desktop conversation is editable"
+        ));
+    }
+    if crate::session_trash::has_pending_work(db, session)?
+        || transcripts::read_inflight(db.data_dir(), session)?.is_some()
+    {
+        return Err(anyhow!(
+            "AGENT_BUSY: settle pending work before editing a reply"
+        ));
+    }
+    let settled = db
+        .conn()
+        .query_row(
+            "SELECT m.role = 'assistant' AND COALESCE(m.streaming, 0) = 0 AND m.is_error = 0
+            AND NOT EXISTS(SELECT 1 FROM messages newer WHERE newer.session_id = m.session_id
+                 AND newer.seq > m.seq AND newer.role != 'system')
+            AND (m.turn_id IS NULL OR EXISTS(SELECT 1 FROM turns t WHERE t.id = m.turn_id
+                 AND t.session_id = m.session_id AND t.status = 'completed'))
+         FROM messages m WHERE m.session_id = ?1 AND m.id = ?2",
+            params![session, edit.message_id],
+            |row| row.get::<_, bool>(0),
+        )
+        .optional()?
+        .ok_or_else(|| anyhow!("NOT_FOUND: message not found in this session"))?;
+    let ineligible = || {
+        anyhow!("CONFLICT: only the latest completed top-level assistant text reply is editable")
+    };
+    if !settled {
+        return Err(ineligible());
+    }
+
+    let suffix = transcripts::read_closed_message_suffix(db.data_dir(), session, |records| {
+        records.iter().any(|r| r.role != "system")
+    })?;
+    let mut records = dedupe_records(match suffix {
+        Some(records) => records,
+        None => transcripts::read_transcript(db.data_dir(), session)?,
+    });
+    let index = records
+        .iter()
+        .rposition(|r| r.role != "system")
+        .ok_or_else(ineligible)?;
+    let (record, later) = records[index..].split_first_mut().ok_or_else(ineligible)?;
+    let meta = record.meta.as_ref().unwrap_or(&Value::Null);
+    if record.id != edit.message_id
+        || record.role != "assistant"
+        || record.is_error
+        || record.tool_name.is_some()
+        || !(meta["status"].is_null() || meta["status"] == "complete")
+        || [
+            "error",
+            "parentToolCallId",
+            "nestedParentToolCallId",
+            "agentName",
+            "modelSystem",
+            "sessionMessage",
+        ]
+        .iter()
+        .any(|key| !meta[*key].is_null())
+    {
+        return Err(ineligible());
+    }
+    let previous = record_index_text(record)
+        .filter(|s| !s.trim().is_empty())
+        .ok_or_else(ineligible)?;
+    let blocks = record.blocks.as_array_mut().ok_or_else(ineligible)?;
+    // Only known answer shapes are safe to rewrite. Never discard an attachment,
+    // tool call, or unknown block just because the display also contains text.
+    if blocks.iter().any(|b| match b["type"].as_str() {
+        Some("thinking" | "hostedSearch") => false,
+        Some("text") => !b["text"].is_string() || b.as_object().is_none_or(|o| o.len() != 2),
+        _ => true,
+    }) {
+        return Err(ineligible());
+    }
+    if previous != edit.expected_content {
+        return Err(anyhow!(
+            "CONFLICT: assistant reply changed since it was opened"
+        ));
+    }
+    if previous == edit.content {
+        // The file is authoritative if a crash landed between rename and index commit.
+        db.conn().execute(
+            "UPDATE messages SET text = ?3 WHERE session_id = ?1 AND id = ?2 AND text IS NOT ?3",
+            params![session, record.id, edit.content],
+        )?;
+        return Ok(());
+    }
+    let mut replaced = false;
+    blocks.retain_mut(|block| {
+        if block["type"] != "text" {
+            return true;
+        }
+        if replaced {
+            return false;
+        }
+        block["text"] = json!(edit.content);
+        replaced = true;
+        true
+    });
+    // Signed provider boundaries describe the original bytes, even for equal-length edits.
+    if let Some(meta) = record.meta.as_mut().and_then(Value::as_object_mut) {
+        meta.remove("providerReplay");
+    }
+    let affected = std::iter::once(record.id.as_str())
+        .chain(later.iter().map(|r| r.id.as_str()))
+        .collect();
+    let tx = db.conn().unchecked_transaction()?;
+    tx.execute(
+        "UPDATE messages SET text = ?3 WHERE session_id = ?1 AND id = ?2",
+        params![session, record.id, edit.content],
+    )?;
+    tx.execute(
+        "UPDATE sessions SET updated_at = ?2 WHERE id = ?1",
+        params![session, now_ms()],
+    )?;
+    if !transcripts::update_message_lines(db.data_dir(), session, record, Some(&affected))? {
+        return Err(anyhow!("NOT_FOUND: canonical message no longer exists"));
+    }
+    tx.commit()?;
+    Ok(())
+}
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]

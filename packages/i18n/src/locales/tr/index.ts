@@ -576,6 +576,8 @@ export const tr = {
     retry: "Yeniden oluştur",
     forkResponse: "Bu yanıttan dal oluştur",
     editMessage: "Düzenle ve yeniden gönder",
+    editReply: "Yanıtı düzenle",
+    editReplyUnavailable: "Bu yanıt artık düzenlenemez.",
     cancelEdit: "İptal",
     retryEdit: "Yeniden dene",
     retryingEdit: "Yeniden deneniyor…",

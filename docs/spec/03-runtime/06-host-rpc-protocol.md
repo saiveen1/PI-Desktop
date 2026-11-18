@@ -11,6 +11,13 @@ Host verifies canonical message/turn ownership and meaningful reply activity;
 a refused retract leaves history intact. Repeating an already completed deletion
 or retraction does not delete another prompt. No history array is required.
 
+`session.editAssistantReply({ sessionId, messageId, expectedContent, content })`
+returns `{ ok: true }` after replacing the final eligible assistant reply in an
+idle local conversation. The Host compares the original text exactly and checks
+the durable tail under the mutation lock; stale edits cannot overwrite a newer
+reply. The new text must not be blank. No history array, user message, model
+turn, schema migration or new revision is required.
+
 `session.activateRevision` accepts optional `requireCanonicalPrefix: true` to
 require a durable Host prefix; a missing family/anchor fails explicitly. Existing
 explicit-prefix activation, `session.replaceMessages`, `session.saveRevision`

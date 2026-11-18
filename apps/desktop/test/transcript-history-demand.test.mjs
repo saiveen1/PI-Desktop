@@ -54,7 +54,7 @@ function command(socket, id, method, params) {
   });
 }
 
-test('history is paged only on reader demand', { timeout: 30000, skip: !browser && 'Standalone Chromium unavailable' }, async t => {
+test('transcript history demand and inline reply editing', { timeout: 30000, skip: !browser && 'Standalone Chromium unavailable' }, async t => {
   const dir = await mkdtemp(join(process.env.PI_SCRATCH_DIR || tmpdir(), 'transcript-demand-'));
   const profile = join(dir, 'profile');
   let stop, socket;
@@ -127,6 +127,21 @@ test('history is paged only on reader demand', { timeout: 30000, skip: !browser 
       const after = await probe('afterPage(1)');
       assert.equal(after.calls, 1);
       assert.equal(after.rows, before.rows + 1);
+    });
+    await t.test('Edit reply opens only the canonical last answer and Cancel never saves', async () => {
+      const result = await evaluate('exerciseReplyEdit()');
+      const original = '  **Final reply**\n';
+      const corrected = '  **Corrected reply**\n';
+      assert.equal(result.actionCount, 1);
+      assert.equal(result.source, original);
+      assert.equal(result.focused, true);
+      assert.equal(result.unchangedDisabled, true);
+      assert.deepEqual(result.afterCancel, { writes: 0, content: original });
+      assert.equal(result.afterFailure, corrected);
+      assert.deepEqual(result.errors, ['Reply changed']);
+      const write = { sessionId: 'reply-edit', messageId: 'answer', expectedContent: original, content: corrected };
+      assert.deepEqual(result.writes, [write, write]);
+      assert.deepEqual(result.ids, ['older-prompt', 'older-answer', 'prompt', 'narration', 'tool', 'answer']);
     });
   } finally {
     if (socket?.readyState === WebSocket.OPEN) {

@@ -19,7 +19,8 @@ mod display_preview_tests;
 mod fork_files;
 mod history_mutations;
 pub use history_mutations::{
-    activate_message_revision_canonical, delete_message, retract_pending_prompt, running_turn,
+    activate_message_revision_canonical, delete_message, edit_assistant_reply,
+    retract_pending_prompt, running_turn, EditAssistantReply,
 };
 mod model_system;
 mod observer;

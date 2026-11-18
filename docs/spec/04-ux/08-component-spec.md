@@ -2233,7 +2233,11 @@ Single message render — either user (plaintext) or assistant (markdown streami
 - Hover actions: quiet icon-only action chips under the bubble — Copy on idle
   assistant turns; Fork and Regenerate on completed assistant turns; Edit and
   Delete on user turns. A streaming assistant turn omits its Copy action until
-  the response settles. Assistant rows expose neither Delete nor Edit. Chips
+  the response settles. The last completed text reply in an idle, editable local
+  Desktop conversation also offers Edit: Save replaces the assistant's answer
+  in the transcript and next model context; Cancel leaves it unchanged. Neither
+  action retries the prompt. Older replies require Fork first; the source and
+  its later turns remain unchanged. Assistant rows never offer Delete. Chips
   render the glyph
   alone: the label is carried by `aria-label` plus a themed hover/focus
   tooltip 8px above the chip (compact raised shadow, not the composer glow),

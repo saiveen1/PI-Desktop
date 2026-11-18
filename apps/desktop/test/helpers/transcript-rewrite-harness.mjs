@@ -36,7 +36,7 @@ const { registerSessionIpc } = load("../../electron/main/ipc/session-ipc.ts", {
   "../services/session-search": {},
 });
 
-export function transcriptRewriteHarness(host, dataDir) {
+export function transcriptRewriteHarness(host, dataDir, sidecar = null) {
   const handlers = new Map();
   const activeTurns = new Map();
   const coordination = createSessionCoordination({ activeTurns, getMainWindow: () => null, getViewingSessionId: () => null });
@@ -44,7 +44,7 @@ export function transcriptRewriteHarness(host, dataDir) {
   registerSessionIpc({
     registrar: { handle: (channel, handler) => handlers.set(channel, handler) },
     getHost: () => host,
-    getSidecar: () => null,
+    getSidecar: () => sidecar,
     dataDir,
     activeTurns,
     sessionProjects: new Map(),
@@ -57,6 +57,7 @@ export function transcriptRewriteHarness(host, dataDir) {
   return {
     persistenceOutbox,
     replace: (input) => handlers.get(shared.IPC.invoke.sessionReplaceMessages)(input),
+    editAssistantReply: (input) => handlers.get(shared.IPC.invoke.sessionEditAssistantReply)(input),
     deleteMessage: (input) => handlers.get(shared.IPC.invoke.sessionDeleteMessage)(input),
     retractPendingPrompt: (input) => handlers.get(shared.IPC.invoke.sessionRetractPendingPrompt)(input),
     activateRevision: (input) => handlers.get(shared.IPC.invoke.sessionActivateRevision)(input),

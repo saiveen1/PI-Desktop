@@ -117,6 +117,10 @@ This edition strengthens the existing framework rather than replacing it.
 
 ### Conversation organization and notifications
 
+- **Edit the last assistant reply.** In an idle local conversation, save a
+  corrected answer and continue with that text as the assistant's reply, without
+  rerunning the model. For an older answer, fork at the reply and edit the copy.
+
 - **Project-scoped groups, colored labels, and deliberate ordering.** Groups
   control placement; multiple labels do not duplicate conversations. Local project
   groups show complete counts and page independently. Folded groups can show running,

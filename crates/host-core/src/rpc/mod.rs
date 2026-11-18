@@ -3238,6 +3238,26 @@ async fn handle_request(
                 .map_err(|e| rpc_err(1000, e.to_string(), "INTERNAL"))?;
             Ok(json!({ "ok": true }))
         }
+        "session.editAssistantReply" => {
+            if !params.is_object() {
+                return Err(rpc_err(
+                    1002,
+                    "reply edit requires named parameters",
+                    "INVALID_PARAMS",
+                ));
+            }
+            let edit: sessions::EditAssistantReply =
+                serde_json::from_value(params).map_err(|_| {
+                    rpc_err(
+                        1002,
+                        "expected sessionId, messageId, expectedContent and content strings",
+                        "INVALID_PARAMS",
+                    )
+                })?;
+            let st = state.lock().await;
+            sessions::edit_assistant_reply(&st.db, &edit).map_err(session_collaboration_rpc_err)?;
+            Ok(json!({ "ok": true }))
+        }
         "session.deleteMessage" | "session.retractPendingPrompt" => {
             let session_id = params
                 .get("sessionId")
@@ -5996,6 +6016,61 @@ mod tests {
     use crate::sessions;
     use crate::state::AppState;
     use std::time::Duration;
+
+    #[tokio::test]
+    async fn assistant_edit_rpc_requires_four_raw_strings_and_returns_only_ack() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut app = AppState::open(dir.path()).unwrap();
+        app.handshook = true;
+        let session = sessions::create_session(&app.db, None, None, None, None, None).unwrap();
+        let row = serde_json::from_value(json!({"id":"reply", "role":"assistant", "content":" old ", "createdAt":"2026-11-01T00:00:00Z"})).unwrap();
+        sessions::append_message(&app.db, &session.id, &row, None).unwrap();
+        let state = Arc::new(Mutex::new(app));
+        let tx = mpsc::unbounded_channel().0;
+        let request = json!({"sessionId":session.id, "messageId":"reply", "expectedContent":" old ", "content":"  new\n"});
+        let call = |request| {
+            handle_request(
+                state.clone(),
+                "session.editAssistantReply",
+                request,
+                tx.clone(),
+            )
+        };
+        assert_eq!(
+            call(json!([session.id, "reply", " old ", "wrong shape"]))
+                .await
+                .unwrap_err()
+                .data
+                .unwrap()["errorCode"],
+            "INVALID_PARAMS"
+        );
+        for (field, value) in [
+            ("expectedContent", json!(5)),
+            ("content", Value::Null),
+            ("messages", json!([])),
+        ] {
+            let mut bad = request.clone();
+            bad[field] = value;
+            assert_eq!(
+                call(bad).await.unwrap_err().data.unwrap()["errorCode"],
+                "INVALID_PARAMS"
+            );
+        }
+        assert_eq!(call(request.clone()).await.unwrap(), json!({"ok":true}));
+        assert_eq!(
+            call(request).await.unwrap_err().data.unwrap()["errorCode"],
+            "CONFLICT"
+        );
+        let st = state.lock().await;
+        assert_eq!(
+            sessions::get_session(&st.db, &session.id)
+                .unwrap()
+                .unwrap()
+                .messages[0]
+                .content,
+            "  new\n"
+        );
+    }
 
     #[tokio::test]
     async fn bounded_history_mutation_rpcs_return_only_mutation_metadata() {

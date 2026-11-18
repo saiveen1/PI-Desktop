@@ -5,6 +5,8 @@ import { I18nextProvider } from "react-i18next";
 import { en } from "@pi-desktop/i18n";
 import { ChatTranscript } from "../../src/features/chat/transcript/ChatTranscript";
 import { sessionReadingState } from "../../src/lib/transcript-reading-position";
+import { api } from "../../src/lib/api";
+import { useAppStore } from "../../src/stores/app-store";
 import "../../src/styles/tokens.css";
 
 await i18n.init({ lng: "en", resources: { en: { translation: en } } });
@@ -76,4 +78,55 @@ window.historyDemand = {
     const { x, y, width, height } = scroller().getBoundingClientRect();
     return { x: x + width / 2, y: y + height / 2 };
   },
+};
+
+window.exerciseReplyEdit = async () => {
+  const id = "reply-edit";
+  const answer = { ...message("answer"), role: "assistant", content: "  **Final reply**\n" };
+  const rows = [message("older-prompt"), { ...message("older-answer"), role: "assistant" }, message("prompt"),
+    { ...message("narration"), role: "assistant" }, { ...message("tool"), role: "tool", toolName: "read" }, answer];
+  const writes = [];
+  const errors = [];
+  api.editAssistantReply = async (input) => {
+    writes.push(input);
+    if (writes.length === 1) throw Error("Reply changed");
+    return { ok: true };
+  };
+  for (const operation of ["prompt", "forkSession", "getSession"]) {
+    api[operation] = () => { throw Error(`Unexpected ${operation}`); };
+  }
+  useAppStore.setState({ page: "chat", activeSessionId: id, messages: rows,
+    sessions: [{ id, source: "desktop" }], showToast: (text) => errors.push(text) });
+  function Conversation() {
+    const live = useAppStore((state) => state.messages);
+    return <ChatTranscript sessionId={id} messages={live} isRunning={false} />;
+  }
+  flushSync(() => root.render(<I18nextProvider i18n={i18n}><Conversation /></I18nextProvider>));
+  const actions = () => [...document.querySelectorAll('button[aria-label="Edit reply"]')];
+  const textarea = () => document.querySelector('textarea[aria-label="Edit reply"]');
+  const formButton = text => [...document.querySelectorAll('.message-edit button')].find(b => b.textContent === text);
+  const open = async () => { actions()[0].click(); await until(textarea, "reply editor did not open"); };
+  const change = value => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(textarea(), value);
+    textarea().dispatchEvent(new Event('input', { bubbles: true }));
+  };
+  const actionCount = actions().length;
+  await open();
+  const source = textarea().value;
+  const focused = textarea() === document.activeElement;
+  const unchangedDisabled = formButton('Save').disabled;
+  change("draft that should be cancelled");
+  formButton('Cancel').click();
+  await until(() => !textarea(), "Cancel did not close reply editor");
+  const afterCancel = { writes: writes.length, content: useAppStore.getState().messages.at(-1).content };
+  await open();
+  change("  **Corrected reply**\n");
+  await until(() => !formButton('Save')?.disabled, "Save did not accept the changed draft");
+  formButton('Save').click();
+  await until(() => errors.length === 1 && formButton('Save'), "Host refusal did not return to the editor");
+  const afterFailure = textarea().value;
+  formButton('Save').click();
+  await until(() => !textarea() && document.querySelector('[data-message-id="answer"]')?.textContent.includes('Corrected reply'), "confirmed reply did not render");
+  return { actionCount, source, focused, unchangedDisabled, afterCancel, afterFailure, errors, writes,
+    ids: useAppStore.getState().messages.map(row => row.id) };
 };

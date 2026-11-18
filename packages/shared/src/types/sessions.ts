@@ -20,6 +20,13 @@ import type { SessionWorktreeSummary } from "./worktree.js";
  */
 export type SessionSource = "desktop" | "pi-native" | "remote";
 
+export type EditAssistantReplyRequest = {
+  sessionId: string;
+  messageId: string;
+  expectedContent: string;
+  content: string;
+};
+
 export type SessionCapabilities = {
   canPrompt: boolean;
   canStop: boolean;

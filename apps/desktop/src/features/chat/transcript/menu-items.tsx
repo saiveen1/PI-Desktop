@@ -135,6 +135,7 @@ export function assistantTurnMenuItems({
   selectTarget,
   complete,
   actions,
+  onEdit,
   onRegenerate,
   onBranch,
 }: {
@@ -144,6 +145,7 @@ export function assistantTurnMenuItems({
   /** Idle, error-free, and backed by an answer message. */
   complete: boolean;
   actions: MenuItemActions;
+  onEdit?: () => void;
   onRegenerate: () => void;
   onBranch: () => void;
 }): ContextMenuItem[] {
@@ -162,12 +164,15 @@ export function assistantTurnMenuItems({
       onSelect: () => actions.selectText(selectTarget),
     });
   }
+  if (onEdit) {
+    items.push({ id: "edit-reply", label: t("chat.editReply"), icon: pencilIcon(), separatorBefore: items.length > 0, onSelect: onEdit });
+  }
   if (complete) {
     items.push({
       id: "regenerate",
       label: t("chat.retry"),
       icon: regenerateIcon(),
-      separatorBefore: items.length > 0,
+      separatorBefore: items.length > 0 && !onEdit,
       onSelect: onRegenerate,
     });
     items.push({

@@ -576,6 +576,8 @@ export const ko = {
     retry: "다시 생성",
     forkResponse: "이 답변에서 브랜치 만들기",
     editMessage: "편집 후 다시 보내기",
+    editReply: "답변 편집",
+    editReplyUnavailable: "이 답변은 더 이상 편집할 수 없습니다.",
     cancelEdit: "취소",
     retryEdit: "다시 시도",
     retryingEdit: "다시 시도 중…",
