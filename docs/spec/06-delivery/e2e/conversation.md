@@ -5159,6 +5159,22 @@ Build two actual runtimes with identical configuration and different scratch dir
   and length cuts must preserve valid Unicode in persisted reasons. Resolve
   provider-local tool IDs to the owning session's stored receipt ID and abandon
   a delayed evidence jump when the active session changes.
+  Resume a multi-step task using only "continue" in restored and reused runtimes:
+  the reviewer receives the bounded earlier goal, later user constraints and
+  latest answer under distinct historical roles with real transcript IDs. The
+  current answer must be cited before high-confidence incomplete can continue.
+  Switch to an unrelated task and verify old task prose is absent. Exercise
+  repeated continuations, discussion-only history, missing/oversized goals,
+  omitted attachments in live and restored turns, failed replies, session notices,
+  Stop-retained/restored steering and preflight-rejected inputs. Exercise short
+  continuation synonyms, explicit task replacement and compound no-execution
+  instructions; object-preservation clauses must not erase those prohibitions.
+  Input stays
+  within its existing cap, historical credentials are redacted, tool counts do
+  not include historical messages, and all Stop/Plan/budget/effect gates remain.
+  Optional explicitly authorized live-model simulations use synthetic evidence
+  only, an exact reviewer binding, bounded requests and no automatic retries;
+  record their results separately from deterministic runtime assertions.
 - **Specs:** Runtime §5e.4; Observer Guard ADR; IPC session.configure; storage;
   Behavior settings; transcript §7.4c.
 - **Acceptance:** C / E / Privacy / Quality.

@@ -95,6 +95,16 @@ It retains existing execution gates and storage ownership; it is not a new
 safety authority or a promise of reviewer accuracy. Original response data and
 legacy unknowns remain intact. Verification uses synthetic provider events and
 isolated Host/renderer fixtures, not the daily profile or installed app.
+The continuation-context fix on personal base `e4af2c4ff` rechecks the same
+locally recorded upstream revision (no fetch); `observer-guard.ts` is absent
+there. The local increment adds bounded, redacted task-history evidence for
+explicit continuation requests and preserves inherited discussion constraints.
+It reuses existing one-shot completion, transcript identities and correction
+budgets; no database or permission authority changes. Synthetic regression
+checks and any explicitly authorized real-model simulations are separate from
+installed behavior and do not establish general reviewer accuracy. The bounded
+real-model exercise and its limitations are recorded in
+[continuation validation](observer-continuation-validation.md).
 
 The local tool observer was implemented on personal base `2dea25a27` and checked
 against locally recorded upstream `aa35fee4b15c354303bb5a0c77c9c33a731d097f`

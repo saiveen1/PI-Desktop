@@ -3,13 +3,13 @@ import { getCurrentSystemMessage } from "@earendil-works/pi-ai";
 import {
   isObserverGuardSettings, resolveObserverGuardSettings,
   type ObserverGuardAssessment, type ObserverGuardContinuationReason, type ObserverGuardError, type ObserverGuardMode,
-  type ObserverGuardSettings, type ObserverGuardSkipReason,
+  type ObserverGuardSettings, type ObserverGuardSkipReason, type UiMessage,
 } from "@pi-desktop/shared";
 import type { RuntimeProviderConfig } from "./provider-binding.js";
 import { completeOneShot } from "./one-shot-complete.js";
-import { actionableUserTask } from "./early-end.js";
 import type { CorrectiveBudget } from "./corrective-budget.js";
 import { OBSERVER_REVIEW_INSTRUCTIONS, ObserverEvidenceWindow, observerResponseAllowsAction, parseObserverVerdict, redactObserverText } from "./observer-guard-evidence.js";
+import { ObserverTaskHistory, actionableObserverTask, type ObserverTaskContext } from "./observer-task-context.js";
 
 export type ObserverGuardRuntimeConfig = {
   mode: ObserverGuardMode;
@@ -39,8 +39,11 @@ export class ObserverGuard {
   private pending = false;
   private pendingSkip?: { messageId: string; reason: ObserverGuardSkipReason };
   private readonly evidence = new ObserverEvidenceWindow();
+  private readonly history: ObserverTaskHistory;
+  private taskContext?: ObserverTaskContext;
+  private taskAttachments = false;
 
-  constructor(private readonly sessionId?: string) {}
+  constructor(private readonly sessionId?: string, history: readonly UiMessage[] = []) { this.history = new ObserverTaskHistory(history); }
 
   get pendingCorrection(): boolean { return this.pending; }
   get canRecord(): boolean {
@@ -63,14 +66,22 @@ export class ObserverGuard {
     this.invalidated = false;
     this.task = undefined;
     this.userId = undefined;
+    this.taskContext = undefined;
+    this.taskAttachments = false;
     this.pendingSkip = undefined;
     this.evidence.reset();
   }
 
-  setTask(task: string | undefined): void { this.task = task; }
+  setTask(task: string | undefined, omittedAttachments = false): void {
+    this.task = task;
+    this.taskAttachments = omittedAttachments;
+    const context = task === undefined ? undefined : this.history.context(task);
+    this.taskContext = omittedAttachments ? { evidence: context?.evidence ?? [], actionable: context?.actionable ?? false, truncated: true } : context;
+    if (task === undefined) this.history.clear();
+  }
   userMessage(id: string, steering: boolean): void {
-    if (steering) { this.invalidated = true; this.cancel(); }
-    else if (this.task !== undefined) this.userId = id;
+    if (steering) { this.invalidated = true; this.history.clear(); this.cancel(); }
+    else if (this.task !== undefined) { this.userId = id; this.history.user(id, this.task, this.taskAttachments); }
   }
   cancel(): void { this.pending = false; this.controller?.abort(); }
 
@@ -113,12 +124,15 @@ export class ObserverGuard {
   async assess(turn: AgentTurnContext, sink: AssessmentSink | undefined, runtimeBlock: () => ObserverRuntimeBlock | undefined, budget: CorrectiveBudget, signal?: AbortSignal): Promise<{ action: "continue" } | undefined> {
     const { message } = turn;
     const task = this.task, userId = this.userId;
+    const answer = message.content.flatMap(block => block.type === "text" ? [block.text] : []).join("\n");
+    if (sink && task !== undefined && !this.invalidated && !message.content.some(block => block.type === "toolCall") && (message.stopReason === "stop" || message.stopReason === "length")) {
+      this.history.answer(sink.messageId, answer, message.stopReason === "length");
+    }
     if (!sink || !this.canRecord || task === undefined || message.content.some(block => block.type === "toolCall")) return;
     if (signal?.aborted) return this.skip(sink, "stop_requested");
     if (message.stopReason === "length") return this.deferSkip(sink, "response_length");
     if (message.stopReason !== "stop") return;
     if (this.invalidated) return this.deferSkip(sink, "task_changed");
-    const answer = message.content.flatMap(block => block.type === "text" ? [block.text] : []).join("\n");
     if (!answer.trim()) return this.deferSkip(sink, "empty_response");
     if (!task.trim() || !userId) return this.deferSkip(sink, "no_user_task");
     const started = this.begin(sink);
@@ -136,7 +150,7 @@ export class ObserverGuard {
     if (!provider.supportedThinkingLevels.includes(settings.thinkingLevel)) { fail("EFFORT_UNAVAILABLE"); return; }
     if (!provider.apiKey && provider.authKind !== "none" && !provider.resolveAuth) { fail("PROVIDER_UNAVAILABLE"); return; }
     const input = this.evidence.build(task, userId, answer, sink.messageId,
-      { ...settings, maxInputChars: settings.maxInputChars - OBSERVER_REVIEW_INSTRUCTIONS.length }, this.secrets());
+      { ...settings, maxInputChars: settings.maxInputChars - OBSERVER_REVIEW_INSTRUCTIONS.length }, this.secrets(), this.taskContext);
     assessment.inputTruncated = input.truncated;
     if (input.text.length + OBSERVER_REVIEW_INSTRUCTIONS.length > settings.maxInputChars || input.evidence.some(row => !row.id || row.id.length > 256) || new Set(input.evidence.map(row => row.id)).size !== input.evidence.length) {
       fail("INSUFFICIENT_EVIDENCE"); return;
@@ -155,7 +169,7 @@ export class ObserverGuard {
       });
       if (signal?.aborted || this.invalidated) controller.abort();
       if (!controller.signal.aborted) {
-        assessment.reviewedToolCount = input.evidence.length - 2;
+        assessment.reviewedToolCount = input.evidence.filter(row => row.kind === "tool").length;
         assessment.toolOutputIncluded = input.evidence.some(row => row.kind === "tool" && Boolean(row.text));
       }
       const result = await Promise.race([aborted, controller.signal.aborted ? aborted : completeOneShot(provider, {
@@ -187,7 +201,7 @@ export class ObserverGuard {
           lifecycle === "stop_requested" || lifecycle === "task_changed" ? lifecycle : toolBlock?.reason ?? lifecycle;
         if (unsafe) { continuationReason = unsafe; continuationBlocked = "unsafe"; }
         else if (input.truncated) { continuationReason = "input_truncated"; continuationBlocked = "not_actionable"; }
-        else if (!actionableUserTask(task, this.evidence.hasToolProgress)) { continuationReason = "task_not_actionable"; continuationBlocked = "not_actionable"; }
+        else if ((this.taskContext && !this.taskContext.actionable) || !actionableObserverTask(task, this.evidence.hasToolProgress || this.taskContext?.actionable === true)) { continuationReason = "task_not_actionable"; continuationBlocked = "not_actionable"; }
         else if (!observerResponseAllowsAction(answer)) { continuationReason = "answer_needs_input"; continuationBlocked = "not_actionable"; }
         else if (!budget.claim()) { continuationReason = "correction_budget"; continuationBlocked = "budget"; }
         else this.pending = true;

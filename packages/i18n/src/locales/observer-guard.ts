@@ -2,7 +2,7 @@ import { observerGuardDiagnostics } from "./observer-guard-diagnostics.js";
 import { observerTranslations } from "./observer-guard-translations.js";
 const en = {
   interrupted: "Assessment not completed",
-  title: "Observer Guard", description: "Independent assessment, enabled per conversation.", privacy: "An additional model request may incur cost. Answer and bounded evidence are sent to the selected provider; tool output is excluded unless enabled. Changes apply next turn.",
+  title: "Observer Guard", description: "Independent assessment, enabled per conversation.", privacy: "An additional model request may incur cost. Answer and bounded evidence, including earlier task messages for continuation requests, are sent to the selected provider; tool output is excluded unless enabled. Changes apply next turn.",
   model: "Observer model", modelHint: "Selecting a model does not enable any conversation.", effort: "Observer effort", noModel: "No model selected", unavailable: "Unavailable", configure: "Configure in Behavior settings", draft: "Start a conversation before enabling Observer Guard.", saveFailed: "Could not update Observer Guard.",
   mode: "Mode", off: "Off", observe: "Observe", guard: "Guard", modeHint: "Observe assesses only. Guard may continue execution within the shared correction allowance.",
   advanced: "Evidence and time limits", timeoutSeconds: "Timeout (seconds)", maxInputChars: "Maximum evidence characters", recentToolCount: "Recent tools", includeToolOutput: "Include tool output", range: "Enter a whole number from {{min}} to {{max}}.",
@@ -18,7 +18,7 @@ const en = {
 type Copy = typeof en;
 const zhCN: Copy = {
   interrupted: "评估未完成",
-  title: "观察者防护", description: "独立评估，按会话启用。", privacy: "额外模型请求可能产生费用。回答和有限证据会发送至所选服务；除非启用，否则不包含工具输出。更改从下一轮生效。",
+  title: "观察者防护", description: "独立评估，按会话启用。", privacy: "额外模型请求可能产生费用。回答和有限证据会发送至所选服务，续接请求还会包含有界的任务前文；除非启用，否则不包含工具输出。更改从下一轮生效。",
   model: "观察者模型", modelHint: "选择模型不会启用任何会话。", effort: "观察者思考强度", noModel: "未选择模型", unavailable: "不可用", configure: "在行为设置中配置", draft: "开始会话后才能启用观察者防护。", saveFailed: "无法更新观察者防护。",
   mode: "模式", off: "关闭", observe: "观察", guard: "防护", modeHint: "观察仅作评估；防护可在共享纠正额度内继续执行。",
   advanced: "证据与时间限制", timeoutSeconds: "超时（秒）", maxInputChars: "最大证据字符数", recentToolCount: "最近工具数量", includeToolOutput: "包含工具输出", range: "请输入 {{min}} 到 {{max}} 之间的整数。",
@@ -27,7 +27,7 @@ const zhCN: Copy = {
   ...observerGuardDiagnostics["zh-CN"],
 };
 const zhTW: Copy = {
-  ...zhCN, interrupted: "評估未完成", title: "觀察者防護", description: "獨立評估，依對話啟用。", privacy: "額外模型請求可能產生費用。回答及有限證據會傳送至所選服務；除非啟用，否則不包含工具輸出。變更於下一輪生效。", model: "觀察者模型", modelHint: "選擇模型不會啟用任何對話。", effort: "觀察者思考強度", noModel: "未選擇模型", unavailable: "無法使用", configure: "在行為設定中配置", draft: "開始對話後才能啟用觀察者防護。", saveFailed: "無法更新觀察者防護。", mode: "模式", off: "關閉", observe: "觀察", guard: "防護", modeHint: "觀察僅作評估；防護可在共用修正額度內繼續執行。", advanced: "證據與時間限制", timeoutSeconds: "逾時（秒）", maxInputChars: "最大證據字元數", recentToolCount: "最近工具數量", includeToolOutput: "包含工具輸出", range: "請輸入 {{min}} 到 {{max}} 之間的整數。", advisory: "獨立評估可能出錯，不能證明任務成功。", started: "開始時間", duration: "耗時", verdict: "判斷", reason: "原因", evidence: "證據 ID", error: "錯誤", continuation: "已續跑", blocked: "續跑受阻", input: "證據", truncated: "已截斷", usage: "用量", tokens: "輸入 {{input}} 權杖；輸出 {{output}} 權杖", yes: "是", no: "否",
+  ...zhCN, interrupted: "評估未完成", title: "觀察者防護", description: "獨立評估，依對話啟用。", privacy: "額外模型請求可能產生費用。回答及有限證據會傳送至所選服務，續接請求還會包含有長度上限的任務前文；除非啟用，否則不包含工具輸出。變更於下一輪生效。", model: "觀察者模型", modelHint: "選擇模型不會啟用任何對話。", effort: "觀察者思考強度", noModel: "未選擇模型", unavailable: "無法使用", configure: "在行為設定中配置", draft: "開始對話後才能啟用觀察者防護。", saveFailed: "無法更新觀察者防護。", mode: "模式", off: "關閉", observe: "觀察", guard: "防護", modeHint: "觀察僅作評估；防護可在共用修正額度內繼續執行。", advanced: "證據與時間限制", timeoutSeconds: "逾時（秒）", maxInputChars: "最大證據字元數", recentToolCount: "最近工具數量", includeToolOutput: "包含工具輸出", range: "請輸入 {{min}} 到 {{max}} 之間的整數。", advisory: "獨立評估可能出錯，不能證明任務成功。", started: "開始時間", duration: "耗時", verdict: "判斷", reason: "原因", evidence: "證據 ID", error: "錯誤", continuation: "已續跑", blocked: "續跑受阻", input: "證據", truncated: "已截斷", usage: "用量", tokens: "輸入 {{input}} 權杖；輸出 {{output}} 權杖", yes: "是", no: "否",
   level: { off: "關閉", minimal: "最小", low: "低", medium: "中", high: "高", xhigh: "極高", max: "最大" }, status: { checking: "正在檢查", assessed: "評估完成", error: "評估出錯", skipped: "已略過" }, verdicts: { complete: "可能完成", incomplete: "可能未完成", blocked: "受阻", needs_input: "需要輸入", unknown: "未知" }, confidence: { low: "低信心", medium: "中信心", high: "高信心" }, blockedReasons: { observe_only: "僅觀察", budget: "修正額度已用盡", unsafe: "繼續執行不安全", not_actionable: "無可執行的續跑" }, errors: { MODEL_NOT_CONFIGURED: "未設定觀察者模型", MODEL_UNAVAILABLE: "觀察者模型無法使用", EFFORT_UNAVAILABLE: "觀察者思考強度無法使用", PROVIDER_UNAVAILABLE: "觀察者服務無法使用", TIMEOUT: "觀察者逾時", INVALID_RESPONSE: "評估回應無效", CANCELLED: "評估已取消", INSUFFICIENT_EVIDENCE: "證據不足", unknown: "評估失敗" },
   ...observerGuardDiagnostics["zh-TW"],
 };

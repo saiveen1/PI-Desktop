@@ -38,8 +38,19 @@ remapping. Credentials remain in the existing Host/Main/sidecar boundaries.
 The Node runtime observes at most one eligible text-only normal-stop candidate
 per user turn, after local correction paths. It makes an independent tool-free
 completion against the exact configured model. Its input is a bounded current
-user goal, the exact candidate answer and selected current-turn tool receipts;
-system instructions, model reasoning and tool arguments are not included.
+user goal, the exact candidate answer and selected current-turn tool receipts.
+For explicit continuation requests, the runtime also supplies up to six retained
+user messages from the latest task chain and its latest assistant answer. This
+2026-11-18 amendment repairs missing task context for short requests such as
+"continue"; it expands the disclosed evidence sent to the selected reviewer,
+not the reviewer's execution authority. Restored and live history use the same
+bounded selector, original transcript IDs and shared input/redaction limits.
+Historical roles stay distinct; a historical answer alone cannot justify a
+high-confidence incomplete verdict. Independent new tasks do not export the old
+chain. Missing goals, truncated history and omitted attachments never authorize
+continuation; earlier discussion constraints remain effective. Authenticated
+session notices and steering invalidate the chain. System instructions, model
+reasoning, child-session prose and tool arguments are not included.
 Tool-result text is opt-in and best-effort redacted. No reviewer transcript,
 verdict or raw reasoning is inserted into the main-model context.
 

@@ -719,8 +719,22 @@ or the renderer, owns the lifecycle and decision. The deterministic guards in
 
 At most one eligible text-only normal-stop candidate per user turn receives an
 independent tool-free assessment. It uses the current goal, exact answer and
-bounded recent tool receipts; system instructions, reasoning and tool arguments
-are excluded. Raw tool text is opt-in, with best-effort redaction. Input and
+bounded recent tool receipts. Explicit English/Chinese continuation requests also
+include a bounded task-history window: up to six user goals/continuations since
+the latest independent request, and the latest prior assistant answer. Retained
+and live history use the same selection rules and real transcript IDs. Historical
+roles (`prior_user`, `prior_assistant`) are distinct from the current user/answer;
+high-confidence incomplete must still cite the current answer. New independent
+tasks do not export previous task prose, including explicit replacement requests
+such as "implement something else instead". Session notices and accepted steering
+(including Stop-retained and restored steering) invalidate the retained chain
+rather than becoming execution authority. A preflight-rejected user input is
+retained under the same transcript ID seen by the main model. Missing
+goals, omitted attachments, dropped history and truncated text cannot authorize
+a continuation; inherited discussion-only scope stays non-executable. History
+shares the existing total input budget and best-effort redaction. System
+instructions, reasoning, child-session prose and tool arguments are excluded.
+Raw tool text is opt-in, with best-effort redaction. Input and
 output are treated as untrusted data. Strictly validate the verdict, confidence,
 bounded reason and references to supplied evidence. Unknown/truncated/incomplete
 assessment evidence never authorizes a continuation. Pending Observer correction

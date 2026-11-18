@@ -1,6 +1,6 @@
 import type { AgentContext, AgentTurnContext } from "@earendil-works/pi-agent-core";
 import { getCurrentSystemMessage } from "@earendil-works/pi-ai";
-import { resolveAgentOutputGuardSettings, type AgentOutputGuardSettings, type AgentResponseTermination } from "@pi-desktop/shared";
+import { resolveAgentOutputGuardSettings, type AgentOutputGuardSettings, type AgentResponseTermination, type UiMessage } from "@pi-desktop/shared";
 import type { RuntimeHost } from "./host-client.js";
 import { CorrectiveBudget } from "./corrective-budget.js";
 import { EARLY_END_REMINDER, EARLY_END_SECTION, suspectedEarlyEnd } from "./early-end.js";
@@ -24,8 +24,8 @@ export class TurnCorrectionPolicy {
   private pendingEarlyEnd = false;
   private generation = 0;
 
-  constructor(host: RuntimeHost, sessionId: string, todosEnabled = true, settings?: AgentOutputGuardSettings) {
-    this.observer = new ObserverGuard(sessionId);
+  constructor(host: RuntimeHost, sessionId: string, todosEnabled = true, settings?: AgentOutputGuardSettings, history: readonly UiMessage[] = []) {
+    this.observer = new ObserverGuard(sessionId, history);
     this.todos = new UnfinishedTodoContinuation(host, sessionId, todosEnabled, this.budget);
     this.setSettings(settings);
     this.reset();
@@ -40,9 +40,9 @@ export class TurnCorrectionPolicy {
     this.nextSettings = settings ? { ...settings } : undefined;
   }
 
-  setTask(task: string | undefined, steering = false): void {
+  setTask(task: string | undefined, steering = false, omittedAttachments = false): void {
     this.task = task ?? "";
-    if (!steering) this.observer.setTask(task);
+    if (!steering) this.observer.setTask(task, omittedAttachments);
     if (steering) {
       this.pendingEarlyEnd = false;
       this.todos.cancelPending();

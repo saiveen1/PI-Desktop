@@ -61,8 +61,11 @@ This edition strengthens the existing framework rather than replacing it.
   existing correction allowance after strict evidence and safety checks. A stable
   turn summary explains checks, skips and blocked continuations, with links to
   recorded evidence. Post-response assessments are retained across reloads;
-  unknown legacy reasons stay unknown. Off adds no requests; enabled assessments
-  add cost/latency, do not recheck continued output, and are not proof of completion.
+  unknown legacy reasons stay unknown. Short continuation requests include a
+  bounded, redacted window of earlier task goals and the latest answer, with
+  distinct historical evidence IDs; missing context still cannot authorize work.
+  Off adds no requests; enabled assessments add cost/latency, do not recheck
+  continued output, and are not proof of completion.
 - **Configurable degenerate-output protection.** Interrupt long whitespace/symbol
   runs or sustained exact narrative-paragraph repetition in model text/thinking.
   Behavior settings expose switches and thresholds; partial results are retained

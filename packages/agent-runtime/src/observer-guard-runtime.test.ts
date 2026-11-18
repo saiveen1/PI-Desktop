@@ -2,10 +2,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createAssistantMessageEventStream, type AssistantMessage, type Context } from "@earendil-works/pi-ai";
 import { addUsage, usageForEvent, type AgentEventEnvelope, type MessageUsage, type ObserverGuardAssessment, type UiMessage } from "@pi-desktop/shared";
 import { DesktopAgentRuntime, type AgentRuntimeOptions } from "./runtime.js";
-import type { ObserverGuardRuntimeConfig } from "./observer-guard.js";
+import type { ObserverGuard, ObserverGuardRuntimeConfig } from "./observer-guard.js";
 import { completeOneShot, type OneShotCompleteResult } from "./one-shot-complete.js";
 import { builtinModeDefinition } from "./mode-definitions.js";
 import { MODE_CLOSEOUT_MAX_REQUESTS } from "./modes/mode-state.js";
+import { CorrectiveBudget } from "./corrective-budget.js";
 
 vi.mock("./one-shot-complete.js", () => ({ completeOneShot: vi.fn() }));
 const reviewer = vi.mocked(completeOneShot);
@@ -457,4 +458,140 @@ describe("Observer Guard new user tasks", () => {
     expect(run.requests).toHaveLength(1);
     expect(assessment(run.events)).toBeUndefined();
   });
+});
+
+describe("Observer continuation task context", () => {
+  const history: UiMessage[] = [
+    { id: "goal", role: "user", content: "Implement display deduplication and verify it across three scenarios without changing original records.", createdAt: "2026-01-01T00:00:00Z", status: "complete" },
+    { id: "previous", role: "assistant", content: "Display deduplication is implemented. Three-scenario validation is still pending.", createdAt: "2026-01-01T00:01:00Z", status: "complete" },
+  ];
+
+  it("supplies the original goal for a restored continuation and permits only the remaining authorized work", async () => {
+    const run = fixture({ observerGuard, history }, [text("Deduplication is complete; multi-scenario validation is still pending."), text("All three requested scenarios now pass.")]);
+    reviewer.mockImplementation(async (_provider, context) => {
+      const input = String(context.messages[1].content);
+      return verdict(context, input.includes("three scenarios without changing original records") ? {} : { verdict: "unknown", confidence: "low" });
+    });
+    await run.runtime.prompt("继续，完成前不需要给我报告了。", "continue-user");
+    expect(run.requests).toHaveLength(2);
+    expect(assessment(run.events)).toMatchObject({ continued: true, reviewedToolCount: 0, inputTruncated: false });
+    const input = JSON.parse(String(reviewer.mock.calls[0][1].messages[1].content));
+    expect(input.evidence).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "goal", kind: "prior_user", text: history[0].content }),
+      expect.objectContaining({ id: "previous", kind: "prior_assistant", text: history[1].content }),
+    ]));
+  });
+
+  it("retains the goal across live turns and repeated short continuations", async () => {
+    const run = fixture({ observerGuard: { ...observerGuard, mode: "observe" } });
+    reviewer.mockImplementation(async (_provider, context) => verdict(context, { verdict: "unknown" }));
+    await run.runtime.prompt(history[0].content, "live-goal");
+    await run.runtime.prompt("继续。", "first-continue");
+    await run.runtime.prompt("Continue.", "second-continue");
+    const input = JSON.parse(String(reviewer.mock.calls[2][1].messages[1].content));
+    expect(input.evidence).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "live-goal", kind: "prior_user", text: history[0].content }),
+      expect.objectContaining({ id: "first-continue", kind: "prior_user", text: "继续。" }),
+    ]));
+  });
+
+  it("does not cite a previous answer as proof that the current answer is incomplete", async () => {
+    const run = fixture({ observerGuard, history });
+    reviewer.mockResolvedValue({ text: JSON.stringify({ verdict: "incomplete", confidence: "high", reason: "Old work was pending.", evidenceIds: ["previous"] }) });
+    await run.runtime.prompt("Continue.", "continue-user");
+    expect(assessment(run.events)).toMatchObject({ status: "error", errorCode: "INVALID_RESPONSE" });
+    expect(run.requests).toHaveLength(1);
+  });
+
+  it("does not turn an inherited discussion into execution", async () => {
+    const run = fixture({ observerGuard, history: [{ ...history[0], content: "Only explain the deduplication design; do not execute or modify anything." }] });
+    reviewer.mockImplementation(async (_provider, context) => verdict(context));
+    await run.runtime.prompt("继续，完成前不需要给我报告了。", "continue-user");
+    expect(assessment(run.events)).toMatchObject({ continued: false, continuationReason: "task_not_actionable" });
+    expect(run.requests).toHaveLength(1);
+  });
+
+  it("does not export the previous goal after the user changes tasks", async () => {
+    const run = fixture({ observerGuard, history });
+    reviewer.mockImplementation(async (_provider, context) => verdict(context, { verdict: "complete" }));
+    await run.runtime.prompt("Implement an unrelated calculator.", "new-user");
+    expect(JSON.stringify(reviewer.mock.calls[0][1])).not.toContain("deduplication");
+    expect(run.requests).toHaveLength(1);
+  });
+});
+
+it("continues a concrete Chinese task while retaining object-preservation constraints", async () => {
+  const task = "实现展示去重并验证三个场景。不要修改原始记录。";
+  const run = fixture({ observerGuard, history: [{ id: "goal", role: "user", content: task, createdAt: "2026-01-01T00:00:00Z", status: "complete" }] });
+  reviewer.mockImplementation(async (_provider, context) => verdict(context));
+  await run.runtime.prompt("继续，不要修改原始记录。", "continue-user");
+  expect(assessment(run.events)).toMatchObject({ continued: true, inputTruncated: false });
+  expect(JSON.stringify(reviewer.mock.calls[0][1])).toContain(task);
+  expect(run.requests).toHaveLength(2);
+});
+
+it.each(["Proceed.", "Go ahead.", "Resume.", "Keep going.", "接着做"])("allows a short %s only with an actionable original goal", async task => {
+  const history: UiMessage[] = [{ id: "goal", role: "user", content: "Implement deduplication and verify three scenarios.", createdAt: "2026-01-01T00:00:00Z", status: "complete" }];
+  const run = fixture({ observerGuard, history });
+  reviewer.mockImplementation(async (_provider, context) => verdict(context));
+  await run.runtime.prompt(task, "continue-user");
+  expect(assessment(run.events)).toMatchObject({ continued: true });
+  expect(run.requests).toHaveLength(2);
+});
+
+it("never discards a compound no-execution instruction", async () => {
+  const run = fixture({ observerGuard, history: [{ id: "goal", role: "user", content: "Implement deduplication.", createdAt: "2026-01-01T00:00:00Z", status: "complete" }] });
+  reviewer.mockImplementation(async (_provider, context) => verdict(context));
+  await run.runtime.prompt("继续，不要修改任何代码也不要执行任何命令。", "restricted-user");
+  expect(assessment(run.events)).toMatchObject({ continued: false, continuationReason: "task_not_actionable" });
+  expect(run.requests).toHaveLength(1);
+});
+
+it("marks omitted live attachments in both the current turn and its later continuation", async () => {
+  const run = fixture({ observerGuard });
+  reviewer.mockImplementation(async (_provider, context) => verdict(context));
+  await run.runtime.prompt({ text: "Implement the attached requirements.", attachments: [{ kind: "session", name: "Requirements", path: "other-session", text: "private-attached-requirements" }] }, "attached-user");
+  await run.runtime.prompt("Continue.", "continue-user");
+  expect(run.requests).toHaveLength(2);
+  for (const message of rows(run.events).filter(row => row.runDiagnostics?.observer)) {
+    expect(message.runDiagnostics?.observer).toMatchObject({ inputTruncated: true, continued: false, continuationReason: "input_truncated" });
+  }
+  expect(reviewer).toHaveBeenCalledTimes(2);
+  expect(JSON.stringify(reviewer.mock.calls)).not.toContain("private-attached-requirements");
+});
+
+it("invalidates retained steering when Stop prevents its user event", async () => {
+  const entered = deferred<Context>();
+  const release = deferred<OneShotCompleteResult>();
+  reviewer.mockImplementation(async (_provider, context) => { entered.resolve(context); return release.promise; });
+  const run = fixture({ observerGuard });
+  const first = run.runtime.prompt("Implement deduplication.", "goal", "turn");
+  const context = await entered.promise;
+  const content = "Only explain; do not execute.";
+  run.runtime.steer({ text: content }, "turn", { id: "steering", role: "user", content, steering: true, createdAt: "2026-01-01T00:00:00Z", status: "complete" });
+  await run.runtime.abort(); await first.catch(() => undefined);
+  release.resolve(verdict(context));
+  reviewer.mockImplementation(async (_provider, next) => verdict(next));
+  await run.runtime.prompt("Continue.", "next-user");
+  expect(run.requests).toHaveLength(2);
+  expect(JSON.stringify(reviewer.mock.calls.at(-1)?.[1])).not.toContain("Implement deduplication.");
+  expect(rows(run.events).filter(row => row.runDiagnostics?.observer).at(-1)?.runDiagnostics?.observer).toMatchObject({ continued: false, continuationReason: "task_not_actionable" });
+});
+
+it("retains a preflight-rejected goal for the public observer boundary under its transcript ID", async () => {
+  const run = fixture({ observerGuard, compactionSettings: { enabled: false, reserveTokens: 16_384, keepRecentTokens: 20_000 }, systemPrompt: "context ".repeat(100_000),
+    history: [{ id: "old-goal", role: "user", content: "Implement deduplication.", createdAt: "2026-01-01T00:00:00Z", status: "complete" }] });
+  await run.runtime.prompt("Implement a calculator.", "preflight-user");
+  expect(run.requests).toHaveLength(0);
+  expect(run.events.some(({ event }) => event.type === "error" && event.error.code === "CONTEXT_TOO_LARGE")).toBe(true);
+  // The same reviewer instance receives a synthetic next answer; no history/retention helper is mocked.
+  const observer = (run.runtime as unknown as { turnCorrections: { observer: ObserverGuard } }).turnCorrections.observer;
+  observer.reset(); observer.setTask("Continue."); observer.userMessage("next-user", false);
+  reviewer.mockImplementation(async (_provider, context) => verdict(context));
+  const message: AssistantMessage = { role: "assistant", api: "openai-completions", provider: "fixture", model: "main", timestamp: 1, stopReason: "stop", content: [{ type: "text", text: "Implementation is still pending." }],
+    usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } } };
+  await observer.assess({ message, toolResults: [], newMessages: [], context: { messages: [] } }, { messageId: "answer", publish() {} }, () => undefined, new CorrectiveBudget(1));
+  const input = JSON.parse(String(reviewer.mock.calls[0][1].messages[1].content));
+  expect(input.evidence).toEqual(expect.arrayContaining([expect.objectContaining({ id: "preflight-user", kind: "prior_user", text: "Implement a calculator." })]));
+  expect(JSON.stringify(input)).not.toContain("Implement deduplication.");
 });

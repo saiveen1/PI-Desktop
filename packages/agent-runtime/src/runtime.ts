@@ -2024,7 +2024,7 @@ export class DesktopAgentRuntime {
     this.host = opts.host;
     this.batchPlanner = new BatchPlanner(this.host, this.sessionId);
     this.turnCorrections = new TurnCorrectionPolicy(
-      this.host, this.sessionId, opts.autoContinueUnfinishedTodos !== false, opts.agentOutputGuard,
+      this.host, this.sessionId, opts.autoContinueUnfinishedTodos !== false, opts.agentOutputGuard, opts.history,
     );
     this.turnCorrections.observer.setConfig(opts.observerGuard);
     this.onDiagnostic = opts.onDiagnostic ?? (() => undefined);
@@ -9521,12 +9521,12 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     this.streamStartedAt = undefined;
     this.currentAssistant = undefined;
   }
-
   /** Keep a pre-flight user message in context so a reused runtime and the
    * next turn both see it, even though no provider request was made. */
   private keepPreflightUserMessage(incomingUserMessage: AgentMessage): void {
     const userMessageId = this.pendingUserMessageId || randomUUID();
     this.pendingUserMessageId = undefined;
+    this.turnCorrections.observer.userMessage(userMessageId, false);
     this.appendLiveEntry(userMessageId, incomingUserMessage);
     this.setAgentMessages(this.liveSessionContext().messages);
   }
@@ -9727,7 +9727,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     this.pendingUserMessageId = userMessageId;
     this.resetRunRecoveryState();
     this.turnCorrections.setTask(typeof input === "string" ? input :
-      input.sessionMessage || (input.modeTurn && input.modeTurn.origin !== "user") ? undefined : input.text);
+      input.sessionMessage || (input.modeTurn && input.modeTurn.origin !== "user") ? undefined : input.text, false, typeof input !== "string" && Boolean(input.attachments?.length));
     this.autonomousExecution = false;
     const recovered = recoverMalformedToolCalls(this.agent.state.messages);
     if (recovered !== this.agent.state.messages) this.setAgentMessages(recovered);
@@ -9963,11 +9963,11 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
   private retainPendingSteering(): void {
     this.agent.clearSteeringQueue();
     for (const [message, pending] of this.pendingSteering) {
+      this.turnCorrections.observer.userMessage(pending.id, true);
       if (!this.agent.state.messages.includes(message)) this.setAgentMessages([...this.agent.state.messages, message]);
       this.appendLiveEntry(pending.id, message);
     }
     this.pendingSteering.clear();
-
   }
   private async waitForIdleAndSteering(): Promise<void> {
     await this.agent.waitForIdle();
