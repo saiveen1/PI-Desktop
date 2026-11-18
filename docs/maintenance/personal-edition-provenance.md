@@ -291,3 +291,11 @@ four-member group appeared as zero); component interaction coverage exercises
 independent expansion, stable counts and visible-only selection in
 `session-organization-user-path.test.mjs`. This is source-candidate evidence,
 not an installed-release verification.
+
+### Inline answers in the main conversation
+
+At upstream `047c4eab1`, `ba82998bb` already provides the structured AskTool
+result and its tool-detail rendering. This candidate reuses those questions and
+answers; the local change is showing them once, in order, outside the main
+transcript's folded work. It does not introduce the question tool or change
+its persistence.

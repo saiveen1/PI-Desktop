@@ -55,6 +55,8 @@ import {
 } from "../../../lib/transcript-summary";
 import { AssistantTurnParts } from "./AssistantTurnParts";
 import { ObserverGuardTurnSummary } from "./ObserverGuardDisclosure";
+import { splitAtAnsweredQuestions } from "../../../lib/turn-question-sections";
+import { AskHistoryCard } from "../../../components/ToolDetails";
 import { TurnProcess } from "./TurnProcess";
 import { ActionSlotSide } from "./ActionBarSlots";
 import { EntryExtraStack } from "./EntryExtraStack";
@@ -373,19 +375,11 @@ export const AssistantTurn = memo(function AssistantTurn({
   // stay stale until new messages arrived. Segmenting here makes the preference
   // apply on the next paint.
   const displayMode = useAppStore((state) => resolveTranscriptDisplayMode(state.settings));
-  const segments = useMemo(
-    () => segmentTurnProcess(process, displayMode),
-    [process, displayMode],
-  );
-  // The one disclosure exists if it reveals anything at all. This uses the same
-  // helper the activity rows use: progress text counts, completed thinking is
-  // hidden under the preference, and a live reasoning indicator still counts.
-  // Content facts come from the per-message cache, so a streaming delta reads
-  // only its own message body rather than every earlier one.
-  const visibleSteps = useMemo(
-    () => cachedVisibleProcessSteps(process, hideThinking, isActive),
-    [process, hideThinking, isActive],
-  );
+  const sections = useMemo(() => splitAtAnsweredQuestions(process).map((section) => {
+    if (section.kind === "ask") return section;
+    const { parts: process } = section;
+    return { ...section, segments: segmentTurnProcess(process, displayMode) };
+  }), [process, displayMode]);
   // The live tail is the turn's actual last part. A process chunk opens and
   // reports live state only while it owns that part, so a superseded thinking
   // chunk cannot keep a false "Thinking" header once a Bash call or a separate
@@ -403,17 +397,23 @@ export const AssistantTurn = memo(function AssistantTurn({
       aria-label={t("chat.assistantMessage")}
     >
       <div className="message-col">
-        {process.length > 0 ? (
-          <TurnProcess
-            turnId={entry.id}
-            processParts={process}
-            turnParts={entry.parts}
-            visibleSteps={visibleSteps}
-            isActive={isActive}
-            failed={summary.hasError}
-            activity={runtimeActivity}
+        {sections.map((section, index) => {
+          if (section.kind === "ask") {
+            return <AskHistoryCard key={`ask-${section.key}`} messageId={section.key} block={section.block} />;
+          }
+          const last = index === sections.length - 1;
+          const live = last && isActive;
+          return <TurnProcess
+            key={`work-${section.key}`}
+            turnId={section.key ? `${entry.id}:after:${section.key}` : entry.id}
+            processParts={section.parts}
+            turnParts={sections.length === 1 ? entry.parts : last ? [...section.parts, ...responses] : section.parts}
+            visibleSteps={cachedVisibleProcessSteps(section.parts, hideThinking, live)}
+            isActive={live}
+            failed={last && summary.hasError}
+            activity={live ? runtimeActivity : undefined}
           >
-            {segments.map((segment) => {
+            {section.segments.map((segment) => {
               if (segment.kind === "run") {
                 return <StandaloneRunRow key={`run-${segment.key}`} segment={segment} />;
               }
@@ -421,8 +421,8 @@ export const AssistantTurn = memo(function AssistantTurn({
                 <AssistantTurnParts key={`process-${segment.key}`} parts={segment.parts} {...partContext} />
               );
             })}
-          </TurnProcess>
-        ) : null}
+          </TurnProcess>;
+        })}
         {/* The answer stays outside the process disclosure: it is what the turn
             produced, not part of what it did. */}
         <AssistantTurnParts parts={responses} {...partContext} />

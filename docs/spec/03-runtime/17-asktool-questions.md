@@ -84,9 +84,11 @@ model.
 
 ## 5. Transcript summary
 
-The completed asktool row in conversation history presents persisted
-`details.questions` and `details.answers` as an ordered question-and-answer
-summary. Multi-select answers remain separate labels, and skipped questions
+The main conversation shows each completed structured asktool result once, at
+its chronological position outside collapsible work. A read-only card pairs
+persisted `details.questions` with `details.answers` in order. Folding nearby
+activity or changing the transcript display mode never hides the card.
+Multi-select answers remain separate labels, and skipped questions
 have an explicit localized state. This is a read-only projection: the
 model-facing text and stored tool result are unchanged. If structured details
 are unavailable or invalid, the transcript keeps its generic result rendering

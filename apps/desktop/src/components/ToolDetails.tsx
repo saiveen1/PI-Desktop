@@ -2,7 +2,7 @@ import { useTranslation } from "react-i18next";
 import { HighlightedCode, useCopy } from "./Markdown";
 import { LargeTextPreview } from "./LargeTextPreview";
 import { IconCheck, IconCircleAlert, IconCopy, IconInfo } from "./icons";
-import { TooltipButton, cx } from "./ui";
+import { Panel, TooltipButton, cx } from "./ui";
 import { toWorkspaceRel } from "../lib/chat-links";
 import { useOpenPreviewTarget } from "../hooks/use-preview-target";
 import { useChatFileMenu } from "../hooks/use-chat-file-menu";
@@ -89,8 +89,10 @@ function MoreNote({ hidden }: { hidden: number }) {
 
 function AskToolResult({
   block,
+  compact = false,
 }: {
   block: Extract<ToolBlock, { kind: "asktool" }>;
+  compact?: boolean;
 }) {
   const { t } = useTranslation();
   return (
@@ -98,17 +100,17 @@ function AskToolResult({
       {block.questions.map((entry, index) => (
         <div className="tool-asktool-entry" key={`${index}-${entry.question}`}>
           <dt className="tool-asktool-question">
-            <span className="tool-asktool-question-number">
+            {!compact && <span className="tool-asktool-question-number">
               {t("askTool.questionNumber", { number: index + 1 })}
-            </span>
+            </span>}
             <span className="tool-asktool-question-copy">
               <AskToolRichText source={entry.question} />
             </span>
           </dt>
           <dd className="tool-asktool-answer">
-            <span className="tool-asktool-answer-label">
+            {!compact && <span className="tool-asktool-answer-label">
               {t("askTool.answerLabel")}
-            </span>
+            </span>}
             <span className="tool-asktool-answer-values">
               {entry.answers?.length ? (
                 entry.answers.map((answer, answerIndex) => (
@@ -127,6 +129,21 @@ function AskToolResult({
         </div>
       ))}
     </dl>
+  );
+}
+
+export function AskHistoryCard({ messageId, block }: {
+  messageId: string;
+  block: Extract<ToolBlock, { kind: "asktool" }>;
+}) {
+  const { t } = useTranslation();
+  return (
+    <section data-message-id={messageId} aria-label={t("askTool.historyTitle")}>
+      <Panel className="ask-history-card">
+        <BlockHead label={`${t("askTool.historyTitle")} (${block.questions.length})`} copy={blockCopyText(block)} />
+        <AskToolResult block={block} compact />
+      </Panel>
+    </section>
   );
 }
 

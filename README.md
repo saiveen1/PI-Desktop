@@ -143,6 +143,8 @@ This edition strengthens the existing framework rather than replacing it.
 - **Task-first reading.** Collapse activity and thinking by default, show concise
   task rows and failure summaries, share parent/child detail presentation, and keep
   recorded file changes accessible during running, stopped, or failed turns.
+  Submitted questions and answers stay together in the main chat even when
+  surrounding tool activity is folded.
 - **Expanded file actions.** Add Save as and supported text-content copying to chat
   references, and extend Open with beyond HTML to default applications. Local
   sessions, with or without a project, use live references for ordinary disk files

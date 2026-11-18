@@ -1791,8 +1791,10 @@ journeys cover successful reads, saves and directory browsing.
   inline code, and a short list. 2) Confirm each card renders the formatting
   while keeping choices keyboard/selectable. 3) Answer the first question,
   click Next, and select two answers on the multi-select question. 4) Skip the final
-  question without entering text. 5) Expand the completed tool row and inspect
-  its question-and-answer summary, then inspect the next model response.
+  question without entering text. 5) Fold the surrounding work and inspect the
+  question-and-answer card without opening a tool row. Switch among Flat,
+  Command-first and Fully folded: each question and its submitted answer (or
+  skipped state) stays visible once, in place before the next model response.
 - **Expected**: One question is visible at a time; the small indicators show
   answered, current, and skipped states in the composer approval area, at the
   same dock position used by Plan and Goal approval. The request has no

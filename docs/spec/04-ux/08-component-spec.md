@@ -964,10 +964,13 @@ reading surface of the workstation.
 
 ### Turn process and thinking display
 
-One unified turn-process presentation projects each loaded assistant turn into a
-single collapsible process disclosure plus its trailing answer. Reasoning, tools,
-hosted searches and intermediate assistant text keep their transcript order inside
-that disclosure. The trailing answer streams outside the process; later activity
+Each loaded assistant turn groups ordinary work into a collapsible process
+and keeps its trailing answer outside. In the main conversation, a completed
+structured AskTool exchange separates the surrounding work: one read-only card
+shows the question count, each prompt and its submitted answers in place,
+including localized skips. It appears once even when all work is folded.
+Reasoning, tools, hosted searches and intermediate text keep their order.
+The trailing answer streams outside the process; later activity
 can reclassify provisional answer text into the process without changing the
 stored message. Assistant errors and stopped trailing partial answers also stay
 outside it. User/system messages and compaction boundaries are unchanged.
@@ -979,10 +982,10 @@ and quotations remain visible as authored. A fragment is not a failed tool row:
 show same-response tool-use evidence separately from the fragment, and defer the
 actual outcome to the tool card. Keep unrelated assistant errors visible.
 
-The disclosure owns every row the turn produced before its answer: ordinary
-activity groups and `Bash` run rows alike. A turn therefore renders exactly one
-top-level process disclosure, including a Bash-only turn; no run row is a sibling
-of it, and a long turn collapses in one gesture. The answer, assistant errors,
+A disclosure owns a stretch of ordinary activity, including `Bash` run rows.
+Without a structured AskTool exchange the turn keeps a single top-level
+disclosure, including a Bash-only turn; no run row is a sibling of it.
+The answer, assistant errors,
 stopped trailing partial text and pending action cards remain outside, reachable
 without expanding the process. An untouched process closes on completion, leaving
 the final answer; with no final text, the process header and those surfaces
@@ -1006,9 +1009,8 @@ activity groups; the outer disclosure lists tools, commands, thinking and
 progress rows in transcript order. In `command-first` and `fully-folded`, a group
 header appears only when at least two items are visible under the current
 thinking preference; a singleton uses its item disclosure directly, and hidden
-thinking never creates an empty wrapper. All three modes render exactly one
-top-level process disclosure and change neither what a tool received nor what is
-stored.
+thinking never creates an empty wrapper. All three modes respect the same
+question-card boundaries and change neither tool inputs nor stored results.
 
 Ordinary activity groups and rendered Thinking rows start **closed, including
 while streaming**, when their respective setting is absent or `true`.
@@ -2671,14 +2673,14 @@ Lightweight inline disclosure row showing a semantic tool action, its primary
 argument hint, status, and a readable rendering of the result. It follows D071
 and is intentionally not an elevated card.
 
-The turn has one outer process disclosure. `fully-folded` (the default) groups
+Each stretch of work has one outer process disclosure. `fully-folded` (the default) groups
 contiguous tool/search/thinking segments between ordinary progress paragraphs,
 including `Bash`/run aliases. `command-first` keeps groups but lifts each command
 to a standalone row beside them; progress text or a command ends a group. `flat`
 keeps transcript order without nested ordinary groups. A group needs at least
 two visible items under the thinking preference; a singleton uses its own item
-disclosure. Task starts use the separate task list (§9.9). All modes keep one
-outer process, including Bash-only turns, and add no new display mode.
+disclosure. Task starts use the separate task list (§9.9). All modes preserve
+the visible AskTool cards described above; Bash-only turns retain one disclosure.
 
 Ordinary groups and rendered reasoning start closed even while streaming when
 their existing folding setting is absent or `true`. Explicit `false` starts that

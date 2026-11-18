@@ -439,9 +439,9 @@ function safeJson(value: unknown): string {
   }
 }
 
-function askToolResultBlock(
+export function askToolResultBlock(
   message: ToolPresentationMessage,
-): ToolBlock | null {
+): Extract<ToolBlock, { kind: "asktool" }> | null {
   const details = asRecord(toolResultPayload(message));
   const rawQuestions = details?.questions;
   const rawAnswers = details?.answers;

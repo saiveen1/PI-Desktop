@@ -3406,6 +3406,39 @@
   overflow-wrap: anywhere;
 }
 
+.ask-history-card {
+  min-width: 0;
+  border: 1px solid var(--ds-border-subtle);
+}
+
+.ask-history-card .tool-row-section-head {
+  border-bottom: 1px solid var(--ds-border-subtle);
+  padding: 4px 12px;
+}
+
+.ask-history-card .tool-asktool-results {
+  max-height: none;
+  overflow: visible;
+  background: transparent;
+  scrollbar-gutter: auto;
+}
+
+.ask-history-card .tool-asktool-question-copy {
+  font-weight: var(--font-weight-semibold);
+}
+
+.ask-history-card .tool-asktool-answer-values {
+  display: grid;
+  gap: 4px;
+}
+
+.ask-history-card .tool-asktool-answer-value {
+  display: block;
+  background: transparent;
+  padding: 0;
+  line-height: var(--leading-relaxed);
+}
+
 .tool-asktool-skipped {
   color: var(--ds-text-muted);
   font-style: italic;
