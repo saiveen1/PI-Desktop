@@ -136,16 +136,16 @@ pub trait Desktop: Send + Sync {
     /// of the answer, and it is discovered here rather than supplied by a
     /// request, so no caller can shrink this set.
     fn self_pids(&self) -> Vec<i32> {
-        let mut pids = vec![std::process::id() as i32];
+        let pid = std::process::id() as i32;
         #[cfg(unix)]
         {
             // SAFETY: `getppid` takes no arguments and cannot fail.
             let parent = unsafe { libc::getppid() };
             if parent > 1 {
-                pids.push(parent);
+                return vec![pid, parent];
             }
         }
-        pids
+        vec![pid]
     }
 }
 
