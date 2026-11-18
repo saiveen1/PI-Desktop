@@ -192,8 +192,9 @@ This edition strengthens the existing framework rather than replacing it.
   running indicators and retry badges. Also fix rename-input reselection and
   collapsed approval controls interfering with the composer.
 - **Targeted Windows and file-reference fixes.** Resolve bare filenames under an
-  explicitly stated Markdown directory, normalize references before worktree
-  rebasing, and default runner-child Python standard streams to UTF-8 only when
+  explicitly stated Markdown directory and open Git Bash links (`/d/...`) on
+  Windows, including the branch copy in an isolated worktree. Runner-child
+  Python standard streams default to UTF-8 only when
   no encoding preference is inherited. Git Bash command transport preserves
   literal backslashes and quoted heredoc content across foreground/background
   runners without changing the approved command or replaying failures.

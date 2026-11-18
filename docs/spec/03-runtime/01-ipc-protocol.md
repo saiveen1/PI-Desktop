@@ -2273,10 +2273,11 @@ Renderer IPC kept for the Plan-safe preview facade and URL fallback:
   that answered); `sessionId` selects the
   session whose scratch store is searched. Completes a file reference the agent
   printed in chat, because the renderer cannot see the session's own scratch
-  store. On Windows, a slash-prefixed drive reference such as `/D:/dir/file`
-  is normalized to `D:/dir/file` before worktree rebasing, exact-path and
-  containment checks; all file actions receive the resolved native drive path.
-  POSIX and UNC spellings are unchanged. An absolute reference only matches
+  store. On Windows, both a slash-prefixed drive reference (`/D:/dir/file`)
+  and a Git Bash drive reference (`/d/dir/file`) normalize to `D:/dir/file`
+  before worktree rebasing, exact-path and containment checks; all file actions
+  receive the resolved native drive path. POSIX hosts and UNC paths are unchanged.
+  An absolute reference only matches
   that exact file inside a known root, and an `attachments/<sha256>` blob resolves against the
   attachment store directly; otherwise the roots are searched in priority order
   — the open project first, the session's own scratch store

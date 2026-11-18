@@ -3809,7 +3809,9 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
     store; one that neither answers resolves in the attachment store, and an
     `attachments/<sha256>` ref opens that stored blob.
   - An absolute reference that names a real file inside a known root wins
-    outright, whichever shorthand would otherwise have matched.
+    outright, whichever shorthand would otherwise have matched. On Windows,
+    repeat the click using Git Bash's `/d/...` spelling for a file on `D:`;
+    it must open the same file as the native `D:/...` link.
   - `only-here.ts` opens the second folder's `lib/only-here.ts`: the primary
     folder is searched first and to exhaustion, then the project group's other
     folders in the group's own order, and the match names the folder that

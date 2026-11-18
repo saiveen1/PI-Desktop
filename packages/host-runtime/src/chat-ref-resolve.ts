@@ -103,11 +103,10 @@ function cleanRef(raw: string): string {
   return normalizeChatRefPath(value);
 }
 
-/** Repair POSIX-rooted Windows drives without changing POSIX paths or root guards. */
+/** Accept `/d/...` from Git Bash as well as slash-prefixed native drive paths. */
 export function normalizeChatRefPath(value: string): string {
-  return process.platform === "win32" && /^\/[A-Za-z]:[\\/]/.test(value)
-    ? `${value.charAt(1).toUpperCase()}${value.slice(2)}`
-    : value;
+  if (process.platform !== "win32") return value;
+  return value.replace(/^\/([A-Za-z])(?::(?=[\\/])|(?=\/))/, (_, drive: string) => `${drive.toUpperCase()}:`);
 }
 
 function stripRefDecorations(raw: string): string {

@@ -68,13 +68,16 @@ test("slash-prefixed Windows drive references keep exact external-file semantics
   const target = join(outside, "生成 包.piplug");
   const ref = `/${target.replaceAll("\\", "/")}`;
   const roots = projectRoots(workspace);
-  assert.equal(await isChatRefOutsideRoots(ref, roots), true);
-  assert.equal(await resolveChatFileRef(ref, roots), null);
-  assert.deepEqual(await resolveExternalChatRef(ref), await resolveExternalChatRef(target));
-  assert.equal((await resolveExternalChatRef(ref)).match?.absolutePath, target);
   const missing = `/${join(outside, "missing.piplug").replaceAll("\\", "/")}`;
-  assert.equal(await resolveChatFileRef(missing, roots), null);
-  assert.deepEqual(await resolveExternalChatRef(missing), { match: null });
+  for (const [existing, absent] of [[ref, missing], [ref.replace(":", ""), missing.replace(":", "")]]) {
+    assert.equal(await isChatRefOutsideRoots(existing, roots), true);
+    assert.equal(await resolveChatFileRef(existing, roots), null);
+    const result = await resolveExternalChatRef(existing);
+    assert.deepEqual(result, await resolveExternalChatRef(target));
+    assert.equal(result.match?.absolutePath, target);
+    assert.equal(await resolveChatFileRef(absent, roots), null);
+    assert.deepEqual(await resolveExternalChatRef(absent), { match: null });
+  }
 });
 
 test("a missing external file is a miss, not an access limit", async () => {

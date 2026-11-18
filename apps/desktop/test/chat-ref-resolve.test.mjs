@@ -128,9 +128,11 @@ test("a POSIX-rooted drive path resolves to the file the drive names", async (t)
 
 test("drive-prefix normalization preserves ordinary paths and is Windows-only", () => {
   for (const ref of ["/usr/local/file.md", "D:/dir/file.md", "relative/file.md",
-    "//server/share/file.md", "\\\\server\\share\\file.md", "/D:relative/file.md", "//D:/dir/file.md"]) {
+    "//server/share/file.md", "//d/share/file.md", "\\\\server\\share\\file.md", "/D:relative/file.md", "//D:/dir/file.md"]) {
     assert.equal(normalizeChatRefPath(ref), ref);
   }
+  const gitBash = "/d/dir/file.md";
+  assert.equal(normalizeChatRefPath(gitBash), process.platform === "win32" ? "D:/dir/file.md" : gitBash);
   const ref = "/D:/dir/file.md";
   assert.equal(normalizeChatRefPath(ref), process.platform === "win32" ? ref.slice(1) : ref);
   for (const value of ["/d:/dir/file.md", "/d:\\dir\\file.md"]) {
@@ -153,7 +155,9 @@ test("slash-prefixed Windows drive references resolve inside managed roots", {
     assert.equal(await isChatRefOutsideRoots(ref, roots(options)), false);
     const expected = await resolve(target, options);
     assert.ok(expected);
-    for (const decorated of [ref, `${ref}:12:3`, `@"${ref}"`, `/${target}`]) {
+    const gitBashRef = ref.replace(":", "");
+    assert.equal(await isChatRefOutsideRoots(gitBashRef, roots(options)), false);
+    for (const decorated of [ref, `${ref}:12:3`, `@"${ref}"`, `/${target}`, `${gitBashRef}:12:3`]) {
       assert.deepEqual(await resolve(decorated, options), expected, decorated);
     }
   }

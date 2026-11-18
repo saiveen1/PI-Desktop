@@ -68,10 +68,12 @@ test("a slash-prefixed Windows parent path still opens the worktree copy", {
   const { root, parent, worktree } = await fixture();
   try {
     const ref = `/${join(parent, "docs", "branch-note.md").replaceAll("\\", "/")}`;
-    assert.equal(
-      await rebaseWorktreeRef(ref, { parent, worktree }),
-      join(worktree, "docs", "branch-note.md"),
-    );
+    for (const spelling of [ref, ref.replace(":", "")]) {
+      assert.equal(
+        await rebaseWorktreeRef(spelling, { parent, worktree }),
+        join(worktree, "docs", "branch-note.md"),
+      );
+    }
   } finally {
     await rm(root, { recursive: true, force: true });
   }
