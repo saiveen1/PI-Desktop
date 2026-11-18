@@ -89,7 +89,8 @@ This edition strengthens the existing framework rather than replacing it.
 - **Unified model pools and approvals.** Add grouped model approvals, recoverable
   approval controls, live policy updates, and per-conversation candidate pools
   and approval overrides. On-demand model descriptions support task-specific
-  selection; configurable failure handling remains within authorized models.
+  model selection. A Task can also request more or less reasoning effort than
+  its parent unless the role fixes the level. Failure handling remains within authorized models.
 - **Session and global task indexes.** Open the current session's subagents from
   the topbar, or review cross-project history with recorded models, completion
   times, output tokens and explicitly labeled run/request throughput. Missing

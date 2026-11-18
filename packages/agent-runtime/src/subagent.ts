@@ -206,7 +206,7 @@ export type SubagentRunOptions = {
   refreshFallbackModels?: () => Promise<Array<{ key: string; provider?: RuntimeProviderConfig }>>;
   /** Authorization may return the exact selected provider rather than a boolean. */
   authorizeModel?: (provider: RuntimeProviderConfig, signal: AbortSignal) => Promise<boolean | RuntimeProviderConfig>;
-  /** Original parent thinking selection, before primary-model clamping. */
+  /** Task effort or parent selection, before primary-model clamping. */
   inheritedThinkingLevel?: SubagentThinkingLevel;
   onModelChange?: (provider: RuntimeProviderConfig, thinkingLevel: SubagentThinkingLevel) => void;
   /** Fully composed child system prompt (see `composeSubagentSystemPrompt`). */

@@ -1,5 +1,5 @@
 import { Type } from "typebox";
-import { DELEGATION_CONTEXT_WINDOW_MAX, describeDelegationRunPolicy, resolveDelegationLimits, resolveDelegationRunPolicy, subagentToolsLabel, type DelegationSettings, type SubagentDefinition } from "@pi-desktop/shared";
+import { THINKING_LEVELS, DELEGATION_CONTEXT_WINDOW_MAX, describeDelegationRunPolicy, resolveDelegationLimits, resolveDelegationRunPolicy, subagentToolsLabel, type DelegationSettings, type SubagentDefinition } from "@pi-desktop/shared";
 
 /** Stable tool metadata is supplied on every request, including after compaction. */
 export function subagentTaskDeclaration(options: {
@@ -40,6 +40,7 @@ export function subagentTaskDeclaration(options: {
       description: Type.Optional(Type.String({ description: "Short label for this delegation (3-6 words), shown to the user." })),
       model: Type.Optional(Type.String({ description: "Override the delegate's model for a new task, e.g. 'anthropic/claude-sonnet-4-20250514'. Omit to use the subagent's default. Repeating the definition's own Default model key is the same as omitting this parameter. Only choose a different override from the available delegation model catalog. When resuming, omit this field; only an exact repeat of the retained provider/model key is tolerated, not a model or account change." })),
       resume: Type.Optional(Type.String({ description: "delegationId of a settled subagent in this conversation to continue. Omit to start a new session. Resume retains its model binding; omit model rather than selecting it again." })),
+      effort: Type.Optional(Type.String({ enum: [...THINKING_LEVELS], description: "Choose reasoning effort for this invocation, including resume, based on task difficulty. An explicit role thinking level wins; otherwise omit to inherit the parent. Each selected model uses a supported level." })),
       modelReason: Type.Optional(Type.String({ maxLength: 1000, description: "One concise sentence explaining why the selected model fits this task. Required for new tasks in a custom session pool. This never grants approval." })),
       ...(settings ? {
         modelSelection: Type.Optional(Type.Union([Type.Literal("prefer"), Type.Literal("require")], { description: "prefer (default) permits authorized alternatives; require preserves an exact model explicitly required by the user and never substitutes it. Approval still applies." })),

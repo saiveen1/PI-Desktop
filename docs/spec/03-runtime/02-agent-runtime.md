@@ -1456,7 +1456,7 @@ intentional override.
 job controls are always declared and belong to the Agent core set rather than
 the on-demand catalog of §7.1. Execution of all four is restricted to Agent mode:
 
-- `Task(agent, task, description?, model?, resume?)` — validates its arguments (an
+- `Task(agent, task, description?, model?, effort?, resume?)` — validates its arguments (an
   unknown `agent`, an empty `task`, an unresolvable model pin and a definition
   whose tools are all unavailable each return a tool error explaining the
   failure rather than throwing), starts the delegate **in the background**, and
@@ -1507,9 +1507,11 @@ the on-demand catalog of §7.1. Execution of all four is restricted to Agent mod
   When a model key is not pre-resolved, the runtime asks Electron main to resolve it
   on-demand via the `provider.resolveSubagentModel` RPC. The started `Task`
   result details record the effective `modelId` and resolved `thinkingLevel`
-  used for that run. The level is resolved after inheritance and target-model
-  capability clamping; `omit` records that no provider thinking override was
-  sent.
+  used for that run. For a new or resumed invocation, an explicit role level
+  (including `omit`) wins over optional `Task.effort`, which otherwise overrides
+  the parent session level for this invocation only. The parent's level is not a
+  ceiling. Approval uses the requested selection, and each admitted model clamps
+  it independently; `omit` records that no provider thinking override was sent.
 - `TaskWait(delegationIds?, mode?, minCompleted?, timeoutSeconds?)` — converges
   on running delegations (defaults to all of them) and returns their reports;
   `mode: "any"` with `minCompleted` converges as soon as the first N settle.

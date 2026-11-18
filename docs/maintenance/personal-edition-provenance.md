@@ -35,6 +35,11 @@ from executable validation. The historical audit boundary above is unchanged.
 
 ## Local harness and delegation increments
 
+Compared with locally recorded upstream `047c4eab1`, the personal runtime adds
+an optional `Task.effort` argument and carries its selection through admission
+and fallback. Role pins, session inheritance and model capability clamping are
+existing behavior, not part of this attribution.
+
 On personal source `2000e8ce2`, compared with locally recorded upstream
 `047c4eab1c97a349b3cf8c734229b64ed9d87764` (no fetch), the developer console
 and dev/test render-stage diagnostics are existing foundations. Neither tree

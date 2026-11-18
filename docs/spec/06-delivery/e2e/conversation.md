@@ -4999,6 +4999,9 @@ Build two actual runtimes with identical configuration and different scratch dir
   cancel edits, inject a failed save and retry. Restore global inheritance
   and separately save an empty custom pool. Query TaskModels only when preparing
   a delegation; choose a lower numeric-priority specialist by description.
+  Request higher and lower `Task.effort` than the parent, repeat without it,
+  and try a role with fixed effort or `omit`. Verify approval and the effective
+  recorded level respect role precedence and each selected model's capabilities.
   Observe automatic approval, explicit approval, denied/unavailable candidates,
   exact requirements, cancellation, resume and natural fallback.
 - **Expected:** Every admission and approval alternative stays in the

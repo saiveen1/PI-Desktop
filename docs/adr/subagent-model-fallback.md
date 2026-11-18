@@ -28,8 +28,9 @@ system prompt, original task, successful assistant and tool history, tool scope,
 counters, and usage, only the failed assistant request leaves model context before
 `continue()` while staying in the visible transcript, and no task or completed tool
 is replayed. The model, adapter, credentials, headers, output cap, and thinking
-level change together, with thinking re-clamped per model from the definition or
-original parent selection; the original abort signal owns the whole chain, and
+level change together, with thinking re-clamped per model from the role's explicit
+selection, the invocation's `Task.effort`, or the original parent selection (in
+that order); the original abort signal owns the whole chain, and
 host/tool failures, missing reports, thrown errors, and cancellation do not initiate
 fallback.
 

@@ -144,6 +144,7 @@ import {
   isCommandShellOption,
   isAskToolQuestionWithinLimit,
   isToolsOutputParams,
+  THINKING_LEVELS,
   MAX_ASK_TOOL_QUESTION_CHARS,
   resolveDelegationLimits,
   normalizeAskToolOption,
@@ -5021,6 +5022,12 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           return this.subagentToolError(toolCallId, "Call TaskModels when preparing delegation, then supply model and one concise modelReason for this task.");
         }
         const selection = isRecord(params) && params.modelSelection === "require" ? "require" : "prefer";
+        const rawEffort = isRecord(params) ? params.effort : undefined;
+        const effort = THINKING_LEVELS.find(level => level === rawEffort);
+        if (rawEffort !== undefined && effort === undefined) {
+          return this.subagentToolError(toolCallId, `Invalid Task effort. Choose one of: ${THINKING_LEVELS.join(", ")}.`);
+        }
+        const requestedThinkingLevel = definition.thinkingLevel ?? effort ?? this.thinkingLevel;
         const requestedBinding = modelOverride ? this.subagentProviders[modelOverride] : undefined;
         let scheduler: DelegationScheduler;
         try {
@@ -5031,7 +5038,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
             agentName: definition.name,
             description: isRecord(params) && typeof params.description === "string" ? params.description : definition.description,
             requestedModel: modelOverride || undefined,
-            thinkingLevel: definition.thinkingLevel === "omit" ? undefined : definition.thinkingLevel ?? this.thinkingLevel,
+            thinkingLevel: definition.thinkingLevel === "omit" ? undefined : requestedThinkingLevel,
             requiresImages: isRecord(params) && params.requiresImages === true,
             minContextWindow: isRecord(params) ? params.minContextWindow : undefined,
             preferredKey: requestedBinding ? `${requestedBinding.id}/${requestedBinding.modelId}` : modelOverride || undefined,
@@ -5129,13 +5136,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           }
         }
         const controller = new AbortController();
-        const thinkingLevel: SubagentThinkingLevel =
-          definition.thinkingLevel === "omit"
-            ? "omit"
-            : clampThinkingLevel(
-                provider,
-                definition.thinkingLevel ?? this.thinkingLevel,
-              );
+        const thinkingLevel = definition.thinkingLevel === "omit" ? "omit" : clampThinkingLevel(provider, requestedThinkingLevel);
         // Only TaskStop, user Stop, dispose, and a parent fatal error abort a
         // delegate (D328 / D352). The Task tool call returns immediately; tying
         // the background run to that call's signal would kill it when the parent
@@ -5241,7 +5242,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
             fallbackModels: scheduled.fallbacks,
             refreshFallbackModels: () => scheduler.candidates(),
             authorizeModel: async (candidate, candidateSignal) => await scheduler.admit(candidate, candidateSignal) ?? false,
-            inheritedThinkingLevel: this.thinkingLevel,
+            inheritedThinkingLevel: requestedThinkingLevel,
             onModelChange: (next, level) => {
               record.modelId = next.modelId;
               record.thinkingLevel = level;

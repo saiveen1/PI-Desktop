@@ -11,6 +11,7 @@ vi.mock("./provider-binding.js", async original => {
   return { ...actual, createProviderModels: (...args: Parameters<typeof actual.createProviderModels>) => {
     const models = actual.createProviderModels(...args);
     models.streamSimple = transport;
+    models.stream = (model, context) => transport(model, context);
     return models;
   } };
 });
@@ -50,6 +51,7 @@ const policy = (modelIds = ["old", "new"], limit = 0): DelegationSettings => ({ 
 beforeEach(() => { transport.mockReset(); });
 
 function fixture(options: { parent: (index: number) => ReturnType<typeof reply>; oldRead?: boolean;
+  roleLevel?: "off" | "omit"; parentLevel?: "off" | "high";
   authorize?: (request: DelegationApprovalRequest) => Promise<DelegationApprovalDecision>; selectionMode?: "task-fit" } ) {
   const events: AgentEventEnvelope[] = [];
   const parentRequests: string[] = [];
@@ -76,9 +78,9 @@ function fixture(options: { parent: (index: number) => ReturnType<typeof reply>;
     return result.stream;
   });
   const config = {
-    sessionId: "hot-policy", mode: "agent" as const, provider: provider("parent"), thinkingLevel: "high" as const,
+    sessionId: "hot-policy", mode: "agent" as const, provider: provider("parent"), thinkingLevel: options.parentLevel ?? "high" as const,
     commandShell: { id: "bash" as const, label: "Bash", dialect: "posix" as const, available: true, isDefault: true },
-    subagents: [{ name: "worker", description: "Independent check", tools: ["Read"], prompt: "Check fixture.", source: "user" as const }],
+    subagents: [{ name: "worker", description: "Independent check", tools: ["Read"], prompt: "Check fixture.", source: "user" as const, thinkingLevel: options.roleLevel }],
     subagentProviders: { "fixture/old": provider("old"), "fixture/new": provider("new") },
     subagentModelKeys: ["fixture/old", "fixture/new"], delegationSettings: policy(), delegationAuthorization: true,
   };
@@ -124,6 +126,35 @@ function details(events: AgentEventEnvelope[]) {
 }
 
 describe("hot delegation policy through the real parent and child agent loops", () => {
+  it.each([
+    { parentLevel: "off", effort: "high", expected: "high" },
+    { parentLevel: "high", effort: "off", expected: "off" },
+    { parentLevel: "off", effort: "max", expected: "high" },
+    { parentLevel: "high", effort: "high", roleLevel: "off", expected: "off" },
+    { parentLevel: "high", effort: "high", roleLevel: "omit", expected: "omit" },
+  ] as const)("resolves Task effort $effort with parent $parentLevel to $expected", async row => {
+    const roleLevel = "roleLevel" in row ? row.roleLevel : undefined;
+    const f = fixture({ parentLevel: row.parentLevel, roleLevel, parent: index => immediate(index === 1
+      ? task({ effort: row.effort }) : text("Checked.")) });
+    try {
+      await f.save(policy(["new"]));
+      await f.prompt();
+      expect(f.childRequests).toEqual(["new"]);
+      expect(f.parentRequests[0]).toContain('"effort":{');
+      expect(details(f.events)[0]?.thinkingLevel).toBe(row.expected);
+      expect(f.approvals[0]?.thinkingLevel).toBe(roleLevel === "omit" ? undefined : roleLevel ?? row.effort);
+    } finally { await f.close(); }
+  });
+
+  it("rejects an invalid Task effort before approval or execution", async () => {
+    const f = fixture({ parent: index => immediate(index === 1 ? task({ effort: "turbo" }) : text("Rejected.")) });
+    try {
+      await f.prompt();
+      expect(f.approvals).toEqual([]);
+      expect(f.childRequests).toEqual([]);
+    } finally { await f.close(); }
+  });
+
   it("queries descriptions on demand, chooses a specialist and retains its rationale", async () => {
     const reason = "The new model fits the independent review.";
     const f = fixture({ selectionMode: "task-fit", parent: index => immediate(
