@@ -5100,7 +5100,10 @@ Build two actual runtimes with identical configuration and different scratch dir
 - **Acceptance:** C / E / Quality.
 - **Milestone:** M6+.
 - **Status:** Runtime integration coverage in
-  `packages/agent-runtime/src/unfinished-todo-continuation.test.ts`; companion
+  `packages/agent-runtime/src/unfinished-todo-continuation.test.ts`; the real
+  stdio bridge in `packages/host-runtime/src/sidecar-mode-completion.test.ts`
+  forwards bound checklist reads (including projectless sessions) and rejects
+  unbound or released sessions before Host access. Companion coverage includes
   settings interaction, persistence, and launch contract tests. Electron
   end-to-end execution is not claimed by these isolated tests.
 

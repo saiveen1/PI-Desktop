@@ -640,7 +640,10 @@ deletes per 60 seconds. P2/P3 methods are not present in protocol v11.
 - `todos.get({ sessionId })` returns the committed checklist snapshot for a live
   Desktop session: `{ sessionId, todos, revision, updatedAt }`. Unknown or
   soft-deleted sessions return `NOT_FOUND`; native Pi sessions and blank ids are
-  rejected as `INVALID_ARGUMENT`.
+  rejected as `INVALID_ARGUMENT`. For unfinished-checklist continuation the
+  sidecar may proxy this read only for a host-bound session, including a
+  projectless session. An unbound or released session is rejected before
+  forwarding. This does not authorize checklist writes.
 - `tools.execute` with `toolName: "TodoWrite"` accepts only `{ todos }` and
   replaces the complete ordered checklist. The host trims content, defaults
   priority to `medium`, truncates overlong Unicode content at 500 characters

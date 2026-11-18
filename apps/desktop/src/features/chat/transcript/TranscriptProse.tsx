@@ -5,9 +5,10 @@ import { hasStatefulTranscriptContent, shouldMountTranscriptContent } from "../.
 import { ScopeContext } from "./disclosure-scope";
 
 /** Keep the existing prose shell and message anchors while releasing its renderer. */
-export const TranscriptProse = memo(function TranscriptProse({ source, streaming }: {
+export const TranscriptProse = memo(function TranscriptProse({ source, streaming, deepSeekAnswer }: {
   source: string;
   streaming: boolean;
+  deepSeekAnswer: boolean;
 }) {
   const elementRef = useRef<HTMLDivElement>(null);
   const { visible } = useContext(ScopeContext);
@@ -54,6 +55,6 @@ export const TranscriptProse = memo(function TranscriptProse({ source, streaming
     data-transcript-content={mounted ? "mounted" : "placeholder"}
     style={mounted ? undefined : { height: window.height }}
   >
-    {mounted ? <Markdown source={source} streaming={streaming} /> : null}
+    {mounted ? <Markdown source={source} streaming={streaming} deepSeekAnswer={deepSeekAnswer} /> : null}
   </div>;
 });

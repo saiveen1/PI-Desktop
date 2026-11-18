@@ -67,6 +67,7 @@ const HOST_PROXY_ALLOWED = new Set([
   "tools.abort",
   "tools.list",
   "session.get",
+  "todos.get",
   "session.appendMessage",
   "session.appendCompaction",
   "session.replaceMessages",
@@ -170,7 +171,8 @@ export class AgentSidecar {
   // The sidecar may request a path, but it never chooses the project root.
   // The embedding host registers this binding from the host-owned session
   // record immediately before starting a runtime turn.
-  private projectInstructionRoots = new Map<string, string>();
+  // A bound projectless session has no root but may still read its checklist.
+  private projectInstructionRoots = new Map<string, string | undefined>();
   private vendorAuthResolver: VendorAuthResolver | null = null;
   private trustedExtensionBridge: TrustedExtensionSidecarBridge | null = null;
   private delegationAuthorizer: DelegationAuthorizer | null = null;
@@ -358,9 +360,7 @@ export class AgentSidecar {
   setProjectInstructionRoot(sessionId: string, projectPath?: string): void {
     const id = sessionId.trim();
     if (!id) return;
-    const root = projectPath?.trim();
-    if (root) this.projectInstructionRoots.set(id, root);
-    else this.projectInstructionRoots.delete(id);
+    this.projectInstructionRoots.set(id, projectPath?.trim() || undefined);
   }
 
   clearProjectInstructionRoot(sessionId: string): void {
@@ -402,6 +402,7 @@ export class AgentSidecar {
   setHost(host: SidecarHostLink) {
     if (this.closed) return;
     if (this.host && this.host !== host) {
+      this.projectInstructionRoots.clear();
       for (const controller of this.localToolControllers.values()) controller.abort();
       for (const request of this.delegationApprovals.values()) this.delegationApprovalCanceller?.(request);
     }
@@ -423,6 +424,7 @@ export class AgentSidecar {
       this.writeToChild(payload);
     });
     this.unsubscribeHostExit = host.onExit(() => {
+      this.projectInstructionRoots.clear();
       for (const request of this.delegationApprovals.values()) this.delegationApprovalCanceller?.(request);
       for (const controller of this.localToolControllers.values()) controller.abort();
       this.unsubscribeHost?.();
@@ -535,6 +537,9 @@ export class AgentSidecar {
           );
         }
         const params = (msg.params?.params ?? {}) as Record<string, unknown>;
+        if (method === "todos.get" && (typeof params.sessionId !== "string" || !this.projectInstructionRoots.has(params.sessionId))) {
+          throw Object.assign(new Error("Checklist read requires a host-bound session"), { code: -32601 });
+        }
         const requestedToolName = String(params.toolName ?? "");
         const planLocalTool =
           requestedToolName === "Skill" ||

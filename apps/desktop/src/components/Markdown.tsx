@@ -27,6 +27,7 @@ import {
   emptyMarkdownBlockCache,
   markdownRemarkPlugins,
 } from "../lib/markdown-blocks";
+import { deepSeekThinkingEnd, remarkDeepSeekThinkingEnd } from "../lib/deepseek-thinking-marker";
 import {
   MAX_STREAMING_MARKDOWN_TAIL_CODE_UNITS,
   MAX_SYNC_MARKDOWN_CODE_UNITS,
@@ -910,6 +911,7 @@ const Block = memo(function MarkdownBlock({
   workspaceRoot,
   baseDir,
   fileDirectory,
+  deepSeekAnswer,
 }: {
   raw: string;
   originalRaw: string;
@@ -918,6 +920,7 @@ const Block = memo(function MarkdownBlock({
   workspaceRoot?: string | null;
   baseDir?: string;
   fileDirectory?: string;
+  deepSeekAnswer: boolean;
 }) {
   const context = useMemo(
     () => ({
@@ -930,13 +933,14 @@ const Block = memo(function MarkdownBlock({
   const remarkPlugins = useMemo(
     () => [
       ...staticRemarkPlugins,
+      ...(deepSeekAnswer ? [remarkDeepSeekThinkingEnd] : []),
       // `originalRaw` still carries the TeX `\[ … \]` delimiters so the
       // bracket-display plugin can promote them to display math after
       // remark-math parses the pre-normalized `$$ … $$` form.
       remarkLatexBracketDisplay(originalRaw),
       remarkChatFileLinks(workspaceRoot, baseDir, fileDirectory),
     ],
-    [originalRaw, workspaceRoot, baseDir, fileDirectory],
+    [originalRaw, workspaceRoot, baseDir, fileDirectory, deepSeekAnswer],
   );
   const positionedRehypePlugins = useMemo(
     () => [...rehypePlugins!, [rehypeSourcePositions, { offset: sourceOffset }]] as Options["rehypePlugins"],
@@ -975,11 +979,13 @@ export const Markdown = memo(function Markdown({
   renderDiagrams = true,
   baseDir,
   streaming = false,
+  deepSeekAnswer = false,
 }: {
   source: string;
   renderDiagrams?: boolean;
   /** True only while an assistant message is still receiving text. */
   streaming?: boolean;
+  deepSeekAnswer?: boolean;
   /** Workspace-relative directory of the source file, for `./` / `../` links. */
   baseDir?: string;
 }) {
@@ -1057,6 +1063,7 @@ export const Markdown = memo(function Markdown({
               workspaceRoot={workspaceRoot}
               baseDir={baseDir}
               fileDirectory={fileDirectories[i]}
+              deepSeekAnswer={deepSeekAnswer && raw.includes(deepSeekThinkingEnd)}
             />
           );
         })}

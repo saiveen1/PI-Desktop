@@ -65,9 +65,11 @@ export class UnfinishedTodoContinuation {
     let snapshot: SessionTodoSnapshot;
     try {
       snapshot = await this.host.call<SessionTodoSnapshot>("todos.get", { sessionId: this.sessionId });
-    } catch {
-      // Checklist lookup is optional; a failed read must not turn a valid reply into an error.
-      console.error(`[runtime] unfinished checklist continuation skipped: todos.get failed (session=${this.sessionId})`);
+    } catch (error) {
+      // Host failure details may contain private text; retain only the numeric wire code.
+      const code = error instanceof Error && "code" in error ? error.code : undefined;
+      const suffix = typeof code === "number" && Number.isSafeInteger(code) ? `, rpcCode=${code}` : "";
+      console.error(`[runtime] unfinished checklist continuation skipped: todos.get failed (session=${this.sessionId}${suffix})`);
       return;
     }
     if (generation !== this.generation || signal?.aborted || !this.enabled || !canContinue()) return;

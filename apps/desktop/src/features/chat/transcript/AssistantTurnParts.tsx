@@ -15,6 +15,7 @@ import { AssistantErrorMessage } from "./shared";
 import { useRenderBlocks, type RenderBlock } from "./render-blocks";
 import { earlyEndAdvisory } from "../../../lib/output-guard-advisory";
 import { splitDsmlProtocolTail } from "../../../lib/dsml-protocol-tail";
+import { hasRepeatedDeepSeekThinkingEnd } from "../../../lib/deepseek-thinking-marker";
 import { useDisclosureAnchorNotifier } from "../../../lib/disclosure-anchor-context";
 
 /** Message bubble that optionally applies smooth text release. */
@@ -33,6 +34,8 @@ const SmoothMessageBubble = memo(function SmoothMessageBubble({ message, streami
   // A live suffix may still become prose. Only scan settled text, never smooth-release frames.
   const protocol = useMemo(() => streaming ? undefined : splitDsmlProtocolTail(message.content || ""),
     [streaming, message.content]);
+  const model = message.responseModelId ?? message.modelId;
+  const deepSeekAnswer = useMemo(() => hasRepeatedDeepSeekThinkingEnd(model, message.content), [model, message.content]);
   const displayContent = useSmoothText(protocol?.prose ?? (message.content || ""), streaming, enabled);
   const showCursor = streaming && enabled && Boolean(displayContent);
   const genUi = useGenUiSplit(displayContent, streaming, inlineVisualizations);
@@ -52,7 +55,7 @@ const SmoothMessageBubble = memo(function SmoothMessageBubble({ message, streami
       className={`message-bubble assistant-turn-fragment${streaming ? " streaming" : ""}${showCursor ? " smooth-cursor" : ""}`}
       data-message-id={message.id}
     >
-      {genUi.content ? <TranscriptProse source={genUi.content} streaming={streaming} /> : null}
+      {genUi.content ? <TranscriptProse source={genUi.content} streaming={streaming} deepSeekAnswer={deepSeekAnswer} /> : null}
       <GenUiCards references={genUi.references} sessionId={sessionId} remote={remote} />
       {message.outputTruncated ? (
         <p className="message-output-notice" role="status">{t("chat.outputTruncated")}</p>

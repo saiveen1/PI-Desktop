@@ -664,7 +664,8 @@ execution. Empty, completed, and cancelled lists do not trigger it. Failed or
 aborted responses, truncated output, a failed latest tool batch, explicit Stop,
 pending steering, pending recovery, and running delegates keep their existing
 lifecycle. The runtime rechecks cancellation and turn ownership after the Host
-read; a failed read logs a diagnostic and preserves normal completion. If
+read; a failed read logs a diagnostic (numeric RPC code when available, never
+raw Host error details) and preserves normal completion. If
 context compaction is needed before the continuation, it retains the active
 user task. No completed tool batch is replayed and only the final loop exit
 emits `agent_end`.

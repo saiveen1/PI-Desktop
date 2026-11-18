@@ -176,16 +176,16 @@ describe("unfinished checklist continuation user path", () => {
     } finally { await f.runtime.dispose(); }
   });
 
-  it("preserves normal completion and logs a safe diagnostic when the Host read fails", async () => {
+  it.each([[-32601, ", rpcCode=-32601"], ["private fixture detail", ""]] as const)("logs only numeric Host codes (%s) without changing completion", async (code, suffix) => {
     const diagnostic = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const f = fixture([discover, write(), { text: "Progress saved." }]);
-    f.setReadSnapshot(async () => { throw new Error("private fixture detail"); });
+    f.setReadSnapshot(async () => { throw Object.assign(new Error("private fixture detail"), { code }); });
     try {
       await f.runtime.prompt("Finish the work.");
       expect(f.requests).toHaveLength(3);
       expect(f.events.filter((event) => event.event.type === "agent_end")).toHaveLength(1);
       expect(f.events.some((event) => event.event.type === "error")).toBe(false);
-      expect(diagnostic).toHaveBeenCalledWith(expect.stringContaining("todos.get failed"));
+      expect(diagnostic).toHaveBeenCalledWith(expect.stringContaining(`todos.get failed (session=continuation-fixture${suffix})`));
       expect(JSON.stringify(diagnostic.mock.calls)).not.toContain("private fixture detail");
     } finally {
       diagnostic.mockRestore();

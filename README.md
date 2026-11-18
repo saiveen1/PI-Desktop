@@ -52,7 +52,8 @@ This edition strengthens the existing framework rather than replacing it.
   can warn when an ordinary Agent promises its next action but stops without a
   tool call, or continue within a selected shared correction allowance. Checklist
   and printed-tool-call corrections use the same ceiling rather than stacking
-  fresh budgets. Normal checks add no model context or reviewer call; actual
+  fresh budgets. The checklist check reads the host-bound session, even when it
+  has no project. Normal checks add no model context or reviewer call; actual
   continuations may add usage and never guarantee completion.
 - **Optional conversation Observer Guard.** Enable Observe or Guard beside the
   composer controls, with an independent model and effort chosen in Behavior
@@ -67,6 +68,8 @@ This edition strengthens the existing framework rather than replacing it.
   Behavior settings expose switches and thresholds; partial results are retained
   without automatic replay. Code and structured samples are excluded from prose
   comparison. This is not a general judge of repetitive prose or answer quality.
+  For DeepSeek replies, the transcript also hides repeated bare thinking-end
+  markers in prose without changing the stored answer or provider replay.
 - **Explicit waiting and context control.** Main-session model requests gain a
   configurable transport-idle policy rather than treating every output pause as
   a broken request to replay. Local idle termination leaves retry to the user.

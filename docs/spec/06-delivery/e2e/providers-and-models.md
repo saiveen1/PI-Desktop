@@ -741,6 +741,16 @@ with only Host API controlled. Running-turn configuration remains queued.
   [diagnosis](../../../maintenance/responses-terminal-content-loss.md).
 
 
+## E2E-PROVIDER-deepseek-thinking-delimiters: Repeated answer delimiters are display-only
+
+- **Steps**: Render a streaming DeepSeek Responses answer with ten exact
+  `<｜end▁of▁thinking｜>` tokens in ordinary prose; reopen the saved answer.
+  Repeat with quoted and code examples, a user message, and a different model.
+- **Expected**: Only bare repeated delimiters in the DeepSeek answer disappear.
+  The surrounding answer, original message content and replay data remain intact.
+- **Coverage**: `apps/desktop/test/deepseek-thinking-marker-rendering.test.mjs`
+  exercises live and historical renderer inputs; not a live-provider or Electron run.
+
 ## E2E-PROVIDER-deepseek-aggregator-thinking: DeepSeek thinking replay includes reasoning_content on aggregator endpoints
 
 - **Preconditions**: An OpenAI-compatible provider whose base URL is not

@@ -982,6 +982,14 @@ and quotations remain visible as authored. A fragment is not a failed tool row:
 show same-response tool-use evidence separately from the fragment, and defer the
 actual outcome to the tool card. Keep unrelated assistant errors visible.
 
+For a recorded DeepSeek-family assistant answer containing repeated literal
+`<｜end▁of▁thinking｜>` delimiters, omit the bare delimiters from ordinary
+Markdown paragraphs in live and restored transcripts. Keep surrounding text in
+order; never infer a reasoning boundary. Code, quotations, a single literal
+mention, and other models' and users' text stay visible. This display rule uses
+the served model ID when available, otherwise the requested model ID; it does
+not rewrite source text, copy/export, reasoning, or provider replay data.
+
 A disclosure owns a stretch of ordinary activity, including `Bash` run rows.
 Without a structured AskTool exchange the turn keeps a single top-level
 disclosure, including a Bash-only turn; no run row is a sibling of it.

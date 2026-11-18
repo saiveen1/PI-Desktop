@@ -46,7 +46,39 @@ it.each(["modes.completeStage", "modes.gateResult"])("forwards %s through real s
   expect(invoke).toHaveBeenCalledExactlyOnceWith(method, params);
 });
 
-it.each(["modes.start", "modes.control", "modes.update", "modes.resolve", "modes.settleTurn", "provider.get"])(
+it.each(["/project", undefined])("reads only a host-bound checklist (project: %s)", async (root) => {
+  const params = { sessionId: "session-1" };
+  const snapshot = { ...params, revision: 1, todos: [{ content: "Verify", status: "pending", priority: "high" }] };
+  const invoke = vi.fn(async () => snapshot);
+  const sidecar = proxy(invoke);
+  const read = (input: unknown) => sidecar.call("probe", { method: "todos.get", params: input });
+  sidecar.setProjectInstructionRoot(params.sessionId, root);
+  expect(await read(params)).toEqual(snapshot);
+  await expect(read({ sessionId: "unbound" })).rejects.toMatchObject({ code: -32601 });
+  await expect(read({})).rejects.toMatchObject({ code: -32601 });
+  sidecar.clearProjectInstructionRoot(params.sessionId);
+  await expect(read(params)).rejects.toMatchObject({ code: -32601 });
+  expect(invoke).toHaveBeenCalledExactlyOnceWith("todos.get", params);
+});
+
+it.each([false, true])("drops checklist bindings across Host replacement (exited: %s)", async (exited) => {
+  const sidecar = proxy(async () => ({}));
+  let exit = () => {};
+  const call = vi.fn(async <T,>(): Promise<T> => { throw new Error("unexpected forward"); });
+  const host: SidecarHostLink = {
+    call,
+    onNotification: () => () => {},
+    onExit: (handler) => { exit = () => handler({ code: 1, signal: null, intentional: false }); return () => {}; },
+  };
+  sidecar.setHost(host);
+  sidecar.setProjectInstructionRoot("session-1");
+  if (exited) exit();
+  sidecar.setHost({ ...host });
+  await expect(sidecar.call("probe", { method: "todos.get", params: { sessionId: "session-1" } })).rejects.toMatchObject({ code: -32601 });
+  expect(call).not.toHaveBeenCalled();
+});
+
+it.each(["todos.write", "modes.start", "modes.control", "modes.update", "modes.resolve", "modes.settleTurn", "provider.get"])(
   "does not expose %s to model-directed sidecar code",
   async (method) => {
     const invoke = vi.fn(async () => ({}));
