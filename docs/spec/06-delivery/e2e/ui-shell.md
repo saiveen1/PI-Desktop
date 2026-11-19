@@ -2597,7 +2597,7 @@
 - **Status**: Unit-covered (`interaction-polish.test.mjs`); rendered scenario
   pending
 
-## E2E-159: A long transcript keeps a bounded mounted window
+## E2E-159: Long transcript history continues on demand and releases on return
 
 - **Preconditions**: PI-Desktop is open on a session whose transcript is
   substantially longer than one `session.get` page (several hundred messages,
@@ -2609,11 +2609,15 @@
   2. Record the renderer's transcript row count and heap usage, then scroll
      upward continuously to the oldest loaded message and past it so older pages
      are fetched.
-  3. At each point where the view stops advancing, confirm it resumes: earlier
-     rows appear without the rows under the cursor being pushed down, and the
-     earlier-messages indicator appears only when a page is actually fetched.
-  4. Re-record the row count and heap usage after paging far back, then scroll
-     back to the bottom and send a new prompt.
+  3. Hold an older page response, reach the physical top, and wheel upward again.
+     Release the response. If still near the boundary, exactly one next step
+     runs without another wheel movement. Repeat while reversing direction or
+     returning an empty page; neither may trigger the queued step. Verify the
+     visible message retains its offset, and ordinary cached mounts do not show
+     the page-loading label.
+  4. Re-record row count, heap and process memory after paging far back. Use
+     **Scroll to bottom**; verify the mounted range shrinks and prior history
+     remains reachable. Send a new prompt and verify the tail remains pinned.
   5. While the answer streams, confirm following stays pinned and typing in the
      composer stays responsive. Scroll up mid-stream and confirm follow releases
      and the jump-to-latest pill appears.
@@ -2627,9 +2631,10 @@
      reachable in that same action. Wait after each action: no further automatic
      steps occur. Repeat actions until exhausted; real upward scrolling may
      prefetch. Confirm a short completed conversation still shows no rail.
-- **Expected**: Mounted transcript rows stay bounded by the window rather than
-  growing with how far back the user scrolled, so the recorded row count and heap
-  usage after paging far back stay close to the values recorded before it.
+- **Expected**: Initial and returned-to-latest transcript mounting stay within
+  the trailing budget; active reading may expand the range. Deep reading caches
+  beyond the retention limit are released on arrival without deleting history.
+  Process memory need not fall immediately after an unmount or cache release.
   Upward travel is continuous: growing the window and fetching a page both keep
   the viewport anchored to the row being read. Every minimap message dash jumps to
   a real row. Streaming stays smooth with the composer responsive, pinned-follow
@@ -2644,8 +2649,8 @@
   `03-runtime/04-data-storage.md`, ADR 0120, ADR 0127, ADR 0130, D108, D269
 - **Acceptance**: C (conversation), H (diagnostics), Quality
 - **Milestone**: M6+
-- **Status**: Window and minimap unit coverage plus isolated Chromium demand and
-  same-action reachability coverage (`transcript-history-demand.test.mjs`);
+- **Status**: Window and reading-cache unit coverage plus isolated Chromium demand,
+  continuation, reversal, and return-to-latest coverage (`transcript-history-demand.test.mjs`);
   the full desktop journey and low-memory Windows measurement remain pending.
 
 ## E2E-160: Dragging the window across displays keeps the dropped position

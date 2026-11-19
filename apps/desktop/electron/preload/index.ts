@@ -1,10 +1,18 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import { COMPOSER_FILE_SELECTION_CHANNEL, createComposerFileSelector } from "../composer-file-selection";
+import { PERFORMANCE_HEARTBEAT } from "../performance-heartbeat";
 import { IPC, IPC_WHITELIST } from "@pi-desktop/shared/protocol";
 // Narrow subpath, not the package barrel: the preload is a single bundled file
 // for a sandboxed renderer, so it must not pull the whole shared surface in.
 import { decodeStartupAnimationArgument } from "@pi-desktop/shared/startup-animation";
 
+if (process.isMainFrame) {
+  ipcRenderer.on(PERFORMANCE_HEARTBEAT, (_event, id: unknown) => {
+    if (typeof id === "number" && Number.isSafeInteger(id) && id > 0) {
+      ipcRenderer.send(PERFORMANCE_HEARTBEAT, id, document.visibilityState === "visible");
+    }
+  });
+}
 const LOCALE_ARGUMENT_PREFIX = "--pi-desktop-locale=";
 
 function readOsLocale(): string | undefined {

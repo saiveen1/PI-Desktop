@@ -243,6 +243,28 @@ for (const prepared of [false, true]) {
   });
 }
 
+test("latest releases a deep reading cache and older history remains reachable by its canonical cursor", async () => {
+  const live = [message("tail")];
+  const calls = [];
+  const r = reader(async (_id, options) => {
+    const end = options.messageBefore;
+    calls.push(end);
+    return page(Array.from({ length: 100 }, (_, i) => message(`row-${end - 100 + i}`)), {
+      messageStart: end - 100, messageEnd: end, hasMoreBefore: end > 100,
+    });
+  }, { messages: live, sessionHistory: { s: { messageStart: 500, hasMoreBefore: true } } });
+  for (let i = 0; i < 3; ++i) await r.loadTranscriptPage("s", "before");
+  assert.equal(r.visible().length, 301);
+  const arrive = r.prepareReturnToLatestTranscript("s");
+  assert.equal(r.visible().length, 301, "keep rows while the jump animates");
+  arrive();
+  assert.equal(r.view(), undefined);
+  assert.equal(r.get().messages, live);
+  await r.loadTranscriptPage("s", "before");
+  assert.deepEqual(calls, [500, 400, 300, 500]);
+  assert.equal(r.visible().length, 101);
+});
+
 test("search supersedes an ordinary page and return-to-latest cancels historical paging", async () => {
   const older = deferred();
   const later = deferred();

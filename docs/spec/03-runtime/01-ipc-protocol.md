@@ -15,6 +15,16 @@ developer mode and sender ownership, and are absent from external-agent
 invocation. There is no Host RPC/schema migration, MCP capability or implicit
 telemetry. See the [observability contract](09-logging-and-observability.md#on-demand-performance-diagnostics).
 
+The automatic incident recorder is separate from these developer-only
+invokes. `pi-desktop/internal/performance-heartbeat` is private to Main and
+the sandboxed main preload and is not in the public preload allowlist. Main
+sends one numeric sequence at a time to the configured app top frame; that
+preload echoes only the sequence and a document-visibility boolean on the
+same channel. Main checks the live window, top-frame identity, app URL,
+outstanding sequence and payload shape. No capture input or arbitrary page
+access is granted. The diagnostics card uses the existing log-folder invoke
+to locate records; there is no incident report read/export IPC.
+
 ### Private native window snapping
 
 `window.enableNativeSnap` is Main-to-Host only: `{nativeHandle: string, ownerPid: number}`

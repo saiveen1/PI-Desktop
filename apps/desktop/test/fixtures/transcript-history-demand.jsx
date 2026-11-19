@@ -16,7 +16,7 @@ const root = createRoot(document.getElementById("root"));
 const scroller = () => document.querySelector('[data-scroll-owner="transcript"]');
 const message = (id) => ({ id, role: "user", status: "complete", content: id, createdAt: "2026-01-01T00:00:00Z" });
 const frame = () => new Promise(resolve => requestAnimationFrame(resolve));
-let sessionId, messages, calls, render, initialBookmark;
+let sessionId, messages, calls, render, initialBookmark, pageGate;
 
 async function until(condition, label) {
   const deadline = performance.now() + 4000;
@@ -38,13 +38,16 @@ window.historyDemand = {
   async open(name) {
     sessionId = name;
     calls = 0;
-    messages = Array.from({ length: name === "underfilled" ? 1 : 8 }, (_, i) => message(`row-${i}`));
+    pageGate = name.startsWith("delayed") ? Promise.withResolvers() : null;
+    messages = Array.from({ length: name === "underfilled" ? 1 : name === "deep" ? 101 : 8 }, (_, i) => message(`row-${i}`));
     if (name === "restored") {
       initialBookmark = { pinned: false, messageId: "row-0", offset: -8, scrollTop: 36, windowSize: 48 };
       sessionReadingState(name).position = initialBookmark;
     }
     const older = async () => {
       ++calls;
+      if (calls === 1 && pageGate) await pageGate.promise;
+      if (name === "delayed-empty" && calls === 1) return;
       messages = [message(`older-${calls}`), ...messages];
       render();
     };
@@ -53,7 +56,8 @@ window.historyDemand = {
         isRunning={false} onLoadOlder={older} />
     </I18nextProvider>));
     render();
-    await until(() => scroller()?.querySelector('[data-message-id="row-0"]') &&
+    const firstVisible = name === "deep" ? "row-100" : "row-0";
+    await until(() => scroller()?.querySelector(`[data-message-id="${firstVisible}"]`) &&
       !document.querySelector('[data-transcript-settling="true"]'), "transcript did not mount and settle");
     return settle();
   },
@@ -74,6 +78,20 @@ window.historyDemand = {
   },
   async afterPage(expected) {
     await until(() => scroller().querySelector(`[data-message-id="older-${expected}"]`), `Page ${expected} did not render`);
+    return settle();
+  },
+  async atBlockedTop() {
+    await until(() => calls === 1 && scroller().scrollTop <= 1, "first page did not stall at the top");
+    return settle();
+  },
+  releasePage() { pageGate.resolve(); },
+  state: settle,
+  async jumpLatest() {
+    const button = document.querySelector('.jump-latest-btn');
+    if (!button) throw Error('No jump-to-latest control');
+    button.click();
+    await until(() => Math.abs(scroller().scrollTop + scroller().clientHeight - scroller().scrollHeight) <= 1,
+      'jump did not reach latest');
     return settle();
   },
   wheelPoint() {

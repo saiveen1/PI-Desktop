@@ -128,6 +128,41 @@ test('transcript history demand and inline reply editing', { timeout: 30000, ski
       assert.equal(after.calls, 1);
       assert.equal(after.rows, before.rows + 1);
     });
+    for (const mode of ['continue', 'reverse', 'empty']) await t.test(`upward input during a held page: ${mode}`, async () => {
+      const before = await probe(`open("delayed-${mode}")`);
+      const point = await probe('wheelPoint()');
+      const wheel = deltaY => send('Input.dispatchMouseEvent', { type: 'mouseWheel', ...point, deltaX: 0, deltaY });
+      await wheel(-before.maxTop);
+      await probe('atBlockedTop()');
+      await wheel(-500);
+      assert.equal((await probe('atBlockedTop()')).calls, 1, 'page must stay single-flight');
+      if (mode === 'reverse') await wheel(160);
+      await probe('releasePage()');
+      const after = await probe(mode === 'empty' ? 'state()' : `afterPage(${mode === 'continue' ? 2 : 1})`);
+      assert.equal(after.calls, mode === 'continue' ? 2 : 1, 'stationary reader must not drain any further');
+      if (mode === 'empty') {
+        assert.equal(after.rows, before.rows);
+        await wheel(-500);
+        assert.equal((await probe('afterPage(2)')).calls, 2, 'new upward input may retry an empty page');
+      }
+    });
+    await t.test('return to latest releases expanded history without losing access', async () => {
+      const before = await probe('open("deep")');
+      assert.equal(before.rows, 61);
+      const point = await probe('wheelPoint()');
+      const top = deltaY => send('Input.dispatchMouseEvent', { type: 'mouseWheel', ...point, deltaX: 0, deltaY });
+      await top(-before.maxTop);
+      const expanded = await probe('state()');
+      assert.equal(expanded.rows, 101);
+      assert.equal(expanded.calls, 0, 'cached rows expand before IO');
+      const latest = await probe('jumpLatest()');
+      assert.equal(latest.rows, 61);
+      assert.equal(latest.top, latest.maxTop);
+      await top(-latest.maxTop);
+      const reopened = await probe('state()');
+      assert.equal(reopened.rows, 101);
+      assert.equal(reopened.calls, 0);
+    });
     await t.test('Edit reply saves each thinking choice explicitly, including unchanged text', async () => {
       const result = await evaluate('exerciseReplyEdit()');
       const original = '  **Final reply**\n';

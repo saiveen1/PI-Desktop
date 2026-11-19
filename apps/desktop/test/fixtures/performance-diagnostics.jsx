@@ -60,6 +60,11 @@ api.performanceDiagnostics = (...args) => perform(...args);
 api.previewPerformanceReport = id => perform("preview", id);
 api.exportPerformanceReport = id => perform("save", id);
 api.getToolObservations = async () => ({ since: "demo", generatedAt: "demo", total: 0, groups: [], counts: {}, coverage: { filesRead: 0, malformedLines: 0, ignoredLegacyRecords: 0, readErrors: 0, limited: false } });
+let incidentFolders = 0;
+api.openLogs = async () => {
+  if (++incidentFolders === 1) throw Error("fixture secret should not appear");
+  return { ok: true };
+};
 useAppStore.setState({ settings: { developerMode: false } });
 let setInfo;
 function Harness() {
@@ -99,6 +104,12 @@ window.performanceProbe = async stage => {
     check(cells[0] === "0" && cells[1] === "1" && cells[2] === i18n.t("performanceDiagnostics.unavailable"), "Zero/null or KiB conversion incorrect");
     check(text().includes(i18n.t("performanceDiagnostics.truncated")), "Missing truncation notice");
     check(calls.filter(call => call[0] === "snapshot").every(call => call.length === 1), "Snapshot sent an id");
+    check(text().includes("app/performance.log"), "Incident log location missing");
+    await click(button("openIncidentLogs"));
+    check(text().includes(i18n.t("performanceDiagnostics.incidentLogsError")) && !text().includes("fixture secret"), "Log-folder error missing or unsanitized");
+    await click(button("openIncidentLogs"));
+    check(incidentFolders === 2 && !text().includes(i18n.t("performanceDiagnostics.incidentLogsError")), "Log-folder retry did not clear the error");
+    check(calls.every(([kind]) => kind === "snapshot"), "Opening incident logs started an opt-in capture");
   } else if (stage === "record-and-save") {
     failure = "start"; await click(button("start"));
     check(document.querySelector('.performance-error[role="alert"]') && button("start"), "Start failure/retry missing");

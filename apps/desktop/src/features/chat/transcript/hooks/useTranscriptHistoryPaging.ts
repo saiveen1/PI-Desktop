@@ -17,6 +17,7 @@ type Hold = {
   point?: TranscriptTextAnchor;
   settled: boolean;
   stableFrames: number;
+  resumeEarlier?: boolean;
   page: boolean;
   windowSize: number;
   sourceHead?: string;
@@ -51,7 +52,7 @@ export function useTranscriptHistoryPaging({ scrollRef, contentRef, visible, sou
   canRetain: (paging: boolean) => boolean;
   onStart: () => void;
   onPosition: (top: number) => void;
-  onSettled: () => void;
+  onSettled: (resumeEarlier: boolean) => void;
 }) {
   const holdRef = useRef<Hold | null>(null);
   // Request ownership ends after settlement; reading ownership lasts until
@@ -101,6 +102,10 @@ export function useTranscriptHistoryPaging({ scrollRef, contentRef, visible, sou
       height: scroller.scrollHeight, top: scroller.scrollTop, viewport: scroller.clientHeight, scroller };
   }, [contentRef, scrollRef]);
   const isHeld = useCallback(() => holdRef.current !== null, []);
+  const setEarlierIntent = useCallback((resume: boolean) => {
+    const hold = holdRef.current;
+    if (hold) hold.resumeEarlier = resume;
+  }, []);
   const track = useCallback((windowSize = 0) => {
     let held = readingHold();
     if (!held && callbacks.current.canRetain(false)) {
@@ -201,8 +206,9 @@ export function useTranscriptHistoryPaging({ scrollRef, contentRef, visible, sou
     if (!visible) { cancel(); return; }
     restore();
     const hold = holdRef.current;
-    if (!hold) return;
-    if (frameRef.current) return;
+    // Scroll, resize and commits already maintain the anchor during IO. Only
+    // measure consecutive frames once a result can actually settle.
+    if (!hold?.settled || frameRef.current) return;
     const align = () => {
       frameRef.current = 0;
       if (holdRef.current !== hold) return;
@@ -218,7 +224,7 @@ export function useTranscriptHistoryPaging({ scrollRef, contentRef, visible, sou
         dropHold();
         readingRef.current = hold;
         setPhase("idle");
-        callbacks.current.onSettled();
+        callbacks.current.onSettled(Boolean(hold.resumeEarlier && !autoBlockedRef.current));
         return;
       }
       frameRef.current = requestAnimationFrame(align);
@@ -264,5 +270,5 @@ export function useTranscriptHistoryPaging({ scrollRef, contentRef, visible, sou
 
   useLayoutEffect(() => () => dropHold(), [dropHold]);
 
-  return { loadingOlder: phase === "page", pending: phase !== "idle", run, restore, isHeld, track, cancel, retry, readLatency };
+  return { loadingOlder: phase === "page", pending: phase !== "idle", run, restore, isHeld, track, cancel, retry, readLatency, setEarlierIntent };
 }

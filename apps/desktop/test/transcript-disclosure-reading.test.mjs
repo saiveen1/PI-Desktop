@@ -101,7 +101,7 @@ test("holding a disclosure leaves follow without a delayed grab-back", () => {
   // on real input or an explicit re-pin, never by taking the bottom back later.
   assert.match(
     transcript,
-    /const leaveFollow = useCallback\(\(\) => \{\s*cancelReadingPosition\(\);\s*cancelFollowScroll\(\);\s*pinnedRef\.current = false;\s*setShowJump\(true\);/,
+    /const leaveFollow = useCallback\(\(\) => \{\s*seekingEarlierRef\.current = false;\s*cancelReadingPosition\(\);\s*cancelFollowScroll\(\);\s*pinnedRef\.current = false;\s*setShowJump\(true\);/,
   );
   assert.match(transcript,
     /const releaseFollow = useCallback\(\(\) => \{\s*latestNavigation\.cancel\(\);\s*stopSmoothScroll\(scrollRef\.current\);\s*leaveFollow\(\);/);
@@ -126,15 +126,15 @@ test("real input, a new turn and every navigation drop the held position", () =>
   );
   assert.match(
     transcript,
-    /releaseDisclosureAnchor\(\);\s*cancelFollowScroll\(\);\s*pinnedRef\.current = true;\s*setShowJump\(false\);\s*scrollToBottom\(\);/,
+    /releaseDisclosureAnchor\(\);\s*cancelFollowScroll\(\);\s*pinnedRef\.current = true;\s*setWindowSize\(TRANSCRIPT_WINDOW_MIN\);\s*setShowJump\(false\);\s*scrollToBottom\(\);/,
   );
   assert.match(
     transcript,
-    /const jumpToLatest = useCallback\(\(arrive\?: \(\) => void\) => \{\s*(?:\/\/[^\n]*\n\s*)*lastScrollGestureAtRef\.current = -Infinity;\s*cancelReadingPosition\(\);\s*cancelHistoryPaging\(\);\s*cancelFollowScroll\(\);\s*releaseDisclosureAnchor\(\);\s*pinnedRef\.current = true;/,
+    /const jumpToLatest = useCallback\(\(arrive\?: \(\) => void\) => \{\s*(?:\/\/[^\n]*\n\s*)*seekingEarlierRef\.current = false;\s*lastScrollGestureAtRef\.current = -Infinity;\s*cancelReadingPosition\(\);\s*cancelHistoryPaging\(\);\s*cancelFollowScroll\(\);\s*releaseDisclosureAnchor\(\);\s*pinnedRef\.current = true;/,
   );
   assert.match(
     transcript,
-    /if \(becameHidden\) \{\s*releaseDisclosureAnchor\(\);/,
+    /if \(becameHidden\) \{\s*seekingEarlierRef\.current = false;\s*lastScrollGestureAtRef\.current = -Infinity;\s*releaseDisclosureAnchor\(\);/,
   );
 });
 

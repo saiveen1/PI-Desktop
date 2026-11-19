@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import type { PerformanceSnapshot } from "@pi-desktop/shared";
 import { Badge, Button } from "../../components/ui";
 import { SettingsCard } from "./primitives";
+import { api } from "../../lib/api";
 import { usePerformanceDiagnostics } from "./use-performance-diagnostics";
 import "./performance-diagnostics.css";
 
@@ -53,6 +54,7 @@ function ProcessTable({ snapshot }: { snapshot: PerformanceSnapshot | null }) {
 function DiagnosticsContent() {
   const { t, i18n } = useTranslation();
   const { data, busy, error, preview, saveResult, request } = usePerformanceDiagnostics();
+  const [logError, setLogError] = useState(false);
   const stopRef = useRef<HTMLButtonElement>(null);
   const previewRef = useRef<HTMLButtonElement>(null);
   const nextFocus = useRef<"stop" | "preview" | null>(null);
@@ -79,6 +81,14 @@ function DiagnosticsContent() {
     <div className="performance-content">
       <p className="performance-note">{t("performanceDiagnostics.privacy")}</p>
       <p className="performance-note">{t("performanceDiagnostics.recordingHint")}</p>
+      <p className="performance-note">{t("performanceDiagnostics.incidentHint")}</p>
+      <div className="performance-actions">
+        <Button variant="secondary" onClick={() => {
+          setLogError(false);
+          void api.openLogs().catch(() => setLogError(true));
+        }}>{t("performanceDiagnostics.openIncidentLogs")}</Button>
+      </div>
+      {logError ? <p role="alert">{t("performanceDiagnostics.incidentLogsError")}</p> : null}
       {!data && !error ? <p role="status">{t("performanceDiagnostics.loading")}</p> : null}
       {busy && busy !== "snapshot" && busy !== "save" ? <p role="status">{t("performanceDiagnostics.working")}</p> : null}
       {error ? <div className="performance-error" role="alert">

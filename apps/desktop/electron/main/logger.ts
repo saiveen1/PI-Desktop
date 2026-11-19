@@ -26,6 +26,7 @@ export type LogCategory =
   | "persistence"
   | "updater"
   | "diagnostics"
+  | "performance"
   | "runtime"
 
 export type LogLevel = "debug" | "info" | "warn" | "error";

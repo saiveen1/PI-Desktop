@@ -2639,9 +2639,10 @@ Renderer: `apps/desktop/src/components/Markdown.tsx` + `apps/desktop/src/lib/shi
   loaded history, not all of it. User demand escalates in two stages — mount more
   of what is already loaded, and fetch an older page only once the window covers
   all of it. A fetched page becomes reachable in the same user action. Both stages
-  add height above the reading position, so
-  both take the same pre-paint scroll anchor. The window resets per session, and
-  the spacer stays scoped to the first commit: a permanent spacer under the
+  add height above the reading position, so both take the same pre-paint scroll
+  anchor. The per-pane budget can grow during historical reading; arrival at the
+  latest message and new live turns restore the 60-entry trailing budget. The
+  spacer stays scoped to the first commit: a permanent spacer under the
   steady-state window would make the user scroll a blank viewport to reach the
   growth trigger. `content-visibility` alone does not bound this cost — it skips
   layout and paint for offscreen rows while retaining their React trees, Markdown

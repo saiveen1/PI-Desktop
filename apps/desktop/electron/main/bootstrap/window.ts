@@ -1,7 +1,8 @@
-import { app, BrowserWindow, nativeTheme, screen, type Tray } from "electron";
+import { app, BrowserWindow, nativeTheme, powerMonitor, screen, type Tray } from "electron";
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { getModuleDirectory } from "../module-path";
 import {
   APP_NAME,
@@ -56,6 +57,7 @@ import {
   mainWindowBackgroundOptions,
 } from "../window-background";
 import { recoverRendererAfterGone } from "../renderer-recovery";
+import { installPerformanceIncidentRecorder } from "../performance/incident-recorder";
 
 function windowsIconPath(): string | undefined {
   if (process.platform !== "win32") return undefined;
@@ -582,12 +584,19 @@ export async function createWindow({
     return { action: "deny" };
   });
   let windowCloseAccepted = false;
+  const rendererFile = join(getModuleDirectory(import.meta.url), "../renderer/index.html");
+  const incidents = installPerformanceIncidentRecorder({ window, logger, power: powerMonitor,
+    getMetrics: () => app.getAppMetrics(),
+    expectedUrl: new URL(process.env.ELECTRON_RENDERER_URL || pathToFileURL(rendererFile).href).href.split("#", 1)[0],
+    isActive: () => windowState.mainWindow === window && !windowState.quitting && !windowCloseAccepted,
+  });
   window.webContents.on("did-start-loading", () => {
     browserHost.detachPresentation();
     windowState.notificationViewingSessionId = null;
     if (windowState.mainWindow === window) resetMenuRendererReady(window);
   });
   window.webContents.on("render-process-gone", (_event, details) => {
+    incidents.rendererGone(details);
     windowState.notificationViewingSessionId = null;
     recoverRendererAfterGone(details, {
       isCurrentWindow: windowState.mainWindow === window,
@@ -2287,8 +2296,6 @@ export async function createWindow({
       window.webContents.openDevTools({ mode: "detach" });
     }
   } else {
-    await window.loadFile(
-      join(getModuleDirectory(import.meta.url), "../renderer/index.html"),
-    );
+    await window.loadFile(rendererFile);
   }
 }

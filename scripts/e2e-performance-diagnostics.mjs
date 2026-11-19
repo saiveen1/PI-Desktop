@@ -16,10 +16,13 @@ const source = join(root, "apps/desktop");
 const runFile = promisify(execFile);
 
 export async function runFixture(dir) {
-  const { app, BrowserWindow, ipcMain } = await import("electron");
+  const { app, BrowserWindow, ipcMain, powerMonitor } = await import("electron");
   app.setPath("userData", join(dir, "profile"));
   register(pathToFileURL(join(source, "test/helpers/ts-import-hooks.mjs")));
   const { registerDesktopPerformance } = await import(pathToFileURL(join(source, "electron/main/performance/desktop-performance.ts")));
+  const { installPerformanceIncidentRecorder } = await import(pathToFileURL(join(source, "electron/main/performance/incident-recorder.ts")));
+  const { PERFORMANCE_HEARTBEAT } = await import(pathToFileURL(join(source, "electron/performance-heartbeat.ts")));
+  const { Logger } = await import(pathToFileURL(join(source, "electron/main/logger.ts")));
   const children = [];
   const watchdog = setTimeout(() => { for (const child of children) child.stdin.end(); app.exit(2); }, 18_000);
   try {
@@ -66,7 +69,28 @@ export async function runFixture(dir) {
       }
     }
     mode = false; clear(); assert.equal(await window.webContents.executeJavaScript("window.denied()"), true);
-    await writeFile(join(dir, "result.json"), JSON.stringify({ ok: true, samples: report.processes.length, pulses: report.ui.length }));
+    const incidents = installPerformanceIncidentRecorder({ window, isActive: () => true,
+      expectedUrl: pathToFileURL(join(dir, "page.html")).href, power: powerMonitor,
+      logger: new Logger(dir, "warn", { mirrorConsole: false }), getMetrics: () => app.getAppMetrics() });
+    const heartbeat = once(window.webContents.ipc, PERFORMANCE_HEARTBEAT);
+    window.showInactive();
+    const [reply, sequence, visible] = await heartbeat;
+    assert.equal(reply.senderFrame, window.webContents.mainFrame);
+    assert.ok(Number.isSafeInteger(sequence) && visible);
+    const rendererPid = window.webContents.getOSProcessId();
+    const log = join(dir, "logs", "app", "performance.log");
+    await assert.rejects(readFile(log), { code: "ENOENT" });
+    window.webContents.on("render-process-gone", (_event, details) => incidents.rendererGone(details));
+    const rendererExit = once(window.webContents, "render-process-gone");
+    window.webContents.forcefullyCrashRenderer();
+    const [, details] = await rendererExit;
+    const incident = JSON.parse((await readFile(log, "utf8")).trim());
+    assert.equal(incident.event, "performance.incident.renderer.exit");
+    assert.equal(incident.data.reason, details.reason);
+    assert.equal(incident.data.rendererPid, rendererPid);
+    assert.ok(incident.data.samples.some(sample => sample.renderer?.pid === rendererPid));
+    await writeFile(join(dir, "result.json"), JSON.stringify({ ok: true, samples: report.processes.length,
+      pulses: report.ui.length, incidentSamples: incident.data.samples.length }));
   } catch (error) {
     await writeFile(join(dir, "result.json"), JSON.stringify({ ok: false, message: String(error?.stack ?? error) }));
   } finally {

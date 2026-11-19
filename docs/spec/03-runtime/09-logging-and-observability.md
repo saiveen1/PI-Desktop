@@ -9,7 +9,7 @@
 
 ### On-demand performance diagnostics
 
-Developer mode alone does not start a sampler. The expanded, visible Settings
+Developer mode alone does not start the on-demand sampler. The expanded, visible Settings
 panel requests single-flight process snapshots. A separate explicit capture is
 owned by Main and continues when the panel is closed. It aims for one process
 snapshot per second for 30 seconds, retains at most 64 process rows per snapshot
@@ -41,6 +41,42 @@ The JSON contains build/platform, peak measured processes, timing and
 coverage counts. It excludes transcript text, file paths, commands, credentials,
 URLs and window titles. Preview and explicitly save to share; nothing is
 uploaded, appended to a prompt or persisted automatically.
+
+### Automatic performance incidents
+
+Independent of developer mode and manual recording, Main keeps up to 15
+samples (roughly one every two seconds, at most 30 seconds of history at write
+time) for its own process and the primary-window renderer. Each has the PID,
+process start time, cumulative CPU seconds, and working set/private memory in
+KiB when available. An unavailable value is `null`. No routine samples go to disk.
+
+Main writes an incident for at least 500 ms of Main timer lateness or a
+validated visible-renderer heartbeat round trip of at least 500 ms. These
+timing hints are rate-limited to one per kind per 30 seconds. A single
+heartbeat may be outstanding, and hiding, minimizing or navigating the window
+invalidates it. Observed suspend/resume and clock discontinuities are excluded
+from delay attribution.
+Main also records native unresponsive/then-responsive transitions that started
+while the primary window was visible. An unexpected primary-renderer exit
+records the cached last known renderer PID, Electron reason and exit code
+before the existing recovery reload. Normal close, quit, and clean exit do
+not generate incident records.
+
+Open **Settings → Info → Developer → Performance diagnostics → Open
+diagnostics → Open logs folder**. Inspect `app/performance.log` in that
+folder (`<dataDir>/logs/app/performance.log`, plus `performance.1.log` and
+`performance.2.log` when rotated). The file starts at the first incident and
+uses standard app log rotation (5 MiB per file, plus the last appended record).
+Unlike manual captures, these records persist after a renderer or app restart.
+Events use the `performance.incident.*`
+prefix. They contain only fixed incident labels, timestamps, process IDs and
+numeric timing/resource counters, not transcript data, URLs, paths, window
+titles, or credentials. Nothing is uploaded.
+
+This is best-effort evidence, not a profiler or exact input-to-paint/heap/stack
+attribution. Short stalls between probes can be missed. A renderer may die
+before Main learns its PID, and a hard Main/OS kill or unwritable disk may
+prevent an incident write.
 
 ## 2. Log levels
 
@@ -126,6 +162,8 @@ The application categories are:
   entry with the Electron exit `reason` and `exitCode`, plus whether the current
   main window was reloaded. Clean exits are informational; unexpected exits are
   warnings.
+- `performance` — incident-only evidence for primary-window stalls and
+  unexpected exits (see [automatic performance incidents](#automatic-performance-incidents)).
 
 - `runtime` — host/sidecar lifecycle, uncategorized child output, and
   main-process `uncaughtException` / `unhandledRejection` records

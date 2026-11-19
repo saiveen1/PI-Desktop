@@ -28,6 +28,10 @@ type ReadingActions = Pick<
   | "restoreTranscriptReading"
 >;
 
+// A deep reading excursion is not an idle cache. Keep small, contiguous
+// revisits cheap without retaining an arbitrarily long prefix at the live tail.
+const MAX_RETAINED_OLDER_MESSAGES = 2 * TRANSCRIPT_PAGE_SIZE;
+
 /** Read workflows publish renderer views and never write the runtime/model cache. */
 export function createTranscriptReadingRuntime({ get, set }: StoreAccess, read: ReadSession) {
   let nextRequestId = 0;
@@ -67,9 +71,10 @@ export function createTranscriptReadingRuntime({ get, set }: StoreAccess, read: 
     if (!view) return;
     const live = state.activeSessionId === sessionId
       ? state.messages : (state.retainedTranscripts[sessionId] ?? EMPTY_TRANSCRIPT);
-    // Keep pages that extend the live tail, without joining across an unread
-    // search/bookmark gap or copying historical data into the model cache.
-    if (!view.hasMoreAfter && view.messages.findIndex(row => row.id === live[0]?.id) > 0) {
+    const olderCount = view.messages.findIndex(row => row.id === live[0]?.id);
+    // Never join across an unread gap or invent a cursor by slicing messages:
+    // the Host cursor counts physical records, not rendered message identities.
+    if (!view.hasMoreAfter && olderCount > 0 && olderCount <= MAX_RETAINED_OLDER_MESSAGES) {
       publish(sessionId, { ...view, focus: null, restored: false, loading: null });
     } else clearTranscriptView(sessionId);
   }

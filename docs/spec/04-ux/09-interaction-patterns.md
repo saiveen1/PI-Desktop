@@ -1718,14 +1718,21 @@ Project drag/drop follows these patterns:
   cached withheld rows before requesting a Host page — anchored to the actual
   visible message node and its viewport offset rather than total scroll-height
   growth or an enclosing answer/minimap group whose first id can change when
-  earlier fragments prepend. Existing message, page, mounted-window, snapshot,
-  and retained session-pane data caches remain unchanged, with no idle TTL or
-  session-data reclamation.
+  earlier fragments prepend. Returning to latest restores the 60-entry trailing
+  render budget (plus the tail) after the navigation lands. A contiguous prefix
+  of at most 200 older messages can stay cached for quick revisits; deeper ranges
+  are released and can be read again from the canonical cursor. Persistent history
+  and model context are unchanged. Starting a new live turn also shrinks the
+  mounted range. Active historical reading still expands on demand.
 - Opening, revealing, restoring a reading position or bookmark, and layout
   changes alone never extend older history. The top **Show earlier messages**
   button and minimap continuation each advance boundedly; a fetched page must
   become reachable in that same user action. A visible boundary or underfilled
   viewport cannot autonomously drain history while the reader is stationary.
+  If upward input reaches the physical edge during an active growth or read, the
+  transaction coalesces that demand into at most one continuation after a
+  successful settle, and only if the viewport remains near the edge. Reversing
+  direction, navigation, hiding the pane, or a failed/empty read cancels it.
 - Assistant prose may release its Markdown renderer outside a five-screen
   retention buffer and restore it inside a three-screen entry buffer, keeping
   measured-height message/prose shells. Measurements must match the current

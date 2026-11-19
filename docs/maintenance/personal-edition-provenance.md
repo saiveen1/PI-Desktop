@@ -13,6 +13,18 @@ Compared with locally recorded upstream `0ca811242`, those identifiers and
 context-exclusion behavior are absent; the underlying signed reasoning and
 function-call replay remain inherited mechanisms.
 
+## Transcript and performance incident follow-up
+
+Compared with locally recorded upstream `95df2e0f9`, this candidate extends
+inherited transcript paging with one owned continuation for blocked upward input
+and releases the expanded render budget when returning to latest. It keeps small
+reading caches but drops oversized prefixes at the canonical tail without
+changing the transcript on disk. The existing opt-in process capture originated
+in local commit `d7a502af5`; this follow-up adds automatic incident-only logging
+and makes the existing logs folder reachable from its panel. See the
+[scrolling contract](../spec/04-ux/09-interaction-patterns.md#91-transcript-scrolling)
+and the [performance decision](../adr/developer-performance-capture.md).
+
 ## Audit boundary
 
 This is the evidence map for the root bilingual README, not release notes or a

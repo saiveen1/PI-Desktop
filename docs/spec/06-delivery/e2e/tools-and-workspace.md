@@ -2867,9 +2867,19 @@ session data is used.
   Check measured stages, nullable maxima and marker timestamps. Only a completed,
   previewed capture can be saved. Cancel does not write; saving reproduces the
   preview. A replaced capture, reload or revocation invalidates pending export.
-- Coverage: isolated Electron/preload fixture `scripts/e2e-performance-diagnostics.mjs`,
-  settings interaction, recorder IPC, sampler and renderer-probe regression tests.
-  These checks do not operate on an installed profile or prove a particular app bottleneck.
+- Without starting a capture (including with developer mode off), simulate a
+  significant Main scheduling delay, a visible renderer stall and recovery,
+  and an unexpected main renderer exit. After reload or a new app instance on
+  the isolated profile, enable developer mode, use **Open logs folder**, and
+  inspect `app/performance.log`. Confirm the time, process identity, available
+  pre-incident samples and the exit reason are readable. Repeat with the window
+  hidden or a sleep/resume gap to check that idle throttling and suspend do not
+  look like renderer stalls. Confirm no conversation or input data is written.
+- Coverage: isolated Electron/preload fixture `scripts/e2e-performance-diagnostics.mjs`
+  for manual capture, real preload heartbeat and renderer exit persistence, plus
+  settings interaction, recorder IPC, sampler and deterministic incident tests.
+  These do not operate on an installed profile or establish attribution for a
+  particular bottleneck.
 
 ## E2E-TOOL-OBSERVER: Local observations and explicit draft reference
 

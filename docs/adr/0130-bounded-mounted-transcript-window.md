@@ -40,10 +40,12 @@ the anchor is owned through IO and three stable layout frames without ever ownin
 user input. This replaces the old `prependHeightRef` total-height delta, which
 deferred DOM, tail updates, and intrinsic-size estimates made unreliable.
 
-### 4. The window resets per session
+### 4. The window belongs to the pane and shrinks at the live tail
 
-Resetting and clamping to the loaded history stop a grown budget from the
-previous session from over-mounting for a frame.
+A saved reading position can restore a grown window. A settled return to latest
+or a new live turn restores the trailing render budget without deleting history.
+At latest, keep at most 200 contiguous older messages as a quick-revisit cache;
+release larger reading ranges and reuse the canonical tail cursor on the next read.
 
 ### 5. The hydration spacer is scoped to the first commit
 
@@ -69,6 +71,11 @@ An underfilled page or a visible top boundary alone must not advance history.
 Opening, revealing, restoring a reading position or bookmark, and layout changes
 must not extend older history. An observer may support an active user-initiated
 operation, but cannot autonomously repeat growth or requests while stationary.
+
+Upward input blocked at the physical edge while a step is active can request one
+more step after it settles successfully, if the viewport is still near the edge.
+No continuation survives a direction reversal, a cancelled hold or an empty or
+failed read.
 
 ### 7. The entry projection arrays are memoized on `entries`
 
