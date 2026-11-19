@@ -270,13 +270,14 @@ are covered by the [personal release runbook](docs/spec/06-delivery/07-personal-
 ### Build in GitHub Actions
 
 The personal fork's [Personal Windows workflow](.github/workflows/personal-windows.yml)
-builds code pushes to `main` without changing the version. Successful runs retain
-the installer and provenance as downloadable Actions artifacts for 30 days.
-For a new beta, use **Run workflow** on `main` and explicitly enter a newer
-`release_version`; leaving it empty only builds. A successful manual release
-records version/history files and publishes a `personal-v` prerelease in this
-fork. It does not enable automatic updates in the installed app. Setup, permissions
-and recovery limits are in the [Actions runbook](docs/spec/06-delivery/07-personal-release-runbook.md#github-actions-personal-fork-only).
+builds code pushes to `main` without changing the committed version. When the version
+stays the same, successful runs only upload the installer and provenance as Actions
+artifacts for 30 days. A push that advances the version to a newer beta also
+publishes a `personal-v` prerelease for the exact commit after the build passes.
+You can still run the workflow manually: leave `release_version` empty to build
+only, or enter a newer beta to bump and publish it from Actions. Neither path
+enables automatic updates in the installed app. See the
+[Actions runbook](docs/spec/06-delivery/07-personal-release-runbook.md#github-actions-personal-fork-only).
 
 ## Documentation
 

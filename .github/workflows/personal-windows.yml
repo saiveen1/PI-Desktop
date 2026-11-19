@@ -19,18 +19,22 @@ permissions:
   contents: read
 
 concurrency:
-  group: personal-windows
+  # Distinct pushes must not replace a pending version-changing run.
+  group: personal-windows-${{ github.event_name == 'push' && github.run_id || 'manual' }}
   cancel-in-progress: false
 
 env:
   PERSONAL_RELEASE_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.release_version || '' }}
+  PERSONAL_PUSH_BEFORE: ${{ github.event.before }}
+  PERSONAL_PUSH_FORCED: ${{ github.event.forced }}
 
 jobs:
   build:
-    if: github.repository == 'saiveen1/PI-Desktop' && github.ref == 'refs/heads/main'
+    if: github.repository == 'saiveen1/PI-Desktop' && github.ref == 'refs/heads/main' && github.event.deleted != true
     runs-on: windows-2025
     outputs:
       artifact_id: ${{ steps.installer.outputs.artifact-id }}
+      publish_version: ${{ steps.plan.outputs.publish_version }}
     timeout-minutes: 60
     defaults:
       run:
@@ -53,8 +57,9 @@ jobs:
 
       - uses: Swatinem/rust-cache@e9d7b9f1e587218970671bac74e5511ed9506e6a # v2
 
-      - name: Validate workflow identity and input
-        run: node --input-type=module -e "import {personalCiIdentity} from './scripts/personal-ci.mjs'; personalCiIdentity(process.env);"
+      - name: Resolve publication plan
+        id: plan
+        run: node scripts/personal-ci.mjs plan
 
       - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
@@ -106,13 +111,14 @@ jobs:
 
   publish:
     needs: build
-    if: github.repository == 'saiveen1/PI-Desktop' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.release_version != ''
+    if: github.repository == 'saiveen1/PI-Desktop' && github.ref == 'refs/heads/main' && needs.build.outputs.publish_version != ''
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: write
     env:
       PERSONAL_ARTIFACT_DIR: .artifacts/personal-ci/download
+      PERSONAL_PUBLISH_VERSION: ${{ needs.build.outputs.publish_version }}
     defaults:
       run:
         shell: bash
@@ -132,11 +138,12 @@ jobs:
           artifact-ids: ${{ needs.build.outputs.artifact_id }}
           merge-multiple: true
 
-      - name: Reconstruct and stage verified release metadata
+      - name: Verify delivery and prepare release
         id: prepare
         run: node scripts/personal-ci.mjs prepare-release
 
       - name: Commit metadata and atomically publish personal tag
+        if: github.event_name == 'workflow_dispatch'
         env:
           PERSONAL_TAG: ${{ steps.prepare.outputs.tag }}
         run: |
@@ -148,6 +155,12 @@ jobs:
           git tag -a "$PERSONAL_TAG" -m "Personal beta $PERSONAL_RELEASE_VERSION; Actions run $GITHUB_RUN_ID"
           git push --atomic --no-follow-tags origin HEAD:refs/heads/main "refs/tags/$PERSONAL_TAG"
 
+      - name: Tag the exact pushed version
+        if: github.event_name == 'push'
+        env:
+          PERSONAL_TAG: ${{ steps.prepare.outputs.tag }}
+        run: git push --no-follow-tags origin "$GITHUB_SHA:refs/tags/$PERSONAL_TAG"
+
       - name: Publish prerelease assets
         env:
           GH_TOKEN: ${{ github.token }}
@@ -157,7 +170,7 @@ jobs:
           test "${#notes[@]}" -eq 1
           gh release create "$PERSONAL_TAG" --repo "$GITHUB_REPOSITORY" \
             --verify-tag --prerelease --latest=false \
-            --title "PI-Desktop Personal $PERSONAL_RELEASE_VERSION" \
+            --title "PI-Desktop Personal $PERSONAL_PUBLISH_VERSION" \
             --notes-file "${notes[0]}" \
             "$PERSONAL_ARTIFACT_DIR/"*.exe \
             "$PERSONAL_ARTIFACT_DIR/"*.exe.sha256 \

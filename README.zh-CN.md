@@ -176,11 +176,10 @@ pnpm dist:personal          # 构建，不改变应用版本
 ### 使用 GitHub Actions 构建
 
 个人 fork 的 [Personal Windows 工作流](.github/workflows/personal-windows.yml)
-在代码推送到 `main` 后构建，不自动修改版本号；成功运行的安装包与溯源文件作为 Actions
-产物保留 30 天，可在对应运行页面下载。
-需要新 beta 时，在 `main` 上点击 **Run workflow**，明确填写更高的 `release_version`；
-留空则只构建。手动发布成功后会保存版本／历史文件，并在自己的 fork 创建 `personal-v`
-预发布版本，不会开启已安装应用的自动更新。初次配置、权限和失败恢复说明见
+在代码推送到 `main` 后构建，不修改已提交的版本号。版本号不变时，只上传安装包和溯源文件作为
+Actions 产物，保留 30 天；推送将版本升为更新的 beta 时，构建通过后还会为该提交发布 `personal-v`
+预发布版本。也可手动运行：`release_version` 留空则只构建，填写更高的 beta 则由 Actions 升版并发布。
+两种方式都不会开启已安装应用的自动更新。详见
 [Actions 发布说明](docs/spec/06-delivery/07-personal-release-runbook.md#github-actions-personal-fork-only)。
 
 ## 文档

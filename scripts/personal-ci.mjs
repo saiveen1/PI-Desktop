@@ -3,13 +3,12 @@ import { createHash } from "node:crypto";
 import { appendFileSync, copyFileSync, createReadStream, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { assertNewBeta, captureGitSource, localGit } from "./personal-build-source.mjs";
+import { assertBetaVersionAdvance, assertNewBeta, captureGitSource, localGit, PERSONAL_BETA_VERSION as beta } from "./personal-build-source.mjs";
 import { collectReleaseChanges, loadReleaseHistory, planReleaseRecord, renderBuildNotes } from "./personal-release-notes.mjs";
 import { applyFileEdits, planWorkspaceVersion } from "./workspace-version.mjs";
 
 export const PERSONAL_REPOSITORY = "saiveen1/PI-Desktop";
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
-const beta = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-beta\.(0|[1-9]\d*)$/;
 const basename = (value) => typeof value === "string" ? value.split(/[\\/]/).at(-1) : "";
 const json = (file) => JSON.parse(readFileSync(file, "utf8"));
 
@@ -25,6 +24,23 @@ export function personalCiIdentity(env) {
     assert.match(version, beta, "Select an explicit X.Y.Z-beta.N version without leading zeroes.");
   }
   return { sourceCommit: env.GITHUB_SHA, version, release: Boolean(version) };
+}
+
+/** Use the push boundary, not HEAD^ (a push can contain several commits). */
+export function personalCiPublishVersion(root, env) {
+  const identity = personalCiIdentity(env);
+  if (env.GITHUB_EVENT_NAME === "workflow_dispatch") return identity.version;
+
+  const before = env.PERSONAL_PUSH_BEFORE ?? "";
+  assert.match(before, /^[a-f0-9]{40}$/, "Missing or invalid previous push commit.");
+  if (/^0{40}$/.test(before) || env.PERSONAL_PUSH_FORCED === "true") return "";
+  const versionAt = (commit) => JSON.parse(localGit(root, ["show", `${commit}:package.json`])).version;
+  const version = versionAt(identity.sourceCommit);
+  const previous = versionAt(before);
+  if (version === previous || !beta.test(version)) return "";
+  localGit(root, ["merge-base", "--is-ancestor", before, identity.sourceCommit]);
+  assertBetaVersionAdvance(version, [previous]);
+  return version;
 }
 
 function regularFile(file) {
@@ -118,20 +134,52 @@ export async function prepareCiRelease(root, directory, identity) {
   return { ...delivery, paths, tag: `personal-v${identity.version}` };
 }
 
+/** Verify a normal build of an already committed version without writing metadata. */
+export async function preparePushedCiRelease(root, directory, env) {
+  const identity = personalCiIdentity(env);
+  assert.equal(env.GITHUB_EVENT_NAME, "push", "Expected a version-changing push.");
+  const version = personalCiPublishVersion(root, env);
+  assert.ok(version, "This push did not select a beta for publication.");
+  const source = captureGitSource(root);
+  assert.equal(source.commit, identity.sourceCommit, "Release checkout differs from the built source.");
+  assert.equal(source.dirty, false, "Release verification requires a clean checkout and index.");
+  const delivery = await verifyCiDelivery(directory, { ...identity, version });
+  assert.deepEqual(readdirSync(directory).sort(), [...delivery.files].sort(), "Unexpected files in the downloaded delivery.");
+  assert.deepEqual(delivery.result.source, source, "Artifact source differs from the clean pushed checkout.");
+  assert.equal(delivery.result.versionOverride, null, "A push build must not override the committed version.");
+  const history = collectReleaseChanges(root, loadReleaseHistory(root));
+  assert.deepEqual(delivery.result.changes, history.changes, "Release notes do not match source history.");
+  assert.equal(delivery.result.baseCommit, history.baseCommit);
+  assert.equal(delivery.result.baselineKind, history.baselineKind);
+  return { ...delivery, tag: `personal-v${version}` };
+}
+
 async function main() {
   const identity = personalCiIdentity(process.env);
   const action = process.argv[2];
-  assert.equal(process.argv.length, 3, "Usage: node scripts/personal-ci.mjs stage|prepare-release");
-  if (action === "stage") {
+  const usage = "Usage: node scripts/personal-ci.mjs plan|stage|prepare-release";
+  assert.equal(process.argv.length, 3, usage);
+  if (action === "plan") {
+    const version = personalCiPublishVersion(ROOT, process.env);
+    assert.ok(process.env.GITHUB_OUTPUT, "Missing workflow output channel.");
+    appendFileSync(process.env.GITHUB_OUTPUT, `publish_version=${version}\n`);
+    console.log(version ? `Build and publish beta ${version}.` : "Build artifacts only.");
+  } else if (action === "stage") {
     const delivery = await stageCiArtifacts(ROOT, identity);
     console.log(`Verified ${delivery.files.length} delivery files for ${delivery.result.buildId}.`);
   } else if (action === "prepare-release") {
     assert.ok(process.env.PERSONAL_ARTIFACT_DIR, "Missing downloaded artifact directory.");
     assert.ok(process.env.GITHUB_OUTPUT, "Missing workflow output channel.");
-    const delivery = await prepareCiRelease(ROOT, resolve(process.env.PERSONAL_ARTIFACT_DIR), identity);
+    const version = personalCiPublishVersion(ROOT, process.env);
+    assert.ok(version, "This event did not select a beta for publication.");
+    assert.equal(version, process.env.PERSONAL_PUBLISH_VERSION, "Publication plan differs from the build job.");
+    const directory = resolve(process.env.PERSONAL_ARTIFACT_DIR);
+    const delivery = process.env.GITHUB_EVENT_NAME === "push"
+      ? await preparePushedCiRelease(ROOT, directory, process.env)
+      : await prepareCiRelease(ROOT, directory, identity);
     appendFileSync(process.env.GITHUB_OUTPUT, `tag=${delivery.tag}\n`);
-    console.log(`Prepared ${delivery.paths.length} version/history files for ${delivery.tag}.`);
-  } else throw new Error("Usage: node scripts/personal-ci.mjs stage|prepare-release");
+    console.log(`Verified delivery for ${delivery.tag}.`);
+  } else throw new Error(usage);
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

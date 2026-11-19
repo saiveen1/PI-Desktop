@@ -168,12 +168,13 @@ profile access, Git tags and remote publication require separate authorization.
 ## GitHub Actions: personal fork only
 
 [Personal Windows](../../../.github/workflows/personal-windows.yml) is restricted
-to `saiveen1/PI-Desktop`, branch `main`. Code pushes build the current version;
-documentation-only pushes do not. Manual dispatch with an empty `release_version`
-also builds without publishing. Ordinary builds accept a stable or beta current
-version; explicit publication remains beta-only. The Windows job installs locked
-dependencies on the clean hosted runner and calls the same `pnpm dist:personal` entry, with offline
-release/policy regression, Desktop typecheck and lint. It never installs or
+to `saiveen1/PI-Desktop`, branch `main`. Code pushes build the committed version;
+documentation-only pushes do not. A push that advances the version to a newer
+beta also publishes a prerelease after its build succeeds. Manual dispatch with
+an empty `release_version` builds without publishing. Ordinary builds accept a
+stable or beta current version; publication remains beta-only. The Windows job
+installs locked dependencies and calls the same `pnpm dist:personal` entry, with
+offline release/policy regression, Desktop typecheck and lint. It never installs or
 launches Desktop. No signing credential or personal access token is required for
 this unsigned personal lane.
 
@@ -183,11 +184,29 @@ The build log is a separate 14-day artifact, including failed builds when the lo
 exists. Artifacts are downloadable from the completed run; they are not a GitHub
 Release, a new version, an updater feed, or proof of installation compatibility.
 
-### Explicit beta publication
+### Publication on a version-changing push
+
+The build job compares `package.json` at the push's previous branch head and at
+the pushed commit. It does not compare against `HEAD^`, the latest Release, or a
+later checkout of `main`. An unchanged version, a stable destination version, a
+new branch, or a force push only builds artifacts; a beta downgrade or unverifiable
+comparison fails without publishing. No already-pushed version is backfilled.
+
+An eligible push still uses the ordinary build command, without a version
+override. After a successful build and artifact upload, the separate write job
+rechecks the push and the source, version, hash and notes of that exact artifact.
+It tags the pushed commit as `personal-vX.Y.Z-beta.N` without moving any existing
+tag, then creates the prerelease with the four verified files. It never writes back
+to `main` or changes `docs/releases/history.json` or `CHANGELOG.md`. If the source
+already records a local build of the same version, that record keeps its own
+checksums and build ID; the GitHub Release sidecars describe the cloud build.
+
+### Manual beta publication
 
 In Actions, select **Personal Windows → Run workflow → main** and enter a newer
 `X.Y.Z-beta.N` in `release_version`. This explicit action authorizes the workflow's
-metadata commit, personal tag and prerelease publication; a push never does.
+metadata commit, personal tag and prerelease publication. Only this manual path
+bumps a version or commits generated release metadata on the server.
 
 1. Windows validates the input, builds with `pnpm dist:personal --release`, and
    verifies version, source identity and the installer hash before upload.
@@ -220,16 +239,19 @@ state; copying YAML is not proof that a run started. The Actions page must show 
 successful Windows build and its installer artifact before claiming cloud packaging
 works. The first build can be manually dispatched with no version to verify setup.
 
-Runs are serialized with running work preserved; GitHub may replace an older
-pending run with a newer queued run. If `main` advances during a beta build, inspect
-the new source and dispatch a fresh candidate rather than force-pushing. If the
-metadata/tag push succeeded but Release creation/upload failed, keep those refs and
+Distinct pushes use separate concurrency groups so a later ordinary build cannot
+replace a pending version-changing run. Manual runs keep their shared concurrency
+group. If `main` advances during a manual beta build, inspect the new source and
+dispatch a fresh candidate rather than force-pushing. Push publication tags its
+own verified source even if a later push advanced `main`.
+
+If a tag push succeeded but Release creation/upload failed, keep the refs and
 the exact run's artifacts. Inspect the existing Release and complete only missing
 publication of that same artifact/tag; do not rebuild and overwrite an issued
 version, delete tags automatically, or blindly rerun the entire release.
 
 Offline regression: `node --test apps/desktop/test/personal-ci.test.mjs`. It covers
-ordinary builds, explicit version/history reconstruction, tampered artifacts,
-source mismatch, extra files, dirty checkouts and non-fast-forward atomic rejection
-using synthetic packages and temporary local Git remotes. It is not live GitHub
-publication or a real installer test.
+ordinary builds, comparison across a multi-commit push, exact-source tagging,
+manual version/history reconstruction, tampered artifacts, dirty checkouts, and
+non-fast-forward rejection using synthetic packages and temporary Git remotes.
+It is not live GitHub publication or a real installer test.

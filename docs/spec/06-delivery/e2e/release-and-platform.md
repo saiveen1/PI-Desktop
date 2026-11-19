@@ -1365,15 +1365,18 @@ Use synthetic Darwin x64/arm64 uname responses through production SSH bootstrap,
 - **Environment:** Temporary Git repositories/remotes, synthetic package bytes and
   the real personal-build/metadata helpers; no installed app or live publication.
 - **Preconditions:** Existing compatible dependencies; isolated scratch state.
-- **Steps:** Stage a normal build, then an explicit newer beta. Reconstruct its
-  metadata in a fresh clone and atomically publish to a temporary local remote.
-  Repeat with a concurrent remote commit, tampered installer, wrong source,
-  forged notes, extra files and a dirty publisher. Inspect workflow triggers,
-  permissions, pinned actions and exact-source checkout.
-- **Expected:** Push builds preserve version/history. Only explicit beta input
-  authorizes publication; verified metadata alone is staged. Conflicts publish
-  neither the new branch head nor tag, invalid inputs write no metadata, and no
-  downloaded source patch or executable is applied/run. Build access stays read-only.
+- **Steps:** Compare single-version and version-changing pushes, including a
+  multi-commit push, and verify its artifact against the exact pushed commit.
+  Push only that tag to a temporary local remote; reject moving it. Then build
+  a manually selected beta, reconstruct its metadata in a fresh clone and
+  atomically push metadata and tag. Repeat with a concurrent remote commit,
+  tampered installer, wrong source, forged notes, extra files and a dirty
+  publisher. Inspect triggers, permissions, pinned actions and checkout identity.
+- **Expected:** Unchanged versions build artifacts only. A push advancing to a
+  newer beta publishes only after its build passes, without editing branch or
+  history. Only a manual beta can write version/history metadata. Conflicts do
+  not move a tag; invalid input does not edit metadata. No downloaded source
+  patch or executable is applied/run. Build access stays read-only.
 - **Automation:** `apps/desktop/test/personal-ci.test.mjs`; existing personal
   release/history/version tests cover the reused builder.
 - **Status:** Offline automated coverage; live build/publication outcomes must be

@@ -48,12 +48,13 @@ export function gitChanges(root, baseCommit) {
   });
 }
 
-export function assertNewBeta(root, current, requested, history) {
-  const pattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-beta\.(0|[1-9]\d*)$/;
-  const parts = (value) => value.match(pattern)?.slice(1).map(BigInt);
+export const PERSONAL_BETA_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-beta\.(0|[1-9]\d*)$/;
+
+export function assertBetaVersionAdvance(requested, previousVersions) {
+  const parts = (value) => value.match(PERSONAL_BETA_VERSION)?.slice(1).map(BigInt);
   const next = parts(requested);
   if (!next) throw new Error("Explicit personal releases require X.Y.Z-beta.N with no leading zeroes.");
-  for (const value of [current, ...history.releases.map((entry) => entry.version)]) {
+  for (const value of previousVersions) {
     const stable = value.match(/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/)?.slice(1).map(BigInt);
     const previous = parts(value) ?? stable;
     if (!previous) throw new Error(`Unsupported current version: ${value}`);
@@ -62,5 +63,9 @@ export function assertNewBeta(root, current, requested, history) {
       throw new Error(`Release version must be newer than ${value}.`);
     }
   }
+}
+
+export function assertNewBeta(root, current, requested, history) {
+  assertBetaVersionAdvance(requested, [current, ...history.releases.map((entry) => entry.version)]);
   if (localGit(root, ["tag", "--list", `v${requested}`]).trim()) throw new Error(`Release version v${requested} is already tagged locally; select a new candidate explicitly.`);
 }

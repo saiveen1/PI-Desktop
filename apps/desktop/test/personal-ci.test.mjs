@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { createRequire } from "node:module";
 import test from "node:test";
 import { buildPersonal, prepareBuild } from "../../../scripts/build-personal-release.mjs";
-import { personalCiIdentity, prepareCiRelease, stageCiArtifacts, verifyCiDelivery } from "../../../scripts/personal-ci.mjs";
+import { personalCiIdentity, personalCiPublishVersion, prepareCiRelease, preparePushedCiRelease, stageCiArtifacts, verifyCiDelivery } from "../../../scripts/personal-ci.mjs";
 import { renderBuildNotes, loadReleaseHistory } from "../../../scripts/personal-release-notes.mjs";
+import { applyFileEdits, planWorkspaceVersion } from "../../../scripts/workspace-version.mjs";
 import { candidate, fixture, fixtureGit, read, syntheticBuild, version, write } from "./helpers/personal-release-fixture.mjs";
 
 const envFor = (sha, release = false) => ({
@@ -50,6 +51,45 @@ test("only the personal fork main push or explicit manual beta is accepted", () 
     { GITHUB_EVENT_NAME: "workflow_dispatch", PERSONAL_RELEASE_VERSION: "$(echo injected)" },
     { GITHUB_EVENT_NAME: "workflow_dispatch", PERSONAL_RELEASE_VERSION: "1.0.0-beta.01" },
   ]) assert.throws(() => personalCiIdentity({ ...valid, ...patch }));
+});
+
+test("a multi-commit push publishes the new committed beta, not a rebuild or a stable version", async (t) => {
+  const f = fixture(t, "0.23.0");
+  const before = fixtureGit(f.root, "rev-parse", "HEAD");
+  const next = "0.23.1-beta.1";
+  const edits = planWorkspaceVersion(f.root, next);
+  applyFileEdits(edits);
+  fixtureGit(f.root, "add", "--", ...edits.map(({ path }) => relative(f.root, path)));
+  fixtureGit(f.root, "commit", "-m", "chore(release): set fixture beta");
+  const versionCommit = fixtureGit(f.root, "rev-parse", "HEAD");
+  write(join(f.root, "extra.txt"), "another commit in the same push");
+  fixtureGit(f.root, "add", "--", "extra.txt");
+  fixtureGit(f.root, "commit", "-m", "docs: add fixture note");
+  const head = fixtureGit(f.root, "rev-parse", "HEAD");
+  const push = { ...envFor(head), PERSONAL_PUSH_BEFORE: before };
+  assert.equal(personalCiPublishVersion(f.root, push), next);
+  assert.equal(personalCiPublishVersion(f.root, { ...push, PERSONAL_PUSH_BEFORE: versionCommit }), "");
+  assert.equal(personalCiPublishVersion(f.root, { ...push, PERSONAL_PUSH_BEFORE: "0".repeat(40) }), "");
+  assert.equal(personalCiPublishVersion(f.root, { ...push, PERSONAL_PUSH_FORCED: "true" }), "");
+  assert.equal(personalCiPublishVersion(f.root, { ...push, GITHUB_SHA: before, PERSONAL_PUSH_BEFORE: head }), "");
+  assert.equal(personalCiPublishVersion(f.root, { ...push, GITHUB_EVENT_NAME: "workflow_dispatch" }), "");
+  assert.throws(() => personalCiPublishVersion(f.root, { ...push, PERSONAL_PUSH_BEFORE: "HEAD^" }), /invalid previous push commit/);
+
+  const context = prepareBuild({ root: f.root, env: f.env, platform: "win32", arch: "x64" });
+  await buildPersonal(context, { run: syntheticBuild(context) });
+  const staged = await stageCiArtifacts(f.root, personalCiIdentity(push));
+  const remote = clone(t, f.root, true);
+  const publisher = clone(t, remote);
+  const delivery = await preparePushedCiRelease(publisher, staged.directory, push);
+  assert.equal(delivery.tag, `personal-v${next}`);
+  assert.equal(delivery.result.versionOverride, null);
+  assert.equal(fixtureGit(publisher, "status", "--porcelain"), "");
+  assert.equal(loadReleaseHistory(publisher).releases.length, 0);
+  await assert.rejects(preparePushedCiRelease(publisher, staged.directory, { ...push, PERSONAL_PUSH_BEFORE: versionCommit }), /did not select/);
+  fixtureGit(publisher, "push", "--no-follow-tags", "origin", `${head}:refs/tags/${delivery.tag}`);
+  assert.equal(fixtureGit(remote, "rev-parse", `${delivery.tag}^{commit}`), head);
+  assert.equal(fixtureGit(remote, "rev-parse", "main"), head);
+  assert.throws(() => fixtureGit(publisher, "push", "--no-follow-tags", "origin", `${versionCommit}:refs/tags/${delivery.tag}`), /already exists/);
 });
 
 test("push build stages a stable-version build without changing version or history", async (t) => {
@@ -143,8 +183,9 @@ test("workflow restricts publishing, reuses the personal builder and pins action
   assert.equal(build.steps[0].with["persist-credentials"], false);
   assert.equal(build.steps[0].with["fetch-depth"], 0);
   assert.equal(publish.needs, "build");
-  assert.match(publish.if, /workflow_dispatch/);
-  assert.match(publish.if, /inputs\.release_version != ''/);
+  assert.match(workflow.concurrency.group, /github\.run_id/);
+  assert.equal(build.outputs.publish_version, "${{ steps.plan.outputs.publish_version }}");
+  assert.match(publish.if, /needs\.build\.outputs\.publish_version != ''/);
   assert.equal(publish.permissions.contents, "write");
   const upload = build.steps.find((step) => step.name === "Upload installer and provenance");
   assert.equal(upload.id, "installer");
@@ -167,6 +208,10 @@ test("workflow restricts publishing, reuses the personal builder and pins action
   const commit = publish.steps.find((step) => step.name === "Commit metadata and atomically publish personal tag").run;
   assert.match(commit, /git ls-remote origin refs\/heads\/main/);
   assert.match(commit, /git push --atomic --no-follow-tags/);
+  const tagPush = publish.steps.find((step) => step.name === "Tag the exact pushed version");
+  assert.equal(tagPush.if, "github.event_name == 'push'");
+  assert.equal(tagPush.run, 'git push --no-follow-tags origin "$GITHUB_SHA:refs/tags/$PERSONAL_TAG"');
+  assert.equal(publish.steps.find((step) => step.run === commit).if, "github.event_name == 'workflow_dispatch'");
   const release = publish.steps.find((step) => step.name === "Publish prerelease assets").run;
   assert.match(release, /--verify-tag --prerelease --latest=false/);
   assert.match(release, /--repo "\$GITHUB_REPOSITORY"/);
