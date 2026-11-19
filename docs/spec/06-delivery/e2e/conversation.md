@@ -4504,6 +4504,8 @@ command, a delegate, and an explicit Stop. Accepted input is delivered once.
   tool row inside an expanded delegate dock. Then scroll with the wheel, press
   ArrowUp with a title focused, click the jump-to-latest control, and send a new
   prompt.
+  With a thinking disclosure longer than the viewport, scroll up from the answer
+  into its reasoning while a paragraph below the destination changes height.
 - **Expected**: The clicked title keeps its on-screen position while the detail
   animates open and closed, and the transcript never re-bottoms underneath it;
   follow mode is left and the newest-message control appears. The held position
@@ -4513,6 +4515,8 @@ command, a delegate, and an explicit Stop. Accepted input is delivered once.
   input, the jump control, a new turn and every navigation release the hold and
   follow the live tail again, while a reader who scrolled up keeps their place.
   Space still activates a focused title and arrow keys still scroll.
+  Once the reader leaves the old anchor, late content below the new viewport
+  does not reverse the upward movement or pull the answer back into view.
 - **Specs linked**: `04-ux/09-interaction-patterns.md` §9.1;
   ADR transcript-reading-ownership; D287, D302, D430
 - **Acceptance**: C (conversation & stream), E (tools & permissions), Quality
@@ -4525,8 +4529,9 @@ command, a delegate, and an explicit Stop. Accepted input is delivered once.
   title moving by the full height of the opened detail. The app stylesheet is not
   linked, so the heights come from inline filler and the components' own
   intrinsic size. `disclosure-anchor.test.mjs` covers the pure anchor and input
-  math, and `transcript-disclosure-reading.test.mjs` covers the wiring. Keyboard,
-  wheel and animated-activity-group paths remain additional validation.
+  math, and `transcript-disclosure-reading.test.mjs` covers the wiring.
+  `transcript-history-demand.test.mjs` exercises expanded reasoning, a native
+  wheel hand-off, and an injected same-frame layout change in Chromium.
 ## E2E-CHAT-turn-process-and-thinking-display
 
 - **Preconditions:** Progress/searches/thinking/commands/final answer across live,

@@ -98,6 +98,51 @@ window.historyDemand = {
     const { x, y, width, height } = scroller().getBoundingClientRect();
     return { x: x + width / 2, y: y + height / 2 };
   },
+  async openLongThinking() {
+    const style = document.createElement('style');
+    style.textContent = '.thread-scroll[data-long-thinking] [data-message-id]{height:auto;overflow:visible}';
+    document.head.append(style);
+    const id = 'long-thinking';
+    const rows = [message('previous-prompt'), { ...message('previous-answer'), role: 'assistant' }, message('prompt'),
+      { ...message('thinking'), role: 'assistant', thinking: Array.from({ length: 80 }, (_, i) => `Reasoning step ${i}.`).join('\n\n'), content: '' },
+      { ...message('answer'), role: 'assistant', content: 'The answer after the thinking.' }];
+    flushSync(() => root.render(<I18nextProvider i18n={i18n}>
+      <ChatTranscript key={id} sessionId={id} messages={rows} isRunning={false} />
+    </I18nextProvider>));
+    const el = scroller();
+    el.dataset.longThinking = '';
+    el.querySelector('.turn-process > button[aria-expanded="false"]')?.click();
+    const thinkingTitle = () => el.querySelector('.thinking .tool-row-header');
+    await until(thinkingTitle, 'thinking title did not open');
+    const title = thinkingTitle();
+    title.scrollIntoView({ block: 'center' });
+    await settle();
+    const offset = () => title.getBoundingClientRect().top - el.getBoundingClientRect().top;
+    const beforeOpen = offset();
+    title.click();
+    await until(() => el.querySelectorAll('.thinking-prose p').length === 80, 'thinking text did not open');
+    await settle();
+    const openDrift = offset() - beforeOpen;
+    const answer = el.querySelector('[data-message-id="answer"]');
+    el.scrollTop += answer.getBoundingClientRect().top - el.getBoundingClientRect().top - el.clientHeight + 30;
+    await settle();
+    return { top: el.scrollTop, openDrift };
+  },
+  async moveDuringLateThinkingLayout() {
+    const el = scroller();
+    const before = el.scrollTop;
+    el.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: -200 }));
+    el.scrollTop = before - 200;
+    const wheelTop = el.scrollTop;
+    // Reproduce a layout delivery below the new viewport in the same scroll frame.
+    const lastParagraph = [...el.querySelectorAll('.thinking-prose p')].at(-1);
+    const belowViewport = lastParagraph.getBoundingClientRect().top >= el.getBoundingClientRect().bottom;
+    const initialHeight = el.scrollHeight;
+    lastParagraph.style.paddingBottom = '260px';
+    el.dispatchEvent(new Event('scroll'));
+    await settle();
+    return { before, wheelTop, finalTop: el.scrollTop, belowViewport, heightDelta: el.scrollHeight - initialHeight };
+  },
 };
 
 window.exerciseReplyEdit = async () => {

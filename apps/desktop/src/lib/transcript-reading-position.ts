@@ -3,6 +3,8 @@ import { transcriptHasLayout } from "./transcript-scroll";
 export type TranscriptReadingPosition = {
   pinned: boolean;
   messageId?: string;
+  /** The captured row type; a turn and one of its messages can share an ID. */
+  anchorKind?: "message" | "turn";
   offset: number;
   scrollTop: number;
   windowSize: number;
@@ -68,21 +70,25 @@ export function captureTranscriptReadingPosition(
   // Answer groups can acquire an earlier first message when a page is prepended.
   // Anchor the visible message itself, whose identity and local offset survive
   // regrouping; use a turn only for visible content without a message node.
-  for (const selector of ["[data-message-id]", "[data-minimap-id]"]) {
+  for (const anchorKind of ["message", "turn"] as const) {
+    const selector = anchorKind === "message" ? "[data-message-id]" : "[data-minimap-id]";
     for (const row of content.querySelectorAll<HTMLElement>(selector)) {
       const rect = row.getBoundingClientRect();
       if (rect.bottom <= viewport.top || rect.top >= viewport.bottom || rect.height === 0) continue;
-      const messageId = row.dataset.messageId ?? row.dataset.minimapId;
-      if (messageId) return { pinned, messageId, offset: rect.top - viewport.top,
+      const messageId = anchorKind === "message" ? row.dataset.messageId : row.dataset.minimapId;
+      if (messageId) return { pinned, messageId, anchorKind, offset: rect.top - viewport.top,
         scrollTop: scroller.scrollTop, windowSize };
     }
   }
 }
 
-function readingPositionRow(content: HTMLElement, messageId: string): HTMLElement | null {
-  const id = CSS.escape(messageId);
-  return content.querySelector<HTMLElement>(`[data-message-id="${id}"]`)
-    ?? content.querySelector<HTMLElement>(`[data-minimap-id="${id}"]`);
+export function resolveTranscriptReadingRow(content: HTMLElement, position: TranscriptReadingPosition): HTMLElement | null {
+  if (!position.messageId) return null;
+  const id = CSS.escape(position.messageId);
+  const turn = `[data-minimap-id="${id}"]`;
+  if (position.anchorKind === "turn") return content.querySelector<HTMLElement>(turn);
+  const message = content.querySelector<HTMLElement>(`[data-message-id="${id}"]`);
+  return position.anchorKind === "message" ? message : message ?? content.querySelector<HTMLElement>(turn);
 }
 
 /** Test the intended reading offset, before compensating a changed layout. */
@@ -92,7 +98,7 @@ export function isTranscriptReadingAnchorVisible(
   position: TranscriptReadingPosition,
 ): boolean {
   if (!transcriptHasLayout(scroller) || !position.messageId) return false;
-  const height = readingPositionRow(content, position.messageId)?.getBoundingClientRect().height ?? 0;
+  const height = resolveTranscriptReadingRow(content, position)?.getBoundingClientRect().height ?? 0;
   return height > 0 && position.offset < scroller.clientHeight && position.offset + height > 0;
 }
 
@@ -104,7 +110,7 @@ export function restoreTranscriptReadingPosition(
 ): boolean {
   if (!transcriptHasLayout(scroller)) return false;
   if (position.messageId) {
-    const row = readingPositionRow(content, position.messageId);
+    const row = resolveTranscriptReadingRow(content, position);
     if (row) {
       const rect = row.getBoundingClientRect();
       if (rect.height > 0) {

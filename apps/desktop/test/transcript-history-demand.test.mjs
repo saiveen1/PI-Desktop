@@ -163,6 +163,21 @@ test('transcript history demand and inline reply editing', { timeout: 30000, ski
       assert.equal(reopened.rows, 101);
       assert.equal(reopened.calls, 0);
     });
+    await t.test('upward wheel into expanded thinking is not reversed by late layout below it', async () => {
+      const opened = await probe('openLongThinking()');
+      assert.ok(Math.abs(opened.openDrift) <= 1, `disclosure title drifted: ${opened.openDrift}`);
+      const point = await probe('wheelPoint()');
+      const wheel = deltaY => send('Input.dispatchMouseEvent', { type: 'mouseWheel', ...point, deltaX: 0, deltaY });
+      await wheel(-12);
+      const primed = await probe('state()');
+      assert.ok(primed.top < opened.top, 'initial wheel should take over the disclosure');
+      const after = await probe('moveDuringLateThinkingLayout()');
+      assert.ok(after.belowViewport && after.heightDelta >= 250, JSON.stringify(after));
+      assert.ok(after.before - after.wheelTop >= 190, JSON.stringify(after));
+      assert.ok(Math.abs(after.finalTop - after.wheelTop) <= 1, `late layout reversed the wheel: ${JSON.stringify(after)}`);
+      await wheel(-80);
+      assert.ok((await probe('state()')).top < after.finalTop, 'native scrolling still works inside the open reasoning');
+    });
     await t.test('Edit reply saves each thinking choice explicitly, including unchanged text', async () => {
       const result = await evaluate('exerciseReplyEdit()');
       const original = '  **Final reply**\n';

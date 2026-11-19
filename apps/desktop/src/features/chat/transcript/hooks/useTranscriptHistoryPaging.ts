@@ -2,6 +2,7 @@ import { useCallback, useLayoutEffect, useRef, useState, type RefObject } from "
 import {
   captureTranscriptReadingPosition,
   isTranscriptReadingAnchorVisible,
+  resolveTranscriptReadingRow,
   restoreTranscriptReadingPosition,
   type TranscriptReadingPosition,
 } from "../../../../lib/transcript-reading-position";
@@ -32,14 +33,8 @@ const layoutChanged = (held: Hold, sourceHead: string | undefined) =>
   held.height !== held.scroller.scrollHeight || held.viewport !== held.scroller.clientHeight ||
   held.alignedHead !== sourceHead;
 
-function messageRow(content: HTMLElement, position: TranscriptReadingPosition) {
-  const id = CSS.escape(position.messageId ?? "");
-  return content.querySelector<HTMLElement>(`[data-message-id="${id}"]`)
-    ?? content.querySelector<HTMLElement>(`[data-minimap-id="${id}"]`);
-}
-
 function contentPoint(scroller: HTMLElement, content: HTMLElement, position: TranscriptReadingPosition) {
-  return captureTranscriptTextAnchor(scroller, messageRow(content, position));
+  return captureTranscriptTextAnchor(scroller, resolveTranscriptReadingRow(content, position));
 }
 
 /** Single-flight page IO and pre-paint anchoring follow the reader's newest
@@ -115,21 +110,21 @@ export function useTranscriptHistoryPaging({ scrollRef, contentRef, visible, sou
     const scroller = scrollRef.current;
     const content = contentRef.current;
     if (!held || !scroller || !content) return;
-    // Retain the same readable message across a gesture. Switching immediately
-    // to a newly exposed, estimated row lets its late layout move the text away.
     const movement = transcriptReaderMovement(held.top, scroller.scrollTop, scroller.scrollHeight, scroller.clientHeight);
     held.position = { ...held.position, offset: held.position.offset - movement, scrollTop: scroller.scrollTop };
     if (held.point) held.point.offset -= movement;
-    if (!layoutChanged(held, sourceHeadRef.current) &&
-      !isTranscriptReadingAnchorVisible(scroller, content, held.position)) {
+    // During ordinary reading, input can leave the old row even while layout is
+    // changing. Repairing that now-offscreen anchor would undo the scroll.
+    const canReanchor = !layoutChanged(held, sourceHeadRef.current) || (movement !== 0 && !holdRef.current);
+    if (canReanchor && !isTranscriptReadingAnchorVisible(scroller, content, held.position)) {
       const position = captureTranscriptReadingPosition(scroller, content, false, held.windowSize);
       if (position) {
         held.position = position;
         held.point = contentPoint(scroller, content, position);
       }
     }
-    const rect = held.point && resolveTranscriptTextAnchor(messageRow(content, held.position), held.point);
-    if (!layoutChanged(held, sourceHeadRef.current) && (!held.point || (rect &&
+    const rect = held.point && resolveTranscriptTextAnchor(resolveTranscriptReadingRow(content, held.position), held.point);
+    if (canReanchor && (!held.point || (rect &&
       (held.point.offset >= scroller.clientHeight || held.point.offset + rect.height <= 0)))) {
       held.point = contentPoint(scroller, content, held.position);
     }
@@ -143,7 +138,7 @@ export function useTranscriptHistoryPaging({ scrollRef, contentRef, visible, sou
     track();
     const before = scroller.scrollTop;
     const changed = layoutChanged(held, sourceHeadRef.current);
-    const row = messageRow(content, held.position);
+    const row = resolveTranscriptReadingRow(content, held.position);
     const rect = held.point && resolveTranscriptTextAnchor(row, held.point);
     if (held.point && rect) {
       const delta = rect.top - scroller.getBoundingClientRect().top - held.point.offset;

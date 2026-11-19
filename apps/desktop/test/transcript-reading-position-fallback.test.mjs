@@ -166,6 +166,31 @@ test("capture retains a turn anchor when no visible message body is mounted", ()
   assert.equal(captureTranscriptReadingPosition(scroller, content, false, 60).messageId, "tools-only");
 });
 
+test("a captured turn never applies its offset to an answer with the same ID", () => {
+  const scroller = fakeScroller({ scrollTop: 480 });
+  let turnTop = -500;
+  const turn = { dataset: { minimapId: "answer" },
+    getBoundingClientRect: () => ({ top: turnTop, bottom: turnTop + 1200, height: 1200 }) };
+  const answer = { dataset: { messageId: "answer" },
+    getBoundingClientRect: () => ({ top: 650, bottom: 685, height: 35 }) };
+  let mountedTurn = turn;
+  const content = {
+    querySelectorAll: selector => selector === "[data-message-id]" ? [answer] : [turn],
+    querySelector: selector => selector.startsWith("[data-message-id=") ? answer : mountedTurn,
+  };
+  const position = captureTranscriptReadingPosition(scroller, content, false, 60);
+  assert.equal(position.messageId, "answer");
+  assert.equal(isTranscriptReadingAnchorVisible(scroller, content, position), true);
+  assert.equal(restoreTranscriptReadingPosition(scroller, content, position), true);
+  assert.equal(scroller.scrollTop, 480, "an offscreen answer cannot pull the viewport down");
+  turnTop += 30;
+  restoreTranscriptReadingPosition(scroller, content, position);
+  assert.equal(scroller.scrollTop, 510, "layout above the same turn is still compensated");
+  mountedTurn = null;
+  restoreTranscriptReadingPosition(scroller, content, position);
+  assert.equal(scroller.scrollTop, 480, "a missing turn falls back to the saved offset");
+});
+
 test("restore prefers the actual message over a group with the same marker id", () => {
   const scroller = fakeScroller({ scrollTop: 80 });
   const content = { querySelector: selector => ({

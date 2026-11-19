@@ -1759,6 +1759,12 @@ Project drag/drop follows these patterns:
   content/viewport shrinkage; that clamp must not shift the intended text offset
   a second time. Native input in the same layout delivery still advances the
   reading target. An unreachable target degrades to the legal scroll boundary.
+  Outside an active paging hold, scrolling far enough to leave the previous
+  row or prose anchor lets the newly visible text become the reading target,
+  even when content is still laying out. Changes below the new viewport cannot
+  pull the reader back to the old one. If no individual message is visible,
+  capture the enclosing turn; restore that geometry against the same turn,
+  not an offscreen answer fragment that happens to share its ID.
   Where parser-owned source positions exist, the anchor identifies the message,
   source block, exact rendered text version, and visible character rather than
   treating a DOM node as identity. Reconstructed unchanged content is re-resolved,
