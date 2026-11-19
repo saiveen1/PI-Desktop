@@ -24,8 +24,9 @@ export function textToolCallDiagnostic(
   // suffix: a lone tag or prose describing the format is not enough evidence.
   const dsmlTags = new Set([...prose.matchAll(/^ {0,3}<\/?｜DSML｜ (calls|invoke|parameter)(?: [^>\r\n]*)?>/gm)]
     .map((match) => match[1]));
-  if (["calls", "invoke", "parameter"].every((tag) => dsmlTags.has(tag)) &&
-    /(?:^|\n) {0,3}<\/｜DSML｜ invoke>\r?\n {0,3}<\/｜DSML｜ calls>\s*$/.test(prose)) {
+  const compactDsmlEnvelope = /(?:^|\n) {0,3}<｜DSML｜ calls>\s*<｜DSML｜ invoke(?: [^>\r\n]*)?>[\s\S]*?<｜DSML｜ parameter(?: [^>\r\n]*)?>[\s\S]*?<\/｜DSML｜ parameter>\s*<\/｜DSML｜ invoke>\s*<\/｜DSML｜ calls>\s*$/.test(prose);
+  if (compactDsmlEnvelope || (["calls", "invoke", "parameter"].every((tag) => dsmlTags.has(tag)) &&
+    /(?:^|\n) {0,3}<\/｜DSML｜ invoke>\r?\n {0,3}<\/｜DSML｜ calls>\s*$/.test(prose))) {
     return {
       code: ErrorCodes.TOOL_CALL_NOT_EXECUTED,
       message: "The reply contains DSML tool-call markup instead of a structured tool call. No action was executed from this text. Retry to request a valid tool call.",

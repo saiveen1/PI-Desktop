@@ -19,7 +19,7 @@
 ## E2E-RUNTIME-text-tool-call-diagnostic
 
 - **Preconditions:** Isolated runtime with a fixture provider and synthetic data.
-- **Steps:** Return a complete text-form Qwen TodoWrite call or DSML orphaned
+- **Steps:** Return a complete text-form Qwen TodoWrite call, a compact or line-broken DSML envelope, or DSML orphaned
   parameter/invoke/calls tail, alone and after prose; correct it with a structured
   call and a normal answer. Repeat persistent leaks, a successful tool between
   leaks, structured siblings, a pending checklist, Stop/abort/steering, new user

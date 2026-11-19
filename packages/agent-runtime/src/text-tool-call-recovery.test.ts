@@ -11,6 +11,7 @@ const dsml = [
   "</｜DSML｜ calls>",
 ].join("\n");
 const xml = "<tool_call>\n<function=Bash>\n<parameter=command>\nprintf checked\n</parameter>\n</function>\n</tool_call>";
+const compactDsml = '<｜DSML｜ calls><｜DSML｜ invoke name="Bash"><｜DSML｜ parameter name="command" string="true">printf checked</｜DSML｜ parameter></｜DSML｜ invoke></｜DSML｜ calls>';
 const text = (value: string): AssistantMessage["content"] => [{ type: "text", text: value }];
 const tool = (id: string): AssistantMessage["content"] => [{ type: "toolCall", id, name: "Bash", arguments: { command: "printf checked" } }];
 type Step = { content: AssistantMessage["content"]; stopReason?: Exclude<AssistantMessage["stopReason"], "pending"> };
@@ -144,7 +145,7 @@ describe("text tool-call recovery user path", () => {
     } finally { await f.runtime.dispose(); }
   });
 
-  it.each([dsml, xml])("corrects a leaked call once in the original turn without replaying completed tools", async (leak) => {
+  it.each([dsml, compactDsml, xml])("corrects a leaked call once in the original turn without replaying completed tools", async (leak) => {
     const f = fixture([{ content: tool("completed") }, { content: text(leak) }, { content: tool("corrected") }, { content: text("Both checks are complete.") }]);
     try {
       await f.runtime.prompt("Run both checks.", "user-1", "turn-1");

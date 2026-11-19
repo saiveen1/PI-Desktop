@@ -34,9 +34,12 @@ const dsml = [
   '</｜DSML｜ calls>',
 ].join("\n");
 
+const compactDsml = '<｜DSML｜ calls><｜DSML｜ invoke name="Bash"><｜DSML｜ parameter name="command" string="true">printf checked</｜DSML｜ parameter></｜DSML｜ invoke></｜DSML｜ calls>';
+
 describe("DSML tool-call leakage diagnostics", () => {
   it.each([
     dsml,
+    compactDsml,
     `I will run the remaining check.\n\n${dsml}`,
     `<｜DSML｜ calls>\n<｜DSML｜ invoke name="Bash">\n${dsml}`,
   ])("recognizes a complete envelope or orphaned protocol tail", (text) => {
