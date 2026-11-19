@@ -3,6 +3,7 @@ export type DelegationSelectionSummary = {
   requestedModel?: string;
   actualModel?: string;
   modelReason?: string;
+  resumedFrom?: string;
   decisions: Decision[];
 };
 
@@ -36,6 +37,7 @@ export function delegationSelectionSummary(payload: unknown): DelegationSelectio
   const actualModel = selected?.model ?? (modelId ? providerId ? `${providerId}/${modelId}` : modelId : undefined);
   const requestedModel = text(scheduling?.requestedModel);
   const modelReason = text(scheduling?.modelReason);
-  if (!actualModel && !requestedModel && !modelReason && !decisions.length) return undefined;
-  return { actualModel, requestedModel, modelReason, decisions };
+  const resumedFrom = text(result.resumedFrom);
+  if (!actualModel && !requestedModel && !modelReason && !resumedFrom && !decisions.length) return undefined;
+  return { actualModel, requestedModel, modelReason, resumedFrom, decisions };
 }

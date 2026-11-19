@@ -633,6 +633,28 @@ describe("rebuildChainsFromTranscript", () => {
     });
   });
 
+  it("rebuilds the latest requested model, reason and effort for resume", () => {
+    const root = taskRow("call-1", "d1", "explore", { description: "explore" });
+    root.toolResult = { details: {
+      delegationId: "d1", agent: "explorer", status: "interrupted", modelId: "actual",
+      requestedThinkingLevel: "off",
+      scheduling: { requestedModel: "account/specialist", modelReason: "The specialist owns this review.", decisions: [{ model: "account/specialist", decision: "selected", reason: "saved policy" }] },
+    } };
+    const resumed = taskRow("call-2", "d2", "continue", { resume: "d1" });
+    resumed.toolResult = { details: {
+      delegationId: "d2", agent: "explorer", status: "completed", modelId: "actual",
+      requestedThinkingLevel: "off",
+      scheduling: { requestedModel: "account/specialist", modelReason: "The specialist owns this review.", decisions: [{ model: "account/specialist", decision: "selected", reason: "saved policy" }] },
+    } };
+    const [chain] = rebuildChainsFromTranscript([root, resumed]);
+    expect(chain).toMatchObject({
+      latestModelKey: "account/specialist",
+      latestRequestedModel: "account/specialist",
+      latestModelReason: "The specialist owns this review.",
+      latestRequestedThinkingLevel: "off",
+    });
+  });
+
   it("starts a new chain when a Task call carries no resume link", () => {
     const transcript: UiMessage[] = [
       taskRow("call-1", "d1", "first"),

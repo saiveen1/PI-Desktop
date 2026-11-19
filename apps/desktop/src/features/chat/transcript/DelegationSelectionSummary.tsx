@@ -11,6 +11,7 @@ export function DelegationSelectionSummary({ payload }: { payload: unknown }) {
       {summary.requestedModel ? <><dt>{t("delegationDetails.requested")}</dt><dd>{summary.requestedModel}</dd></> : null}
       {summary.modelReason ? <><dt>{t("delegationDetails.reason")}</dt><dd>{summary.modelReason}</dd></> : null}
       {summary.actualModel ? <><dt>{t("delegationDetails.actual")}</dt><dd>{summary.actualModel}</dd></> : null}
+      {summary.resumedFrom ? <><dt>{t("delegationDetails.resumedFrom")}</dt><dd>{summary.resumedFrom}</dd></> : null}
       {summary.decisions.length ? <>
         <dt>{t("delegationDetails.scheduling")}</dt>
         <dd><ul>{summary.decisions.map((decision, index) => <li key={`${decision.model}-${index}`}>

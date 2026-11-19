@@ -51,9 +51,11 @@ export function useSubagentHistory(sessionId: string, delegationId: string, visi
     : mergeSubagentHistory(read.view?.messages ?? [], visible, live), [read.view, visible, live]);
   const known = useRef(messages);
   known.current = messages;
-  const hasMoreBefore = Boolean(read.before && subagentHistoryAddsContent(messages, mergeSubagentHistory(read.before.messages, messages), delegationId));
-  const hasMoreAfter = Boolean(read.after && subagentHistoryAddsContent(messages, mergeSubagentHistory(read.after.messages, messages), delegationId));
-  const obsolete = Boolean((read.before && !hasMoreBefore) || (read.after && !hasMoreAfter));
+  const candidateHasMoreBefore = Boolean(read.before && subagentHistoryAddsContent(messages, mergeSubagentHistory(read.before.messages, messages), delegationId));
+  const candidateHasMoreAfter = Boolean(read.after && subagentHistoryAddsContent(messages, mergeSubagentHistory(read.after.messages, messages), delegationId));
+  const obsolete = Boolean((read.before && !candidateHasMoreBefore) || (read.after && !candidateHasMoreAfter));
+  const hasMoreBefore = !read.loading && !read.error && !obsolete && candidateHasMoreBefore;
+  const hasMoreAfter = !read.loading && !read.error && !obsolete && candidateHasMoreAfter;
   useEffect(() => {
     // Live output can satisfy a prepared page before the user clicks it.
     if (obsolete) setProbeAttempt(value => value + 1);

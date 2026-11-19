@@ -113,7 +113,9 @@ This edition strengthens the existing framework rather than replacing it.
   Runtime observations distinguish quiet tools, model waiting and no new evidence
   without imposing a hidden kill deadline or mandatory model progress reports.
   In local Agent sessions, send instructions to a running child or explicitly
-  resume a settled task. Viewing history alone does not restart it.
+  resume a settled task. Resumes retain the recorded model, selection rationale
+  and requested effort, and are shown as continuations rather than new tasks.
+  Viewing history alone does not restart it.
 - **More accurate completion and recovery.** Do not treat an old progress message
   or truncated ending as a final report; coalesce duplicate recovery requests
   and support resuming work interrupted by a parent failure on the next user turn.

@@ -606,6 +606,8 @@ export type DelegationRecord = {
   agentName: string;
   modelId: string;
   thinkingLevel: SubagentThinkingLevel;
+  /** Requested effort before provider-specific clamping; retained for resume. */
+  requestedThinkingLevel?: SubagentThinkingLevel;
   status: DelegationStatus;
   startedAt: number;
   completedAt?: number;
@@ -658,6 +660,7 @@ function delegationSummary(record: DelegationRecord): Record<string, unknown> {
     agent: record.agentName,
     modelId: record.modelId,
     thinkingLevel: record.thinkingLevel,
+    ...(record.requestedThinkingLevel ? { requestedThinkingLevel: record.requestedThinkingLevel } : {}),
     status: record.status,
     startedAt: record.startedAt,
     turns: record.result?.turns ?? record.turns,
@@ -5015,6 +5018,8 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
             `Resuming a subagent cannot change its model or provider. Omit \`model\` to continue ${resume}, or start a new delegation to pick a different model.`);
         }
         const modelReason = isRecord(params) && typeof params.modelReason === "string" ? params.modelReason : undefined;
+        const inheritedModelReason = resume ? resumedChain?.latestModelReason : undefined;
+        const effectiveModelReason = modelReason?.trim() || inheritedModelReason;
         if (this.delegationPolicy.value.selectionMode === "task-fit" && !resume &&
           this.delegationModelsReadKey !== safeJson(this.delegationPolicy.value)) {
           return this.subagentToolError(toolCallId, "Read the current model descriptions with TaskModels before selecting a model. The conversation's model policy is new or changed.");
@@ -5028,17 +5033,17 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
         if (rawEffort !== undefined && effort === undefined) {
           return this.subagentToolError(toolCallId, `Invalid Task effort. Choose one of: ${THINKING_LEVELS.join(", ")}.`);
         }
-        const requestedThinkingLevel = definition.thinkingLevel ?? effort ?? this.thinkingLevel;
+        const requestedThinkingLevel = definition.thinkingLevel ?? effort ?? resumedChain?.latestRequestedThinkingLevel ?? this.thinkingLevel;
         const requestedBinding = modelOverride ? this.subagentProviders[modelOverride] : undefined;
         let scheduler: DelegationScheduler;
         try {
           scheduler = new DelegationScheduler({
             settings: this.delegationSettings,
-            sessionId: this.sessionId, task, reason: modelReason, selection,
+            sessionId: this.sessionId, task, reason: effectiveModelReason, selection,
             currentPolicy: () => this.delegationPolicy.refresh(),
             agentName: definition.name,
             description: isRecord(params) && typeof params.description === "string" ? params.description : definition.description,
-            requestedModel: modelOverride || undefined,
+            requestedModel: resumedChain?.latestRequestedModel ?? (modelOverride || undefined),
             thinkingLevel: definition.thinkingLevel === "omit" ? undefined : requestedThinkingLevel,
             requiresImages: isRecord(params) && params.requiresImages === true,
             minContextWindow: isRecord(params) ? params.minContextWindow : undefined,
@@ -5070,7 +5075,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
         } catch (error) {
           return this.subagentToolError(toolCallId, error instanceof Error ? error.message : "Delegation scheduling failed; no task started.",
             error instanceof DelegationRequestError ? { code: error.code } : error instanceof DelegationAdmissionError ? { code: error.code,
-              scheduling: { requestedModel: scheduler.requestedModel, modelReason: modelReason?.trim(), decisions: error.decisions } } : undefined);
+              scheduling: { requestedModel: scheduler.requestedModel, modelReason: effectiveModelReason, decisions: error.decisions } } : undefined);
         }
         if (this.disposed || this.runCancelled || this.turnHadError || resumeEpoch !== this.turnEpoch) {
           return this.subagentToolError(toolCallId, "The parent turn ended before delegation could resume.");
@@ -5161,6 +5166,9 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           objective,
           latestModelId: provider.modelId,
           ...(providerKey ? { latestModelKey: providerKey } : {}),
+          requestedModel: scheduler.requestedModel,
+          modelReason: effectiveModelReason,
+          requestedThinkingLevel,
           resumedFrom: resumedChain,
         });
         const runPolicy = resolveDelegationRunPolicy(scheduler.settings?.runPolicy);
@@ -5175,6 +5183,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           agentName: definition.name,
           modelId: provider.modelId,
           thinkingLevel,
+          requestedThinkingLevel,
           status: "running",
           startedAt,
           completion,
@@ -5191,7 +5200,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           ...(worktreeKey ? { worktreeKey } : {}),
           ...(resumedChain ? { resumedFrom: resume } : {}),
           ...(modelChangedFrom ? { modelChangedFrom } : {}),
-          scheduling: { requestedModel: scheduler.requestedModel, modelReason: modelReason?.trim(), decisions: scheduler.decisions },
+          scheduling: { requestedModel: scheduler.requestedModel, modelReason: effectiveModelReason, decisions: scheduler.decisions },
         };
         this.delegations.set(delegationId, record);
         const initialApprovals = scheduler.approvals.map(row => ({ ...row }));
@@ -5351,6 +5360,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
             toolCalls: record.toolCalls,
             modelId: provider.modelId,
             thinkingLevel,
+            requestedThinkingLevel,
             ...(record.scheduling ? { scheduling: record.scheduling } : {}),
             ...(record.observation ? { observation: record.observation } : {}),
             ...(resumedChain ? { resumedFrom: resume } : {}),

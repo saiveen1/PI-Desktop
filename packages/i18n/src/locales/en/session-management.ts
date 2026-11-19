@@ -75,6 +75,7 @@ export const delegationDetails = {
   "reason": "Selection reason",
   "actual": "Actual model",
   "scheduling": "Scheduling decisions",
+  "resumedFrom": "Resumed from",
   "selected": "Selected",
   "skipped": "Skipped",
   "cancelled": "Cancelled"

@@ -75,6 +75,7 @@ export const delegationDetails = {
   "reason": "Seçim gerekçesi",
   "actual": "Kullanılan model",
   "scheduling": "Zamanlama kararları",
+  "resumedFrom": "Şuradan sürdürüldü",
   "selected": "Seçildi",
   "skipped": "Atlandı",
   "cancelled": "İptal edildi"

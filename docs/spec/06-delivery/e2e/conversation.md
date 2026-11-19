@@ -5047,8 +5047,10 @@ Build two actual runtimes with identical configuration and different scratch dir
   preserve saved consent. Model descriptions are absent from constant system/Task
   payloads and appear in the requested directory result.
   Original modelReason, requested model and actual scheduling decisions survive
-  reload and appear separately in ordinary detail views. Missing legacy reasons
-  remain absent. Configuring a pool does not alter activity timestamps.
+  reload and appear separately in ordinary detail views. Resuming after a
+  failed or interrupted run reuses the recorded requested effort when the new
+  Task omits it and is labeled as a continuation. Missing legacy reasons remain
+  absent. Configuring a pool does not alter activity timestamps.
 - **Status:** Session approval coverage includes shared policy unit tests,
   main-process authorization/launch tests, isolated renderer user-path tests and
   Host RPC persistence tests. Earlier unrelated organization scenarios retain

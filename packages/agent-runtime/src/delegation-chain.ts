@@ -92,6 +92,9 @@ export class DelegationChainRegistry {
     latestModelId?: string;
     /** `providerId/modelId` key that resolved, so a resume can re-resolve it. */
     latestModelKey?: string;
+    requestedModel?: string;
+    modelReason?: string;
+    requestedThinkingLevel?: DelegationChain["latestRequestedThinkingLevel"];
     resumedFrom?: DelegationChain;
   }): DelegationChain {
     const existing = options.resumedFrom
@@ -106,6 +109,9 @@ export class DelegationChainRegistry {
           latestObjective: options.objective || existing.latestObjective,
           latestModelId: options.latestModelId ?? existing.latestModelId,
           latestModelKey: options.latestModelKey ?? existing.latestModelKey,
+          latestRequestedModel: options.requestedModel ?? existing.latestRequestedModel,
+          latestModelReason: options.modelReason ?? existing.latestModelReason,
+          latestRequestedThinkingLevel: options.requestedThinkingLevel ?? existing.latestRequestedThinkingLevel,
           latestStatus: "running",
           lastActivityAt: Date.now(),
         }
@@ -121,6 +127,9 @@ export class DelegationChainRegistry {
           latestObjective: options.objective,
           latestModelId: options.latestModelId,
           latestModelKey: options.latestModelKey,
+          latestRequestedModel: options.requestedModel,
+          latestModelReason: options.modelReason,
+          latestRequestedThinkingLevel: options.requestedThinkingLevel,
           latestStatus: "running",
           lastActivityAt: Date.now(),
         };

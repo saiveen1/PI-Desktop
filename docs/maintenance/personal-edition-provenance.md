@@ -54,6 +54,16 @@ Observer reviews: upstream's `one-shot-complete.ts` does not set it. The
 loopback `pi-anthropic-message-threads.test.ts` regression verifies both the
 independent request and preservation of the next main-turn continuation.
 
+The post-merge local recovery fix on `9ba56d329` preserves the requested model,
+selection rationale and pre-clamp effort in the resumable delegation chain. Host
+history now falls back to settled scheduling metadata when `Task(resume)` omits
+those fields, and the renderer labels the continuation instead of presenting it
+as a new task. The subagent history probe also suppresses stale earlier-message
+controls while lookahead is loading or has become obsolete. Coverage is in
+`delegation-hot-policy-user-path.test.ts`, `delegation-history.test.ts`,
+`crates/host-core/src/delegation_history_tests.rs`, and
+`apps/desktop/test/subagent-history.test.mjs`.
+
 ## Local harness and delegation increments
 
 Compared with locally recorded upstream `047c4eab1`, the personal runtime adds

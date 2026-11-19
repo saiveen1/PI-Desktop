@@ -75,6 +75,7 @@ export const delegationDetails = {
   "reason": "Auswahlgrund",
   "actual": "Tatsächliches Modell",
   "scheduling": "Planungsentscheidungen",
+  "resumedFrom": "Fortgesetzt von",
   "selected": "Ausgewählt",
   "skipped": "Übersprungen",
   "cancelled": "Abgebrochen"

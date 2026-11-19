@@ -36,8 +36,10 @@ import type {
 import {
   MAX_RESUMABLE_LISTED_FILES,
   MAX_RESUMABLE_READ_LINES,
+  isSessionThinkingLevel,
   normalizeSubagentName,
   withoutReasoningReplayPlaceholder,
+  type SubagentThinkingLevel,
   type UiMessage,
 } from "@pi-desktop/shared";
 import { isRecord, timestampMs, toJsonObject, toJsonValue, usageToPi } from "./agent-messages.js";
@@ -73,6 +75,12 @@ export type DelegationChain = {
   latestModelId?: string;
   /** `providerId/modelId` key the latest run resolved (ADR 0279 §4). */
   latestModelKey?: string;
+  /** Original requested model key, preserved across resume when present. */
+  latestRequestedModel?: string;
+  /** Original model-selection rationale, preserved across resume. */
+  latestModelReason?: string;
+  /** Requested effort before provider-specific clamping. */
+  latestRequestedThinkingLevel?: SubagentThinkingLevel;
   /** Settled status of the latest run; `running` while it works. Owns the
    * resumability gate so pruning finished delegation records cannot make a
    * running chain look reusable (ADR 0279). */
@@ -497,6 +505,10 @@ export type RebuiltTaskCall = {
   objective: string;
   task?: string;
   modelId?: string;
+  modelKey?: string;
+  requestedModel?: string;
+  modelReason?: string;
+  requestedThinkingLevel?: SubagentThinkingLevel;
   createdAt: number;
   /** Settled status this call's `Task` row recorded, when it recorded one. */
   status?: string;
@@ -566,6 +578,15 @@ export function rebuildChainsFromTranscript(
     const task = typeof args?.task === "string" ? args.task.trim() : "";
     const modelId =
       typeof details?.modelId === "string" ? details.modelId : undefined;
+    const scheduling = isRecord(details?.scheduling) ? details.scheduling : undefined;
+    const requestedModel = typeof scheduling?.requestedModel === "string" ? scheduling.requestedModel : undefined;
+    const modelReason = typeof scheduling?.modelReason === "string" ? scheduling.modelReason : undefined;
+    const requestedThinkingLevel = isSessionThinkingLevel(details?.requestedThinkingLevel)
+      ? details.requestedThinkingLevel : undefined;
+    const selectedDecision = Array.isArray(scheduling?.decisions)
+      ? [...scheduling.decisions].reverse().find(candidate => isRecord(candidate) && candidate.decision === "selected" && typeof candidate.model === "string")
+      : undefined;
+    const modelKey = isRecord(selectedDecision) && typeof selectedDecision.model === "string" ? selectedDecision.model : undefined;
     const checkpointPath =
       typeof details?.checkpointPath === "string" ? details.checkpointPath : undefined;
     const call: RebuiltTaskCall = {
@@ -576,6 +597,10 @@ export function rebuildChainsFromTranscript(
       objective: taskObjectiveFromArgs(args),
       ...(task ? { task } : {}),
       ...(modelId ? { modelId } : {}),
+      ...(modelKey ? { modelKey } : {}),
+      ...(requestedModel ? { requestedModel } : {}),
+      ...(modelReason ? { modelReason } : {}),
+      ...(requestedThinkingLevel ? { requestedThinkingLevel } : {}),
       ...(checkpointPath ? { checkpointPath } : {}),
       status: chainStatusFromDetail(details, row),
       createdAt: timestampMs(row.createdAt) || Date.now(),
@@ -639,6 +664,10 @@ export function rebuildChainsFromTranscript(
       latestDelegationId: latest?.delegationId,
       latestObjective: latest?.objective ?? root.objective,
       latestModelId: latest?.modelId,
+      ...(latest?.modelKey ? { latestModelKey: latest.modelKey } : {}),
+      ...(latest?.requestedModel ? { latestRequestedModel: latest.requestedModel } : {}),
+      ...(latest?.modelReason ? { latestModelReason: latest.modelReason } : {}),
+      ...(latest?.requestedThinkingLevel ? { latestRequestedThinkingLevel: latest.requestedThinkingLevel } : {}),
       latestStatus: latest?.status,
       ...(latest?.checkpointPath ? { checkpointPath: latest.checkpointPath } : {}),
       lastActivityAt: latest?.createdAt ?? root.createdAt,

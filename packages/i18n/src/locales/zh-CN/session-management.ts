@@ -75,6 +75,7 @@ export const delegationDetails = {
   "reason": "选模理由",
   "actual": "实际模型",
   "scheduling": "调度记录",
+  "resumedFrom": "恢复自",
   "selected": "已选择",
   "skipped": "已跳过",
   "cancelled": "已取消"

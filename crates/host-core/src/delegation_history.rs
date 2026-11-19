@@ -149,10 +149,23 @@ fn project(c: &Candidate, message: sessions::UiMessage) -> Option<Value> {
     if let Some(report) = details["report"].as_str() {
         bounded(&mut out, "report", report, Some("reportTruncated"));
     }
+    let scheduling = details.get("scheduling").unwrap_or(&Value::Null);
     for (key, source) in [
         ("modelId", &details["modelId"]),
-        ("modelReason", &args["reason"]),
-        ("requestedModel", &args["model"]),
+        (
+            "modelReason",
+            scheduling
+                .get("modelReason")
+                .or(args.get("reason"))
+                .unwrap_or(&Value::Null),
+        ),
+        (
+            "requestedModel",
+            scheduling
+                .get("requestedModel")
+                .or(args.get("model"))
+                .unwrap_or(&Value::Null),
+        ),
     ] {
         if let Some(text) = source.as_str() {
             bounded(&mut out, key, text, None);

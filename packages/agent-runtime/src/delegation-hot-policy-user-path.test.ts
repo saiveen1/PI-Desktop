@@ -258,6 +258,31 @@ describe("hot delegation policy through the real parent and child agent loops", 
       expect(f.approvals).toHaveLength(2);
       expect(details(f.events).at(-1)).toMatchObject({ modelId: "new", runPolicy: expect.objectContaining({ maxToolCalls: 2 }), resumedFrom: expect.any(String) });
     } finally { await f.close(); }
+
+  });
+
+  it("preserves requested effort and selection rationale across a resumed Task", async () => {
+    let resumed = false;
+    const f = fixture({ parentLevel: "high", parent: index => {
+      if (index === 1) return immediate(task({ model: "fixture/old", modelReason: "The existing review binding remains authoritative.", effort: "off" }));
+      const first = details(f.events)[0];
+      const settled = f.events.some(({ event }) => event.type === "message_end" && event.message.toolName === "Task" &&
+        isRecord(event.message.toolResult) && isRecord(event.message.toolResult.details) && event.message.toolResult.details.status === "completed");
+      if (settled && !resumed) {
+        resumed = true;
+        if (typeof first?.delegationId !== "string") throw new Error("Missing initial delegation ID");
+        return immediate(task({ resume: first.delegationId }));
+      }
+      return immediate(settled && resumed ? text("Resume incorporated.") : call("TaskWait", {}));
+    } });
+    try {
+      await f.prompt();
+      const rows = details(f.events);
+      expect(f.childRequests).toEqual(["old", "old"]);
+      expect(rows).toHaveLength(2);
+      expect(rows[0]).toMatchObject({ thinkingLevel: "off", requestedThinkingLevel: "off", scheduling: { requestedModel: "fixture/old", modelReason: "The existing review binding remains authoritative." } });
+      expect(rows[1]).toMatchObject({ thinkingLevel: "off", requestedThinkingLevel: "off", resumedFrom: rows[0].delegationId, scheduling: { requestedModel: "fixture/old", modelReason: "The existing review binding remains authoritative." } });
+    } finally { await f.close(); }
   });
   it.each([
     { model: undefined, accepted: true },

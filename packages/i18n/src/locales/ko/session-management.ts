@@ -75,6 +75,7 @@ export const delegationDetails = {
   "reason": "선택 이유",
   "actual": "실제 모델",
   "scheduling": "일정 결정",
+  "resumedFrom": "재개 원본",
   "selected": "선택됨",
   "skipped": "건너뜀",
   "cancelled": "취소됨"

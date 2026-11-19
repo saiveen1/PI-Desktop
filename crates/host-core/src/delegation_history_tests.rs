@@ -387,3 +387,32 @@ fn history_preserves_only_recorded_valid_effort_without_inventing_legacy_values(
         );
     }
 }
+
+#[test]
+fn history_uses_recorded_scheduling_metadata_when_resume_args_omit_selection() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = Database::open_in_dir(dir.path()).unwrap();
+    let session = sessions::create_session(&db, None, None, None, None, None).unwrap();
+    let message: sessions::UiMessage = serde_json::from_value(json!({
+        "id": "resume-row",
+        "role": "tool",
+        "toolName": "Task",
+        "content": "Task resumed",
+        "createdAt": "2026-11-05T12:00:00.000Z",
+        "toolArgs": {"agent": "reviewer", "task": "continue", "resume": "prior"},
+        "toolResult": {"details": {
+            "delegationId": "next",
+            "agent": "reviewer",
+            "status": "completed",
+            "modelId": "actual",
+            "thinkingLevel": "low",
+            "requestedThinkingLevel": "high",
+            "scheduling": {"requestedModel": "account/specialist", "modelReason": "The specialist owns this review.", "decisions": []}
+        }}
+    })).unwrap();
+    sessions::append_message(&db, &session.id, &message, None).unwrap();
+    let entry = list(&db, Query::default()).unwrap()["entries"][0].clone();
+    assert_eq!(entry["requestedModel"], "account/specialist");
+    assert_eq!(entry["modelReason"], "The specialist owns this review.");
+    assert_eq!(entry["thinkingLevel"], "low");
+}

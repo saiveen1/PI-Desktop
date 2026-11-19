@@ -10,7 +10,7 @@ import { subagentTaskOutcome } from "../../lib/subagent-task-presentation";
  */
 export function delegationHistoryDiagnostics(entry: DelegationRunHistoryEntry) {
   return {
-    modelId: entry.modelId, scheduling: { requestedModel: entry.requestedModel },
+    modelId: entry.modelId, scheduling: { requestedModel: entry.requestedModel, modelReason: entry.modelReason },
     ...(entry.thinkingLevel === undefined ? {} : { thinkingLevel: entry.thinkingLevel }),
     startedAt: entry.startedAt ? Date.parse(entry.startedAt) : undefined,
     completedAt: entry.status !== "interrupted" && entry.completedAt ? Date.parse(entry.completedAt) : undefined,

@@ -1535,6 +1535,11 @@ the on-demand catalog of §7.1. Execution of all four is restricted to Agent mod
   the parent session level for this invocation only. The parent's level is not a
   ceiling. Approval uses the requested selection, and each admitted model clamps
   it independently; `omit` records that no provider thinking override was sent.
+  A resumed chain reuses its recorded requested model, model-selection rationale,
+  and requested effort when the new `Task(resume)` omits those fields; the active
+  model may still clamp the requested effort to its capabilities. The Task result
+  records `resumedFrom`, so renderer history presents the run as a continuation,
+  not a new unrelated delegation.
 - `TaskWait(delegationIds?, mode?, minCompleted?, timeoutSeconds?)` — converges
   on running delegations (defaults to all of them) and returns their reports;
   `mode: "any"` with `minCompleted` converges as soon as the first N settle.
