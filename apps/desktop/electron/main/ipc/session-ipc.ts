@@ -342,6 +342,7 @@ export function registerSessionIpc({
             id?: string;
             messageBefore?: number;
             messageAround?: string;
+            previousUserMessage?: boolean;
             messageLimit?: number;
             contentLimit?: number;
           },
@@ -350,6 +351,18 @@ export function registerSessionIpc({
       const request = typeof input === "string" ? { id: input } : input ?? {};
       const id = String(request.id ?? "").trim();
       if (!id) throw new Error("session id required");
+      if (
+        (request.previousUserMessage !== undefined && typeof request.previousUserMessage !== "boolean") ||
+        (request.previousUserMessage === true && (
+          !Number.isSafeInteger(request.messageBefore) || request.messageBefore! < 0 ||
+          !Number.isSafeInteger(request.messageLimit) || request.messageLimit! <= 0 ||
+          request.messageAround !== undefined || id.startsWith("native-pi:")
+        ))
+      ) {
+        throw Object.assign(new Error("previousUserMessage requires a local Desktop session, non-negative messageBefore, positive messageLimit, and no messageAround"), {
+          errorCode: ErrorCodes.INVALID_ARGUMENT,
+        });
+      }
       if (id.startsWith("native-pi:")) {
         if (!sidecar) throw new Error("sidecar unavailable");
         return sidecar.call("native.session.get", { id, ...request });
@@ -357,6 +370,7 @@ export function registerSessionIpc({
       const [result, { providers, defaults }] = await Promise.all([
         host.call<{ session?: RuntimeSession | null }>("session.get", {
           id,
+          ...(request.previousUserMessage === true ? { previousUserMessage: true } : {}),
           ...(typeof request.messageAround === "string" && request.messageAround.trim()
             ? { messageAround: request.messageAround }
             : {}),

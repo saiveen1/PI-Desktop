@@ -451,6 +451,8 @@ export type SessionHistoryReadOptions = {
   messageAround?: string;
   /** Return the newest page ending before this zero-based message offset. */
   messageBefore?: number;
+  /** End a bounded local read at the last top-level user message before messageBefore. */
+  previousUserMessage?: boolean;
   /** Maximum number of messages in the returned page. */
   messageLimit?: number;
   /** Maximum characters per displayed message/value field. */

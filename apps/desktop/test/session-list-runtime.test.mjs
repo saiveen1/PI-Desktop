@@ -4,6 +4,7 @@ import * as path from "node:path";
 import test from "node:test";
 import ts from "typescript";
 import { IPC } from "../../../packages/shared/src/protocol.ts";
+import { ErrorCodes } from "../../../packages/shared/src/errors.ts";
 import { localNativeProjectPaths } from "../electron/main/services/session-search.ts";
 
 const source = fs.readFileSync(new URL("../electron/main/ipc/session-ipc.ts", import.meta.url), "utf8");
@@ -14,7 +15,7 @@ const imports = {
   electron: { shell: {} },
   "node:fs": fs,
   "node:path": path,
-  "@pi-desktop/shared": { IPC },
+  "@pi-desktop/shared": { IPC, ErrorCodes },
   "../importers": {},
   "../services/session-collaboration": {},
   "../services/session-search": { localNativeProjectPaths },
@@ -52,4 +53,28 @@ test("session listing returns the current host-owned running IDs after its reads
   assert.deepEqual(result.runningSessionIds, ["still-running"]);
   activeTurns.clear();
   assert.deepEqual(result.runningSessionIds, ["still-running"], "the result must be a detached snapshot");
+});
+
+test("session history IPC allowlists and validates the previous-user cursor", async () => {
+  const handlers = new Map();
+  const calls = [];
+  const host = { call: async (...args) => { calls.push(args); return { session: null }; } };
+  loaded.exports.registerSessionIpc({
+    registrar: { handle: (channel, handler) => handlers.set(channel, handler) },
+    getHost: () => host,
+    getSidecar: () => null,
+    sessionCapabilityContext: async () => ({ providers: [], defaults: {} }),
+  });
+  const get = handlers.get(IPC.invoke.sessionGet);
+  const options = { id: "local", previousUserMessage: true, messageBefore: 0, messageLimit: 100, contentLimit: 256 };
+  assert.deepEqual(await get({ ...options, unrelated: true }), { session: null });
+  assert.deepEqual(calls, [["session.get", options]]);
+  for (const patch of [
+    { previousUserMessage: "true" }, { messageBefore: -1 }, { messageBefore: undefined },
+    { messageLimit: 0 }, { messageLimit: 1.5 }, { messageAround: "message" },
+    { id: "native-pi:example" },
+  ]) {
+    await assert.rejects(get({ ...options, ...patch }), { errorCode: "INVALID_ARGUMENT" });
+  }
+  assert.equal(calls.length, 1);
 });

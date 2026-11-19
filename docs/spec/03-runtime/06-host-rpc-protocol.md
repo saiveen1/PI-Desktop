@@ -383,9 +383,9 @@ to later refresh and inference; the vendor picker does not collect them.
   `messageBefore` is the exclusive zero-based end offset, `messageLimit` is
   the positive page size, and `contentLimit` is the positive character budget
   for the derived display projection. The response includes
-  `messageStart` and `hasMoreBefore` when a window is requested. Omitting all
-  three options returns the complete lossless UI projection for sidecar and
-  mutation callers. Window offsets are physical transcript message-line
+  `messageStart` and `hasMoreBefore` when a window is requested. Omitting the
+  window and display options returns the complete lossless UI projection for
+  sidecar and mutation callers. Window offsets are physical transcript message-line
   positions, clamped against the cached transcript layout rather than the
   deduplicated session index counter, and a window is served by seeking to its
   first selected line instead of scanning the history before it.
@@ -395,6 +395,16 @@ to later refresh and inference; the vendor picker does not collect them.
   message retains its complete text; neighboring text and tool fields stay
   capped. Bounded reads also return exclusive physical `messageEnd` and
   `hasMoreAfter` to support contiguous forward pages (ADR session-content-search).
+  Optional `previousUserMessage: true` requires a non-negative integer
+  `messageBefore`, a positive integer `messageLimit` (clamped to 1,000), and no
+  `messageAround`. It returns an ordinary bounded page ending at the last
+  top-level user record strictly before `messageBefore`: `messageEnd` is the
+  selected record's physical position plus one, and `contentLimit` still
+  applies. With no qualifying record, the response is `{ "session": null }`.
+  Invalid mode or cursor options return `INVALID_PARAMS`; omitting the mode or
+  passing `false` preserves ordinary reads.
+  If the selected ID occurs more than once in the page, its selected copy
+  remains the last returned message; physical paging offsets are unchanged.
   When the selected message has `parentToolCallId`, optional `navigationParent`
   contains the latest matching Task tool-call projection from the same canonical
   transcript. It is capped separately and does not widen the window or alter its

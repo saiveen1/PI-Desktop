@@ -78,7 +78,7 @@ export const SessionPane = memo(function SessionPane({
           sessionId={sessionId}
           messages={transcript.messages}
           hasMoreBefore={transcript.hasMoreBefore}
-          onLoadOlder={() => loadTranscriptPage(sessionId, "before")}
+          onLoadOlder={(options) => loadTranscriptPage(sessionId, "before", options)}
           searchTarget={searchTarget}
           readingWindow={transcript.historical}
           liveTail={transcript.liveTail}

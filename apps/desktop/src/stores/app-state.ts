@@ -33,7 +33,7 @@ import type {
   UiMessage,
 } from "@pi-desktop/shared";
 import type { SettingsTabId } from "../lib/settings-search";
-import type { TranscriptSearchTarget, TranscriptView } from "../lib/transcript-reading";
+import type { TranscriptEarlierRead, TranscriptSearchTarget, TranscriptView } from "../lib/transcript-reading";
 import type { TranscriptReadingPosition, TranscriptReadingRestoreResult } from "../lib/transcript-reading-position";
 import type {
   ProjectMeta,
@@ -221,7 +221,7 @@ export type AppState = import("./slices/session-management-slice").SessionManage
   prefetchSession: (id: string) => Promise<void>;
   navigateTranscript: (target: Omit<TranscriptSearchTarget, "requestId">) => Promise<void>;
   restoreTranscriptReading: (sessionId: string, position: TranscriptReadingPosition, signal: AbortSignal) => Promise<TranscriptReadingRestoreResult>;
-  loadTranscriptPage: (sessionId: string, direction: "before" | "after") => Promise<void>;
+  loadTranscriptPage: (sessionId: string, direction: "before" | "after", options?: TranscriptEarlierRead) => Promise<void>;
   returnToLatestTranscript: (sessionId: string) => void;
   prepareReturnToLatestTranscript: (sessionId: string) => () => void;
   selectSession: (

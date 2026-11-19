@@ -1786,6 +1786,16 @@ line to the bounded page. This is derived read-only context, not a new persisted
 relationship or index. The renderer's unified reading view is shared by ordinary
 history and search; it never becomes canonical mutation or model input.
 
+Local previous-user navigation uses the same bounded reader and a binary
+search of sparse physical positions in the disposable transcript layout. The
+layout records the canonical message `role` equal to `user` only when its
+ancestry can be decoded and neither `meta.parentToolCallId` nor
+`meta.nestedParentToolCallId` is non-null. The warm seek does not parse tool
+payloads; only the returned window is projected as usual. The derived layout
+file verifies those positions together with its other indexed data and rebuilds
+from the JSONL on cache mismatch or a prior cache version. Neither the
+transcript format nor canonical model history changes.
+
 Bounded tool-result projections budget typed image metadata and model-input
 diagnostics before binary bodies. Validated raster descriptors retain complete
 `mimeType` and local `path`/`ref` identities (including an unambiguous single-image

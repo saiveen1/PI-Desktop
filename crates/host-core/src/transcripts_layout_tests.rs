@@ -146,6 +146,80 @@ fn cold_layout_keeps_append_only_history() {
 }
 
 #[test]
+fn previous_user_message_index_reuses_disk_cache_and_survives_rewrites() {
+    let dir = tempdir().unwrap();
+    let id = "layout-regression";
+    let mut messages = vec![
+        message("first", "first prompt"),
+        message("tool", &"x".repeat(LAYOUT_CACHE_MIN_LEN as usize)),
+        message("second", "second prompt"),
+        message("legacy", "historical metadata"),
+    ];
+    messages[1].role = "tool".into();
+    messages[3].meta = Some(json!("not an ancestry object"));
+    write_transcript(dir.path(), id, CREATED_AT, &messages).unwrap();
+    let path = transcript_path(dir.path(), id).unwrap();
+    let original = fs::read(&path).unwrap();
+    let initial = session_layout(dir.path(), id).unwrap();
+    assert_eq!(initial.previous_user_message(4), Some(2));
+    assert_eq!(initial.previous_user_message(2), Some(0));
+    assert_eq!(initial.previous_user_message(0), None);
+    assert_eq!(initial.message_ids[3].as_deref(), Some("legacy"));
+
+    if initial.identity.is_available() {
+        let key = layout_key(dir.path(), id);
+        let cache = layout_cache_path(dir.path(), id).unwrap();
+        let valid_cache = fs::read_to_string(&cache).unwrap();
+        layout_cache().lock().unwrap().remove(&key);
+        SCANNED_LINES.with(|lines| lines.set(0));
+        let disk = session_layout(dir.path(), id).unwrap();
+        assert_eq!(disk.previous_user_message(4), Some(2));
+        SCANNED_LINES.with(|lines| assert_eq!(lines.get(), 0));
+        assert!(Arc::ptr_eq(&disk, &session_layout(dir.path(), id).unwrap()));
+
+        let old_version = valid_cache.replacen(
+            &format!("{LAYOUT_CACHE_MAGIC} {LAYOUT_CACHE_VERSION}"),
+            &format!("{LAYOUT_CACHE_MAGIC} 3"),
+            1,
+        );
+        let mut damaged = valid_cache.lines().collect::<Vec<_>>();
+        let last_position = damaged.len() - 2;
+        assert_eq!(damaged[last_position], "2");
+        damaged[last_position] = "1";
+        for invalid_cache in [old_version, damaged.join("\n")] {
+            layout_cache().lock().unwrap().remove(&key);
+            fs::write(&cache, invalid_cache).unwrap();
+            SCANNED_LINES.with(|lines| lines.set(0));
+            assert_eq!(
+                session_layout(dir.path(), id)
+                    .unwrap()
+                    .previous_user_message(4),
+                Some(2)
+            );
+            SCANNED_LINES.with(|lines| assert!(lines.get() > 0));
+        }
+    }
+    assert_eq!(fs::read(&path).unwrap(), original);
+
+    messages[2].role = "assistant".into();
+    write_transcript(dir.path(), id, CREATED_AT, &messages).unwrap();
+    assert_eq!(
+        session_layout(dir.path(), id)
+            .unwrap()
+            .previous_user_message(4),
+        Some(0)
+    );
+    let next = message("new", "new prompt after rewrite");
+    append_message(dir.path(), id, CREATED_AT, &next).unwrap();
+    assert_eq!(
+        session_layout(dir.path(), id)
+            .unwrap()
+            .previous_user_message(5),
+        Some(4)
+    );
+}
+
+#[test]
 fn a_damaged_disk_cache_is_rebuilt_without_skipping_messages() {
     let dir = tempdir().unwrap();
     let messages: Vec<MessageRecord> = (0..300)
@@ -273,7 +347,7 @@ fn layout_recovery_rebuilds_once_and_recomputes_the_window() {
     layout_cache()
         .lock()
         .unwrap()
-        .insert(layout_key(dir.path(), "layout-regression"), stale);
+        .insert(layout_key(dir.path(), "layout-regression"), Arc::new(stale));
 
     let (total, actual) = with_layout_recovery(dir.path(), "layout-regression", |layout| {
         let total = layout.message_count();
@@ -404,7 +478,7 @@ fn unavailable_file_identity_disables_disk_cache_but_keeps_reads_available() {
     let layout = refresh_with_identity(
         dir.path(),
         "layout-regression",
-        TranscriptLayout::default(),
+        Arc::default(),
         length,
         FileIdentity::Unavailable,
     )

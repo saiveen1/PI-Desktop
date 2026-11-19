@@ -2982,6 +2982,26 @@ async fn handle_request(
                     "INVALID_PARAMS",
                 ));
             }
+            let invalid_previous_user_request = || {
+                rpc_err(
+                    1002,
+                    "previousUserMessage must be boolean and, when true, requires non-negative messageBefore, positive messageLimit, and no messageAround",
+                    "INVALID_PARAMS",
+                )
+            };
+            let previous_user_before = match params.get("previousUserMessage") {
+                None | Some(Value::Bool(false)) => None,
+                Some(Value::Bool(true))
+                    if message_limit.is_some() && params.get("messageAround").is_none() =>
+                {
+                    Some(
+                        message_before
+                            .and_then(|before| usize::try_from(before).ok())
+                            .ok_or_else(invalid_previous_user_request)?,
+                    )
+                }
+                _ => return Err(invalid_previous_user_request()),
+            };
             let content_limit = params
                 .get("contentLimit")
                 .and_then(|v| v.as_u64())
@@ -2998,7 +3018,7 @@ async fn handle_request(
                 ));
             }
             let st = state.lock().await;
-            let session = sessions::get_session_with_options(
+            let session = sessions::get_session_with_history_navigation(
                 &st.db,
                 id,
                 sessions::SessionReadOptions {
@@ -3007,6 +3027,7 @@ async fn handle_request(
                     message_limit,
                     content_limit,
                 },
+                previous_user_before,
             )
             .map_err(|e| rpc_err(1000, e.to_string(), "INTERNAL"))?;
             let session = remote_tools::decorate_session(
@@ -10475,6 +10496,101 @@ mod tests {
         .await
         .unwrap_err();
         assert_eq!(missing.data.unwrap()["errorCode"], "NOT_FOUND");
+    }
+
+    #[tokio::test]
+    async fn previous_user_message_rpc_skips_tools_and_delegated_users() {
+        let data_dir = tempfile::tempdir().unwrap();
+        let mut app_state = AppState::open(data_dir.path()).unwrap();
+        app_state.handshook = true;
+        let id = sessions::create_session(&app_state.db, None, None, None, None, None)
+            .unwrap()
+            .id;
+        let records = (0..=402)
+            .map(|position| crate::transcripts::MessageRecord {
+                id: format!("m{}", if position == 120 { 202 } else { position }),
+                role: if matches!(position, 0 | 120 | 202 | 401 | 402) {
+                    "user"
+                } else {
+                    "tool"
+                }
+                .into(),
+                tool_name: None,
+                is_error: false,
+                blocks: json!([{ "type": "text", "text": "a long enough value".repeat(8), "role": "user" }]),
+                meta: match position {
+                    401 => Some(json!({ "parentToolCallId": "delegation" })),
+                    402 => Some(json!({ "nestedParentToolCallId": "nested" })),
+                    _ => None,
+                },
+                created_at: "2026-01-01T00:00:00Z".into(),
+            })
+            .collect::<Vec<_>>();
+        crate::transcripts::write_transcript(
+            data_dir.path(),
+            &id,
+            "2026-01-01T00:00:00Z",
+            &records,
+        )
+        .unwrap();
+        let state = Arc::new(Mutex::new(app_state));
+        let (tx, _rx) = mpsc::unbounded_channel();
+        let read = |mut params: Value| {
+            params["id"] = json!(id);
+            handle_request(state.clone(), "session.get", params, tx.clone())
+        };
+
+        let page = read(json!({
+            "previousUserMessage": true, "messageBefore": 403, "messageLimit": 100, "contentLimit": 96
+        })).await.unwrap();
+        let page = &page["session"];
+        assert_eq!(page["messageStart"], 103);
+        assert_eq!(page["messageEnd"], 203);
+        assert_eq!(page["hasMoreBefore"], true);
+        assert_eq!(page["hasMoreAfter"], true);
+        let messages = page["messages"].as_array().unwrap();
+        assert_eq!(messages.len(), 99);
+        let anchor = messages.last().unwrap();
+        assert_eq!(anchor["id"], "m202");
+        assert!(anchor["content"]
+            .as_str()
+            .unwrap()
+            .contains("truncated for display"));
+
+        let first =
+            read(json!({ "previousUserMessage": true, "messageBefore": 120, "messageLimit": 100 }))
+                .await
+                .unwrap();
+        let first = &first["session"];
+        assert_eq!(first["messageStart"], 0);
+        assert_eq!(first["messageEnd"], 1);
+        assert_eq!(first["hasMoreBefore"], false);
+        assert_eq!(first["messages"][0]["id"], "m0");
+        let absent =
+            read(json!({ "previousUserMessage": true, "messageBefore": 0, "messageLimit": 100 }))
+                .await
+                .unwrap();
+        assert_eq!(absent, json!({ "session": null }));
+        let ordinary =
+            read(json!({ "previousUserMessage": false, "messageBefore": 403, "messageLimit": 1 }))
+                .await
+                .unwrap();
+        assert_eq!(ordinary["session"]["messages"][0]["id"], "m402");
+
+        for params in [
+            json!({ "previousUserMessage": "true", "messageBefore": 0, "messageLimit": 1 }),
+            json!({ "previousUserMessage": true, "messageLimit": 1 }),
+            json!({ "previousUserMessage": true, "messageBefore": -1, "messageLimit": 1 }),
+            json!({ "previousUserMessage": true, "messageBefore": 0 }),
+            json!({ "previousUserMessage": true, "messageBefore": 0, "messageLimit": 0 }),
+            json!({ "previousUserMessage": true, "messageBefore": 0, "messageLimit": 1, "messageAround": "m0" }),
+            json!({ "previousUserMessage": true, "messageBefore": 0, "messageLimit": 1, "messageAround": null }),
+        ] {
+            assert_eq!(
+                read(params).await.unwrap_err().data.unwrap()["errorCode"],
+                "INVALID_PARAMS"
+            );
+        }
     }
 
     #[tokio::test]

@@ -185,7 +185,8 @@ export function createTranscriptReadingRuntime({ get, set }: StoreAccess, read: 
           });
       }
     },
-    loadTranscriptPage: async (sessionId, direction) => {
+    loadTranscriptPage: async (sessionId, direction, options) => {
+      const previous = get().transcriptViews[sessionId];
       const view = currentView(sessionId);
       const remote = isRemoteSession({ id: sessionId });
       // Remote history exposes older-item cursors only; never synthesize a
@@ -193,10 +194,33 @@ export function createTranscriptReadingRuntime({ get, set }: StoreAccess, read: 
       if (remote && direction === "after") return;
       if (view.loading || !(direction === "before" ? view.hasMoreBefore : view.hasMoreAfter))
         return;
+      if (options?.signal?.aborted) return;
       const limit = view.focus ? TRANSCRIPT_SEARCH_PAGE_SIZE : TRANSCRIPT_PAGE_SIZE;
       const pending: TranscriptView = { ...view, loading: direction };
+      const restorePrevious = () => {
+        if (get().transcriptViews[sessionId] !== pending) return;
+        if (previous) publish(sessionId, previous);
+        else clearTranscriptView(sessionId);
+      };
       publish(sessionId, pending);
       try {
+        if (direction === "before" && options?.previousPrompt && !remote && !sessionId.startsWith("native-pi:") &&
+          (!view.focus || view.focus.kind === "previous-prompt") && get().activeSessionId === sessionId && !get().runningSessions[sessionId]) {
+          const { session } = await read(sessionId, { messageBefore: view.messageStart,
+            messageLimit: TRANSCRIPT_PAGE_SIZE, contentLimit: TRANSCRIPT_CONTENT_LIMIT, previousUserMessage: true });
+          if (get().transcriptViews[sessionId] !== pending) return;
+          if (options.signal?.aborted || get().activeSessionId !== sessionId || get().runningSessions[sessionId]) {
+            restorePrevious();
+            return;
+          }
+          const prompt = session?.messages.at(-1);
+          if (session && prompt?.role === "user" && !prompt.parentToolCallId && !prompt.nestedParentToolCallId && session.hasMoreAfter &&
+            session.messageEnd !== undefined && session.messageEnd <= view.messageStart) {
+            publish(sessionId, transcriptViewFromSession(session, { sessionId, messageId: prompt.id, query: "",
+              kind: "previous-prompt", requestId: ++nextRequestId }));
+            return;
+          }
+        }
         const { session } = await read(sessionId, {
           messageBefore:
             direction === "before" ? view.messageStart : (view.messageEnd ?? 0) + limit,
@@ -204,6 +228,7 @@ export function createTranscriptReadingRuntime({ get, set }: StoreAccess, read: 
           contentLimit: TRANSCRIPT_CONTENT_LIMIT,
         });
         if (get().transcriptViews[sessionId] !== pending) return;
+        if (options?.signal?.aborted) { restorePrevious(); return; }
         if (!session) throw new Error("Conversation no longer exists.");
         const extended = extendTranscriptView(pending, session, direction);
         // Remote numeric values represent opaque Host item cursors. Preserve
@@ -216,6 +241,10 @@ export function createTranscriptReadingRuntime({ get, set }: StoreAccess, read: 
           hasMoreAfter: false,
         } : extended);
       } catch (error) {
+        if (options?.signal?.aborted) {
+          restorePrevious();
+          return;
+        }
         reportError(sessionId, pending, error);
       }
     },

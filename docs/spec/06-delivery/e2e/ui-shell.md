@@ -2653,6 +2653,23 @@
   continuation, reversal, and return-to-latest coverage (`transcript-history-demand.test.mjs`);
   the full desktop journey and low-memory Windows measurement remain pending.
 
+### E2E-159a: Read past a folded tool-heavy turn
+
+- **Preconditions**: A settled local Desktop session whose bounded tail starts
+  inside one folded turn with several hundred tools.
+- **Steps**: Scroll upward at the tail boundary or activate **Show earlier
+  messages**. Return to latest, then use **Load earlier tool details**. From the
+  earlier prompt, use **Load later messages**. Repeat with the leading tool
+  activity open, and with a navigation cancelled before its read resolves.
+- **Expected**: One demand locates the earlier prompt and never loads the
+  intermediate tool pages. The reading range does not merge across the gap.
+  The explicit detail path reads one page, and a late cancelled jump cannot
+  move the viewport or change model history.
+- **Specs**: `04-ux/09-interaction-patterns.md` §9.1; ADR 0120.
+- **Acceptance**: C (conversation), Quality. **Milestone**: M6+.
+- **Status**: Isolated Chromium, renderer store, and Host RPC regression coverage;
+  installed Desktop and process-memory qualification remain pending.
+
 ## E2E-160: Dragging the window across displays keeps the dropped position
 
 - **Preconditions**: PI-Desktop is open on a machine with two displays arranged

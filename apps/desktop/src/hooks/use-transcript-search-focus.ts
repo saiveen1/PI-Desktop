@@ -80,6 +80,15 @@ export function installTranscriptSearchFocus({
   if (fresh)
     position.current = { requestId: target.requestId, alignUntil: performance.now() + 1500 };
   onNavigate(fresh);
+  if (target.kind === "previous-prompt") {
+    row.classList.remove("transcript-search-target");
+    if (fresh) {
+      const offset = message.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+      scroller.scrollTop += offset - Math.min(160, scroller.clientHeight / 3);
+      onPosition?.(scroller.scrollTop);
+    }
+    return;
+  }
 
   let match = locateTranscriptSearch(message, target.query, source);
   let highlight: Highlight | undefined;

@@ -44,13 +44,13 @@ test("session reads use a bounded tail and load older pages on demand", () => {
     main,
     /host\.call<\{ session\?: RuntimeSession \| null \}>\("session\.get"/,
   );
-  assert.match(transcript, /onLoadOlder\?: \(\) => Promise<void>/);
+  assert.match(transcript, /onLoadOlder\?: \(options\?: [^\n]+TranscriptEarlierRead\) => Promise<void>/);
   assert.match(transcript, /gesturing && upwardSpeed > 0 &&\s*isHistoryPrefetchPosition/);
   // Paging is wired per retained pane (ADR 0137), so each pane requests its own
   // older pages rather than the surface requesting them for whichever session
   // happens to be active.
   assert.match(pane, /hasMoreBefore=\{transcript\.hasMoreBefore\}/);
-  assert.match(pane, /onLoadOlder=\{\(\) => loadTranscriptPage\(sessionId, "before"\)\}/);
+  assert.match(pane, /onLoadOlder=\{\(options\) => loadTranscriptPage\(sessionId, "before", options\)\}/);
 });
 
 test("session reads are coalesced, bounded, and never globally serialized", () => {
@@ -154,7 +154,7 @@ test("hidden panes keep their layout box and stay inert", () => {
 });
 
 test("a hidden pane does no reading work off screen", () => {
-  assert.match(transcript, /const reachTop = useCallback\(\(\) => \{\s*if \(!paneVisible \|\| isHistoryPaging\(\)\) return;/);
+  assert.match(transcript, /const reachTop = useCallback\(\([^)]*\) => \{\s*if \(!paneVisible\) return;\s*if \(isHistoryPaging\(\)\)/);
   assert.match(transcript, /if \(becameHidden\) \{\s*seekingEarlierRef\.current = false;\s*lastScrollGestureAtRef\.current = -Infinity;/);
   assert.match(transcript, /\{paneVisible && !veilCovering \? \(\s*<ConversationMinimap/);
 });

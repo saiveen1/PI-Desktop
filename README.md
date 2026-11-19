@@ -129,6 +129,10 @@ This edition strengthens the existing framework rather than replacing it.
 
 ### Conversation organization and notifications
 
+- **Earlier prompts in tool-heavy chats.** When the oldest loaded range starts
+  inside a folded tool run, go directly to the preceding prompt without loading
+  all intervening tool records. Older tool details remain available on demand.
+
 - **Edit the last assistant reply.** In an idle local conversation, save a
   corrected answer and continue with that text as the assistant's reply, without
   rerunning the model. Choose whether to exclude only the final answer's thinking

@@ -58,7 +58,7 @@ type ChatTranscriptProps = {
   sessionId: string | undefined;
   messages: UiMessage[];
   hasMoreBefore?: boolean;
-  onLoadOlder?: () => Promise<void>;
+  onLoadOlder?: (options?: import("../../../lib/transcript-reading").TranscriptEarlierRead) => Promise<void>;
   isRunning: boolean;
   pendingPermission?: PendingPermission;
   /** Requests waiting behind this one, from other delegates (ADR 0062). */
@@ -185,6 +185,8 @@ function TranscriptBody({
     veilPhase,
     handleScroll,
     revealEarlierHistory,
+    canLoadToolHistory,
+    loadToolHistory,
     releaseFollow,
     jumpToLatest,
     loadNewer,
@@ -432,7 +434,7 @@ function TranscriptBody({
   };
 
   return (
-    <TranscriptSearchContext.Provider value={searchTarget}>
+    <TranscriptSearchContext.Provider value={searchTarget?.kind === "previous-prompt" ? null : searchTarget}>
     <DisclosureAnchorContext.Provider value={disclosureAnchorNotifier}>
     <SlotSessionProvider sessionId={sessionId ?? ""}>
     <div
@@ -468,10 +470,14 @@ function TranscriptBody({
         <div className="thread-content" ref={contentRef}>
           <div className="transcript-history-loading" aria-live="polite" aria-busy={loadingOlder}>
             {hasEarlierHistory || loadingOlder ? (
-              <Button type="button" variant="ghost" size="sm" disabled={historyPending}
+              <Button type="button" variant="ghost" size="sm" disabled={historyPending || navigationLoading}
                 onClick={revealEarlierHistory}>
                 {loadingOlder ? t("chat.loadingEarlierMessages") : t("chat.showEarlierMessages")}
               </Button>
+            ) : null}
+            {canLoadToolHistory ? (
+              <Button type="button" variant="ghost" size="sm" disabled={historyPending || navigationLoading}
+                onClick={loadToolHistory}>{t("chat.loadEarlierToolDetails")}</Button>
             ) : null}
           </div>
           {hydrationBounded ? (

@@ -8,7 +8,7 @@ use std::{
     fs::{self, File},
     io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
-    sync::{Mutex, OnceLock},
+    sync::{Arc, Mutex, OnceLock},
 };
 
 use anyhow::{Context, Result};
@@ -19,7 +19,7 @@ use super::{sniff_line_kind, swap_into_place, transcript_path};
 const LAYOUT_CACHE_MIN_LEN: u64 = 2 * 1024 * 1024;
 const LAYOUT_CACHE_MAX_LAG: u64 = 4 * 1024 * 1024;
 const LAYOUT_CACHE_MAGIC: &str = "PI-DESKTOP-TRANSCRIPT-LAYOUT";
-const LAYOUT_CACHE_VERSION: &str = "3";
+const LAYOUT_CACHE_VERSION: &str = "4";
 
 #[cfg(test)]
 thread_local! {
@@ -85,6 +85,8 @@ pub struct TranscriptLayout {
     /// Parsed identities parallel to message offsets. Invalid rows keep None so
     /// point reads still expose their decoding errors instead of hiding them.
     pub(super) message_ids: Vec<Option<String>>,
+    /// Sorted physical positions of top-level user messages.
+    pub(super) user_message_positions: Vec<usize>,
     /// Byte offset of each compaction line, in file order.
     pub compaction_offsets: Vec<u64>,
     /// Byte offset of each append-only tool review state line.
@@ -97,6 +99,20 @@ pub struct TranscriptLayout {
 
 #[derive(serde::Deserialize)]
 struct MessageIdentity {
+    id: String,
+    role: Option<String>,
+    meta: Option<MessageAncestry>,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MessageAncestry {
+    parent_tool_call_id: Option<serde::de::IgnoredAny>,
+    nested_parent_tool_call_id: Option<serde::de::IgnoredAny>,
+}
+
+#[derive(serde::Deserialize)]
+struct MessageId {
     id: String,
 }
 
@@ -132,6 +148,12 @@ impl TranscriptLayout {
         self.message_offsets.len()
     }
 
+    pub(crate) fn previous_user_message(&self, before: usize) -> Option<usize> {
+        let positions = &self.user_message_positions;
+        let end = positions.partition_point(|&position| position < before);
+        end.checked_sub(1).map(|index| positions[index])
+    }
+
     fn empty(identity: FileIdentity) -> Self {
         Self {
             identity,
@@ -146,9 +168,10 @@ struct LayoutKey {
     session_id: String,
 }
 
-static TRANSCRIPT_LAYOUTS: OnceLock<Mutex<HashMap<LayoutKey, TranscriptLayout>>> = OnceLock::new();
+type LayoutCache = Mutex<HashMap<LayoutKey, Arc<TranscriptLayout>>>;
+static TRANSCRIPT_LAYOUTS: OnceLock<LayoutCache> = OnceLock::new();
 
-fn layout_cache() -> &'static Mutex<HashMap<LayoutKey, TranscriptLayout>> {
+fn layout_cache() -> &'static LayoutCache {
     TRANSCRIPT_LAYOUTS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
@@ -176,6 +199,7 @@ pub(super) fn note_append(path: &Path, before: &fs::Metadata, before_stamp: Opti
     let Some(layout) = guard.get_mut(&layout_key(data_dir, session_id)) else {
         return;
     };
+    let layout = Arc::make_mut(layout);
     let after = match fs::metadata(path) {
         Ok(metadata) => metadata,
         Err(error) => {
@@ -201,14 +225,14 @@ fn layout_cache_path(data_dir: &Path, session_id: &str) -> Result<PathBuf> {
 
 /// Return an up-to-date layout, reusing the process cache or a validated disk
 /// cache and scanning only the appended tail.
-pub(crate) fn session_layout(data_dir: &Path, session_id: &str) -> Result<TranscriptLayout> {
+pub(crate) fn session_layout(data_dir: &Path, session_id: &str) -> Result<Arc<TranscriptLayout>> {
     let key = layout_key(data_dir, session_id);
     let cached = layout_cache()
         .lock()
         .ok()
         .and_then(|guard| guard.get(&key).cloned())
         .unwrap_or_default();
-    let layout = refresh_layout(data_dir, session_id, cached)?;
+    let layout = refresh_shared_layout(data_dir, session_id, cached)?;
     if let Ok(mut guard) = layout_cache().lock() {
         guard.insert(key, layout.clone());
     }
@@ -260,7 +284,7 @@ pub(crate) fn with_layout_recovery<T>(
         Ok(value) => Ok(value),
         Err(error) if error.is::<InvalidLayoutBoundary>() => {
             invalidate(data_dir, session_id);
-            let rebuilt = scan_current_file(data_dir, session_id)?;
+            let rebuilt = Arc::new(scan_current_file(data_dir, session_id)?);
             cache_rebuilt_layout(data_dir, session_id, &rebuilt);
             match operation(&rebuilt) {
                 Err(error) if error.is::<InvalidLayoutBoundary>() => {
@@ -273,7 +297,7 @@ pub(crate) fn with_layout_recovery<T>(
     }
 }
 
-fn cache_rebuilt_layout(data_dir: &Path, session_id: &str, layout: &TranscriptLayout) {
+fn cache_rebuilt_layout(data_dir: &Path, session_id: &str, layout: &Arc<TranscriptLayout>) {
     if let Ok(mut guard) = layout_cache().lock() {
         guard.insert(layout_key(data_dir, session_id), layout.clone());
     }
@@ -282,17 +306,26 @@ fn cache_rebuilt_layout(data_dir: &Path, session_id: &str, layout: &TranscriptLa
     }
 }
 
-/// Refresh the supplied layout only after validating its file identity.
+#[cfg(test)]
 pub fn refresh_layout(
     data_dir: &Path,
     session_id: &str,
     base: TranscriptLayout,
 ) -> Result<TranscriptLayout> {
+    refresh_shared_layout(data_dir, session_id, Arc::new(base)).map(Arc::unwrap_or_clone)
+}
+
+/// Refresh the supplied layout only after validating its file identity.
+fn refresh_shared_layout(
+    data_dir: &Path,
+    session_id: &str,
+    base: Arc<TranscriptLayout>,
+) -> Result<Arc<TranscriptLayout>> {
     let path = transcript_path(data_dir, session_id)?;
     let metadata = match fs::metadata(&path) {
         Ok(metadata) => metadata,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            return Ok(TranscriptLayout::default())
+            return Ok(Arc::default());
         }
         Err(error) => return Err(error).with_context(|| format!("stat {}", path.display())),
     };
@@ -308,10 +341,10 @@ pub fn refresh_layout(
 fn refresh_with_identity(
     data_dir: &Path,
     session_id: &str,
-    base: TranscriptLayout,
+    base: Arc<TranscriptLayout>,
     length: u64,
     identity: FileIdentity,
-) -> Result<TranscriptLayout> {
+) -> Result<Arc<TranscriptLayout>> {
     let path = transcript_path(data_dir, session_id)?;
     let stamp = modification_stamp(&path, &fs::metadata(&path)?);
     let mut base = if identity.is_available()
@@ -322,31 +355,32 @@ fn refresh_with_identity(
     {
         base
     } else {
-        TranscriptLayout::empty(identity.clone())
+        Arc::new(TranscriptLayout::empty(identity.clone()))
     };
 
     if !identity.is_available() {
         // Without a reliable identity, no existing offsets can be trusted.
-        base = TranscriptLayout::empty(identity.clone());
+        base = Arc::new(TranscriptLayout::empty(identity.clone()));
     } else if base.file_len == 0 {
         base = load_layout_cache(data_dir, session_id, &identity, length)?
-            .unwrap_or_else(|| TranscriptLayout::empty(identity.clone()));
+            .map(Arc::new)
+            .unwrap_or_else(|| Arc::new(TranscriptLayout::empty(identity.clone())));
     }
 
     if length == base.file_len {
         if stamp.is_some() && base.modification_stamp == stamp {
             return Ok(base);
         }
-        base = TranscriptLayout::empty(identity);
+        base = Arc::new(TranscriptLayout::empty(identity));
     }
     let base_len = base.file_len;
-    let layout = scan_layout(&path, base)?;
+    let layout = scan_layout(&path, Arc::unwrap_or_clone(base))?;
     if base_len == 0 || layout.file_len.saturating_sub(base_len) >= LAYOUT_CACHE_MAX_LAG {
         if let Err(error) = store_layout_cache(data_dir, session_id, &layout) {
             tracing::warn!(%error, "failed to persist transcript layout cache");
         }
     }
-    Ok(layout)
+    Ok(Arc::new(layout))
 }
 
 fn scan_current_file(data_dir: &Path, session_id: &str) -> Result<TranscriptLayout> {
@@ -395,12 +429,26 @@ fn scan_layout(path: &Path, mut layout: TranscriptLayout) -> Result<TranscriptLa
         let line = String::from_utf8_lossy(&raw);
         match sniff_line_kind(line.trim_end()) {
             Some("message") => {
-                layout.message_offsets.push(offset);
-                layout.message_ids.push(
-                    serde_json::from_str::<MessageIdentity>(&line)
+                let id = match serde_json::from_str::<MessageIdentity>(&line) {
+                    Ok(identity) => {
+                        if identity.role.as_deref() == Some("user")
+                            && identity.meta.is_none_or(|meta| {
+                                meta.parent_tool_call_id.is_none()
+                                    && meta.nested_parent_tool_call_id.is_none()
+                            })
+                        {
+                            layout.user_message_positions.push(layout.message_count());
+                        }
+                        Some(identity.id)
+                    }
+                    // Historical rows can have arbitrary metadata. Preserve
+                    // their ID index even when ancestry could not be decoded.
+                    Err(_) => serde_json::from_str::<MessageId>(&line)
                         .ok()
-                        .map(|identity| identity.id),
-                );
+                        .map(|value| value.id),
+                };
+                layout.message_offsets.push(offset);
+                layout.message_ids.push(id);
             }
             Some("compaction") => layout.compaction_offsets.push(offset),
             Some("tool_review_state") => layout.tool_review_state_offsets.push(offset),
@@ -491,6 +539,7 @@ fn load_layout_cache(
     let mut layout = TranscriptLayout {
         message_offsets: Vec::with_capacity(message_count),
         message_ids: Vec::with_capacity(message_count),
+        user_message_positions: Vec::new(),
         compaction_offsets: Vec::with_capacity(compaction_count),
         tool_review_state_offsets: Vec::with_capacity(review_state_count),
         file_len,
@@ -528,6 +577,26 @@ fn load_layout_cache(
             Some(id)
         };
         layout.message_ids.push(id);
+    }
+    let Some(user_count) = tokens.next().and_then(|token| token.parse::<usize>().ok()) else {
+        return Ok(None);
+    };
+    if user_count > message_count {
+        return Ok(None);
+    }
+    for _ in 0..user_count {
+        let Some(position) = tokens.next().and_then(|token| token.parse::<usize>().ok()) else {
+            return Ok(None);
+        };
+        if layout.message_ids.get(position).is_none_or(Option::is_none)
+            || layout
+                .user_message_positions
+                .last()
+                .is_some_and(|&last| last >= position)
+        {
+            return Ok(None);
+        }
+        layout.user_message_positions.push(position);
     }
     let transcript = transcript_path(data_dir, session_id)?;
     let (Some(checksum_label), Some(checksum)) = (tokens.next(), tokens.next()) else {
@@ -663,6 +732,10 @@ fn layout_cache_digest(layout: &TranscriptLayout) -> String {
             None => digest.update([0]),
         }
     }
+    digest.update((layout.user_message_positions.len() as u64).to_le_bytes());
+    for &position in &layout.user_message_positions {
+        digest.update((position as u64).to_le_bytes());
+    }
     hex::encode(digest.finalize())
 }
 
@@ -717,6 +790,10 @@ fn store_layout_cache(data_dir: &Path, session_id: &str, layout: &TranscriptLayo
                 Some(id) => writeln!(writer, "+{}", hex::encode(id))?,
                 None => writeln!(writer, "-")?,
             }
+        }
+        writeln!(writer, "{}", layout.user_message_positions.len())?;
+        for position in &layout.user_message_positions {
+            writeln!(writer, "{position}")?;
         }
         writeln!(writer, "checksum {}", layout_cache_digest(layout))?;
         writer.flush()?;

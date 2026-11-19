@@ -18,7 +18,7 @@ already crossed the process boundary.
    `messageBefore`, `messageLimit`, and `contentLimit`, and returns
    `messageStart` and `hasMoreBefore` so the renderer can page toward older
    messages while keeping the newest view.
-2. Host-core parses JSONL sequentially and projects only the requested page;
+2. Host-core seeks to the requested JSONL window and projects only that page;
    `contentLimit` truncates only the display projection, with an explicit
    marker, while the on-disk transcript and the uncapped sidecar/model path stay
    authoritative.
@@ -26,10 +26,15 @@ already crossed the process boundary.
    preserving scroll position, and rehydrates the complete transcript before any
    deliberate full-history rewrite so a partial window cannot delete older
    messages.
-4. The uncapped default stays available to non-renderer callers, and window
-   lookup uses a disposable per-session layout of message and compaction
-   offsets, optionally cached on disk and rebuilt from the JSONL source whenever
-   it is invalid. Format, schema, and RPC contracts are unchanged.
+4. The uncapped default stays available to non-renderer callers. Window lookup
+   uses a disposable per-session layout of message and compaction offsets,
+   optionally cached on disk and rebuilt from the JSONL source whenever it is
+   invalid. The canonical transcript format and storage schema are unchanged.
+5. Local previous-prompt navigation extends the same RPC read window, using
+   sparse top-level user positions derived into that layout to find the last
+   user record before an exclusive physical cursor without scanning tool rows
+   between the cursor and target on a warm layout. The resulting page has the
+   usual display cap and physical paging flags.
 
 ## Consequences
 

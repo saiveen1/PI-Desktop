@@ -1613,7 +1613,7 @@ pub fn session_mode(db: &Database, id: &str) -> Result<Option<String>> {
 pub(crate) fn session_layout(
     db: &Database,
     session_id: &str,
-) -> Result<transcripts::TranscriptLayout> {
+) -> Result<std::sync::Arc<transcripts::TranscriptLayout>> {
     transcripts::layout::session_layout(db.data_dir(), session_id)
 }
 
@@ -1662,6 +1662,15 @@ pub fn get_session_with_options(
     id: &str,
     options: SessionReadOptions,
 ) -> Result<Option<SessionDetail>> {
+    get_session_with_history_navigation(db, id, options, None)
+}
+
+pub(crate) fn get_session_with_history_navigation(
+    db: &Database,
+    id: &str,
+    options: SessionReadOptions,
+    previous_user_before: Option<usize>,
+) -> Result<Option<SessionDetail>> {
     let Some(summary) = session_summary(db, id)? else {
         return Ok(None);
     };
@@ -1680,6 +1689,11 @@ pub fn get_session_with_options(
                         return Ok(None);
                     };
                     (position + limit / 2 + 1).min(total)
+                } else if let Some(cursor) = previous_user_before {
+                    let Some(position) = layout.previous_user_message(cursor) else {
+                        return Ok(None);
+                    };
+                    position + 1
                 } else {
                     match options.message_before {
                         Some(value) => (value.max(0) as usize).min(total),
@@ -1694,8 +1708,17 @@ pub fn get_session_with_options(
                     start,
                     Some(before.saturating_sub(start)),
                 )?;
+                let mut records = read.messages;
+                if previous_user_before.is_some() {
+                    if let Some(anchor) = records.pop() {
+                        // Preserve the physical endpoint when older copies of
+                        // the same ID would otherwise keep its first slot.
+                        records.retain(|record| record.id != anchor.id);
+                        records.push(anchor);
+                    }
+                }
                 Ok(Some((
-                    dedupe_records(read.messages),
+                    dedupe_records(records),
                     read.compactions,
                     Some(start as i64),
                     Some(start > 0),

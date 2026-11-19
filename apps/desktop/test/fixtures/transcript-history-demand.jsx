@@ -4,6 +4,7 @@ import i18n from "i18next";
 import { I18nextProvider } from "react-i18next";
 import { en, zhCN } from "@pi-desktop/i18n";
 import { ChatTranscript } from "../../src/features/chat/transcript/ChatTranscript";
+import { SessionPane } from "../../src/components/SessionPane";
 import { sessionReadingState } from "../../src/lib/transcript-reading-position";
 import { api } from "../../src/lib/api";
 import { useAppStore } from "../../src/stores/app-store";
@@ -17,6 +18,7 @@ const scroller = () => document.querySelector('[data-scroll-owner="transcript"]'
 const message = (id) => ({ id, role: "user", status: "complete", content: id, createdAt: "2026-01-01T00:00:00Z" });
 const frame = () => new Promise(resolve => requestAnimationFrame(resolve));
 let sessionId, messages, calls, render, initialBookmark, pageGate;
+let foldedReads = [];
 
 async function until(condition, label) {
   const deadline = performance.now() + 4000;
@@ -142,6 +144,40 @@ window.historyDemand = {
     el.dispatchEvent(new Event('scroll'));
     await settle();
     return { before, wheelTop, finalTop: el.scrollTop, belowViewport, heightDelta: el.scrollHeight - initialHeight };
+  },
+  async openFoldedHistory(name = 'folded-history') {
+    const prompt = message('earlier-user');
+    const rows = [message('even-earlier'), prompt, ...Array.from({ length: 600 }, (_, i) => ({
+      ...message(`folded-tool-${i}`), role: 'tool', turnId: 'large-turn', toolCallId: `call-${i}`, toolName: 'Read', toolStatus: 'success',
+    })), { ...message('folded-answer'), role: 'assistant', turnId: 'large-turn' }];
+    const start = rows.length - 100;
+    const tail = rows.slice(start);
+    foldedReads = [];
+    window.piDesktop = { invoke: async (channel, options) => {
+      if (!channel.endsWith('/session/get') || options.id !== name) throw Error(`Unexpected fixture call: ${channel}`);
+      const before = options.previousUserMessage ? 2 : options.messageBefore;
+      foldedReads.push(options.previousUserMessage ? 'previous-prompt' : 'raw-page');
+      const pageStart = Math.max(0, before - options.messageLimit);
+      return { ok: true, data: { session: { id: name, source: 'desktop', messages: rows.slice(pageStart, before),
+        messageStart: pageStart, messageEnd: before, hasMoreBefore: pageStart > 0, hasMoreAfter: before < rows.length } } };
+    } };
+    useAppStore.setState({ activeSessionId: name, messages: tail, retainedTranscripts: { [name]: tail },
+      retainedSessionIds: [name], transcriptViews: {}, sessionHistory: { [name]: { messageStart: start, hasMoreBefore: true } },
+      sessions: [{ id: name, source: 'desktop' }] });
+    flushSync(() => root.render(<I18nextProvider i18n={i18n}><SessionPane key={name} sessionId={name} visible /></I18nextProvider>));
+    await until(() => scroller()?.querySelector('.turn-process > button[aria-expanded="false"]'), 'tool activity did not fold');
+    await settle();
+    return { rows: scroller().querySelectorAll('.message-row').length };
+  },
+  async foldedHistoryResult() {
+    await until(() => foldedReads.length, 'no history request');
+    await settle();
+    const el = scroller();
+    const rect = el.querySelector('[data-message-id="earlier-user"]')?.getBoundingClientRect();
+    const bounds = el.getBoundingClientRect();
+    const view = useAppStore.getState().transcriptViews[useAppStore.getState().activeSessionId];
+    return { calls: foldedReads, promptVisible: !!rect && rect.bottom > bounds.top && rect.top < bounds.bottom,
+      rows: view?.messages.length };
   },
 };
 

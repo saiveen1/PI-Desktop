@@ -265,6 +265,50 @@ test("latest releases a deep reading cache and older history remains reachable b
   assert.equal(r.visible().length, 101);
 });
 
+test("a folded range jump replaces renderer history without merging across the skipped physical range", async () => {
+  const live = [message("latest")];
+  const calls = [];
+  const r = reader(async (_id, options) => {
+    calls.push(options);
+    return options.previousUserMessage
+      ? page([message("earlier-user")], { messageStart: 1, messageEnd: 2, hasMoreAfter: true })
+      : page([message("later-tool", "detail", { role: "tool" })], { messageStart: 2, messageEnd: 62 });
+  }, { messages: live });
+  await r.loadTranscriptPage("s", "before", { previousPrompt: true });
+  assert.equal(calls[0].messageBefore, 120);
+  assert.equal(calls[0].messageLimit, 100);
+  assert.equal(r.view().focus.kind, "previous-prompt");
+  assert.deepEqual(r.visible().map(row => row.id), ["earlier-user"]);
+  assert.equal(r.get().messages, live);
+  await r.loadTranscriptPage("s", "after");
+  assert.deepEqual(r.visible().map(row => row.id), ["earlier-user", "later-tool"]);
+  assert.equal(calls[1].messageBefore, 62);
+  r.returnToLatestTranscript("s");
+  assert.equal(r.view(), undefined);
+  assert.equal(r.visible(), live);
+});
+
+test("no previous prompt falls back to one page; cancelling a jump never publishes its result", async () => {
+  const jump = deferred();
+  let calls = 0;
+  const r = reader(async (_id, options) => {
+    ++calls;
+    if (options.previousUserMessage) return calls === 1 ? { session: null } : jump.promise;
+    return page([message("ordinary-row")], { messageStart: 98, messageEnd: 120 });
+  });
+  await r.loadTranscriptPage("s", "before", { previousPrompt: true });
+  assert.equal(calls, 2);
+  assert.equal(r.view().focus, null);
+  const controller = new AbortController();
+  const pending = r.loadTranscriptPage("s", "before", { previousPrompt: true, signal: controller.signal });
+  controller.abort();
+  jump.resolve(page([message("discarded-prompt")], { messageStart: 0, messageEnd: 1 }));
+  await pending;
+  assert.equal(calls, 3);
+  assert.deepEqual(r.visible().map(row => row.id), ["ordinary-row", "tail"]);
+  assert.equal(r.view().loading, null);
+});
+
 test("search supersedes an ordinary page and return-to-latest cancels historical paging", async () => {
   const older = deferred();
   const later = deferred();

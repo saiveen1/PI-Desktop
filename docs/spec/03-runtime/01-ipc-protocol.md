@@ -1371,7 +1371,7 @@ Minimal interface:
   through the reviewed desktop-control path; it does not create or mutate the
   session
 - `session/fork({ sessionId, title?, throughMessageId? }) -> { session: SessionDetail }`
-- `session/get({ id, messageBefore?, messageAround?, messageLimit?, contentLimit? })` — without
+- `session/get({ id, messageBefore?, messageAround?, previousUserMessage?, messageLimit?, contentLimit? })` — without
   read-window options returns the complete UI projection; with them returns a
   bounded newest/older page plus `messageStart` and `hasMoreBefore`. The
   content limit applies only to display values and never changes the lossless
@@ -1382,6 +1382,11 @@ Minimal interface:
   no session. Only the selected user/assistant text bypasses the display cap.
   Bounded responses also include exclusive `messageEnd` and `hasMoreAfter` for
   forward paging; reading windows never replace the live transcript cache.
+  On local Desktop sessions, `previousUserMessage: true` requires a non-negative
+  integer `messageBefore`, a positive integer `messageLimit`, and no
+  `messageAround`. It selects the last top-level user record strictly before
+  that physical cursor, returns a normal capped page ending at that record
+  (`messageEnd` is its offset plus one), or returns `{ session: null }` if absent.
   A nested target may also return `navigationParent`, the latest capped owning
   Task `UiMessage`. It is display context outside the physical page, not an
   extra history line. The renderer shares one reading view between ordinary

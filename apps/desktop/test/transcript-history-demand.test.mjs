@@ -178,6 +178,32 @@ test('transcript history demand and inline reply editing', { timeout: 30000, ski
       await wheel(-80);
       assert.ok((await probe('state()')).top < after.finalTop, 'native scrolling still works inside the open reasoning');
     });
+    await t.test('one upward gesture crosses a folded tool-only range without accumulating it', async () => {
+      const before = await probe('openFoldedHistory()');
+      assert.equal(before.rows, 1);
+      const point = await probe('wheelPoint()');
+      await send('Input.dispatchMouseEvent', { type: 'mouseWheel', ...point, deltaX: 0, deltaY: -1000 });
+      const jumped = await probe('foldedHistoryResult()');
+      assert.deepEqual(jumped.calls, ['previous-prompt']);
+      assert.ok(jumped.promptVisible);
+      assert.ok(jumped.rows < 10);
+      await probe('jumpLatest()');
+      assert.deepEqual((await probe('foldedHistoryResult()')).calls, ['previous-prompt']);
+      await probe('openFoldedHistory("raw-tool-history")');
+      await evaluate(`document.querySelectorAll('.transcript-history-loading button')[1].click()`);
+      const details = await probe('foldedHistoryResult()');
+      assert.deepEqual(details.calls, ['raw-page']);
+      assert.equal(details.rows, 200);
+      assert.equal(details.promptVisible, false);
+      await probe('openFoldedHistory("open-tool-history")');
+      await evaluate(`document.querySelector('.turn-process > button').click()`);
+      await probe('state()');
+      const openPoint = await probe('wheelPoint()');
+      await send('Input.dispatchMouseEvent', { type: 'mouseWheel', ...openPoint, deltaX: 0, deltaY: -10000 });
+      const open = await probe('foldedHistoryResult()');
+      assert.deepEqual(open.calls, ['raw-page']);
+      assert.equal(open.promptVisible, false);
+    });
     await t.test('Edit reply saves each thinking choice explicitly, including unchanged text', async () => {
       const result = await evaluate('exerciseReplyEdit()');
       const original = '  **Final reply**\n';

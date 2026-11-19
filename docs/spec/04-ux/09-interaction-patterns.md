@@ -1733,6 +1733,16 @@ Project drag/drop follows these patterns:
   transaction coalesces that demand into at most one continuation after a
   successful settle, and only if the viewport remains near the edge. Reversing
   direction, navigation, hiding the pane, or a failed/empty read cancels it.
+- At the oldest loaded edge of a settled local Desktop session, a page-sized
+  range starting in folded tool activity may not add visible height when
+  prepended. After cached rows are reachable, upward boundary input and the
+  earlier-history controls seek the preceding top-level user message in one
+  bounded read. The result replaces the reading range, without merging across
+  the skipped physical span or changing the live cache. **Load earlier tool
+  details** still reads one ordinary page; **Load later messages** can traverse
+  the gap explicitly and **Scroll to bottom** returns to the original live tail.
+  Open activity, active turns, search, and remote/native sessions keep ordinary
+  paging. A missing target falls back to an ordinary older page.
 - Assistant prose may release its Markdown renderer outside a five-screen
   retention buffer and restore it inside a three-screen entry buffer, keeping
   measured-height message/prose shells. Measurements must match the current
