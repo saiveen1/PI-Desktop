@@ -121,6 +121,8 @@ This edition strengthens the existing framework rather than replacing it.
 - **More accurate completion and recovery.** Do not treat an old progress message
   or truncated ending as a final report; coalesce duplicate recovery requests
   and support resuming work interrupted by a parent failure on the next user turn.
+  Batch waits tolerate a redundant job reference when its ID is already in the
+  batch, avoiding model retries without relaxing stop targeting.
   Fixed-tool delegates can load skills without inheriting unrelated plugin/MCP
   execution tools. Each role can inherit available skills, select specific IDs,
   or select none; this does not grant the tools or permissions a skill describes.

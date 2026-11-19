@@ -98,10 +98,12 @@ and history retention remain finite.
 
 ### Coherent delegation selectors and explicit Bash targets (2026-11-07)
 
-A delegation job accepts exactly one matching `delegationIds` entry and retains
-delegation wait options; ambiguous sets fail. An explicit Bash job is the sole
-target: pi `prepareArguments` removes delegation-only selectors from a copy
-before schema validation, including irrelevant invalid values. Original arguments
-remain diagnostic evidence. Identity, timeout, cancellation and ownership checks
-are unchanged; failed lifecycle rows expose arguments without changing successful
-roster presentation.
+TaskWait uses a list of distinct, nonblank `delegationIds` as its wait set when
+it includes the accompanying delegation job's ID. A job alone still targets one
+delegation; the wait options stay intact. TaskStop requires exactly one matching
+ID if both fields are present; disjoint or malformed selectors fail. An explicit
+Bash job is the sole target: pi `prepareArguments` removes delegation-only
+selectors from a copy before schema validation, including irrelevant invalid
+values. Original arguments remain diagnostic evidence. Identity, timeout,
+cancellation and ownership checks are unchanged; failed lifecycle rows expose
+arguments without changing successful roster presentation.

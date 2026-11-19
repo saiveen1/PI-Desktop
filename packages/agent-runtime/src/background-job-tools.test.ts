@@ -63,7 +63,6 @@ describe("session job controls", () => {
       ...args, job: undefined,
     }, undefined, undefined);
     expect(dispatch).not.toHaveBeenCalled();
-    expect(wait.description).toContain("same single delegation");
   });
 
   it.each(["all", "any"] as const)("preserves %s wait options with a delegation job alone", async mode => {
@@ -75,6 +74,21 @@ describe("session job controls", () => {
     expect(dispatch).not.toHaveBeenCalled();
   });
 
+  it.each(["all", "any"] as const)("waits once on the full batch with a matching job in %s mode", async mode => {
+    const { wait, stop, dispatch, delegates } = fixture();
+    const job = { kind: "delegation", id: "delegate" };
+    const delegationIds = ["first", "delegate", "third", "fourth"];
+    const args = { job, delegationIds, mode, minCompleted: 2, timeoutSeconds: 12 };
+    await wait.execute("batch", args);
+    expect(delegates.wait.execute).toHaveBeenCalledExactlyOnceWith("batch", {
+      job: undefined, delegationIds: ["first", "delegate", "third", "fourth"], mode, minCompleted: 2, timeoutSeconds: 12,
+    }, undefined, undefined);
+    expect(args).toEqual({ job, delegationIds: ["first", "delegate", "third", "fourth"], mode, minCompleted: 2, timeoutSeconds: 12 });
+    await expect(stop.execute("stop-batch", { job, delegationIds })).rejects.toThrow("same single delegation");
+    expect(delegates.stop.execute).not.toHaveBeenCalled();
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
   it("stops only the same explicitly selected delegation when both selectors are present", async () => {
     const { stop, delegates, dispatch } = fixture();
     await stop.execute("one", { job: { kind: "delegation", id: "delegate" }, delegationIds: ["delegate"] });
@@ -83,13 +97,15 @@ describe("session job controls", () => {
     expect(stop.description).toContain("same single delegation");
   });
 
-  it.each([{ ids: [] }, { ids: ["other"] }, { ids: ["delegate", "delegate"] }, { ids: ["delegate", "other"] }, { ids: "delegate" }, { ids: null }])("rejects conflicting delegation selectors before dispatch ($ids)", async ({ ids: delegationIds }) => {
+  it.each([
+    { ids: [] }, { ids: ["other"] }, { ids: ["other", "third"] },
+    { ids: ["delegate", "delegate"] }, { ids: ["delegate", "other", "other"] },
+    { ids: ["delegate", " "] }, { ids: ["delegate", 123] }, { ids: "delegate" }, { ids: null },
+  ])("rejects conflicting or malformed delegation selectors before dispatch ($ids)", async ({ ids: delegationIds }) => {
     const { wait, stop, delegates, dispatch } = fixture();
     const args = { job: { kind: "delegation", id: "delegate" }, delegationIds };
-    for (const tool of [wait, stop]) {
-      await expect(tool.execute("conflict", args)).rejects.toThrow("same single delegation");
-      await expect(tool.execute("conflict", args)).rejects.toThrow('Retry with {"job":{"kind":"delegation","id":"delegate"}}');
-    }
+    await expect(wait.execute("conflict", args)).rejects.toThrow('Retry with {"job":{"kind":"delegation","id":"delegate"}}');
+    await expect(stop.execute("conflict", args)).rejects.toThrow("same single delegation");
     expect(delegates.wait.execute).not.toHaveBeenCalled();
     expect(delegates.stop.execute).not.toHaveBeenCalled();
     expect(dispatch).not.toHaveBeenCalled();

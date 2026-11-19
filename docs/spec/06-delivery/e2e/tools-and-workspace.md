@@ -2781,9 +2781,10 @@ permission-request UI below has isolated fixture automation.
   conflicting selector set, correct it to matching `job`/`delegationIds` plus
   wait options, then reread the completed report and list the final state.
   Assert only one delegate started and no Bash wait/stop RPC was dispatched.
-  `background-job-tools.test.ts` covers both wait modes, explicit stop, rejected
-  empty/multiple/different selectors and corrective errors. Failed lifecycle
-  rows show arguments; successful rows retain roster-only presentation.
+  `background-job-tools.test.ts` covers full-batch wait routing in both modes,
+  option preservation, explicit stop and rejected conflicting or malformed
+  selectors. Failed lifecycle rows show arguments; successful rows retain
+  roster-only presentation.
 
 ## E2E-ISSUE-2162
 
@@ -2795,19 +2796,19 @@ Closing the connected Browser tab clears its connection. Subsequent session-only
   `PI_DESKTOP_HOST_BIN=<candidate-host> node scripts/e2e-task-job-selectors.mjs`.
 - Preconditions: isolated Host data/workspace and a deterministic localhost
   provider; production parent and delegate loops, with no external model account.
-- Steps: start a delegate; wait with its job and exactly `[job.id]`, retaining
-  mode/minCompleted; reread with job alone. Reject empty, duplicate, different,
-  multiple and malformed lists with job-only correction guidance. Hold another
-  child, stop it with matching selectors and confirm retirement through TaskWait.
-  Separately send explicit Bash jobs with irrelevant delegation fields.
-- Expected: delegation jobs accept omitted IDs or exactly one matching ID;
-  mode/minCompleted retain their meaning. Bash fields are stripped before schema
-  validation, while identity/timeout/ownership stay strict. Reports remain
-  readable; cancellation settles only the target. No implicit Bash stop occurs.
+- Steps: start a delegate and wait with its job and exactly `[job.id]`. Start
+  a second delegate, then wait using its job, both IDs, `mode: any` and
+  `minCompleted: 2`. Hold a third child, stop it with matching single-job
+  selectors, and confirm retirement through a job-only TaskWait. Unit tests
+  separately exercise rejected selector shapes and explicit Bash jobs.
+- Expected: one batch wait returns both distinct reports without a retry or
+  losing wait options. Empty, duplicate, disjoint and malformed mixed selectors
+  still fail; a batch stop with a single job is still rejected. Explicit stop
+  settles only its target. Bash routing and session ownership are unchanged.
 - Specs: `03-runtime/02-agent-runtime.md`, Session job controls.
-- Acceptance: wait, report re-read and running-delegate cancellation complete
-  through the real tool loop. Milestone: maintenance. Status: candidate coverage;
-  local selector assertions differ from upstream, and full native E2E is not claimed.
+- Acceptance: batch report delivery and running-delegate cancellation complete
+  through the real tool loop. Milestone: maintenance. Status: automated headless
+  coverage; no installed Desktop or live provider is required.
 
 ## E2E-NATIVE-workspace-file-routing
 

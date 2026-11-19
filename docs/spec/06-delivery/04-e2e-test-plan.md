@@ -369,7 +369,7 @@ E2E-196b, E2E-196c, and E2E-200 (Quality, M6+).
 | C / E / Security / Quality — Live delegation policy, retry continuation and revision-bound grouped model consent | E2E-DELEGATION-scheduling-and-model-approval |
 | C / E / Data safety / Quality - Truthful terminal delivery and optional recovery | E2E-DELEGATION-terminal-delivery-and-recovery |
 | C / E / Data safety / Quality - Recorded observations, throughput and approval sound | E2E-DELEGATION-observations-and-approval-sound |
-| C / E / Security / Quality - Admission normalization and acknowledged stopping | E2E-DELEGATION-admission-contract-and-stop |
+| C / E / Security / Quality - Admission normalization and acknowledged stopping | E2E-DELEGATION-admission-contract-and-stop, [E2E-ISSUE-2173](e2e/tools-and-workspace.md#e2e-issue-2173-delegation-job-selectors) |
 | C / Data safety / Quality - Bounded unknown upstream response recovery | E2E-PROVIDER-unknown-upstream-recovery-policy |
 | A / F / Quality — Self-managed daily release and isolated Dev | E2E-RELEASE-self-managed-daily-build |
 | A / F / Security — Explicit Dev data-directory inheritance | E2E-DEV-explicit-data-directory-inheritance |

@@ -1,4 +1,4 @@
-// Issue #2173 integration: retain the personal edition's exact-target and wait-option contract.
+// Issue #2173 integration: normalize redundant wait selectors while keeping stop targets strict.
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp } from "node:fs/promises";
 import { createServer } from "node:http";
@@ -8,14 +8,16 @@ import { DesktopAgentRuntime } from "../packages/agent-runtime/dist/runtime.js";
 import { Host, resolveHostBinary } from "./e2e/host.mjs";
 import { createSession, configureSession, beginTurn, endTurn } from "./e2e/session.mjs";
 
-const artifacts = fileURLToPath(new URL("../.cache/task-job-selectors/", import.meta.url));
+const artifacts = process.env.PI_SCRATCH_DIR
+  ? join(process.env.PI_SCRATCH_DIR, "task-job-selectors")
+  : fileURLToPath(new URL("../.cache/task-job-selectors/", import.meta.url));
 await mkdir(artifacts, { recursive: true });
 const scratch = await mkdtemp(join(artifacts, "run-"));
 const workspace = join(scratch, "workspace");
 await mkdir(workspace);
 const host = new Host(resolveHostBinary(), join(scratch, "data"), { quiet: true });
 const delegateStarted = Promise.withResolvers();
-let runtime, turnId, fixtureFailure, job;
+let runtime, turnId, fixtureFailure, job, firstJob;
 let round = 0;
 const events = [];
 const toolResult = (body, id) => {
@@ -48,35 +50,41 @@ const server = createServer(async (req, res) => {
         name = "Task"; args = { agent: "selector-fixture", task: "Return a selector report." };
         break;
       case 1:
-        job = jobReference(body, "call-1");
-        assert.equal(job.kind, "delegation");
+        firstJob = jobReference(body, "call-1");
+        assert.equal(firstJob.kind, "delegation");
         name = "TaskWait"; args = {
-          job, delegationIds: [job.id], mode: "all", minCompleted: 1, timeoutSeconds: 180,
+          job: firstJob, delegationIds: [firstJob.id], mode: "all", minCompleted: 1, timeoutSeconds: 180,
         };
         break;
       case 2:
         assert(toolResult(body, "call-2").includes("Selector delegate report."));
-        name = "TaskWait"; args = {
-          job, delegationIds: [job.id], mode: "any", minCompleted: 1, timeoutSeconds: 600,
-        };
+        name = "Task"; args = { agent: "selector-fixture", task: "selector-second: return a distinct report." };
         break;
       case 3:
-        assert(toolResult(body, "call-3").includes("Selector delegate report."));
-        name = "Task"; args = { agent: "selector-fixture", task: "selector-stop: wait for cancellation." };
+        job = jobReference(body, "call-3");
+        assert.notEqual(job.id, firstJob.id);
+        name = "TaskWait"; args = {
+          job, delegationIds: [firstJob.id, job.id], mode: "any", minCompleted: 2, timeoutSeconds: 180,
+        };
         break;
       case 4:
-        job = jobReference(body, "call-4");
+        assert.match(toolResult(body, "call-4"), /Selector delegate report\./);
+        assert.match(toolResult(body, "call-4"), /Second selector report\./);
+        name = "Task"; args = { agent: "selector-fixture", task: "selector-stop: wait for cancellation." };
+        break;
+      case 5:
+        job = jobReference(body, "call-5");
         await delegateStarted.promise;
         name = "TaskStop"; args = { job, delegationIds: [job.id] };
         break;
-      case 5:
-        assert.match(toolResult(body, "call-5"), /stopped 1 subagent/i);
+      case 6:
+        assert.match(toolResult(body, "call-6"), /stopped 1 subagent/i);
         name = "TaskWait"; args = {
           job, mode: "all", minCompleted: 1, timeoutSeconds: 180,
         };
         break;
-      case 6:
-        assert(toolResult(body, "call-6").includes("stopped"));
+      case 7:
+        assert(toolResult(body, "call-7").includes("stopped"));
         break;
       default: throw new Error("Unexpected provider round");
     }
@@ -89,7 +97,9 @@ const server = createServer(async (req, res) => {
       delta({ role: "assistant", tool_calls: [{ index: 0, id: `call-${round}`, type: "function", function: { name, arguments: JSON.stringify(args) } }] });
       delta({}, "tool_calls");
     } else {
-      delta({ role: "assistant", content: isDelegate ? "Selector delegate report." : "Verified delegation selectors." });
+      const report = JSON.stringify(body.messages).includes("selector-second")
+        ? "Second selector report." : "Selector delegate report.";
+      delta({ role: "assistant", content: isDelegate ? report : "Verified delegation selectors." });
       delta({}, "stop");
     }
     res.end("data: [DONE]\n\n");
@@ -127,14 +137,14 @@ try {
   });
   await runtime.prompt("Start, wait for and stop the selector fixtures.", "selector-user", turnId);
   if (fixtureFailure) throw fixtureFailure;
-  assert.equal(round, 7);
+  assert.equal(round, 8);
   assert.equal(events.some(event => event.type === "error"), false);
   await endTurn(host, turnId);
   turnId = undefined;
   console.log(JSON.stringify({ ok: true, rounds: round, checks: [
     "real Task and delegate provider loop", "matching delegation selectors",
-    "explicit delegation target", "single-job wait options preserved",
-    "report re-read", "running delegate stopped", "stopped status re-read",
+    "batch wait returns both reports in one call", "explicit delegation target",
+    "running delegate stopped", "stopped status re-read",
   ] }, null, 2));
 } finally {
   clearTimeout(deadline);

@@ -2702,12 +2702,13 @@ references. Bash summaries contain no logs. The command preview retains the
 first 1 KiB at a UTF-8 boundary. `commandTruncated` marks a shortened command
 independently of output truncation; older Hosts may omit the field.
 
-TaskWait and TaskStop accept one explicit `job`. A delegation job may also
-carry `delegationIds` only when it is exactly `[job.id]`; the redundant
-selectors then identify the same single delegation. TaskWait's `mode` and
-`minCompleted` continue to apply to that delegation. Empty, different,
-multi-target or malformed identifier lists are rejected before dispatch,
-with a job-only retry example; the runtime never guesses which target wins.
+TaskWait and TaskStop accept one explicit `job`. With a delegation job and no
+`delegationIds`, TaskWait observes that job alone. When both fields are present,
+TaskWait uses the explicit list if it contains `job.id` and consists of distinct,
+nonblank IDs. The redundant job neither narrows nor expands the list; `mode`,
+`minCompleted` and `timeoutSeconds` retain their existing behavior. TaskStop still
+requires exactly `[job.id]` when both selectors are present. Empty, disjoint or
+malformed lists are rejected before dispatch with a job-only retry example.
 A Bash job ID is the sole target for that call; delegation-only selectors
 (`delegationIds`, `mode` and `minCompleted`) accompanying it are removed from a
 copy of the call by pi's `prepareArguments`, before schema validation. This
