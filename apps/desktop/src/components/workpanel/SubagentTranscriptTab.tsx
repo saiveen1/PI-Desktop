@@ -100,7 +100,7 @@ function SubagentTranscriptSurface({ delegationId, sessionId }: { delegationId: 
       <div ref={scrollRef} data-scroll-owner="follow" className="subagent-transcript-scroll"
         onScroll={handleScroll} role="log" aria-live="polite" aria-label={t("panel.subagent")} tabIndex={0}>
         <div ref={contentRef} className="subagent-transcript-list">
-          {history.loading ? <p role="status">{t("delegationHistory.loading")}</p> : null}
+          {history.loading && !transcriptResult && !history.entry?.report ? <p role="status">{t("delegationHistory.loading")}</p> : null}
           {history.hasMoreBefore && !history.loading ? <Button size="sm" variant="ghost" disabled={history.loading}
             onClick={() => { releaseFollow(); void history.loadMore("before"); }}>{t("chat.showEarlierMessages")}</Button> : null}
           {history.error ? <p role="alert">{t("delegationHistory.loadFailed")} <Button size="sm" variant="ghost" onClick={history.retry}>{t("delegationHistory.retry")}</Button></p> : null}

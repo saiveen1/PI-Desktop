@@ -1552,8 +1552,11 @@ opens automatically. A second row activation does not close the tab.
   incrementally, skips unrelated prose/task-chain rebuilding and yields between
   bounded batches, including cached reads. Pending reads are scoped to
   the mounted detail, stop on disposal and expose failures through Retry.
-  A retained report is shown when its original child answer is not in the loaded
-  range; truncation remains explicit. Read errors expose Retry.
+  Detail loading feedback appears only while neither the child transcript nor
+  a retained report is available. Background lookahead does not insert a
+  loading paragraph into readable content. A retained report is shown when its
+  original child answer is not in the loaded range; truncation remains explicit.
+  Read errors expose Retry.
 - The selected detail header shows the task description as its title, with
   role/name fallback, a robot identity icon and explicit Subagent label, passive
   recorded model/effort metadata, and authorized Stop/failed Retry controls.

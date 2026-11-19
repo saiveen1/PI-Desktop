@@ -4808,8 +4808,10 @@ renderer's durable transcript reads. No real model or provider is contacted.
   content to the selected chain. Parent/other-delegate/duplicate pages produce
   no buttons; filtered-empty pages do not hide more distant child content.
   Clicking reveals the prepared content without refetching it or moving the
-  parent chat. Errors remain retryable; disposed readers stop further paging and
-  cannot publish into another detail.
+  parent chat. An outstanding read does not show a loading paragraph alongside
+  an already visible child transcript or retained report. Errors remain
+  retryable; disposed readers stop further paging and cannot publish into
+  another detail.
 - **Coverage:** `subagent-history.test.mjs` exercises bounded lookahead, duplicate
   suppression, resume discovery, live arrival, read errors and cancellation.
   `session-delegations-ui.test.mjs` uses the production detail/hook in an isolated
