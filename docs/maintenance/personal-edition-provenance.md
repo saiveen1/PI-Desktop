@@ -1,5 +1,14 @@
 # Personal-edition change provenance
 
+## Floating chat image previews
+
+Locally recorded upstream `95df2e0f9` already opens generated images in a
+native modal, with an opaque full-window surface and no background dismissal.
+The local increment replaces that surface with a scrim and floating controls
+for both generated images and tool results, using the shared intentional-click
+guard. File access, image storage, and the original viewer controls are not
+new local capabilities.
+
 ## In-place assistant reply editing
 
 Against locally recorded upstream `3dd8b955a`, response-level Fork is inherited:

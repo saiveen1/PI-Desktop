@@ -1,4 +1,4 @@
-import { useEffect, useRef, type HTMLAttributes } from "react";
+import { useEffect, useRef, type ComponentPropsWithRef } from "react";
 
 /** Dismiss only a press/release on this backdrop, never a drag across its content. */
 export function OverlayBackdrop({
@@ -7,7 +7,7 @@ export function OverlayBackdrop({
   onPointerUpCapture,
   onPointerCancelCapture,
   ...props
-}: HTMLAttributes<HTMLDivElement>) {
+}: ComponentPropsWithRef<"div">) {
   const press = useRef<{ pointerId: number; released: boolean } | null>(null);
   useEffect(() => {
     const reset = () => { press.current = null; };

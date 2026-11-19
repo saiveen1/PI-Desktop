@@ -24,11 +24,11 @@ const i18n = createInstance();
 await i18n.init({ lng: "en", resources: { en: { translation: catalogs.en }, "zh-CN": { translation: catalogs["zh-CN"] } } });
 document.documentElement.style.setProperty("--font-scale", "1");
 const view = createRoot(document.getElementById("root")!);
-const image = (color: string) => {
+const image = (color: string, width = 120, height = 80) => {
   const canvas = document.createElement("canvas");
-  canvas.width = 120; canvas.height = 80;
+  canvas.width = width; canvas.height = height;
   const context = canvas.getContext("2d")!;
-  context.fillStyle = color; context.fillRect(0, 0, 120, 80);
+  context.fillStyle = color; context.fillRect(0, 0, width, height);
   return { type: "image", mimeType: "image/png", data: canvas.toDataURL().split(",")[1] };
 };
 const red = image("red"), blue = image("blue");
@@ -87,6 +87,25 @@ const decodeThumbnails = async () => {
   await Promise.all([...document.querySelectorAll<HTMLImageElement>(".tool-result-image-thumb img, .generated-image-thumb img")].map((img) => img.decode()));
 };
 let trigger: HTMLButtonElement;
+let backgroundClicks = 0;
+const underlay = document.createElement("button");
+underlay.style.cssText = "position:fixed;inset:0;opacity:0";
+underlay.setAttribute("aria-label", "Underlying conversation action");
+underlay.onclick = () => { backgroundClicks += 1; };
+
+Object.assign(window, { toolImagesPointer: (stage: string) => {
+  const center = (element: Element) => {
+    const box = element.getBoundingClientRect();
+    return [Math.round(box.x + box.width / 2), Math.round(box.y + box.height / 2)];
+  };
+  const imagePoint = center(selectedImage()!);
+  const left = [8, imagePoint[1]];
+  const right = [innerWidth - 96, imagePoint[1]];
+  if (stage === "lightbox-drag") return [imagePoint, right];
+  if (stage === "lightbox-image") return [imagePoint];
+  if (stage === "lightbox-zoom") return [center(dialog()!.querySelector(`[aria-label="${i18n.t("menu.zoomIn")}"]`)!)];
+  return [stage === "lightbox-left" ? left : right];
+} });
 
 Object.assign(window, { toolImagesProbe: async (stage: string) => {
   if (stage === "open") {
@@ -109,6 +128,26 @@ Object.assign(window, { toolImagesProbe: async (stage: string) => {
   } else if (stage === "close" || stage === "close-again") {
     await frame(); check(!dialog(), "Escape did not close the viewer");
     check(document.activeElement === trigger, "Focus did not return to the thumbnail");
+  } else if (stage === "lightbox-open" || stage === "lightbox-reopen") {
+    if (stage === "lightbox-open") {
+      const portrait = image("red", 160, 650);
+      render([message("portrait", { images: [portrait] }, "mcp_screenshot")]);
+      await decodeThumbnails();
+      trigger = thumb();
+      document.body.append(underlay);
+    }
+    flushSync(() => trigger.click()); await frame(); await selectedImage()?.decode(); await frame();
+    check(dialog()?.open, "Portrait preview did not open");
+  } else if (stage === "lightbox-drag" || stage === "lightbox-image" || stage === "lightbox-zoom") {
+    await frame();
+    check(dialog()?.open, `${stage} unexpectedly closed the preview`);
+    if (stage === "lightbox-zoom") check(Number.parseInt(dialog()!.querySelector("output")!.textContent!) > 100, "Zoom click did not enlarge the image");
+  } else if (stage === "lightbox-left" || stage === "lightbox-right") {
+    await frame();
+    check(!dialog(), `${stage}: clicking blank space did not close the preview`);
+    check(document.activeElement === trigger, "Backdrop dismissal did not restore focus");
+    check(backgroundClicks === 0, "Backdrop dismissal clicked the underlying action");
+    if (stage === "lightbox-right") underlay.remove();
   } else if (stage === "restore") {
     flushSync(() => view.render(null));
     render([JSON.parse(JSON.stringify(original))]); await decodeThumbnails();
@@ -259,6 +298,17 @@ Object.assign(window, { toolImagesProbe: async (stage: string) => {
     check(thumbs.length === 2, "Generated batch lost thumbnails");
     flushSync(() => thumbs[1].click()); await frame();
     check(document.querySelector<HTMLAnchorElement>(".generated-image-actions a")?.href === blueUrl, "Generated download did not follow selection");
+    trigger = document.querySelector<HTMLButtonElement>(".generated-image-preview")!;
+    flushSync(() => trigger.click()); await waitForSelectedImage(blueUrl); await frame();
+    const preview = dialog()!;
+    check(innerWidth <= 400 && getComputedStyle(preview.querySelector("nav")!).flexDirection === "row", "Narrow preview did not move thumbnails below the image");
+    for (const toolbar of preview.querySelectorAll("header, footer")) {
+      const bounds = toolbar.getBoundingClientRect();
+      check(bounds.left > 0 && bounds.right < innerWidth && bounds.bottom < innerHeight, "Floating controls overflow the narrow window");
+    }
+  } else if (stage === "generated-dismiss") {
+    await frame();
+    check(!dialog() && document.activeElement === trigger, "Narrow generated preview did not dismiss or restore focus");
     render([message("setup", { details: { kind: "image-generation-error", errorCode: "IMAGE_NOT_CONFIGURED" } })]);
     const configure = document.querySelector<HTMLButtonElement>(".generated-images button");
     check(configure, "Generation setup action was removed");

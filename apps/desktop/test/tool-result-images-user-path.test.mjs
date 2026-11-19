@@ -10,7 +10,9 @@ import { repositoryRoot, resolveElectronBinary } from "../../../scripts/e2e/boot
 
 const root = repositoryRoot();
 const { build } = createRequire(join(root, "packages/agent-runtime/package.json"))("esbuild");
-const stages = ["open", "next", "previous", "close", "keyboard-open", "close-again", "restore", "states", "read-disclosure", "turn", "group", "group-next", "group-close", "group-boundaries", "generated", "snapshot-light", "snapshot-dark", "finish"];
+const stages = ["open", "next", "previous", "close", "keyboard-open", "close-again",
+  "lightbox-open", "lightbox-drag", "lightbox-image", "lightbox-zoom", "lightbox-left", "lightbox-reopen", "lightbox-right",
+  "restore", "states", "read-disclosure", "turn", "group", "group-next", "group-close", "group-boundaries", "generated", "generated-dismiss", "snapshot-light", "snapshot-dark", "finish"];
 
 async function runFixture(temp) {
   const entry = join(temp, "main.cjs");
@@ -90,14 +92,24 @@ app.whenReady().then(async () => {
     win.webContents.focus();
     for (const stage of ${JSON.stringify(stages)}) {
       log("TOOL_IMAGES_STAGE " + stage);
+      if (stage === "generated") win.setContentSize(360, 640);
+      if (stage === "snapshot-light") win.setContentSize(1000, 800);
       const keyCode = { next: "Right", previous: "Left", close: "Escape", "keyboard-open": "Enter", "close-again": "Escape", "group-next": "Right", "group-close": "Escape" }[stage];
       if (keyCode) {
         win.webContents.sendInputEvent({ type: "keyDown", keyCode });
         if (keyCode === "Enter") win.webContents.sendInputEvent({ type: "char", keyCode: "\\r" });
         win.webContents.sendInputEvent({ type: "keyUp", keyCode });
       }
+      if (["lightbox-drag", "lightbox-image", "lightbox-zoom", "lightbox-left", "lightbox-right", "generated-dismiss"].includes(stage)) {
+        const [start, end = start] = await win.webContents.executeJavaScript("window.toolImagesPointer(" + JSON.stringify(stage) + ")");
+        win.webContents.sendInputEvent({ type: "mouseDown", x: start[0], y: start[1], button: "left", clickCount: 1 });
+        if (end !== start) win.webContents.sendInputEvent({ type: "mouseMove", x: end[0], y: end[1], modifiers: ["leftButtonDown"] });
+        win.webContents.sendInputEvent({ type: "mouseUp", x: end[0], y: end[1], button: "left", clickCount: 1 });
+      }
       log("TOOL_IMAGES " + JSON.stringify(await win.webContents.executeJavaScript("window.toolImagesProbe(" + JSON.stringify(stage) + ")")));
-      if (stage.startsWith("snapshot-")) fs.writeFileSync(path.join(__dirname, stage + ".png"), (await win.webContents.capturePage()).toPNG());
+      if (stage.startsWith("snapshot-") || stage === "lightbox-open" || stage === "generated") {
+        fs.writeFileSync(path.join(__dirname, stage + ".png"), (await win.webContents.capturePage()).toPNG());
+      }
     }
     finish(0);
   } catch (error) { log(error.stack || String(error)); finish(1); }

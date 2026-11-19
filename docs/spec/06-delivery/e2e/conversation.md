@@ -4724,7 +4724,7 @@ command, a delegate, and an explicit Stop. Accepted input is delivered once.
 ## E2E-IMAGES-result-download
 
 - **Preconditions:** Agent conversation with two successful generated PNGs and a local image fixture.
-- **Steps:** Verify one selected card and two adjacent thumbnails, download the first result, select and download the second, inspect the narrow chat layout, open the selected image in the full-window viewer, navigate both directions, zoom in, close with Escape, and inspect Show in folder.
+- **Steps:** Verify one selected card and two adjacent thumbnails, download the first result, select and download the second, inspect the narrow chat layout, open the selected image in the floating preview, navigate both directions, zoom in, close with Escape, and inspect Show in folder.
 - **Expected:** The selected card and download target follow thumbnail selection. The selected thumbnail has a light gray ring, and switching loaded images keeps the card and viewer image present with stable fit dimensions throughout. Rapid reverse navigation cancels a pending decode. Both downloaded PNGs match their saved bytes and have safe filenames. Chat and viewer thumbnails remain reachable at narrow widths; viewer selection, zoom and focus restoration work, and the selected image remains selected in chat. The originals remain available. The folder action uses the contained file reveal path.
 - **Specs:** 03-runtime/21-image-generation.
 - **Acceptance:** Result actions and image browsing work without changing image storage or preview access.
@@ -5327,6 +5327,8 @@ Build two actual runtimes with identical configuration and different scratch dir
   in all display modes, standalone and subagent rows.
   Return a six-image MCP output; collapse/reopen its gallery, navigate and append
   an image while viewing. Check wrapping at 280 pixels in light/dark themes.
+  Open a portrait image and click the image and zoom controls. Drag from the
+  image onto blank space, then click blank space on each side after reopening.
   Repeat with missing refs and a generated-image batch containing successes and failures.
 - **Expected:** Image bytes reach a compatible model; unsupported/invalid/oversize
   images produce explicit omission feedback without claiming analysis. Compact
@@ -5338,10 +5340,13 @@ Build two actual runtimes with identical configuration and different scratch dir
   MCP/plugin output galleries retain accessible filenames, horizontal wrapping,
   collapse, keyboard navigation and call attribution. Appending preserves
   selection, zoom and pending decode/navigation; session switches close viewers.
-  Persisted inline bytes are viewable without the source file. Keyboard selection,
-  download targets, focus restoration and session isolation work. Missing resources
-  display an unavailable state without a download. Tool details contain no typed
-  binary dump. Generation retains its original cards and error/setup actions.
+  Persisted inline bytes are viewable without the source file. The conversation
+  stays visible under the scrim; image clicks, controls and cross-boundary drags
+  do not dismiss the preview. Clicking either blank side dismisses without
+  activating the conversation and restores focus to the originating thumbnail.
+  Keyboard selection, download targets and session isolation work. Missing
+  resources display an unavailable state without a download. Tool details contain
+  no typed binary dump. Generation retains its original cards and error/setup actions.
   Bounded history never string-clips image bytes or identity fields. Fitting
   retained bytes do not depend on the original file; over-budget previews use
   typed refs or explicit display-only unavailability, not model-input rejection.

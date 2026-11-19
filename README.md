@@ -183,8 +183,10 @@ This edition strengthens the existing framework rather than replacing it.
   follow-up requests and child-model contexts, with explicit omission notices when
   model capability or image limits prevent delivery. Native Responses image results
   are now saved and linked instead of being silently discarded; image-only replies
-  and delivery failures do not automatically repeat generation. Existing preview
-  limits still apply, with file access for larger retained images.
+  and delivery failures do not automatically repeat generation. Tool and generated
+  images open over the conversation and close with a click in the surrounding
+  space. Existing preview limits still apply, with file access for larger retained
+  images.
 
 ### Fixes that matter in daily use
 

@@ -90,10 +90,16 @@ attachment store after realpath containment. Each edit input set is capped at
 Successful results appear in one rounded image card. A batch with multiple
 successful images has a thumbnail strip beside the selected image; selecting a
 thumbnail updates the card and its download target without hiding failed-result
-messages. The strip remains reachable in narrow windows. Opening the card shows a
-full-window viewer with batch thumbnails, keyboard previous/next navigation,
-zoom and fit controls, and a way back to the existing file panel. Switching
-images never displays the previous image under the newly selected thumbnail.
+messages. The strip remains reachable in narrow windows. Opening the card shows
+a modal preview above the conversation, with a centered image, compact floating
+controls and a themed scrim. A click in blank space dismisses without activating
+the conversation underneath; a press and release must both hit the same
+backdrop. The image, thumbnails and controls do not dismiss on click, except
+for explicit close or open-file actions. Escape and the close button also
+dismiss, returning focus to the trigger without scrolling the conversation.
+The preview retains keyboard previous/next, batch thumbnails, zoom and fit,
+and a way back to the file panel. Switching images never displays the previous
+image under the newly selected thumbnail.
 Switching between loaded images keeps the card and viewer image visible without a
 blank placeholder frame. The viewer keeps fitted dimensions stable while the
 next image decodes, and the latest navigation wins during rapid input. The selected
@@ -164,8 +170,8 @@ input diagnostics explicitly distinguish unsupported vision, invalid data and
 input limits. Failed reads without image content never produce a success count.
 The original retained image remains viewable when model input is unavailable.
 
-Thumbnails reuse the full-window image viewer, keyboard previous/next, Escape,
-focus restoration, zoom and download. Typed inline raster bytes are displayed
+Thumbnails reuse the floating image preview and its dismissal, focus,
+navigation, zoom and download behavior. Typed inline raster bytes are displayed
 without rereading the source file. File references use the existing session-bound
 contained image reader; no network URLs or arbitrary text paths are inferred as
 images. Missing/unreadable previews have a visible unavailable state. Viewer

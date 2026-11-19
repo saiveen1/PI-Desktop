@@ -3,7 +3,7 @@ import { useChatNativeFilesAllowed, useChatSessionCapability } from "../../../ho
 import { useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { IconChevronLeft, IconChevronRight, IconClose, IconDownload, IconExternal, IconFolder, IconMinus, IconPlus } from "../../../components/icons";
-import { Button, TooltipButton } from "../../../components/ui";
+import { Button, OverlayBackdrop, TooltipButton } from "../../../components/ui";
 import { useOpenChatFileRef } from "../../../hooks/use-preview-target";
 import { api } from "../../../lib/api";
 import { useBlockingOverlay } from "../../../lib/blocking-overlay";
@@ -57,7 +57,7 @@ export function GeneratedImageViewer({ images, selectedIndex, onSelect, onClose,
       navigationRequestRef.current += 1;
       pendingIndexRef.current = null;
       dialog.close();
-      focusReturnRef.current?.focus();
+      focusReturnRef.current?.focus({ preventScroll: true });
     };
   }, [focusReturnRef]);
 
@@ -134,50 +134,52 @@ export function GeneratedImageViewer({ images, selectedIndex, onSelect, onClose,
         }
       }}
     >
-      <header className="generated-image-viewer-header">
-        <TooltipButton type="button" autoFocus onClick={closeViewer} tooltip={t("common.close")}><IconClose size={18} /></TooltipButton>
-        <strong>{label}</strong>
-        <div className="generated-image-viewer-header-actions">
-          {selected.path ? <TooltipButton type="button" onClick={() => { closeViewer(); void openFile(selected.path); }} tooltip={t("chat.previewFile")}><IconExternal size={18} /></TooltipButton> : null}
-          {nativeFilesAllowed && selected.path ? <TooltipButton type="button" onClick={() => void reveal()} tooltip={t("settings.revealGeneratedImage")}><IconFolder size={18} /></TooltipButton> : null}
-          {src && failedSrc !== src && downloadName ? <a href={src} download={downloadName} aria-label={t("settings.downloadGeneratedImage")} title={t("settings.downloadGeneratedImage")}><IconDownload size={18} /></a> : null}
+      <OverlayBackdrop className="generated-image-viewer-scrim" onClick={closeViewer}>
+        <header className="generated-image-viewer-header">
+          <TooltipButton type="button" autoFocus onClick={closeViewer} tooltip={t("common.close")}><IconClose size={18} /></TooltipButton>
+          <strong>{label}</strong>
+          <div className="generated-image-viewer-header-actions">
+            {selected.path ? <TooltipButton type="button" onClick={() => { closeViewer(); void openFile(selected.path); }} tooltip={t("chat.previewFile")}><IconExternal size={18} /></TooltipButton> : null}
+            {nativeFilesAllowed && selected.path ? <TooltipButton type="button" onClick={() => void reveal()} tooltip={t("settings.revealGeneratedImage")}><IconFolder size={18} /></TooltipButton> : null}
+            {src && failedSrc !== src && downloadName ? <a href={src} download={downloadName} aria-label={t("settings.downloadGeneratedImage")} title={t("settings.downloadGeneratedImage")}><IconDownload size={18} /></a> : null}
+          </div>
+        </header>
+        <div className="generated-image-viewer-body">
+          {images.length > 1 ? <nav className="generated-image-viewer-thumbs" aria-label={t("chat.imagePreview.title")}>
+            {images.map((image, index) => <GeneratedImageThumbnail key={image.index} image={image} selected={index === selectedIndex} onSelect={() => void selectImage(index)} className="generated-image-viewer-thumb" />)}
+          </nav> : null}
+          <OverlayBackdrop className="generated-image-viewer-viewport" ref={viewportRef} onClick={closeViewer}>
+            {src && failedSrc !== src ? <img
+              src={src}
+              alt={label}
+              draggable={false}
+              data-sized={size ? "true" : undefined}
+              style={size ? { width: size.width * zoom, height: size.height * zoom } : undefined}
+              onLoad={(event) => {
+                const { naturalWidth: width, naturalHeight: height } = event.currentTarget;
+                if (width > 0 && height > 0) {
+                  knownNaturalSizesRef.current.set(selected.index, { width, height });
+                  setNatural({ src, width, height });
+                }
+              }}
+              onError={() => setFailedSrc(src)}
+            /> : <p role="status">{t("settings.imagePreviewUnavailable")}</p>}
+          </OverlayBackdrop>
         </div>
-      </header>
-      <div className="generated-image-viewer-body">
-        {images.length > 1 ? <nav className="generated-image-viewer-thumbs" aria-label={t("chat.imagePreview.title")}>
-          {images.map((image, index) => <GeneratedImageThumbnail key={image.index} image={image} selected={index === selectedIndex} onSelect={() => void selectImage(index)} className="generated-image-viewer-thumb" />)}
-        </nav> : null}
-        <div className="generated-image-viewer-viewport" ref={viewportRef}>
-          {src && failedSrc !== src ? <img
-            src={src}
-            alt={label}
-            draggable={false}
-            data-sized={size ? "true" : undefined}
-            style={size ? { width: size.width * zoom, height: size.height * zoom } : undefined}
-            onLoad={(event) => {
-              const { naturalWidth: width, naturalHeight: height } = event.currentTarget;
-              if (width > 0 && height > 0) {
-                knownNaturalSizesRef.current.set(selected.index, { width, height });
-                setNatural({ src, width, height });
-              }
-            }}
-            onError={() => setFailedSrc(src)}
-          /> : <p role="status">{t("settings.imagePreviewUnavailable")}</p>}
-        </div>
-      </div>
-      <footer className="generated-image-viewer-footer">
-        {images.length > 1 ? <div className="generated-image-viewer-navigation">
-          <TooltipButton type="button" disabled={selectedIndex === 0} onClick={() => move(-1)} tooltip={t("chat.imagePreview.previous")}><IconChevronLeft size={18} /></TooltipButton>
-          <span role="status">{t("chat.imagePreview.position", { current: selectedIndex + 1, total: images.length })}</span>
-          <TooltipButton type="button" disabled={selectedIndex === images.length - 1} onClick={() => move(1)} tooltip={t("chat.imagePreview.next")}><IconChevronRight size={18} /></TooltipButton>
-        </div> : null}
-        <div className="generated-image-viewer-zoom">
-          <TooltipButton type="button" disabled={!size || zoom <= Math.min(0.1, fit)} onClick={() => changeZoom(zoom / 1.25)} tooltip={t("menu.zoomOut")}><IconMinus size={18} /></TooltipButton>
-          <output>{Math.round(zoom * 100)}%</output>
-          <TooltipButton type="button" disabled={!size || zoom >= 4} onClick={() => changeZoom(zoom * 1.25)} tooltip={t("menu.zoomIn")}><IconPlus size={18} /></TooltipButton>
-          <Button type="button" variant="ghost" disabled={!size} onClick={() => setManualZoom(null)}>{t("chat.imagePreview.fit")}</Button>
-        </div>
-      </footer>
+        <footer className="generated-image-viewer-footer">
+          {images.length > 1 ? <div className="generated-image-viewer-navigation">
+            <TooltipButton type="button" disabled={selectedIndex === 0} onClick={() => move(-1)} tooltip={t("chat.imagePreview.previous")}><IconChevronLeft size={18} /></TooltipButton>
+            <span role="status">{t("chat.imagePreview.position", { current: selectedIndex + 1, total: images.length })}</span>
+            <TooltipButton type="button" disabled={selectedIndex === images.length - 1} onClick={() => move(1)} tooltip={t("chat.imagePreview.next")}><IconChevronRight size={18} /></TooltipButton>
+          </div> : null}
+          <div className="generated-image-viewer-zoom">
+            <TooltipButton type="button" disabled={!size || zoom <= Math.min(0.1, fit)} onClick={() => changeZoom(zoom / 1.25)} tooltip={t("menu.zoomOut")}><IconMinus size={18} /></TooltipButton>
+            <output>{Math.round(zoom * 100)}%</output>
+            <TooltipButton type="button" disabled={!size || zoom >= 4} onClick={() => changeZoom(zoom * 1.25)} tooltip={t("menu.zoomIn")}><IconPlus size={18} /></TooltipButton>
+            <Button type="button" variant="ghost" disabled={!size} onClick={() => setManualZoom(null)}>{t("chat.imagePreview.fit")}</Button>
+          </div>
+        </footer>
+      </OverlayBackdrop>
     </dialog>,
   );
 }
