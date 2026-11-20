@@ -175,6 +175,8 @@ pub struct SessionSummary {
     pub delegation_model_keys: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub delegation_model_approvals: Option<crate::session_delegation::ModelApprovals>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub persona: Option<crate::session_personas::SessionPersona>,
     pub created_at: String,
     /// True when this session is the transcript owned by a scheduled-task run.
     /// Automation transcripts are entered from the Scheduled page, so the
@@ -1402,12 +1404,16 @@ pub(crate) fn summary_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Sess
         worktree: None,
         delegation_model_keys: None,
         delegation_model_approvals: None,
+        persona: None,
     })
 }
 
-/// Attach host-owned presentation and delegation metadata without loading transcripts.
+/// Attach host-owned metadata without loading transcripts.
 fn attach_session_metadata(db: &Database, summaries: &mut [SessionSummary]) -> Result<()> {
     crate::session_delegation::attach(db, summaries)?;
+    for summary in summaries.iter_mut() {
+        crate::session_personas::attach(db, summary)?;
+    }
     let mut worktrees = crate::session_worktrees::lifecycle::summaries(db)?;
     if worktrees.is_empty() {
         return Ok(());
@@ -1496,7 +1502,7 @@ pub fn create_session_with_options(
     db: &Database,
     options: SessionCreateOptions,
 ) -> Result<SessionSummary> {
-    create_session_with_mode_snapshot(db, options, None)
+    create_session_with_mode_snapshot(db, options, None, None)
 }
 
 /// Store a selected definition and its new session in one transaction.
@@ -1505,6 +1511,7 @@ pub fn create_session_with_mode_snapshot(
     db: &Database,
     options: SessionCreateOptions,
     mode_snapshot: Option<&Value>,
+    persona: Option<crate::session_personas::SessionPersona>,
 ) -> Result<SessionSummary> {
     let SessionCreateOptions {
         title,
@@ -1534,9 +1541,8 @@ pub fn create_session_with_mode_snapshot(
     validate_thinking_level(&thinking_level)?;
     let permission_mode = permission_mode.unwrap_or_else(default_permission_mode);
     validate_permission_mode(&permission_mode)?;
-    let transaction = prepared
-        .as_ref()
-        .map(|_| db.conn().unchecked_transaction())
+    let transaction = (prepared.is_some() || persona.is_some())
+        .then(|| db.conn().unchecked_transaction())
         .transpose()?;
     if let Some(prepared) = &prepared {
         crate::mode_runs::store_session_snapshot(db, prepared)?;
@@ -1575,6 +1581,9 @@ pub fn create_session_with_mode_snapshot(
             prepared.as_ref().and_then(|value| value.snapshot_hash()),
             observer_mode
         ])?;
+    if persona.is_some() {
+        crate::session_personas::write(db.conn(), &id, persona.as_ref())?;
+    }
     if let Some(transaction) = transaction {
         transaction.commit()?;
     }
@@ -1598,6 +1607,7 @@ pub fn create_session_with_mode_snapshot(
         worktree: None,
         delegation_model_keys: None,
         delegation_model_approvals: None,
+        persona,
     })
 }
 
@@ -1984,6 +1994,9 @@ pub fn fork_session_through(
              SELECT ns, ?1, value_json, updated_at FROM kv WHERE ns = ?2 AND key = ?3",
             params![id, crate::session_delegation::NAMESPACE, source_id],
         )?;
+        if source.summary.persona.is_some() {
+            crate::session_personas::write(&tx, &id, source.summary.persona.as_ref())?;
+        }
         tx.commit()?;
         Ok(())
     })();
@@ -2009,6 +2022,7 @@ pub fn fork_session_through(
         observer_mode: ObserverMode::Off,
         delegation_model_keys: source.summary.delegation_model_keys,
         delegation_model_approvals: source.summary.delegation_model_approvals,
+        persona: source.summary.persona,
         updated_at: created_at.clone(),
         created_at,
         // A fork is the user's own conversation, not the automation's transcript.
@@ -5717,6 +5731,7 @@ mod tests {
             worktree: None,
             delegation_model_keys: None,
             delegation_model_approvals: None,
+            persona: None,
             created_at: "2025-01-01T00:00:00Z".into(),
             updated_at: "2025-01-02T00:00:00Z".into(),
         };
@@ -5774,6 +5789,7 @@ mod tests {
             worktree: None,
             delegation_model_keys: None,
             delegation_model_approvals: None,
+            persona: None,
             created_at: "2025-01-01T00:00:00Z".into(),
             updated_at: "2025-01-01T00:00:00Z".into(),
         };
@@ -7042,6 +7058,7 @@ mod tests {
             worktree: None,
             delegation_model_keys: None,
             delegation_model_approvals: None,
+            persona: None,
             created_at: "2025-01-01T00:00:00Z".into(),
             updated_at: "2025-01-01T00:00:00Z".into(),
         };

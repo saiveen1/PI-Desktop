@@ -96,6 +96,7 @@ export class DelegationChainRegistry {
     modelReason?: string;
     requestedThinkingLevel?: DelegationChain["latestRequestedThinkingLevel"];
     resumedFrom?: DelegationChain;
+    persona?: import("@pi-desktop/shared").SessionPersona;
   }): DelegationChain {
     const existing = options.resumedFrom
       ? this.chains.get(options.resumedFrom.delegateSessionId)
@@ -130,6 +131,7 @@ export class DelegationChainRegistry {
           latestRequestedModel: options.requestedModel,
           latestModelReason: options.modelReason,
           latestRequestedThinkingLevel: options.requestedThinkingLevel,
+          ...(options.persona ? { persona: structuredClone(options.persona) } : {}),
           latestStatus: "running",
           lastActivityAt: Date.now(),
         };

@@ -55,6 +55,7 @@ import type {
   SessionHistoryWindow,
 } from "../app-state";
 import type { SessionCoordination } from "../runtime/session-coordination";
+import { createConfigureActivePersona } from "../runtime/session-persona";
 import {
   type SessionRuntime,
 } from "../runtime/session-runtime";
@@ -166,14 +167,22 @@ export function createSessionSlice({
   | "forkSession"
   | "forkAssistantMessage"
   | "configureActiveSession"
+  | "configureActivePersona"
   | "abortSession"
 > {
   const pendingInteractiveRestoreGenerations = new Map<string, number>();
 
   const refreshSessionList = createRefreshCoordinator(async () => {
+    const personasBeforeRead = new Map(get().sessions.map((session) => [session.id, session.persona]));
     const result = await api.listSessions();
     set((state) => {
-      const next = result.sessions.map(safeSessionSummary);
+      const currentRows = new Map(state.sessions.map((session) => [session.id, session]));
+      const next = result.sessions.map((row) => {
+        const current = currentRows.get(row.id);
+        const summary = safeSessionSummary(row);
+        return current && current.persona !== personasBeforeRead.get(row.id)
+          ? { ...summary, persona: current.persona } : summary;
+      });
       const active = state.sessions.find((session) => session.id === state.activeSessionId);
       // A disconnected host may temporarily disappear from inventory; keep the
       // active identity fail-closed until an authoritative detail/list replaces it.
@@ -184,6 +193,8 @@ export function createSessionSlice({
   });
 
   return {
+    configureActivePersona: createConfigureActivePersona({ get, set }),
+
     refreshSessions: async (options) => {
       const previousSessions = get().sessions;
       const sessions = await refreshSessionList();
@@ -702,6 +713,7 @@ export function createSessionSlice({
         options && "projectPath" in options
           ? options.projectPath ?? null
           : get().workspace?.path ?? null;
+      const draftInScope = !get().activeSessionId && (get().workspace?.path ?? null) === requestedProjectPath;
       const isolated = options?.isolated === true;
       const group = options?.groupId === undefined ? undefined : {
         scope: projectOrganizationScope(requestedProjectPath, get().sidebarProjectGroups ?? []),
@@ -742,8 +754,11 @@ export function createSessionSlice({
           state.sessionMeta,
           group ? (session) => sessionMatchesCreationGroup(state, session, group) : undefined,
         );
+        const currentDraft = draftInScope ? state.draftConfiguration : null;
+        const useDraft = currentDraft?.personaId && state.settings?.personas?.some((item) => item.id === currentDraft.personaId);
         if (
           latest &&
+          !useDraft &&
           sessionIsReusableEmpty(latest, {
             isolated,
             running: get().runningSessions[latest.id] === true,
@@ -759,7 +774,7 @@ export function createSessionSlice({
         return await persistSessionAndSelect({
           intent,
           projectPath: requestedProjectPath,
-          draftConfiguration: null,
+          draftConfiguration: useDraft ? currentDraft : null,
           group,
           ...(isolated ? { isolated: true } : {}),
         });
@@ -857,6 +872,7 @@ export function createSessionSlice({
       if (!sessionId) {
         set((state) => ({
           draftConfiguration: {
+            ...state.draftConfiguration,
             mode: config.mode,
             thinkingLevel: config.thinkingLevel,
             providerId:
@@ -904,6 +920,7 @@ export function createSessionSlice({
           session.id === sessionId
             ? {
                 ...result.session,
+                ...(session.persona !== undefined ? { persona: session.persona } : {}),
                 pinned: sessionIsPinned(sessionId, state.sessionMeta),
                 archived: sessionIsArchived(sessionId, state.sessionMeta),
               }

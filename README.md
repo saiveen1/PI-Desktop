@@ -86,6 +86,13 @@ This edition strengthens the existing framework rather than replacing it.
   active request model and provider IDs, including after model changes, so it
   can answer identity questions and fill requested `AI-Model` trailers without
   guessing. This identifies the configured request, not undisclosed gateway routing.
+- **Conversation personas.** Manage reusable identity/tone/style templates in
+  Instructions settings and select one beside the composer mode picker. Selection
+  snapshots replace the default identity opening without changing modes or
+  permissions. Optional child inheritance is off by default; resumed child chains
+  retain their original persona even after the parent selection changes. Template
+  edits require reapplying a selection. This is prompt guidance, not guaranteed
+  model adherence; native extension-agent and remote backends are not supported.
 - **Execution continuity after compaction.** Main-session active-task checkpoints retain the
   current request plus a budgeted window of recent progress and paired tool
   receipts, including after restart, rather than relying on the summary alone.

@@ -26,7 +26,11 @@ pub fn list(db: &Database) -> Result<Vec<TrashedSession>> {
             deleted_at: ms_to_ts(row.get("deleted_at")?),
         })
     })?;
-    Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    let mut rows = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+    for entry in &mut rows {
+        crate::session_personas::attach(db, &mut entry.session)?;
+    }
+    Ok(rows)
 }
 
 pub fn is_trashed(db: &Database, id: &str) -> Result<bool> {

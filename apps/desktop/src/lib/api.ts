@@ -1,5 +1,6 @@
 import { isProviderStreamIdleTimeoutMinutes, resolveProviderStreamIdleTimeoutMinutes } from "@pi-desktop/shared";
 import { isAgentOutputGuardSettings, resolveAgentOutputGuardSettings } from "@pi-desktop/shared";
+import { isConfigureSessionPersonaRequest, isPersonaCatalog, isSessionPersona, type ConfigureSessionPersonaRequest } from "@pi-desktop/shared";
 import { isObserverGuardSettings, resolveObserverGuardSettings, resolveObserverGuardMode } from "@pi-desktop/shared";
 import type { CoreNotificationRequest, NotificationDeliveryResult, NotificationTarget } from "@pi-desktop/shared";
 import type { DelegationApprovalSnapshot, DelegationApprovalActionRequest, DelegationApprovalActionResult, DelegationApprovalExtendRequest, DelegationApprovalChangedEvent } from "@pi-desktop/shared";
@@ -419,15 +420,21 @@ export type BackgroundTaskOutput = {
 };
 
 /** `session.create` input: summary fields plus the isolation switch. */
-export type CreateSessionInput = Partial<SessionSummary> & {
-  /** Run the session in its own git worktree (ADR 0329). */
-  isolated?: boolean;
-};
+export type CreateSessionInput = Partial<SessionSummary> &
+  Pick<ConfigureSessionPersonaRequest, "personaId" | "inheritToSubagents"> & {
+    /** Run the session in its own git worktree (ADR 0329). */
+    isolated?: boolean;
+  };
+
+function normalizedPersonaField({ persona }: SessionSummary): Pick<SessionSummary, "persona"> {
+  return persona === undefined ? {} : { persona: persona === null || isSessionPersona(persona) ? persona : undefined };
+}
 
 function normalizeSession(session: SessionSummary): SessionSummary {
   return {
     ...safeSessionSummary(session),
     source: isRemoteSession(session) ? "remote" : session.source ?? "desktop",
+    ...normalizedPersonaField(session),
     mode: normalizeMode((session as { mode?: unknown }).mode),
     ...(!session.id.startsWith("native-pi:") && !isRemoteSession(session) && (!session.source || session.source === "desktop")
       ? { observerMode: resolveObserverGuardMode(session.observerMode) } : {}),
@@ -438,6 +445,7 @@ function normalizeSessionDetail(detail: SessionDetail | null): SessionDetail | n
   return detail
     ? {
         ...safeSessionSummary(detail),
+        ...normalizedPersonaField(detail),
         messages: projectPlanHistory(detail.messages, detail.planHistory ?? [], detail.id),
         mode: normalizeMode((detail as { mode?: unknown }).mode),
         ...(!detail.id.startsWith("native-pi:") && !isRemoteSession(detail) && (!detail.source || detail.source === "desktop")
@@ -468,6 +476,7 @@ function isTranscriptDisplayModeValue(value: unknown): value is TranscriptDispla
 export function normalizeSettings(settings: AppSettings): AppSettings {
   return {
     ...settings,
+    ...(settings.personas !== undefined ? { personas: isPersonaCatalog(settings.personas) ? settings.personas : [] } : {}),
     sidebarRunningIndicators: settings.sidebarRunningIndicators !== false,
     sidebarRunningBadge: settings.sidebarRunningBadge !== false,
     sidebarRunningRail: settings.sidebarRunningRail === true,
@@ -512,6 +521,9 @@ export function normalizeSettings(settings: AppSettings): AppSettings {
 }
 
 export function validateSettingsWrite(settings: AppSettings): AppSettings {
+  if (Object.hasOwn(settings, "personas") && !isPersonaCatalog(settings.personas)) {
+    throw Object.assign(new Error("personas is invalid"), { errorCode: "INVALID_PARAMS" });
+  }
   if (Object.prototype.hasOwnProperty.call(settings, "agentOutputGuard") &&
       !isAgentOutputGuardSettings(settings.agentOutputGuard)) {
     throw Object.assign(new Error("agentOutputGuard is invalid"), { errorCode: "INVALID_PARAMS" });
@@ -926,6 +938,13 @@ export const api = {
       id,
       config,
     ).then((result) => ({ ...result, session: normalizeSession(result.session) })),
+  configureSessionPersona: async (request: ConfigureSessionPersonaRequest) => {
+    if (!isConfigureSessionPersonaRequest(request)) {
+      throw Object.assign(new Error("Invalid session persona request"), { code: "INVALID_PARAMS" });
+    }
+    const { session } = await invoke<{ session: SessionSummary }>(IPC.invoke.sessionConfigurePersona, request);
+    return { session: normalizeSession(session) };
+  },
   scanImportSessions: () =>
     invoke<{
       sessions: ImportCandidate[];

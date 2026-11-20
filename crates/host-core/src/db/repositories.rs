@@ -1,5 +1,8 @@
 use super::*;
 
+#[path = "session_persona_migration.rs"]
+mod session_persona_migration;
+
 pub(crate) const OBSOLETE_PLAN_APPROVAL_PERMISSION_MODE: &str = "planApprovalPermissionMode";
 
 pub(crate) fn strip_obsolete_plan_approval_permission_mode(value: &mut Value) -> bool {
@@ -151,6 +154,7 @@ impl Database {
                 tx.execute_batch(super::MODE_RUNS_SCHEMA)?;
                 super::mode_run_elapsed_migration::initialize(&tx)?;
                 super::completion_report_migration::initialize(&tx)?;
+                tx.execute_batch(session_persona_migration::DDL)?;
                 tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
                 tx.commit()?;
             }
@@ -220,7 +224,7 @@ impl Database {
             26 => {
                 migrate_v26_to_v27(&conn, path)?;
             }
-            27..=33 => {}
+            27..=34 => {}
             legacy @ 1..=6 => {
                 let _ = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
                 drop(conn);
@@ -307,6 +311,10 @@ impl Database {
         let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
         if matches!(version, 32 | 33) {
             super::legacy_goal_migration::migrate(&conn, path)?;
+        }
+        let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+        if version == 34 {
+            session_persona_migration::migrate(&conn, path)?;
         }
         let db = Self { conn, data_dir };
         db.boot_maintenance()?;

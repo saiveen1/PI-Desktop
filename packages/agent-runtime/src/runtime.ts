@@ -85,6 +85,7 @@ import {
   type UserMessage,
 } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
+import { delegationPersona, personaSystemPrompt, readSessionPersona, withPersonaPrefix } from "./persona-prompt.js";
 import {
   DEFAULT_COMMAND_TIMEOUT_MS,
   OAUTH_AUTH_KIND,
@@ -591,6 +592,7 @@ export type DelegationStatus =
  * resolves when the delegate settles; `abort` stops the delegate's agent.
  */
 export type DelegationRecord = {
+  persona?: import("@pi-desktop/shared").SessionPersona;
   delegationId: string;
   /** Parent `Task` toolCallId that started this delegation. */
   parentToolCallId?: string;
@@ -657,6 +659,7 @@ type ManualDelegationRetryResult = AgentRetrySubagentResponse;
 
 function delegationSummary(record: DelegationRecord): Record<string, unknown> {
   return {
+    ...(record.persona ? { persona: record.persona } : {}),
     delegationId: record.delegationId,
     agent: record.agentName,
     modelId: record.modelId,
@@ -1086,6 +1089,7 @@ export type AgentRuntimeOptions = {
   systemPrompt?: string;
   /** pi-compatible SYSTEM.md / APPEND_SYSTEM.md resolved for the session (issue #542). */
   customSystemPrompt?: CustomSystemPrompt;
+  persona?: import("@pi-desktop/shared").SessionPersona | null;
   /** Session-bound workspace root used for path-scoped instruction requests. */
   projectPath?: string;
   /** Remote tool root. Model requests and runtime state remain on this machine. */
@@ -1168,6 +1172,7 @@ export type RuntimeMatchConfig = {
   pluginSkills?: PluginSkillDef[];
   trustedExtensions?: TrustedExtensionSpec[];
   customSystemPrompt?: CustomSystemPrompt;
+  persona?: import("@pi-desktop/shared").SessionPersona | null;
   projectInstructions?: ProjectInstructions;
   projectMemory?: string;
   projectPath?: string;
@@ -1766,6 +1771,7 @@ export class DesktopAgentRuntime {
   private streamSink: StreamCoalescer;
   private baseSystemPrompt: string;
   private customSystemPrompt?: CustomSystemPrompt;
+  private readonly persona?: import("@pi-desktop/shared").SessionPersona;
   private planningState: PlanningState;
   private pendingPlanId?: string;
   /** Main-turn-only diagnostic owner; delegate/compaction streams never use it. */
@@ -2061,6 +2067,7 @@ export class DesktopAgentRuntime {
     // Remote workspaces are never isolated (ADR 0329).
     this.workspaceRoot = opts.remoteWorkspace ? undefined : opts.workspaceRoot?.trim() || undefined;
     this.customSystemPrompt = opts.customSystemPrompt;
+    this.persona = readSessionPersona(opts.persona);
     this.baseProjectInstructions = opts.projectInstructions;
     this.projectInstructions = opts.projectInstructions;
     this.projectMemory = opts.projectMemory?.trim() || undefined;
@@ -2128,6 +2135,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     // steering and scratch mechanics keep the desktop working (issue #542).
     this.baseSystemPrompt = [
       (
+        personaSystemPrompt(this.persona) ??
         opts.customSystemPrompt?.replace ??
         opts.systemPrompt ??
         DEFAULT_RUNTIME_SYSTEM_PROMPT
@@ -2816,6 +2824,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       // Editing SYSTEM.md / APPEND_SYSTEM.md retires the runtime so the next
       // prompt recomposes from the fresh content.
       ["customSystemPrompt", safeJson(this.customSystemPrompt ?? null) === safeJson(config.customSystemPrompt ?? null)],
+      ["persona", safeJson(this.persona ?? null) === safeJson(config.persona ?? null)],
       ["projectMemory", (this.projectMemory ?? "") === (config.projectMemory?.trim() ?? "")],
       ["projectPath", (this.projectPath ?? "") === (config.remoteWorkspace?.path ?? config.projectPath?.trim() ?? "")],
       ["remoteWorkspace", safeJson(this.remoteWorkspace ?? null) === safeJson(config.remoteWorkspace ?? null)],
@@ -5003,6 +5012,9 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           return this.subagentToolError(toolCallId, resumeLookup.message);
         }
         const resumedChain = resumeLookup?.ok ? resumeLookup.chain : undefined;
+        let childPersona: import("@pi-desktop/shared").SessionPersona | undefined;
+        try { childPersona = delegationPersona(this.persona, resumedChain); }
+        catch (error) { return this.subagentToolError(toolCallId, error instanceof Error ? error.message : "Invalid delegation persona snapshot."); }
         // A resume keeps the chain's own binding (ADR 0279 §4): changing the
         // parent's session model must not strand a chain, and a delegate must
         // never swap models by accident. When the recorded binding is gone the
@@ -5171,10 +5183,12 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           modelReason: effectiveModelReason,
           requestedThinkingLevel,
           resumedFrom: resumedChain,
+          ...(childPersona ? { persona: childPersona } : {}),
         });
         const runPolicy = resolveDelegationRunPolicy(scheduler.settings?.runPolicy);
         const failurePolicy = Object.freeze({ ...(scheduler.settings?.failurePolicy ?? DEFAULT_DELEGATION_FAILURE_POLICY) });
         const record: DelegationRecord = {
+          ...(childPersona ? { persona: childPersona } : {}),
           runPolicy,
           failurePolicy,
           delegationId,
@@ -5209,6 +5223,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
         try {
           const delegatePrompt = (instructions: ProjectInstructions | undefined) => composeSubagentSystemPrompt({
             definition,
+            persona: childPersona,
             guidance: this.subagentGuidance(definition, instructions ?? null, skills),
             toolNames: declaredToolNames,
           });
@@ -5219,6 +5234,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           const scopedTools = this.scopeDelegateTools(tools, definition, delegationId, worktreeKey, applyInstructions, skills);
           subagentRun = new SubagentRun({
             definition,
+            persona: childPersona,
             builtinToolNames,
             sessionId: this.sessionId,
             turnId: this.turnId,
@@ -5265,6 +5281,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
             },
             systemPrompt: composeSubagentSystemPrompt({
               definition,
+              persona: childPersona,
               guidance: this.subagentGuidance(definition, this.projectInstructions, skills),
               toolNames: declaredToolNames,
             }),
@@ -5351,6 +5368,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           ],
           details: {
             delegationId,
+            ...(childPersona ? { persona: childPersona } : {}),
             job: { kind: "delegation", id: delegationId },
             agent: definition.name,
             status: "running",
@@ -9884,7 +9902,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       typeof input === "string" ? input : input.text,
       base,
     );
-    this.setAgentSystemPrompt(prompt ?? base);
+    this.setAgentSystemPrompt(withPersonaPrefix(prompt ?? base, this.persona));
   }
   /**
    * `before_provider_request` rides pi-ai's `onPayload`, `after_provider_response`
@@ -10119,6 +10137,12 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     this.acceptingSteering = false;
     this.gracefulStopRequested = true;
     return { requested: true };
+  }
+
+  /** Configuration must also wait for cancelled delegates that are still settling. */
+  personaConfigurationBlocked(): boolean {
+    return this.getStatus().isRunning || this.runningDelegations().length > 0 ||
+      this.pendingAskTools.size > 0;
   }
 
   getStatus(): AgentStatus {

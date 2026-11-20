@@ -38,6 +38,7 @@ export type AgentIpcDependencies = {
   claimedExecutionSessions: Map<string, string>;
   resolveAgentRuntimeLaunch: (...args: any[]) => Promise<any>;
   acquireSessionOperation: (sessionId: string) => Promise<() => void>;
+  compactingSessions?: Set<string>;
   finishTurn: FinishTurn;
   /**
    * Record a cancellation before the cancel request is issued, so a terminal
@@ -102,6 +103,7 @@ export function registerAgentIpc({
   claimedExecutionSessions,
   resolveAgentRuntimeLaunch,
   acquireSessionOperation,
+  compactingSessions = new Set<string>(),
   finishTurn,
   lockAbortReason,
   finishApprovedExecution,
@@ -118,7 +120,6 @@ export function registerAgentIpc({
   // operation is released before the sidecar call so Stop stays live; this
   // mark is what keeps a queued prompt from starting against a compacting
   // runtime (issue #2289).
-  const compactingSessions = new Set<string>();
   let host: HostProcess | null = null;
   let sidecar: AgentSidecar | null = null;
   let agentHostBridge: AgentHostBridge | null = null;

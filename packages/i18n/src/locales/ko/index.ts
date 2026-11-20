@@ -7,7 +7,9 @@ import { sessionLabels, sessionGroups, sessionDelegation, delegationDetails } fr
 import { en, type EnglishCatalog } from "../en/index.js";
 
 import { turnContext } from "../turn-context.js";
+import { conversationPersonas } from "../conversation-personas.js";
 export const ko = {
+  personas: conversationPersonas.ko,
   turnContext: turnContext.ko,
   outputGuard: outputGuard.ko,
   observerGuard: observerGuard.ko,

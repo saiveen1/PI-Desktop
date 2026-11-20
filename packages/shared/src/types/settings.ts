@@ -59,6 +59,8 @@ export type StartupAnimationSettings = {
 };
 
 export type AppSettings = {
+  /** Reusable persona templates; existing sessions retain their selected snapshots. */
+  personas?: import("../personas.js").PersonaDefinition[];
   /** Unified AI delegation policy. Absent preserves legacy model opt-ins and pins. */
   delegation?: import("../delegation-policy.js").DelegationSettings;
   /** Installation-local core notification delivery preferences. */

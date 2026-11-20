@@ -26,6 +26,7 @@ export class SubagentProgress {
     metadata: () => Pick<SubagentCheckpoint, "agentName" | "modelId" | "thinkingLevel" | "turns" | "toolCalls" | "updatedAt"> & {
       version: 1; sessionId: string; delegateSessionId: string; delegationId: string; task: string;
       contextCompactions: number; contextDegraded: boolean;
+      persona?: import("@pi-desktop/shared").SessionPersona;
     };
     initialReport?: string;
     observation: () => SubagentObservation;

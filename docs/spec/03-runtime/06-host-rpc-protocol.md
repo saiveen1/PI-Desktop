@@ -1,5 +1,14 @@
 # 06. Host RPC Protocol
 
+### Session persona configuration
+
+`session.configurePersona` accepts `{ id, personaId?, inheritToSubagents? }` and
+returns `{ session }`. Null personaId clears; omission preserves the snapshot;
+true inheritance requires a selected persona. Host rejects pending work and
+approval/mode runs without partial writes. Main additionally gates inline child
+state. `session.create` accepts the selection fields atomically from a draft;
+catalogs use `settings.set`. See [session personas](session-personas.md).
+
 
 ### Bounded existing-history operations (#1868)
 

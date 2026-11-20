@@ -384,6 +384,9 @@ export function createSessionLaunchRuntime({
     // Plugin-owned agents resolve credentials and transport inside the trusted
     // extension; the host never reads or injects a secret for them.
     const isExtensionAgent = Boolean(extensionAgentKey);
+    if (session.persona && (remoteWorkspace || isExtensionAgent)) {
+      throw Object.assign(new Error("Clear the session persona before using this agent backend"), { errorCode: ErrorCodes.INVALID_ARGUMENT });
+    }
     const isVendorAccount = !isExtensionAgent && provider.authKind === OAUTH_AUTH_KIND;
     const secret = isExtensionAgent || isVendorAccount
       ? { value: undefined }
@@ -816,6 +819,7 @@ export function createSessionLaunchRuntime({
         ...(remoteWorkspace ? { remoteWorkspace } : {}),
         ...(workspaceRoot ? { workspaceRoot } : {}),
         customSystemPrompt,
+        persona: session.persona,
         projectInstructions,
         projectMemory,
         provider: {

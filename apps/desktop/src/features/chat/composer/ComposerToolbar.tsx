@@ -10,6 +10,7 @@ import {
 } from "@pi-desktop/shared";
 import { type AppState, useAppStore } from "../../../stores/app-store";
 import { ComposerModePicker } from "./ComposerModePicker";
+import { ComposerPersonaPicker } from "./ComposerPersonaPicker";
 import { modeErrorMessage } from "../../modes/mode-run-model";
 import { ComposerPermissionPicker } from "./ComposerPermissionPicker";
 import { ContextUsageInspector } from "../../../components/ContextUsageInspector";
@@ -116,6 +117,7 @@ export function ComposerToolbar({
   workSessionLabel,
 }: ComposerToolbarProps) {
   const platform = (window.piDesktop?.platform ?? "darwin") as ShortcutPlatform;
+  const personaSaving = useAppStore((state) => !!workSessionId && state.personaWrites?.[workSessionId] === true);
   const steeringShortcut = keybindingDisplayParts("Alt+Enter", platform).join("+");
   return (
     <div className="composer-toolbar">
@@ -139,6 +141,8 @@ export function ComposerToolbar({
         {localToolsAllowed ? (
           <ComputerUseIndicator sessionId={workSessionId ?? null} abort={abort} />
         ) : null}
+        {localToolsAllowed ? <ComposerPersonaPicker sessionId={workSessionId} providerId={providerId}
+          onOpen={() => { setModeOpen(false); setPermissionOpen(false); modelMenu.setOpen(false); }} /> : null}
         <ComposerModePicker
           t={t}
           mode={mode}
@@ -275,6 +279,7 @@ export function ComposerToolbar({
             disabled={
               !hasDraftContent ||
               sendBlocked ||
+              personaSaving ||
               (!modelReady && !value.trim().startsWith("/"))
             }
             onClick={() => void submit()}

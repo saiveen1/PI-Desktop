@@ -7,7 +7,9 @@ import { approvalCenter } from "./delegation-approval.js";
 import { delegationReliabilitySettings, delegationDiagnostics } from "./delegation-reliability.js";
 import { sessionLabels, sessionGroups, sessionDelegation, delegationDetails } from "./session-management.js";
 import { turnContext } from "../turn-context.js";
+import { conversationPersonas } from "../conversation-personas.js";
 export const en = {
+  personas: conversationPersonas.en,
   turnContext: turnContext.en,
   outputGuard: outputGuard.en,
   observerGuard: observerGuard.en,

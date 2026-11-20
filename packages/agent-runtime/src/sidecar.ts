@@ -155,6 +155,7 @@ type RuntimeParams = {
   /** An isolated session's worktree root, supplied by Electron main (ADR 0329). */
   workspaceRoot?: string;
   customSystemPrompt?: CustomSystemPrompt;
+  persona?: import("@pi-desktop/shared").SessionPersona | null;
   projectInstructions?: ProjectInstructions;
   projectMemory?: string;
   compactionSettings?: ContextCompactionSettings;
@@ -273,6 +274,7 @@ async function runtimeFor(
     jevApiKey: params.jevApiKey,
     projectInstructions: params.projectInstructions,
     customSystemPrompt: params.customSystemPrompt,
+    persona: params.persona,
     projectMemory: params.projectMemory,
     projectPath: params.projectPath,
     remoteWorkspace: params.remoteWorkspace,
@@ -374,6 +376,7 @@ async function runtimeFor(
     remoteWorkspace: params.remoteWorkspace,
     workspaceRoot: params.workspaceRoot,
     customSystemPrompt: params.customSystemPrompt,
+    persona: params.persona,
     projectInstructions: params.projectInstructions,
     projectMemory: params.projectMemory,
     scratchDir:
@@ -708,6 +711,7 @@ async function handle(method: string, params: any): Promise<unknown> {
       }
       const runtime = runtimes.get(sessionId);
       return {
+        personaConfigurationBlocked: runtime?.personaConfigurationBlocked() ?? false,
         status: runtime?.getStatus() ?? {
           sessionId,
           isRunning: false,

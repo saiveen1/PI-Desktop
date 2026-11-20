@@ -1,4 +1,12 @@
-# 04. Data Storage (Schema v34)
+# 04. Data Storage (Schema v35)
+
+### Session personas (schema 35)
+
+The 34-to-35 upgrade preserves a verified schema-34 backup and adds the
+Host-owned `session_personas` table. Each optional versioned snapshot belongs
+to one session; deletion cascades with that owner. Old sessions have no persona,
+template changes do not modify selected snapshots, and transcript bytes remain
+unchanged. See [session personas](session-personas.md) for selection and inheritance.
 
 ### Project path aliases (#2148)
 
@@ -69,12 +77,12 @@ Existing mode snapshots, runs, gates, approvals, delegation policy/history,
 project/session groups and transcript bytes are preserved. A failed step rolls
 back its DDL, ownership and version; its backup remains. Older schemas follow
 the existing versioned chain, including the lossless image marker at version 26.
-The current schema is 34. Upstream used v30 for elapsed/queued-Goal columns;
+The current schema is 35. Upstream used v30 for elapsed/queued-Goal columns;
 local v30 reconciliation predates those columns. Before the v31 completion-report
 migration, missing elapsed and Goal-intent columns are therefore reconciled in
 the same transaction. Existing values are preserved. The delegation-history
 index is idempotently ensured at every supported version, including upstream
-v29–33 databases. Reopening schema 34 does not repeat versioned migrations or
+v29–33 databases. Reopening schema 35 does not repeat versioned migrations or
 replace backups; newer schemas fail closed and downgrade requires a compatible
 backup rather than deleting user data.
 

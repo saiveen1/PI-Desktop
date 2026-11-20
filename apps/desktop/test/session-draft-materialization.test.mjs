@@ -153,3 +153,32 @@ test("a queued second Goal is explicit and resets the input, while rejected and 
   assert.equal(await f.get().sendPrompt("rejected"), false);
   assert.equal(f.get().sessions[0].mode, "goal");
 });
+
+test("persona choices survive other draft config and are included in the first prompt's atomic session creation", async t => {
+  const f = fixture(t);
+  const persona = { id: "reviewer", name: "Reviewer", prompt: "Be a patient reviewer." };
+  f.set({ settings: { personas: [persona] } });
+  const target = { projectPath: "/synthetic/project" };
+  await f.get().configureActivePersona({ personaId: persona.id }, target);
+  await f.get().configureActivePersona({ inheritToSubagents: true }, target);
+  await f.get().configureActiveSession({ mode: "agent", thinkingLevel: "high" });
+  const requests = [];
+  t.mock.method(api, "createSession", async request => {
+    requests.push(request);
+    await f.gate.promise;
+    return { session: { id: "new-persona-task", title: "New task", mode: "agent", persona: {
+      version: 1, definition: persona, revision: "1".repeat(64), inheritToSubagents: request.inheritToSubagents,
+    } } };
+  });
+  const sending = f.get().sendPrompt("Review this example");
+  await f.get().configureActivePersona({ personaId: null }, target);
+  assert.equal(f.get().draftConfiguration.personaId, "reviewer", "draft cannot change while creating");
+  f.gate.resolve();
+  assert.equal(await sending, true);
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].personaId, "reviewer");
+  assert.equal(requests[0].inheritToSubagents, true);
+  assert.equal(requests[0].thinkingLevel, "high");
+  assert.equal(f.get().sessions[0].persona.definition.name, "Reviewer");
+  assert.equal(f.get().draftConfiguration, null);
+});

@@ -12,6 +12,7 @@ import type {
   AppVersionInfo,
   AskToolResolution,
   ContextCompactionMark,
+  ConfigureSessionPersonaRequest,
   Mode,
   ModelInfo,
   OnboardingState,
@@ -122,6 +123,8 @@ export type DraftSessionConfiguration = {
   permissionMode?: PermissionMode;
   /** Session `/fast` switch carried into the created session (ADR 0334). */
   fastMode?: boolean;
+  personaId?: string | null;
+  inheritToSubagents?: boolean;
 };
 
 
@@ -147,6 +150,8 @@ export type AppState = import("./slices/session-management-slice").SessionManage
   activeSessionId?: string;
   /** Composer toolbar choices retained on the draft while it has no session. */
   draftConfiguration: DraftSessionConfiguration | null;
+  personaDraftCreationIntent?: number;
+  personaWrites?: Record<string, true>;
   /** Latest user-selected session while its transcript/workspace is resolving. */
   selectingSessionId?: string;
   messages: UiMessage[];
@@ -247,6 +252,10 @@ export type AppState = import("./slices/session-management-slice").SessionManage
     fastMode?: boolean;
     observerMode?: SessionSummary["observerMode"];
   }, targetSessionId?: string) => Promise<void>;
+  configureActivePersona: (change: Omit<ConfigureSessionPersonaRequest, "id">, target: {
+    sessionId?: string;
+    projectPath?: string;
+  }) => Promise<void>;
   /** Returns true once accepted unless concurrent smart Stop restores it. */
   sendPrompt: (
     content: string,

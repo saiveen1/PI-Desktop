@@ -12,6 +12,8 @@ import {
   isModelConfigImportSource,
   isModeId,
   isObserverGuardMode,
+  isConfigureSessionPersonaRequest,
+  trustedExtensionAgentKeyFromProviderId,
   type EditAssistantReplyRequest,
   type EditAssistantReplyResult,
   type ObserverGuardMode,
@@ -98,6 +100,7 @@ export type SessionIpcDependencies = {
   getSidecar: () => AgentSidecar | null;
   dataDir: string;
   activeTurns: ReadonlyMap<string, string>;
+  compactingSessions?: ReadonlySet<string>;
   sessionProjects: Map<string, string | null>;
   persistenceOutbox: PersistenceOutbox;
   logger: Pick<Logger, "app">;
@@ -121,6 +124,7 @@ export function registerSessionIpc({
   getSidecar,
   dataDir,
   activeTurns,
+  compactingSessions = new Set<string>(),
   sessionProjects,
   persistenceOutbox,
   logger,
@@ -242,6 +246,44 @@ export function registerSessionIpc({
       ].sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt))),
     };
   });
+  handle(IPC.invoke.sessionConfigurePersona, async (input: unknown) => {
+    if (!isConfigureSessionPersonaRequest(input)) {
+      throw Object.assign(new Error("Invalid session persona configuration"), { errorCode: ErrorCodes.INVALID_PARAMS });
+    }
+    rejectNativeMutation(input.id, "persona configuration");
+    if (input.id.startsWith("remote:")) {
+      throw Object.assign(new Error("Session personas are available only in local Desktop sessions"), { errorCode: ErrorCodes.INVALID_ARGUMENT });
+    }
+    const currentHost = host;
+    if (!currentHost) throw new Error("host unavailable");
+    const assertIdle = () => {
+      if (activeTurns.has(input.id) || compactingSessions.has(input.id)) throw Object.assign(new Error("Cannot change the persona while the session is running or compacting"), { errorCode: ErrorCodes.AGENT_BUSY });
+    };
+    assertIdle();
+    const release = await acquireSessionOperation(input.id);
+    try {
+      assertIdle();
+      const { providers, defaults } = await sessionCapabilityContext();
+      const existing = await currentHost.call<{ session?: RuntimeSession | null }>("session.get", { id: input.id, messageLimit: 1, contentLimit: 1 });
+      if (!existing.session) throw Object.assign(new Error("Session not found"), { errorCode: ErrorCodes.NOT_FOUND });
+      const providerId = existing.session.providerId ?? defaults.defaultProviderId;
+      if (input.personaId !== null && (existing.session.remoteWorkspace ||
+          (typeof providerId === "string" && trustedExtensionAgentKeyFromProviderId(providerId)))) {
+        throw Object.assign(new Error("Session personas are unavailable for this agent backend"), { errorCode: ErrorCodes.INVALID_ARGUMENT });
+      }
+      assertIdle();
+      const currentSidecar = getSidecar();
+      if (currentSidecar) {
+        const state = await currentSidecar.call<{ personaConfigurationBlocked?: boolean }>("agent.getStatus", { sessionId: input.id });
+        if (state.personaConfigurationBlocked !== false) {
+          throw Object.assign(new Error("Settle agent work and approvals before changing the persona"), { errorCode: ErrorCodes.AGENT_BUSY });
+        }
+      }
+      assertIdle();
+      const result = await currentHost.call<{ session: RuntimeSession }>("session.configurePersona", input);
+      return { ...result, session: enrichSession(result.session, providers, defaults) };
+    } finally { release(); }
+  });
   handle(IPC.invoke.sessionCreate, async (input = {}) => {
     if (!host) throw new Error("host unavailable");
     if (!input || typeof input !== "object" || Array.isArray(input) ||
@@ -252,6 +294,10 @@ export function registerSessionIpc({
     const mode = input.mode ?? "agent";
     const modeSnapshot = await modeCatalog.snapshotFor(mode);
     const { providers, defaults } = await sessionCapabilityContext();
+    const creationProvider = input.providerId ?? defaults.defaultProviderId;
+    if (input.personaId != null && typeof creationProvider === "string" && trustedExtensionAgentKeyFromProviderId(creationProvider)) {
+      throw Object.assign(new Error("Session personas are unavailable for this agent backend"), { errorCode: ErrorCodes.INVALID_ARGUMENT });
+    }
     const res = await currentHost.call<{ session?: (RuntimeSession & { id?: string }) | null }>(
       "session.create",
       { ...input, mode, modeSnapshot },

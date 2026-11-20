@@ -131,8 +131,7 @@ fn schema_v34_reconciles_both_populated_v33_and_v32_variants_idempotently() {
             drop(before);
 
             let db = Database::open(&path).unwrap();
-            assert_eq!(SCHEMA_VERSION, 34);
-            assert_eq!(version(db.conn()), 34);
+            assert_eq!(version(db.conn()), SCHEMA_VERSION);
             assert_eq!(rows(db.conn(), "SELECT id,title,mode,additive_payload,generated_label FROM sessions ORDER BY id"), saved);
             assert_eq!(rows(db.conn(), "SELECT * FROM messages"), messages);
             assert_eq!(rows(db.conn(), "SELECT * FROM turn_execution"), ledger);
@@ -203,7 +202,7 @@ fn schema_v34_reconciles_both_populated_v33_and_v32_variants_idempotently() {
             drop(db);
             for _ in 0..2 {
                 let reopened = Database::open(&path).unwrap();
-                assert_eq!(version(reopened.conn()), 34);
+                assert_eq!(version(reopened.conn()), SCHEMA_VERSION);
                 assert_eq!(objects(reopened.conn()), final_objects);
                 assert_eq!(
                     rows(reopened.conn(), "SELECT * FROM sessions ORDER BY id"),

@@ -137,6 +137,7 @@ pub fn search(db: &Database, query: &str, offset: i64, limit: i64) -> Result<Sea
          ORDER BY created_at DESC, seq DESC, id ASC LIMIT 2",
     )?;
     for hit in &mut hits {
+        crate::session_personas::attach(db, &mut hit.session)?;
         if hit.message_count == 0 {
             continue;
         }

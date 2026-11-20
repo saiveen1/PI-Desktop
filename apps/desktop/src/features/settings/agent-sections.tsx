@@ -15,6 +15,7 @@ import { SettingsMenuSelect } from "../../components/settings/SettingsMenuSelect
 import { persistUpdatePreference } from "./update-preference";
 import { SettingsCard, SettingsRow } from "./primitives";
 
+import { ConversationPersonasSettings } from "./ConversationPersonasSettings";
 const ReleaseNotesDialog = lazy(() =>
   import("../../components/ReleaseNotesDialog").then((module) => ({
     default: module.ReleaseNotesDialog,
@@ -52,6 +53,7 @@ export function AgentInstructionsSection() {
   const globalDirty = global !== null && globalDraft !== global.content;
   return (
     <div className="settings-stack">
+      <ConversationPersonasSettings />
       <SettingsCard
         title={t("settings.instructionsGlobal")}
         description={t("settings.instructionsGlobalDesc")}

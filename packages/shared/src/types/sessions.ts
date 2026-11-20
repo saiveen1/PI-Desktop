@@ -51,6 +51,8 @@ export type SessionCapabilities = {
 };
 
 export type SessionSummary = {
+  /** Optional Host-owned persona snapshot; absent preserves the legacy prompt. */
+  persona?: import("../personas.js").SessionPersona | null;
   remoteWorkspace?: RemoteWorkspace;
   id: string;
   /** Transcript authority. Omitted by older hosts and normalized to `desktop`. */

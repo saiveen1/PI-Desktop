@@ -25,6 +25,7 @@
 
 import { historyForModelContext } from "@pi-desktop/shared";
 import { editedThinkingForReplay } from "./assistant-provider-replay.js";
+import { restoredDelegationPersona } from "./persona-prompt.js";
 import { estimateTokens } from "./pi-runtime-estimates.js";
 import type {
   AssistantMessage,
@@ -54,6 +55,8 @@ import {
 
 /** One chain of `Task` calls that share a delegate session. */
 export type DelegationChain = {
+  persona?: import("@pi-desktop/shared").SessionPersona;
+  personaInvalid?: boolean;
   /** Stable identity across every `resume`; never appears in a tool or prompt. */
   delegateSessionId: string;
   /** Every `Task` toolCallId on this chain, oldest first. */
@@ -500,6 +503,8 @@ function toolResultFromUi(m: UiMessage, timestamp: number): ToolResultMessage {
 }
 
 export type RebuiltTaskCall = {
+  persona?: import("@pi-desktop/shared").SessionPersona;
+  personaInvalid?: boolean;
   toolCallId: string;
   delegationId: string;
   agentName: string;
@@ -603,6 +608,7 @@ export function rebuildChainsFromTranscript(
       ...(requestedModel ? { requestedModel } : {}),
       ...(modelReason ? { modelReason } : {}),
       ...(requestedThinkingLevel ? { requestedThinkingLevel } : {}),
+      ...restoredDelegationPersona(details?.persona),
       ...(checkpointPath ? { checkpointPath } : {}),
       status: chainStatusFromDetail(details, row),
       createdAt: timestampMs(row.createdAt) || Date.now(),
@@ -663,6 +669,8 @@ export function rebuildChainsFromTranscript(
       readFiles: reads.files,
       readLineCount: reads.lineCount,
       originalTask: root.task,
+      ...restoredDelegationPersona(root.persona),
+      ...(ordered.some(call => call.personaInvalid) ? { personaInvalid: true } : {}),
       latestDelegationId: latest?.delegationId,
       latestObjective: latest?.objective ?? root.objective,
       latestModelId: latest?.modelId,

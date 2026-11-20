@@ -36,6 +36,7 @@ git history.
 | session-organization-and-scoped-delegation | [Session organization and scoped on-demand delegation](session-organization-and-scoped-delegation.md) | Accepted, implementation candidate |
 | unified-core-notifications | [Unified core notification delivery](unified-core-notifications.md) | Accepted, implementation candidate |
 | mode-definitions | [User-definable modes as staged workflows](mode-definitions.md) | Proposed |
+| session-personas | [Session personas with pinned delegation inheritance](session-personas.md) | Implemented candidate |
 | sidebar-layout-recovery | [Recover sidebar layout independently of Chromium storage](sidebar-layout-recovery.md) | Accepted |
 | delegation-scheduling-and-approval | [Unified delegation scheduling and mandatory model approval](delegation-scheduling-and-approval.md) | Accepted |
 | session-recycle-bin | [Reversible session deletion with a host-owned recycle bin](session-recycle-bin.md) | Accepted |

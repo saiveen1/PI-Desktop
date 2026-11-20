@@ -1,6 +1,7 @@
 import { isNotificationSettings, type AppSettings, type NotificationSettings } from "@pi-desktop/shared";
 import { isAgentOutputGuardSettings, resolveAgentOutputGuardSettings } from "@pi-desktop/shared";
 import { isObserverGuardSettings, resolveObserverGuardSettings } from "@pi-desktop/shared";
+import { isPersonaCatalog, type PersonaDefinition } from "@pi-desktop/shared";
 
 type Boundary = {
   read(): Promise<AppSettings>;
@@ -38,6 +39,13 @@ export function createSettingsWriter(boundary: Boundary) {
           observerGuard: { ...resolveObserverGuardSettings(latest.observerGuard), ...patch.observerGuard },
         }),
       }));
+    },
+    personas(change: (catalog: readonly PersonaDefinition[]) => PersonaDefinition[]) {
+      return update(latest => {
+        const personas = change(latest.personas ?? []);
+        if (!isPersonaCatalog(personas)) throw new Error("personas is invalid");
+        return { ...latest, personas };
+      });
     },
     notifications(value: NotificationSettings, scope: "global" | "delegation") {
       if (!isNotificationSettings(value)) return Promise.reject(new Error("Invalid notification preferences"));

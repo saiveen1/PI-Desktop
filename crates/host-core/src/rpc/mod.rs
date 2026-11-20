@@ -15,6 +15,7 @@ mod scheduled_rpc;
 mod scheduled_settings;
 mod scheduled_tools;
 mod session_display;
+mod session_personas_rpc;
 mod session_trash_rpc;
 mod todos;
 mod window_corner_rpc;
@@ -1088,9 +1089,10 @@ fn validate_settings_value(value: &Value) -> Result<(), JsonRpcError> {
         .map_err(|message| rpc_err(1002, message, "INVALID_PARAMS"))?;
     notification_settings::validate(value)
         .map_err(|message| rpc_err(1002, message, "INVALID_PARAMS"))?;
-    let Some(object) = value.as_object() else {
-        return Ok(());
-    };
+    let object = value
+        .as_object()
+        .ok_or_else(|| rpc_err(1002, "settings must be an object", "INVALID_PARAMS"))?;
+    session_personas_rpc::validate_settings(object)?;
     if object
         .get("scheduledTasksEnabled")
         .is_some_and(|enabled| !enabled.is_boolean())
@@ -2832,6 +2834,7 @@ async fn handle_request(
             if let Some(project) = isolated_project.as_deref() {
                 worktree_rpc::ensure_local_project(&st.db, project)?;
             }
+            let persona = session_personas_rpc::prepare_create(&st, &params)?;
             let permission_mode = if let Some(parent_id) = permission_parent {
                 Some(
                     sessions::session_permission_mode(&st.db, &parent_id)
@@ -2870,6 +2873,7 @@ async fn handle_request(
                     observer_mode,
                 },
                 params.get("modeSnapshot"),
+                persona,
             )
             .map_err(modes_rpc::error)?;
             let Some(project) = isolated_project else {
@@ -3059,6 +3063,7 @@ async fn handle_request(
                 "modelApprovals": session.delegation_model_approvals,
             }))
         }
+        "session.configurePersona" => session_personas_rpc::configure(&state, params).await,
         "session.configure" => {
             let id = params
                 .get("id")

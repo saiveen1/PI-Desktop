@@ -1,5 +1,19 @@
 # Personal-edition change provenance
 
+## Session personas and pinned child inheritance
+
+Compared with locally recorded upstream `95df2e0f9`, the current candidate adds
+`SessionPersona`, `session.configurePersona`, a composer persona picker and
+Host-owned selection snapshots, plus opt-in `inheritToSubagents` replay across
+child-chain resumes. Those contract identifiers are absent at that revision.
+Existing SYSTEM.md/APPEND_SYSTEM.md support, operating modes, delegation tools,
+and system transcript projection are inherited foundations, not new local
+features. Implementation evidence is in `packages/shared/src/personas.ts`,
+`crates/host-core/src/session_personas.rs`, the composer/settings persona
+components and `packages/agent-runtime/src/persona-prompt.ts`. See the
+[persona contract](../spec/03-runtime/session-personas.md) for limits. This records
+current-source functionality, not a published release or real-provider guarantee.
+
 ## Floating chat image previews
 
 Locally recorded upstream `95df2e0f9` already opens generated images in a

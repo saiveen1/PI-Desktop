@@ -2176,12 +2176,13 @@ gains no affinity header or body key.
 ## 7. System prompt composition
 
 ```text
-[base product prompt in English]
-+ [operating-state prompt: agent/plan/goal]
-+ [workspace info]
-+ [tool instructions]
-+ [project instruction chain, when present]
-+ [optional user custom instructions]
+[selected session persona + scoped precedence, otherwise SYSTEM.md or base identity]
++ [Desktop operational rules]
++ [tool activation and skill catalog]
++ [optional APPEND_SYSTEM.md and on-demand tool guidance]
++ [global/project instruction chain and optional project-group context]
++ [memory, workspace facts, and runtime model identity]
++ [selected operating-mode and stage instructions]
 ```
 
 ### 7.0.0 Chronological system state (issue #1285)
@@ -2243,6 +2244,11 @@ rebuilds a Task(resume) history: tag restored assistants and synthetic
 tool-call carriers with `model.provider` / `model.id`, not the account row id.
 
 ### 7.0.1 User custom system prompt files (issue #542)
+
+An explicitly selected [session persona](session-personas.md) takes the identity
+opening instead of SYSTEM.md and supplies scoped identity/tone/style precedence.
+Absent selection preserves the following file-based behavior. Operational,
+permission and workflow contracts are not replaced by either mechanism.
 
 The `[optional user custom instructions]` layer is the pi-compatible file pair
 `SYSTEM.md` / `APPEND_SYSTEM.md`, discovered per session launch from
@@ -2445,7 +2451,8 @@ boundary blocks it.
 
 ### 7.2b Subagent prompt composition (D201, ADR 0062)
 
-A delegate's system prompt is composed in the sidecar from three parts, in this
+Without an inherited [session persona](session-personas.md), a delegate's system
+prompt is composed in the sidecar from three parts, in this
 order: the delegation framing, the definition's Markdown body, and the tool
 guidance its resolved tools earn. The body sits ahead of the workspace guidance
 so a project's own instructions still have the last word.

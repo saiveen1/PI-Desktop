@@ -31,6 +31,7 @@ import {
 } from "../../lib/sidebar-preferences";
 import type { AppState, DraftSessionConfiguration } from "../app-state";
 import type { SessionRuntime } from "./session-runtime";
+import { isExtensionPersonaProvider } from "./session-persona";
 import type { StoreAccess } from "../slices/types";
 import { persistCreatedSessionGroup } from "../helpers/store-helpers";
 import { switchWorkPanelSession } from "../slices/work-panel-slice";
@@ -108,6 +109,7 @@ export function createSessionCoordination({
               session.id === sessionId
                 ? {
                     ...result.session,
+                    ...(session.persona !== undefined ? { persona: session.persona } : {}),
                     pinned: sessionIsPinned(sessionId, state.sessionMeta),
                     archived: sessionIsArchived(sessionId, state.sessionMeta),
                   }
@@ -340,6 +342,9 @@ export function createSessionCoordination({
           defaultProvider?.supportedThinkingLevels,
         );
     const previousSessionId = state.activeSessionId;
+    const personaId = !isExtensionPersonaProvider(inherited.providerId) &&
+      settings?.personas?.some((item) => item.id === draftConfig?.personaId) ? draftConfig?.personaId : undefined;
+    if (runtime.navigationIntentIsCurrent(active)) set({ personaDraftCreationIntent: active });
     revealEmptyCreatingSession(active);
     let created: Awaited<ReturnType<typeof api.createSession>>;
     try {
@@ -353,6 +358,7 @@ export function createSessionCoordination({
         modelId: inherited.modelId,
         projectPath: projectPath ?? undefined,
         ...(options.isolated ? { isolated: true } : {}),
+        ...(personaId ? { personaId, inheritToSubagents: draftConfig?.inheritToSubagents === true } : {}),
       });
     } catch (error) {
       if (previousSessionId && runtime.navigationIntentIsCurrent(active)) {
@@ -361,6 +367,8 @@ export function createSessionCoordination({
         });
       }
       throw error;
+    } finally {
+      if (get().personaDraftCreationIntent === active) set({ personaDraftCreationIntent: undefined });
     }
     const sessionId = created.session.id;
     if (!runtime.navigationIntentIsCurrent(active)) {

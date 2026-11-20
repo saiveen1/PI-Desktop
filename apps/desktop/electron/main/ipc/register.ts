@@ -110,6 +110,7 @@ function wrap<T>(fn: () => Promise<T>): Promise<Result<T>> {
 }
 
 export function registerIpcHandlers(dependencies: RegisterIpcDependencies) {
+  const compactingSessions = new Set<string>();
   const {
     ipcMain,
     getMainWindow,
@@ -297,6 +298,7 @@ export function registerIpcHandlers(dependencies: RegisterIpcDependencies) {
     sendToRenderer,
   });
   registerSessionIpc({
+    compactingSessions,
     registrar,
     getHost,
     getSidecar,
@@ -456,6 +458,7 @@ export function registerIpcHandlers(dependencies: RegisterIpcDependencies) {
     },
   });
   registerAgentIpc({
+    compactingSessions,
     registrar,
     getHost,
     getSidecar,

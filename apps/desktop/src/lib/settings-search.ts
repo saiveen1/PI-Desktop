@@ -262,6 +262,7 @@ export const SETTINGS_NAV: SettingsNavEntry[] = [
     keywordKeys: [
       "settings.instructionsGlobal",
       "settings.instructionsPath",
+      "personas.title",
     ],
   },
   {

@@ -44,7 +44,7 @@ test("remote toolbar preserves send and stop while disabling local controls and 
     hasDraftContent: true, modelReady: true, workSessionId: remote.id,
   });
   const html = render();
-  assert.doesNotMatch(html, /LOCAL PLUGIN/);
+  assert.doesNotMatch(html, /LOCAL PLUGIN|composer-persona-chip/);
   assert.match(html, /aria-label="chat.addFiles"[^>]*disabled/);
   assert.match(html, /aria-label="chat.send"/);
   const stop = await composerToolbar(t, ssr, {

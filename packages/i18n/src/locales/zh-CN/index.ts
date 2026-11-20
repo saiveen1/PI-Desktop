@@ -9,7 +9,9 @@ import { sessionLabels, sessionGroups, sessionDelegation, delegationDetails } fr
 import { en, type EnglishCatalog } from "../en/index.js";
 
 import { turnContext } from "../turn-context.js";
+import { conversationPersonas } from "../conversation-personas.js";
 export const zhCN = {
+  personas: conversationPersonas["zh-CN"],
   turnContext: turnContext["zh-CN"],
   outputGuard: outputGuard["zh-CN"],
   observerGuard: observerGuard["zh-CN"],

@@ -1,5 +1,15 @@
 # 06. Settings Information Architecture
 
+### Conversation personas
+
+Instructions contains a separate persona-template editor before the global
+instruction editor, using shared settings primitives. This order reflects the
+first application-composed identity block. Create/edit/delete templates without
+mutating session snapshots. Explain that block, recommend persona-oriented
+content, and distinguish it from workflow and permission changes.
+The composer selector links here; no extra sidebar category is introduced.
+See [session personas](../03-runtime/session-personas.md).
+
 ## 1. Settings root (Codex full-page shell)
 
 Settings is a **full-window page** that replaces the app sidebar + main chrome (Codex electron behavior):

@@ -386,6 +386,10 @@ export function createQueueSlice({
     sendPrompt: async (content, draft, requestedSessionId, onAccepted) => {
       let sessionId = requestedSessionId ?? get().activeSessionId;
       const target = get().sessions.find((session) => session.id === sessionId) ?? (sessionId ? { id: sessionId } : undefined);
+      if (sessionId && get().personaWrites?.[sessionId]) {
+        get().showToast(i18n.t("personas.block.saving"), { variant: "info" });
+        return false;
+      }
       if (!sessionAllows(target, "canPrompt")) return false;
       if (draft?.fileReferences.length && !sessionAllows(target, "canAttach")) return false;
       if (isRemoteSession(target) && sessionId && get().runningSessions[sessionId]) return false;
@@ -407,6 +411,7 @@ export function createQueueSlice({
           materializedKey = key;
         }
         if (!sessionId) throw new Error(i18n.t("errors.noActiveSession"));
+        if (get().personaWrites?.[sessionId]) return false;
         if (get().pendingPlans[sessionId]?.status === "pending") return false;
         if (get().runningSessions[sessionId]) {
           // Native Pi children have no Desktop prompt queue. Reject the send

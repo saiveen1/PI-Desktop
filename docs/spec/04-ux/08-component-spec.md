@@ -1,5 +1,18 @@
 # 08. Component Spec
 
+### Composer persona selector
+
+A labeled Persona chip sits immediately before the mode picker. Its popover
+selects a template and exposes session-level child inheritance, default off and
+disabled without a persona. Default has a separate, keyboard-focusable HelpIcon
+explaining that it adds no session persona and preserves existing PI-Desktop
+behavior, including mode, global/project instructions and SYSTEM.md configuration.
+Help is not nested inside the selection button; opening it must not select or
+clear a persona. Busy/loading/approval states are explained; changes are not
+queued. Retain snapshots even when templates disappear. Draft selections carry
+into creation. See [session personas](../03-runtime/session-personas.md) for
+stale-async protection and supported backends.
+
 Refreshing provider settings preserves the active remote session's safe identity and capabilities when its Host is temporarily absent from the session inventory. Returned authoritative summaries still replace it. Remote filesystem paths never become a local workspace target, and missing inventory cannot turn denied remote controls into local defaults. (Refs #2370)
 
 The renderer commits a project-filtered plugin view refresh only when it is the latest request and its project is still active. Older success or failure responses cannot replace or clear the current project's view catalog. This protects UI response ownership; it does not change service lifetime or desktop.control permissions. (Refs #2377)

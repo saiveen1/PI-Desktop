@@ -1,5 +1,14 @@
 # 01. IPC Protocol
 
+### Session persona selection
+
+`sessionConfigurePersona` (`pi-desktop/session/configurePersona`) accepts one
+`{ id, personaId?: string | null, inheritToSubagents?: boolean }` and returns
+`{ session }`. Main validates inputs, holds the session operation lock, checks
+active turns and sidecar `personaConfigurationBlocked`, then asks Host to resolve
+and save the selection atomically. No mode/permission mutation or queued switch
+is implied. See [session personas](session-personas.md) for scope and snapshots.
+
 ### Developer performance diagnostics (local desktop only)
 
 The trusted main window's top frame can invoke `diagnostics/performance`

@@ -1,3 +1,4 @@
+export * from "./personas.js";
 export * from "./activation.js";
 export * from "./protocol.js";
 export * from "./performance-diagnostics.js";

@@ -262,6 +262,12 @@ impl AppState {
         );
     }
 
+    pub(crate) fn has_pending_permission(&self, session_id: &str) -> bool {
+        self.pending_permissions
+            .values()
+            .any(|(owner, _)| owner == session_id)
+    }
+
     pub fn clear_pending_permission(&mut self, request_id: &str) {
         self.pending_permissions.remove(request_id);
     }

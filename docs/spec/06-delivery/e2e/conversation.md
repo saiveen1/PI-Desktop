@@ -1,5 +1,48 @@
 # E2E Scenarios: Conversation and Sessions
 
+## E2E-session-personas
+
+Scope: ordinary local Desktop sessions; [contract](../../03-runtime/session-personas.md).
+Use isolated synthetic data and a stubbed model transport for automated checks.
+
+1. Start from an old profile with no persona fields. The default/file-based
+   identity, modes and permissions are unchanged after the schema-35 upgrade.
+2. Create/edit/delete a template in Settings > Instructions, where persona
+   management precedes global instructions. Reject duplicate IDs, empty
+   names/prompts and oversized UTF-8 content without replacing saved settings.
+   Omitting the catalog in another settings patch preserves it.
+3. Select from the composer immediately before mode. First main request starts with the
+   selected persona, replaces the prior identity opening, and retains runtime,
+   project and mode instructions. Clear/reselect in an idle existing session;
+   the next turn changes, but earlier transcript and output do not.
+4. Select in a new-chat draft, enable child inheritance and send. Creation and
+   selection commit together. Navigation during a pending save must never apply
+   that save to a different conversation/draft.
+5. Edit/delete the selected template. The saved session snapshot and its name
+   remain; toggling inheritance does not silently reload the template. Explicit
+   reapplication selects the latest template content.
+6. Try switching while the main agent, an inline child, queued work, an approval
+   or a mode run is active. UI explains the block; direct IPC/RPC also rejects
+   without changing configuration or dismissing approval.
+7. With inheritance off, child prompts remain unchanged. With it on, the exact
+   persona snapshot precedes the child framework and specialist prompt. No
+   parent history, tools, models or permissions are granted by this switch.
+8. Restart and resume that child after switching/clearing the parent's persona.
+   The child keeps its original snapshot, including through context compaction
+   and path-specific instruction refresh. Legacy children remain unpersonalized.
+9. Check native/remote/extension-agent controls are not advertised as supported;
+   malformed backend requests and malformed saved snapshots fail visibly.
+10. Hover and keyboard-focus the separate question-mark help beside Default.
+    It explains that no session persona is added and existing PI-Desktop mode,
+    global/project instructions and SYSTEM.md configuration stay effective.
+    Help is not nested in the selection button and does not select or clear a
+    persona. Selecting Default still clears only the session persona.
+
+Automated evidence: shared persona validation, Host persona migration/RPC tests,
+`session-persona-user-path.test.ts`, `session-persona-main-ipc.test.mjs` and the
+persona renderer fixtures. Live-provider adherence and installed-profile upgrade
+are separate manual acceptance, not implied by the isolated checks.
+
 ## E2E-stop-navigation-running-state
 
 Hold the history read after a successful local Stop, switch to another running session, then resolve the older session's history. Verify only the stopped session is settled, the new transcript remains and its toolbar still offers Stop. Also navigate synchronously during the hydration commit to exercise the final state writer. Coverage: `stop-navigation-running-state.test.mjs`, related smart-stop/terminal regressions, and `scripts/e2e-stop-navigation-running-state.mjs` using the production store and ComposerToolbar in Electron.

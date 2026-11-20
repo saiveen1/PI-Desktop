@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createElement } from "react";
 import { composerToolbar } from "./helpers/composer-toolbar.mjs";
 import { parseProbe, probed, propsProbe, slotMounts, slotSsr } from "./helpers/slot-ssr.mjs";
 
@@ -19,8 +20,10 @@ import { parseProbe, probed, propsProbe, slotMounts, slotSsr } from "./helpers/s
 // Every label-driven trigger states its control and its current value.
 const HOST_LEFT = [
   "chat.addFiles",
+  "Persona: Default. Checking whether the conversation is ready.",
   "settings.mode: settings.modeAgent",
   "chat.permissionMode",
+  "Start a conversation before enabling Observer Guard.",
 ];
 const HOST_RIGHT = ["context", "chat.model: Model. chat.reasoningLevel: Off", "chat.send"];
 
@@ -113,4 +116,14 @@ test("a control leaves its side as soon as it is disposed", async (t) => {
   assert.deepEqual(sidesOf(ssr.toolbar()), { left: HOST_LEFT, right: ["b:right", ...HOST_RIGHT] });
   ssr.clear();
   assert.equal(ssr.toolbar(), plain);
+});
+
+test("Instructions settings presents personas before global instructions", async (t) => {
+  const ssr = await composer(t);
+  const { AgentInstructionsSection } = await ssr.load("/src/features/settings/agent-sections.tsx");
+  const html = ssr.render(createElement(AgentInstructionsSection), { sessionId: null });
+  const persona = html.indexOf("Conversation personas");
+  const global = html.indexOf("Global instructions");
+  assert.ok(persona >= 0 && global >= 0, "both settings sections are rendered");
+  assert.ok(persona < global, "the first instruction entry is presented first");
 });

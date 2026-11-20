@@ -1,3 +1,4 @@
+import { personaSystemPrompt } from "./persona-prompt.js";
 import { withToolImageCapability } from "./tool-image-context.js";
 import { SubagentConversation } from "./subagent-conversation.js";
 /**
@@ -24,7 +25,7 @@ import { SubagentConversation } from "./subagent-conversation.js";
 import { randomUUID } from "node:crypto";
 import { toolExecutionMode, withDynamicTaskExecutionMode } from "./tool-execution-policy.js";
 import { DESKTOP_AGENT_IDENTITY } from "./agent-identity.js";
-import { initialSystemTranscript, replaceSystemPrompt } from "./system-transcript.js";
+import { initialSystemTranscript, rebuildSystemTranscript, replaceSystemPrompt } from "./system-transcript.js";
 import {
   Agent,
   type AfterToolCallContext,
@@ -211,6 +212,7 @@ export type SubagentRunOptions = {
   onModelChange?: (provider: RuntimeProviderConfig, thinkingLevel: SubagentThinkingLevel) => void;
   /** Fully composed child system prompt (see `composeSubagentSystemPrompt`). */
   systemPrompt: string;
+  persona?: import("@pi-desktop/shared").SessionPersona;
   /** Host-backed tools, built by the session runtime so a delegate's calls
    * take the exact same path as the parent's. */
   tools: AgentTool[];
@@ -249,6 +251,7 @@ export type SubagentRunOptions = {
  */
 export function composeSubagentSystemPrompt(options: {
   definition: SubagentDefinition;
+  persona?: import("@pi-desktop/shared").SessionPersona;
   /** Guidance blocks inherited from the session (shell, scratch, rules). */
   guidance?: string[];
   /** Spawn-time tool names after inherit resolution. */
@@ -271,8 +274,8 @@ export function composeSubagentSystemPrompt(options: {
     "The runtime also provides TaskReport to save progress without granting workspace writes. Use it to record evidence and next steps when useful. Progress summaries are optional; state and final text are saved automatically.",
     "If you discover in the first few turns that you lack a tool essential to the task (e.g. no Bash when shell commands are needed), stop immediately with a one-sentence report naming the missing capability. Do not attempt workarounds or pad the report with unrelated reading.",
   ].join("\n");
-  return [framing, definition.prompt, ...(options.guidance ?? [])]
-    .filter((block) => block.trim().length > 0)
+  return [personaSystemPrompt(options.persona), framing, definition.prompt, ...(options.guidance ?? [])]
+    .filter((block): block is string => typeof block === "string" && block.trim().length > 0)
     .join("\n\n");
 }
 
@@ -376,6 +379,7 @@ export class SubagentRun {
         thinkingLevel: this.thinkingLevel, turns: this.turns, toolCalls: this.toolCalls,
         updatedAt: Date.now(), contextCompactions: this.contextCompactions,
         contextDegraded: this.contextDegraded, runPolicy: this.runPolicy,
+        ...(opts.persona ? { persona: opts.persona } : {}),
       }),
     });
     const binding = this.modelBinding();
@@ -640,6 +644,10 @@ export class SubagentRun {
     turn: PrepareNextTurnContext,
     signal?: AbortSignal,
   ): Promise<AgentLoopTurnUpdate | undefined> {
+    // Pi's loop owns a different array; path-scoped system updates live in state.
+    const messages = rebuildSystemTranscript(this.agent.state.messages, turn.context.messages);
+    const promptUpdate: AgentLoopTurnUpdate | undefined = messages === turn.context.messages
+      ? undefined : { context: { ...turn.context, messages } };
     if (this.finalizing) {
       const budget = delegateContextBudgetFor(this.agent.state.model, this.agent.state.messages, [],
         `${this.agent.state.systemPrompt}\n${SUBAGENT_FINAL_REPORT_PROMPT}`, []);
@@ -647,7 +655,7 @@ export class SubagentRun {
         this.pendingContextOverflow = subagentContextOverflowError(this.provider.modelId);
         throw new Error(this.pendingContextOverflow.message);
       }
-      return undefined;
+      return promptUpdate;
     }
     const outcome = await prepareDelegateTurnContext({
       messages: this.agent.state.messages,
@@ -666,7 +674,7 @@ export class SubagentRun {
       thinkingLevel: this.agent.state.thinkingLevel,
       signal: signal ?? this.runSignal(),
     });
-    if (outcome.kind === "unchanged") return undefined;
+    if (outcome.kind === "unchanged") return promptUpdate;
     if (outcome.kind === "overflow") {
       // The Agent wrapper converts this throw into the normal error/agent_end
       // sequence; `message_end` picks the pending overflow up so the run

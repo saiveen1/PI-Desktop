@@ -1,3 +1,4 @@
+import { isSessionPersona } from "@pi-desktop/shared";
 import { isDelegationRunPolicySnapshot, parseSubagentObservation, type SubagentObservation, type DelegationRunPolicy } from "@pi-desktop/shared";
 import { createHash, randomUUID } from "node:crypto";
 import { closeSync, fstatSync, lstatSync, mkdirSync, openSync, readSync, realpathSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
@@ -9,6 +10,7 @@ export type SubagentCheckpointError = {
   code?: string; message?: string; resumeId?: string; charactersProduced?: number;
 };
 export type SubagentCheckpoint = {
+  persona?: import("@pi-desktop/shared").SessionPersona;
   version?: 1;
   status: SubagentCheckpointStatus;
   sessionId?: string;
@@ -136,6 +138,7 @@ function validate(value: unknown, options: ReadSubagentCheckpointOptions): Subag
         typeof value.updatedAt === "string" && value.updatedAt.length > 0 && value.updatedAt.length <= 64) ||
       value.task !== undefined && typeof value.task !== "string") fail("checkpoint-invalid");
   if (value.runPolicy !== undefined && !isDelegationRunPolicySnapshot(value.runPolicy)) fail("checkpoint-invalid");
+  if (value.persona !== undefined && !isSessionPersona(value.persona)) fail("checkpoint-invalid-persona");
   const terminal = parseSubagentTerminalDiagnostics(value.terminal);
   if (value.terminal !== undefined && !terminal) fail("checkpoint-invalid");
   const observation = parseSubagentObservation(value.observation);
@@ -145,6 +148,7 @@ function validate(value: unknown, options: ReadSubagentCheckpointOptions): Subag
     version: 1, sessionId: options.sessionId, agentName: options.agentName, delegateSessionId: chainId(options),
     status: value.status as SubagentCheckpointStatus, modelId: value.modelId, thinkingLevel: value.thinkingLevel,
     ...(isDelegationRunPolicySnapshot(value.runPolicy) ? { runPolicy: value.runPolicy } : {}),
+    ...(isSessionPersona(value.persona) ? { persona: structuredClone(value.persona) } : {}),
     report: value.report, turns: value.turns, toolCalls: value.toolCalls, updatedAt: value.updatedAt,
     ...(shortString(value.delegationId) ? { delegationId: value.delegationId } : {}),
     ...(typeof value.task === "string" ? { task: value.task } : {}),
