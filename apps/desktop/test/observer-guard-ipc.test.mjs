@@ -33,7 +33,7 @@ function sessionFixture() {
 
 test("local configuration preserves the requested Observer mode through the real IPC handler", async () => {
   const f = sessionFixture();
-  for (const observerMode of ["off", "observe", "guard"]) {
+  for (const observerMode of ["off", "endless", "guard"]) {
     const result = await f.configure("session", { mode: "agent", observerMode });
     assert.equal(result.session.observerMode, observerMode);
     assert.deepEqual(f.writes.at(-1), ["session.configure", { id: "session", mode: "agent", observerMode }]);
@@ -44,7 +44,7 @@ test("local configuration preserves the requested Observer mode through the real
 
 test("invalid explicit mode and native configuration never reach Host", async () => {
   const f = sessionFixture();
-  for (const observerMode of [null, true, "auto", [], 1]) await assert.rejects(f.configure("session", { mode: "agent", observerMode }), /observerMode is invalid/);
+  for (const observerMode of [null, true, "auto", "observe", [], 1]) await assert.rejects(f.configure("session", { mode: "agent", observerMode }), /observerMode is invalid/);
   await assert.rejects(f.configure("native-pi:session", { mode: "agent", observerMode: "guard" }));
   assert.equal(f.writes.length, 0);
 });
@@ -54,7 +54,7 @@ test("remote bridge rejects Observer instead of silently dropping local consent"
   const { makeRemoteSessionId } = await import("../electron/main/remote/backend-router.ts");
   const calls = [];
   const backend = createRemoteBackend({ hostKey: "remote", client: { request: async (...args) => { calls.push(args); throw Error("must not contact remote"); } } });
-  for (const observerMode of ["off", "observe", "guard"]) {
+  for (const observerMode of ["off", "endless", "guard"]) {
     await assert.rejects(backend.invoke(shared.IPC.invoke.sessionConfigure, [makeRemoteSessionId("remote", "session"), { mode: "agent", observerMode }]), /Observer Guard/);
   }
   assert.deepEqual(calls, []);

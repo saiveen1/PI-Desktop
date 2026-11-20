@@ -119,11 +119,18 @@ test("session launch resolves Jev credentials only for opted-in Agent mode", asy
     assert.equal(malformed.sidecarParams.agentOutputGuard.repetitiveOutputEnabled, false);
     assert.equal(defaultOff.sidecarParams.observerGuard.mode, "off");
     const observation = await launchRuntime.resolveAgentRuntimeLaunch("session-fixture",
-      { providerId: provider.id, modelId: provider.defaultModelId, observerMode: "observe" },
+      { providerId: provider.id, modelId: provider.defaultModelId, observerMode: "guard" },
       { defaultMode: "agent", observerGuard: { providerId: provider.id, modelId: provider.defaultModelId, thinkingLevel: "off", timeoutSeconds: 15 } });
-    assert.equal(observation.sidecarParams.observerGuard.mode, "observe");
+    assert.equal(observation.sidecarParams.observerGuard.mode, "guard");
     assert.equal(observation.sidecarParams.observerGuard.provider.modelId, provider.defaultModelId);
     assert.equal(observation.sidecarParams.observerGuard.settings.timeoutSeconds, 15);
+    const endless = await launchRuntime.resolveAgentRuntimeLaunch("session-fixture",
+      { providerId: provider.id, modelId: provider.defaultModelId, observerMode: "endless" },
+      { defaultMode: "agent", observerGuard: { maxContinuations: 4 } });
+    assert.equal(endless.sidecarParams.observerGuard.mode, "endless");
+    assert.equal(endless.sidecarParams.observerGuard.settings.maxContinuations, 4);
+    assert.equal(endless.sidecarParams.observerGuard.provider, undefined);
+    assert.equal(endless.sidecarParams.observerGuard.errorCode, undefined);
     const unconfigured = await launchRuntime.resolveAgentRuntimeLaunch("session-fixture",
       { providerId: provider.id, modelId: provider.defaultModelId, observerMode: "guard" }, { defaultMode: "agent" });
     assert.equal(unconfigured.sidecarParams.observerGuard.errorCode, "MODEL_NOT_CONFIGURED");

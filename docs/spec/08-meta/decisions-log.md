@@ -5492,3 +5492,14 @@ This supersedes the personal edition's adjacent-Read footer gallery, which echoe
 user input and stayed visible after the process was folded. See
 [image inspection](../03-runtime/21-image-generation.md#tool-image-inspection-results)
 and `E2E-IMAGES-tool-inspection` in the conversation scenario catalog.
+
+## Local amendment: bounded automatic continuation (2026-11-20)
+
+Replace the advisory Observe mode with explicitly selected Endless continuation;
+stored Observe consent migrates to off. Guard judges only the latest reply using
+an editable prompt and a continue/stop result. Both modes default to at most three
+automatic continuations per explicit user turn, configurable from 1 to 100, and
+replace legacy normal-stop nudges while enabled. Runtime Stop, permissions,
+pending work and transport recovery remain authoritative. Historical diagnostic
+records stay readable; continuation is not a task-completion proof. See
+[the amended decision](../../adr/builtin-observer-guard.md) and runtime §5e.4.

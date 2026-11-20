@@ -1,4 +1,4 @@
-use super::{anyhow, create_migration_backup, Connection, Context, Path, Result};
+use super::{create_migration_backup, Connection, Context, Path, Result};
 use regex::Regex;
 use rusqlite::Transaction;
 
@@ -18,39 +18,7 @@ pub(super) fn widen_session_modes(tx: &Transaction<'_>) -> Result<()> {
         return Ok(());
     }
     let widened = legacy_check.replace_all(&sql, "");
-    let columns_start = widened
-        .find('(')
-        .ok_or_else(|| anyhow!("unrecognized sessions table definition"))?;
-    let create = format!("CREATE TABLE sessions_v32 {}", &widened[columns_start..]);
-    let objects = tx
-        .prepare("SELECT sql FROM sqlite_master WHERE tbl_name='sessions' AND type IN ('index','trigger') AND sql IS NOT NULL ORDER BY type,name")?
-        .query_map([], |row| row.get::<_, String>(0))?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    // Copy actual writable columns, retaining additive fields and allowing SQLite
-    // to recompute generated columns rather than trying to insert into them.
-    let columns = tx
-        .prepare("SELECT name FROM pragma_table_xinfo('sessions') WHERE hidden=0 ORDER BY cid")?
-        .query_map([], |row| row.get::<_, String>(0))?
-        .collect::<rusqlite::Result<Vec<_>>>()?
-        .into_iter()
-        .map(|name| format!("\"{}\"", name.replace('"', "\"\"")))
-        .collect::<Vec<_>>()
-        .join(",");
-    tx.execute_batch(&create)?;
-    tx.execute_batch(&format!(
-        "INSERT INTO sessions_v32 ({columns}) SELECT {columns} FROM sessions;
-         DROP TABLE sessions;
-         ALTER TABLE sessions_v32 RENAME TO sessions;"
-    ))?;
-    for object in objects {
-        tx.execute_batch(&object)?;
-    }
-    if tx.prepare("PRAGMA foreign_key_check")?.exists([])? {
-        return Err(anyhow!(
-            "foreign key check failed during session mode migration"
-        ));
-    }
-    Ok(())
+    super::schema_rebuild::rebuild_sessions(tx, &widened, "sessions_v32", None)
 }
 
 pub(super) fn migrate(conn: &Connection, path: &Path) -> Result<()> {

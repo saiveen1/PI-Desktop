@@ -1,6 +1,6 @@
 import type { AgentContext, AgentTurnContext } from "@earendil-works/pi-agent-core";
 import { getCurrentSystemMessage } from "@earendil-works/pi-ai";
-import { resolveAgentOutputGuardSettings, type AgentOutputGuardSettings, type AgentResponseTermination, type UiMessage } from "@pi-desktop/shared";
+import { resolveAgentOutputGuardSettings, type AgentOutputGuardSettings, type AgentResponseTermination } from "@pi-desktop/shared";
 import type { RuntimeHost } from "./host-client.js";
 import { CorrectiveBudget } from "./corrective-budget.js";
 import { EARLY_END_REMINDER, EARLY_END_SECTION, suspectedEarlyEnd } from "./early-end.js";
@@ -24,8 +24,8 @@ export class TurnCorrectionPolicy {
   private pendingEarlyEnd = false;
   private generation = 0;
 
-  constructor(host: RuntimeHost, sessionId: string, todosEnabled = true, settings?: AgentOutputGuardSettings, history: readonly UiMessage[] = []) {
-    this.observer = new ObserverGuard(sessionId, history);
+  constructor(host: RuntimeHost, sessionId: string, todosEnabled = true, settings?: AgentOutputGuardSettings) {
+    this.observer = new ObserverGuard(sessionId);
     this.todos = new UnfinishedTodoContinuation(host, sessionId, todosEnabled, this.budget);
     this.setSettings(settings);
     this.reset();
@@ -40,9 +40,9 @@ export class TurnCorrectionPolicy {
     this.nextSettings = settings ? { ...settings } : undefined;
   }
 
-  setTask(task: string | undefined, steering = false, omittedAttachments = false): void {
+  setTask(task: string | undefined, steering = false): void {
     this.task = task ?? "";
-    if (!steering) this.observer.setTask(task, omittedAttachments);
+    if (!steering) this.observer.setTask(task);
     if (steering) {
       this.pendingEarlyEnd = false;
       this.todos.cancelPending();
@@ -86,14 +86,13 @@ export class TurnCorrectionPolicy {
     observerSink?: Parameters<ObserverGuard["assess"]>[1],
   ): Promise<{ action: "continue" | "end" } | undefined> {
     const generation = this.generation;
-    this.observer.observeTools(turn);
     const correction = await this.finishLocal(turn, toolNames, () => !runtimeBlock(), annotate, signal, autonomous);
     if (generation !== this.generation) return;
     if (correction) return correction;
     // A queued user message owns the next request; record the skip on its reply, not on this intermediate one.
     if (runtimeBlock() === "task_changed") return;
     return this.observer.assess(turn, observerSink, () => runtimeBlock() ??
-      (autonomous || this.latestBatchUnsafe ? "runtime_unavailable" : this.pending ? "pending_work" : undefined), this.budget, signal);
+      (autonomous || this.latestBatchUnsafe ? "runtime_unavailable" : this.pending ? "pending_work" : undefined), signal);
   }
 
   private async finishLocal(
@@ -107,6 +106,8 @@ export class TurnCorrectionPolicy {
     this.observeTools(turn);
     const correction = this.textCalls.finishTurn(turn, toolNames, canContinue(), signal);
     if (correction) return correction;
+    // The enabled continuation mode owns normal-stop nudges; do not stack legacy allowances.
+    if (this.observer.enabled) return;
     const generation = this.generation;
     const todo = await this.todos.finishTurn(turn, canContinue, signal);
     if (todo) return todo;

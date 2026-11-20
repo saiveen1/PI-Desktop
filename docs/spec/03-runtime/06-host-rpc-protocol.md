@@ -511,7 +511,7 @@ to later refresh and inference; the vendor picker does not collect them.
   without a custom pool reject the whole configuration. Both fields share the
   idle gate and transaction; delegation-only changes leave activity intact.
   Session list/get return both optional fields; forks copy both.
-- Optional `observerMode: off | observe | guard` is accepted by local session
+- Optional `observerMode: off | endless | guard` is accepted by local session
   creation/configuration; invalid explicit values, including null, reject the
   write. Omission preserves configuration and defaults creation to off. It uses
   the same idle transaction and never starts execution. Lists/get expose it;

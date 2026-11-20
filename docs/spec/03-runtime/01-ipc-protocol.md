@@ -252,7 +252,7 @@ type SessionConfigureRequest = {
   /** Session `/fast` switch (ADR 0334); omitted keeps the stored value. */
   fastMode?: boolean;
   /** Local Observer consent, independent of execution/permission mode. */
-  observerMode?: "off" | "observe" | "guard";
+  observerMode?: "off" | "endless" | "guard";
   /** Omitted preserves; null inherits global; [] disables delegation. */
   delegationModelKeys?: string[] | null;
   /** Omitted preserves; null clears; keys must belong to the custom pool. */

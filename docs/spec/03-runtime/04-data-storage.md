@@ -1,4 +1,4 @@
-# 04. Data Storage (Schema v35)
+# 04. Data Storage (Schema v36)
 
 ### Session personas (schema 35)
 
@@ -914,7 +914,10 @@ CREATE INDEX idx_session_import_origins_plugin
   (ADR 0295): send no thinking override. Existing rows keep their stored
   canonical values.
 - `observer_mode` is explicit per-conversation consent for the built-in Observer
-  Guard, projected as `SessionSummary.observerMode` (`off | observe | guard`).
+  Guard, projected as `SessionSummary.observerMode` (`off | endless | guard`).
+  The versioned migration maps stored `observe` to `off`, preserves `guard`, and
+  updates the column constraint transactionally without discarding sessions.
+  Historical assessment mode `observe` remains readable in transcript metadata.
   Legacy summaries without the optional wire field read as `off`; new and
   migrated sessions default to `off`. Existing trusted `session.create` and
   `session.configure` RPCs accept only these exact strings when supplied:

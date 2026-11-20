@@ -16,14 +16,14 @@ const base = { defaultMode: "agent", theme: "light", enterToSend: true };
 const settings = { ...base, observerGuard: { providerId: "p", modelId: "m", thinkingLevel: "high" } };
 const jsx = { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }) };
 const primitive = name => Object.assign(() => null, { displayName: name });
-const components = Object.fromEntries(["SettingsCard", "SettingsRow", "Input", "SettingsToggle", "SettingsMenuSelect", "SettingsDisclosure", "Button", "TooltipButton", "AnchoredMenu", "IconCheck", "IconEye"].map(name => [name, primitive(name)]));
+const components = Object.fromEntries(["SettingsCard", "SettingsRow", "Input", "Field", "Textarea", "SettingsToggle", "SettingsMenuSelect", "SettingsDisclosure", "Button", "TooltipButton", "AnchoredMenu", "IconCheck", "IconEye"].map(name => [name, primitive(name)]));
 const t = key => key;
 function load(path, extra) {
   const source = readFileSync(new URL(path, import.meta.url), "utf8");
   const code = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const module = { exports: {} };
   new Function("require", "exports", "module", code)(id => {
-    if (id === "react") return { useState: value => [value, () => {}], useRef: value => ({ current: value }), useEffect() {} };
+    if (id === "react") return { useState: value => [value, () => {}], useRef: value => ({ current: value }), useEffect() {}, ...extra.react };
     if (id === "react/jsx-runtime") return jsx;
     if (id === "react-i18next") return { useTranslation: () => ({ t }) };
     if (id === "@pi-desktop/shared") return shared;
@@ -50,20 +50,30 @@ test("model and effort availability retain stale selections without remapping", 
   assert.equal(observerSelection(settings, [{ ...provider, authKind: "oauth", hasOauth: true }], {}).available, true);
 });
 
-test("picker targets work session and permits off when model disappears", async () => {
+test("picker uses off for legacy Observe and requires the exact model only for Guard", () => {
   const calls = [];
-  const state = { sessions: [session("a"), { ...session("b"), observerMode: "guard" }], activeSessionId: "a", runningSessions: {}, pendingPlans: {}, settings, providers: [provider], providerModels: {}, configureActiveSession: async (...args) => { calls.push(args); }, showToast() {}, setSettingsTab() {} };
+  const state = { sessions: [{ ...session("a"), observerMode: "observe" }, { ...session("b"), observerMode: "guard" }], activeSessionId: "a", runningSessions: {}, pendingPlans: {}, settings, providers: [provider], providerModels: {}, configureActiveSession: async (...args) => { calls.push(args); }, showToast() {}, setSettingsTab() {} };
   const { ObserverGuardPicker } = load("../src/features/sessions/ObserverGuardPicker.tsx", { useAppStore: makeStore(state) });
-  let tree = ObserverGuardPicker({ sessionId: "b" });
-  let choices = tree.props.children[0];
-  assert.equal(choices[2].props["aria-checked"], true);
-  choices[1].props.onClick();
-  assert.equal(ObserverGuardPicker({ sessionId: "a" }).props.children[0][0].props["aria-checked"], true);
-  assert.equal(calls[0][1], "b"); assert.equal(calls[0][0].observerMode, "observe");
+  const options = id => ObserverGuardPicker({ sessionId: id }).props.children[0];
+  assert.deepEqual(options("a").map(choice => choice.props.children[0].props.children), ["observerGuard.off", "observerGuard.endless", "observerGuard.guard"]);
+  assert.equal(options("a")[0].props["aria-checked"], true);
+  assert.equal(options("b")[2].props["aria-checked"], true);
+  assert.equal(options("b")[2].props.disabled, false);
+  state.settings = { ...settings, observerGuard: { ...settings.observerGuard, modelId: "missing" } };
+  assert.equal(options("b")[2].props.disabled, true, "does not substitute an available model");
+  state.settings = base;
   state.providers = [];
-  tree = ObserverGuardPicker({ sessionId: "b" }); choices = tree.props.children[0];
-  assert.equal(choices[1].props.disabled, true); assert.equal(choices[0].props.disabled, false);
-  choices[0].props.onClick(); assert.equal(calls.at(-1)[0].observerMode, "off");
+  assert.equal(options("b")[1].props.disabled, false);
+  assert.equal(options("b")[2].props.disabled, true);
+  options("b")[2].props.onClick();
+  assert.equal(calls.length, 0);
+  options("b")[1].props.onClick();
+  assert.equal(calls[0][1], "b"); assert.equal(calls[0][0].observerMode, "endless");
+  state.sessions[1].observerMode = "endless";
+  const endless = ObserverGuardPicker({ sessionId: "b" });
+  assert.match(endless.props.trigger(null).props.ariaLabel, /observerGuard.ready/);
+  assert.doesNotMatch(rendered(endless), /observerGuard.configuredModel/);
+  options("b")[0].props.onClick(); assert.equal(calls.at(-1)[0].observerMode, "off");
   state.runningSessions.b = true; assert.equal(ObserverGuardPicker({ sessionId: "b" }).props.trigger(null).props.disabled, false);
   state.runningSessions.b = false; state.sessions[1].source = "remote"; assert.equal(ObserverGuardPicker({ sessionId: "b" }), null);
   state.sessions[1].source = "native"; assert.equal(ObserverGuardPicker({ sessionId: "b" }), null);
@@ -77,11 +87,81 @@ test("settings model and effort controls use explicit selection and preserve sta
   const state = { providers: [provider], providerModels: {} };
   const { ObserverGuardSettings } = load("../src/components/settings/ObserverGuardSettings.tsx", { useAppStore: makeStore(state) });
   const tree = ObserverGuardSettings({ settings: { ...settings, observerGuard: { ...settings.observerGuard, thinkingLevel: "low" } }, saveSettings: async patch => writes.push(patch) });
-  const [modelRow, effortRow] = tree.props.children;
+  const [, modelRow, effortRow] = tree.props.children;
   const model = modelRow.props.children; const effort = effortRow.props.children;
   assert.match(effort.props.options.find(row => row.id === "low").label, /unavailable/);
   effort.props.onChange("high"); assert.deepEqual(writes[0], { observerGuard: { thinkingLevel: "high" } });
   model.props.onChange(""); assert.deepEqual(writes[1], { observerGuard: { providerId: "", modelId: "" } });
+});
+
+test("settings use the shared bounds and save the prompt only on explicit action", async () => {
+  const writes = [];
+  const state = { providers: [], providerModels: {} };
+  let hookState = [], cursor = 0, rejectSave = false;
+  const react = {
+    useState(value) {
+      const index = cursor++;
+      if (!(index in hookState)) hookState[index] = value;
+      return [hookState[index], next => { hookState[index] = next; }];
+    },
+  };
+  const { ObserverGuardSettings } = load("../src/components/settings/ObserverGuardSettings.tsx", { useAppStore: makeStore(state), react });
+  const saveSettings = async patch => { writes.push(patch); if (rejectSave) throw new Error("save failed"); };
+  const render = settings => ObserverGuardSettings({ settings, saveSettings });
+  const [limit, , , prompt, , advanced] = render(settings).props.children;
+  assert.equal(limit.props.name, "maxContinuations");
+  assert.equal(limit.props.value, 3);
+  assert.deepEqual(advanced.props.children.map(node => node.props.name), ["timeoutSeconds", "maxInputChars"]);
+  const run = node => { cursor = 0; return node.type(node.props); };
+  const number = () => run(limit).props.children.props;
+  assert.deepEqual([number().min, number().max], [1, 100]);
+  number().onChange({ target: { value: "101" } });
+  number().onBlur();
+  assert.equal(number()["aria-invalid"], true);
+  assert.deepEqual(writes, []);
+  number().onChange({ target: { value: "100" } });
+  number().onBlur();
+  assert.deepEqual(writes.pop(), { observerGuard: { maxContinuations: 100 } });
+
+  hookState = [];
+  const saved = render({ ...settings, observerGuard: { prompt: "previous" } }).props.children[3];
+  assert.equal(prompt.props.value, shared.DEFAULT_OBSERVER_GUARD_PROMPT);
+  const textarea = () => nodes(run(saved)).find(node => node.type === components.Textarea).props;
+  const button = label => nodes(run(saved)).find(node => node.type === components.Button && node.props.children === label).props;
+  assert.equal(textarea().value, "previous");
+  textarea().onChange({ target: { value: "x".repeat(shared.OBSERVER_GUARD_PROMPT_MAX_CHARS + 1) } });
+  assert.equal(textarea()["aria-invalid"], true);
+  assert.equal(button("common.save").disabled, true);
+  button("common.save").onClick();
+  assert.deepEqual(writes, []);
+  textarea().onChange({ target: { value: "custom" } });
+  assert.deepEqual(writes, [], "typing never saves settings");
+  rejectSave = true;
+  button("common.save").onClick();
+  assert.equal(textarea().disabled, true);
+  await Promise.resolve();
+  assert.deepEqual(writes.pop(), { observerGuard: { prompt: "custom" } });
+  assert.equal(textarea().value, "custom");
+  assert.ok(nodes(run(saved)).some(node => node.props?.role === "alert"));
+  rejectSave = false;
+  button("common.save").onClick();
+  await Promise.resolve();
+  assert.deepEqual(writes.pop(), { observerGuard: { prompt: "custom" } });
+  button("observerGuard.resetPrompt").onClick();
+  await Promise.resolve();
+  assert.deepEqual(writes.pop(), { observerGuard: { prompt: "" } });
+});
+
+test("transient recovery defaults off and saves only its setting", () => {
+  const writes = [];
+  const state = { providers: [], providerModels: {} };
+  const { ObserverGuardSettings } = load("../src/components/settings/ObserverGuardSettings.tsx", { useAppStore: makeStore(state) });
+  const render = observerGuard => ObserverGuardSettings({ settings: { ...base, observerGuard }, saveSettings: async patch => writes.push(patch) });
+  const toggle = tree => nodes(tree).find(node => node.type === components.SettingsToggle).props;
+  assert.equal(toggle(render({})).checked, false);
+  toggle(render({ providerId: "p", modelId: "m", maxContinuations: 4 })).onChange();
+  assert.deepEqual(writes, [{ observerGuard: { continueOnTransientError: true } }]);
+  assert.equal(toggle(render({ continueOnTransientError: true })).checked, true);
 });
 
 test("disclosure matches message IDs, shows live and renders model prose only as text", () => {
@@ -112,7 +192,8 @@ test("all locale catalogs expose observer keys and Behavior search indexes setti
   const expected = Object.keys(catalogs.en.observerGuard);
   for (const [name, catalog] of Object.entries(catalogs)) assert.deepEqual(Object.keys(catalog.observerGuard), expected, name);
   const behavior = SETTINGS_NAV.find(row => row.id === "behavior");
-  for (const key of ["title", "model", "effort", "timeoutSeconds", "maxInputChars", "recentToolCount", "includeToolOutput"]) assert.ok(behavior.keywordKeys.includes(`observerGuard.${key}`));
+  for (const key of ["title", "model", "effort", "timeoutSeconds", "maxInputChars", "maxContinuations", "prompt", "continueOnTransientError", "continueOnTransientErrorHint"]) assert.ok(behavior.keywordKeys.includes(`observerGuard.${key}`));
+  for (const key of ["recentToolCount", "includeToolOutput"]) assert.ok(!behavior.keywordKeys.includes(`observerGuard.${key}`));
 });
 
 test("real store writes the work-session ID across selection changes and blocks live sessions", async t => {
@@ -126,13 +207,13 @@ test("real store writes the work-session ID across selection changes and blocks 
   const slice = createSessionSlice({ ...access, runtime, ...createSessionCoordination({ ...access, runtime }) });
   let resolveWrite; const writes = [];
   t.mock.method(api, "configureSession", (id, config) => { writes.push({ id, config }); return new Promise(resolve => { resolveWrite = resolve; }); });
-  const write = slice.configureActiveSession({ mode: "agent", observerMode: "observe" }, "b");
-  assert.equal(writes[0].id, "b"); assert.equal(writes[0].config.observerMode, "observe");
+  const write = slice.configureActiveSession({ mode: "agent", observerMode: "endless" }, "b");
+  assert.equal(writes[0].id, "b"); assert.equal(writes[0].config.observerMode, "endless");
   assert.equal(Object.hasOwn(writes[0].config, "thinkingLevel"), false);
   assert.equal(state.sessions.find(row => row.id === "b").observerMode, undefined, "unconfirmed saves do not appear enabled");
   state = { ...state, activeSessionId: "a" };
-  resolveWrite({ session: { ...session("b"), observerMode: "observe" } }); await write;
-  assert.equal(state.sessions.find(row => row.id === "b").observerMode, "observe");
+  resolveWrite({ session: { ...session("b"), observerMode: "endless" } }); await write;
+  assert.equal(state.sessions.find(row => row.id === "b").observerMode, "endless");
   assert.equal(state.sessions.find(row => row.id === "a").observerMode, undefined);
   state.runningSessions.b = true;
   await slice.configureActiveSession({ mode: "agent", observerMode: "off" }, "b");

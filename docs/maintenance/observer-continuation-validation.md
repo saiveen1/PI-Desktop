@@ -1,5 +1,10 @@
 # Observer continuation-context validation
 
+> Historical validation of the 2026-11-18 design. The 2026-11-20 simplification
+> removes its task-history evidence path and replaces Observe with Endless.
+> These recorded Luna calls do not validate the new modes; see the current
+> [continuation decision](../adr/builtin-observer-guard.md).
+
 Date: 2026-11-18 (UTC). Base revision: `e4af2c4ff`, with uncommitted task changes
 and preserved unrelated work. This is source-candidate validation, not an
 installed-build or live-profile upgrade test.

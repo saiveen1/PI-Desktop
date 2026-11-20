@@ -300,19 +300,17 @@ every terminal frame; neither is fabricated. A normal stop is not task success.
 
 ## 8. User-facing diagnostics
 
-The optional built-in Observer adds `runDiagnostics.observer` on the exact
-candidate message: mode/status, selected model/effort, start/end, bounded verdict,
-confidence, redacted short reason, evidence IDs, continuation decision and its
-own usage. Optional skip and continuation reason codes distinguish local gating
-from model judgement; a bounded blocking-tool identity identifies the first
-unresolved receipt without exporting arguments or output. No raw reviewer
-prompt/reasoning or provider error prose is logged. The transcript presents one
-summary outside the folded execution process and restores it from the candidate's
-persisted metadata, not a fresh assessment. It explicitly labels requested
-continuations as not reassessed in that turn. These facts remain separate from
-main-provider attempt counters and the developer tool-observation report.
-Missing old data remains absent, missing reasons are unknown, and an advisory
-verdict is never a verified task outcome.
+Automatic continuation adds `runDiagnostics.observer` to each owning candidate:
+mode/status, times, decision (continue/stop), continuation count/limit, whether
+continuation was requested and its actual stop/skip reason. Guard includes its
+independent model/effort/usage; Endless has no reviewer request or fabricated
+verdict/usage. Old Observe/verdict/confidence/reason/evidence records remain
+readable without reconstruction. No reviewer prompt/reasoning or provider error
+prose is logged. The transcript summary shows the latest result outside folded
+execution details; earlier records remain attached to their responses. A later
+candidate may be reviewed again, up to the continuation limit. These records
+remain separate from primary request accounting and tool-observation reports.
+Neither a continue decision nor a stop decision verifies task success.
 
 MVP provides:
 

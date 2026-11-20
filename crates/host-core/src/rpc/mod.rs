@@ -8,6 +8,7 @@ mod gen_ui;
 mod market_browse_rpc;
 mod modes_rpc;
 mod notification_settings;
+mod observer_settings;
 mod plugin_reviews_rpc;
 mod remote_tools;
 mod review_actions_rpc;
@@ -810,7 +811,7 @@ fn observer_mode_param(params: &Value) -> Result<Option<sessions::ObserverMode>,
         .map_err(|_| {
             rpc_err(
                 1002,
-                "observerMode must be off, observe, or guard",
+                "observerMode must be off, endless, or guard",
                 "INVALID_PARAMS",
             )
         })
@@ -927,6 +928,7 @@ fn prompt_enhancement_template_error(field: &str, value: &Value) -> Option<Strin
 fn normalize_settings_value(mut value: Value) -> Value {
     if let Some(object) = value.as_object_mut() {
         object.remove("planApprovalPermissionMode");
+        observer_settings::normalize(object);
         if object.get("defaultMode").and_then(Value::as_str) == Some("chat") {
             object.insert("defaultMode".into(), Value::String("plan".into()));
         }
@@ -1093,6 +1095,8 @@ fn validate_settings_value(value: &Value) -> Result<(), JsonRpcError> {
         .as_object()
         .ok_or_else(|| rpc_err(1002, "settings must be an object", "INVALID_PARAMS"))?;
     session_personas_rpc::validate_settings(object)?;
+    observer_settings::validate(object)
+        .map_err(|message| rpc_err(1002, message, "INVALID_PARAMS"))?;
     if object
         .get("scheduledTasksEnabled")
         .is_some_and(|enabled| !enabled.is_boolean())

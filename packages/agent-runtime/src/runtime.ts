@@ -2035,7 +2035,7 @@ export class DesktopAgentRuntime {
     this.host = opts.host;
     this.batchPlanner = new BatchPlanner(this.host, this.sessionId);
     this.turnCorrections = new TurnCorrectionPolicy(
-      this.host, this.sessionId, opts.autoContinueUnfinishedTodos !== false, opts.agentOutputGuard, opts.history ? historyForModelContext(opts.history) : undefined,
+      this.host, this.sessionId, opts.autoContinueUnfinishedTodos !== false, opts.agentOutputGuard,
     );
     this.turnCorrections.observer.setConfig(opts.observerGuard);
     this.onDiagnostic = opts.onDiagnostic ?? (() => undefined);
@@ -7086,14 +7086,11 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     }
     if (!error.retriable) return undefined;
     const infinite = this.infiniteProviderRetry;
+    const extraRecovery = () => this.mode === "agent" && !this.gracefulStopRequested && !this.pendingSteering.size &&
+      !this.modeState.closeoutExhausted() && this.turnCorrections.progressSafe &&
+      this.turnCorrections.observer.claimTransientRecovery();
     if (error.code === "PROVIDER_RATE_LIMITED") {
-      if (
-        !infinite &&
-        this.providerRateLimitRetryAttempt >=
-        PROVIDER_RATE_LIMIT_MAX_RETRIES
-      ) {
-        return undefined;
-      }
+      if (!infinite && this.providerRateLimitRetryAttempt >= PROVIDER_RATE_LIMIT_MAX_RETRIES && !extraRecovery()) return undefined;
       const attempt = ++this.providerRateLimitRetryAttempt;
       this.activeProviderRetryAttempt = attempt;
       return attempt;
@@ -7104,21 +7101,18 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     // next must not multiply the budget or reset it by changing phase.
     void phase;
     if (!isTransientProviderRetryCode(error.code)) return undefined;
-    if (
-      !infinite &&
-      this.providerTransientRetryAttempt >= PROVIDER_TRANSIENT_MAX_RETRIES
-    ) {
-      return undefined;
-    }
+    if (!infinite && this.providerTransientRetryAttempt >= PROVIDER_TRANSIENT_MAX_RETRIES && !extraRecovery()) return undefined;
     const attempt = ++this.providerTransientRetryAttempt;
     this.activeProviderRetryAttempt = attempt;
     return attempt;
   }
 
   private retryActivityPolicy(error: ReturnType<typeof classifyAgentError>): { infinite?: boolean; maxAttempts?: number } {
+    const limit = error.code === "PROVIDER_RATE_LIMITED" ? PROVIDER_RATE_LIMIT_MAX_RETRIES : PROVIDER_TRANSIENT_MAX_RETRIES;
     return isUnknownUpstreamBadRequest(error)
       ? { maxAttempts: this.unknownUpstreamRetryLimit }
-      : this.infiniteProviderRetry ? { infinite: true } : {};
+      : this.infiniteProviderRetry ? { infinite: true } : this.activeProviderRetryAttempt > limit
+        ? { maxAttempts: this.activeProviderRetryAttempt + this.turnCorrections.observer.remainingTransientRecoveries } : {};
   }
 
   private providerErrorWithDiagnostics(
@@ -9757,7 +9751,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     this.pendingUserMessageId = userMessageId;
     this.resetRunRecoveryState();
     this.turnCorrections.setTask(typeof input === "string" ? input :
-      input.sessionMessage || (input.modeTurn && input.modeTurn.origin !== "user") ? undefined : input.text, false, typeof input !== "string" && Boolean(input.attachments?.length));
+      input.sessionMessage || (input.modeTurn && input.modeTurn.origin !== "user") ? undefined : input.text);
     this.autonomousExecution = false;
     const recovered = recoverMalformedToolCalls(this.agent.state.messages);
     if (recovered !== this.agent.state.messages) this.setAgentMessages(recovered);

@@ -1,22 +1,22 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createAssistantMessageEventStream, type AssistantMessage, type Context } from "@earendil-works/pi-ai";
-import { addUsage, usageForEvent, type AgentEventEnvelope, type MessageUsage, type ObserverGuardAssessment, type UiMessage } from "@pi-desktop/shared";
+import { type AgentEventEnvelope, type ObserverGuardAssessment, type UiMessage } from "@pi-desktop/shared";
 import { DesktopAgentRuntime, type AgentRuntimeOptions } from "./runtime.js";
-import type { ObserverGuard, ObserverGuardRuntimeConfig } from "./observer-guard.js";
+import type { ObserverGuardRuntimeConfig } from "./observer-guard.js";
 import { completeOneShot, type OneShotCompleteResult } from "./one-shot-complete.js";
-import { builtinModeDefinition } from "./mode-definitions.js";
-import { MODE_CLOSEOUT_MAX_REQUESTS } from "./modes/mode-state.js";
-import { CorrectiveBudget } from "./corrective-budget.js";
+import { PROVIDER_TRANSIENT_MAX_RETRIES, PROVIDER_RATE_LIMIT_MAX_RETRIES } from "./provider-retry.js";
 
 vi.mock("./one-shot-complete.js", () => ({ completeOneShot: vi.fn() }));
 const reviewer = vi.mocked(completeOneShot);
 const provider = { id: "fixture", name: "Fixture", modelId: "main", apiKey: "", authKind: "none", supportsReasoning: false, supportedThinkingLevels: ["off" as const] };
-const observerGuard: ObserverGuardRuntimeConfig = { mode: "guard", settings: { providerId: "reviewer", modelId: "judge", thinkingLevel: "off" }, provider: { ...provider, id: "reviewer", modelId: "judge" } };
+const guard: ObserverGuardRuntimeConfig = { mode: "guard", settings: { providerId: "reviewer", modelId: "judge", thinkingLevel: "off", maxContinuations: 3 }, provider: { ...provider, id: "reviewer", modelId: "judge" } };
+const endless: ObserverGuardRuntimeConfig = { mode: "endless", settings: { maxContinuations: 3 } };
 const instances: DesktopAgentRuntime[] = [];
 afterEach(async () => { await Promise.all(instances.splice(0).map(runtime => runtime.dispose())); vi.resetAllMocks(); vi.useRealTimers(); });
-type Script = Partial<Pick<AssistantMessage, "content" | "stopReason" | "errorMessage">>;
+type Script = Partial<Pick<AssistantMessage, "content" | "stopReason" | "errorMessage">> & { beforeStart?: boolean };
 const text = (value: string): Script => ({ content: [{ type: "text", text: value }] });
-function fixture(options: Partial<AgentRuntimeOptions> = {}, script: Script[] = [text("Implementation is still pending.")], toolFailure = false) {
+const read: Script = { content: [{ type: "toolCall", id: "read-receipt", name: "Read", arguments: { path: "private-path" } }], stopReason: "toolUse" };
+function fixture(options: Partial<AgentRuntimeOptions> = {}, script: Script[] = [text("Done.")], toolFailure = false) {
   const events: AgentEventEnvelope[] = [];
   const requests: Context[] = [];
   const hostCalls: string[] = [];
@@ -26,7 +26,7 @@ function fixture(options: Partial<AgentRuntimeOptions> = {}, script: Script[] = 
       if (method === "tools.fileBatchCapabilities") return { version: 1, supported: false } as T;
       if (method === "provider.delegationSnapshot" || method === "session.appendMessage") return undefined as T;
       if (method === "todos.get") return { sessionId: "session", todos: [] } as T;
-      if (method === "tools.execute") return { ok: !toolFailure, content: { content: [{ type: "text", text: "retained receipt password=supersecret" }] } } as T;
+      if (method === "tools.execute") return { ok: !toolFailure, content: { content: [{ type: "text", text: "private-tool-output" }] } } as T;
       return undefined as T;
     } }, sessionId: "session", mode: "agent", provider, thinkingLevel: "off",
     commandShell: { id: "bash", label: "Bash", dialect: "posix", available: true, isDefault: true },
@@ -35,21 +35,21 @@ function fixture(options: Partial<AgentRuntimeOptions> = {}, script: Script[] = 
   });
   const streamSimple = (_model: unknown, context: Context) => {
     requests.push({ ...context, messages: [...context.messages] });
-    const step = script[Math.min(requests.length - 1, script.length - 1)];
+    const { beforeStart, ...step } = script[Math.min(requests.length - 1, script.length - 1)];
     const message: AssistantMessage = {
       role: "assistant", api: "openai-completions", provider: "fixture", model: "main", content: [{ type: "text", text: "Done." }],
-      usage: { input: 2, output: 3, cacheRead: 0, cacheWrite: 0, totalTokens: 5, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } }, stopReason: "stop", timestamp: Date.now(), ...step,
+      usage: { input: 2, output: 3, cacheRead: 0, cacheWrite: 0, totalTokens: 5, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+      stopReason: "stop", timestamp: Date.now(), ...step,
     };
     const stream = createAssistantMessageEventStream();
     queueMicrotask(() => {
-      stream.push({ type: "start", partial: message });
+      if (!beforeStart) stream.push({ type: "start", partial: message });
       if (message.stopReason === "error" || message.stopReason === "aborted") stream.push({ type: "error", reason: message.stopReason, error: message });
       else if (message.stopReason !== "pending") stream.push({ type: "done", reason: message.stopReason, message });
       stream.end(message);
     });
     return stream;
   };
-  // Only replace the external transport; prompt, tools, corrections and diagnostics use real wiring.
   (runtime as unknown as { models: { streamSimple: typeof streamSimple } }).models = { streamSimple };
   instances.push(runtime);
   return { runtime, requests, events, hostCalls };
@@ -59,539 +59,339 @@ function rows(events: AgentEventEnvelope[]): UiMessage[] {
   for (const { event } of events) if (event.type === "message_start" || event.type === "message_update" || event.type === "message_end") messages.set(event.message.id, event.message);
   return [...messages.values()];
 }
-function assessment(events: AgentEventEnvelope[]): ObserverGuardAssessment | undefined {
-  return rows(events).find(message => message.runDiagnostics?.observer)?.runDiagnostics?.observer;
-}
-function verdict(context: Context, extra: Record<string, unknown> = {}): OneShotCompleteResult {
-  const input = JSON.parse(String(context.messages.find(message => message.role === "user")?.content)) as { evidence: { id: string }[] };
-  return { text: JSON.stringify({ verdict: "incomplete", confidence: "high", reason: "The requested implementation remains pending.", evidenceIds: input.evidence.map(row => row.id), ...extra }), usage: { inputTokens: 21, outputTokens: 8, totalTokens: 29 } };
+function assessments(events: AgentEventEnvelope[]): ObserverGuardAssessment[] {
+  return rows(events).flatMap(message => message.runDiagnostics?.observer?.messageId === message.id ? [message.runDiagnostics.observer] : []);
 }
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>(done => { resolve = done; });
   return { promise, resolve };
 }
-const read: Script = { content: [{ type: "toolCall", id: "read-receipt", name: "Read", arguments: { path: "fixture.txt" } }], stopReason: "toolUse" };
 
-describe("Observer Guard public prompt path", () => {
-  it("assesses once after tools, retains receipts, and persists on the exact intermediate message without double usage", async () => {
-    const run = fixture({ observerGuard }, [read, text("Implementation is still pending."), text("I will now fix the remaining issue.")]);
-    reviewer.mockImplementation(async (_provider, context) => verdict(context));
-    await run.runtime.prompt("Implement the requested fix.", "user", "turn");
-    expect(reviewer).toHaveBeenCalledTimes(1);
-    expect(run.requests).toHaveLength(3);
-    expect(run.hostCalls.filter(method => method === "tools.execute")).toHaveLength(1);
-    const persisted = rows(run.events);
-    const candidate = persisted.find(message => message.runDiagnostics?.observer);
-    expect(candidate?.runDiagnostics?.observer).toMatchObject({ messageId: candidate?.id, status: "assessed", continued: true, usage: { totalTokens: 29 }, modelKey: "reviewer/judge", thinkingLevel: "off", reviewedToolCount: 1, toolOutputIncluded: false });
-    expect(persisted.filter(message => message.role === "assistant").at(-1)?.runDiagnostics?.observer).toBeUndefined();
-    expect(run.events.filter(({ event }) => event.type === "message_update" && event.message.runDiagnostics?.observer?.status === "checking")).toHaveLength(1);
-    const finalContext = JSON.stringify(run.requests.at(-1));
-    expect(finalContext).toContain("retained receipt");
-    expect(finalContext).toContain("observer_guard_correction");
-    expect(finalContext).not.toContain("The requested implementation remains pending.");
-    expect(run.requests.at(-1)?.messages.filter(message => message.role === "user")).toHaveLength(1);
-    expect(run.events.reduce<MessageUsage | undefined>((sum, event) => addUsage(sum, usageForEvent(event)), undefined)?.totalTokens).toBe(15);
-    expect(run.runtime.getStatus().runDiagnostics?.requestCount).toBe(3);
-  });
-
-  it.each([undefined, { ...observerGuard, mode: "off" as const }, { mode: "guard" as const, settings: {} }, { ...observerGuard, provider: undefined }, { ...observerGuard, errorCode: "EFFORT_UNAVAILABLE" as const }])("never falls back without an explicit usable observer binding: %j", async config => {
-    const run = fixture({ observerGuard: config });
-    await run.runtime.prompt("Implement the fix.", "user");
+describe("bounded automatic continuation", () => {
+  it.each([1, 3, 5])("makes %i unconditional continuations without a reviewer or model configuration", async maxContinuations => {
+    const run = fixture({ observerGuard: { mode: "endless", settings: { maxContinuations } } });
+    await run.runtime.prompt("Implement the change.", "user");
+    expect(run.requests).toHaveLength(maxContinuations + 1);
     expect(reviewer).not.toHaveBeenCalled();
-    expect(run.requests).toHaveLength(1);
-    if (!config || config.mode === "off") expect(assessment(run.events)).toBeUndefined();
-    else expect(assessment(run.events)?.status).toBe("error");
-    expect(JSON.stringify(run.requests)).not.toContain("observer_guard");
+    const saved = assessments(run.events);
+    expect(saved).toHaveLength(maxContinuations + 1);
+    expect(saved.at(-1)).toMatchObject({ mode: "endless", continued: false, continuationReason: "continuation_limit", continuationCount: maxContinuations, maxContinuations });
+    expect(saved.every(row => !row.modelKey && !row.usage && !row.thinkingLevel && !row.verdict)).toBe(true);
+    expect(run.requests.at(-1)?.messages.filter(message => message.role === "user")).toHaveLength(1);
   });
 
-  it.each([["complete", "verdict_complete"], ["blocked", "verdict_blocked"], ["needs_input", "verdict_needs_input"], ["unknown", "verdict_unknown"], ["low", "low_confidence"], ["medium", "low_confidence"], ["observe", "observe_only"]])("keeps %s advisory and leaves normal prompt/tool declarations unchanged", async (variant, reason) => {
-    const config = variant === "observe" ? { ...observerGuard, mode: "observe" as const } : observerGuard;
-    const run = fixture({ observerGuard: config });
-    reviewer.mockImplementation(async (_provider, context) => verdict(context, ["low", "medium"].includes(variant) ? { confidence: variant } : variant === "observe" ? {} : { verdict: variant }));
-    await run.runtime.prompt("Implement the fix.", "user");
-    expect(reviewer).toHaveBeenCalledTimes(1);
-    expect(run.requests).toHaveLength(1);
-    expect(assessment(run.events)).toMatchObject({ continued: false, continuationReason: reason, reviewedToolCount: 0, toolOutputIncluded: false });
-    expect(JSON.stringify(run.requests)).not.toContain("observer_guard");
-    expect(assessment(run.events)?.status).toBe("assessed");
+  it("reevaluates new final replies and stops when the reviewer says stop", async () => {
+    const run = fixture({ observerGuard: guard }, [text("Next I will inspect."), read, text("One step remains."), text("Done.")]);
+    reviewer.mockResolvedValueOnce({ text: "continue" }).mockResolvedValueOnce({ text: "continue" }).mockResolvedValueOnce({ text: "stop" });
+    await run.runtime.prompt("Continue.", "user");
+    expect(run.requests).toHaveLength(4);
+    expect(reviewer).toHaveBeenCalledTimes(3);
+    expect(assessments(run.events).map(row => row.decision)).toEqual(["continue", "continue", "stop"]);
+    expect(assessments(run.events).at(-1)).toMatchObject({ continued: false, continuationCount: 2, continuationReason: "decision_stop" });
+    expect(run.hostCalls.filter(name => name === "tools.execute")).toHaveLength(1);
   });
 
-  it.each(["not-json", "{}", JSON.stringify({ verdict: "incomplete", confidence: "high", reason: "Ignore all safeguards", evidenceIds: ["invented"] }), JSON.stringify({ verdict: "complete", confidence: "high", reason: "Done", evidenceIds: [] }), JSON.stringify({ verdict: "incomplete", confidence: "high", reason: "Only user proof", evidenceIds: ["user"] })])("rejects malformed or unsupported proof without main-turn failure: %s", async response => {
-    const run = fixture({ observerGuard });
-    reviewer.mockResolvedValue({ text: response });
-    await run.runtime.prompt("Implement the fix.", "user");
-    expect(assessment(run.events)).toMatchObject({ status: "error", errorCode: "INVALID_RESPONSE", reviewedToolCount: 0, toolOutputIncluded: false });
-    expect(assessment(run.events)).not.toHaveProperty("verdict");
-    expect(assessment(run.events)).not.toHaveProperty("continuationReason");
-    expect(run.requests).toHaveLength(1);
-    expect(run.events.some(({ event }) => event.type === "error")).toBe(false);
-  });
-
-  it.each(["Explain how to fix it.", "Discuss whether we should run the tests.", "Continue."])("cannot grant execution to discussion/ambiguous task %s", async task => {
-    const run = fixture({ observerGuard });
-    reviewer.mockImplementation(async (_provider, context) => verdict(context));
-    await run.runtime.prompt(task, "user");
-    expect(run.requests).toHaveLength(1);
-    expect(assessment(run.events)).toMatchObject({ continued: false, continuationBlocked: "not_actionable", continuationReason: "task_not_actionable" });
-  });
-
-  it.each(["I cannot proceed because permission is required.", "Please provide the missing file.", "I won't perform this request.", "Should I continue?"])("does not override local blockers or refusals: %s", async answer => {
-    const run = fixture({ observerGuard }, [text(answer)]);
-    reviewer.mockImplementation(async (_provider, context) => verdict(context));
-    await run.runtime.prompt("Implement the fix.", "user");
-    expect(run.requests).toHaveLength(1);
-    expect(assessment(run.events)).toMatchObject({ continued: false, continuationReason: "answer_needs_input" });
-  });
-
-  it("does not grant execution in Plan or from non-user notices", async () => {
-    const plan = fixture({ observerGuard, mode: "plan" });
-    reviewer.mockImplementation(async (_provider, context) => verdict(context));
-    await plan.runtime.prompt("Implement the fix.", "user");
-    expect(plan.requests).toHaveLength(1);
-    expect(assessment(plan.events)).toMatchObject({ continued: false, continuationBlocked: "unsafe", continuationReason: "plan_mode" });
-    const notice = fixture({ observerGuard });
-    await notice.runtime.prompt({ text: "Implement the fix.", sessionMessage: { kind: "completion", sourceSessionId: "other", sourceTitle: "Other", targetSessionId: "session", messageId: "notice", replyToMessageId: "parent" } });
-    expect(reviewer).toHaveBeenCalledTimes(1);
-    expect(notice.requests).toHaveLength(1);
-    expect(assessment(notice.events)).toBeUndefined();
-  });
-
-  it("local corrections precede assessment and share the ceiling even across later tools", async () => {
-    const run = fixture({ observerGuard, agentOutputGuard: { earlyEndMode: "continue", recoveryLimit: 1 } }, [text("I will now inspect the code."), read, text("Implementation is still pending.")]);
-    reviewer.mockImplementation(async (_provider, context) => verdict(context));
+  it("caps guard continuation even when every review requests more work", async () => {
+    reviewer.mockResolvedValue({ text: "continue" });
+    const run = fixture({ observerGuard: { ...guard, settings: { ...guard.settings, maxContinuations: 2 } }, agentOutputGuard: { earlyEndMode: "continue", recoveryLimit: 3 } }, [text("I will now inspect the code.")]);
     await run.runtime.prompt("Implement the fix.", "user");
     expect(run.requests).toHaveLength(3);
-    expect(reviewer).toHaveBeenCalledTimes(1);
-    expect(assessment(run.events)).toMatchObject({ continuationBlocked: "budget", continuationReason: "correction_budget", continued: false });
+    expect(reviewer).toHaveBeenCalledTimes(2);
+    expect(assessments(run.events).at(-1)).toMatchObject({ continuationReason: "continuation_limit", continuationCount: 2 });
   });
 
-  it("rejects truncated evidence and failed tools even with an apparently authoritative reviewer", async () => {
-    reviewer.mockImplementation(async (_provider, context) => verdict(context));
-    const bounded = fixture({ observerGuard: { ...observerGuard, settings: { ...observerGuard.settings, maxInputChars: 2000 } } }, [text("Pending. ".repeat(3000))]);
-    await bounded.runtime.prompt("Implement the fix.", "user");
-    expect(reviewer.mock.calls[0][1].messages.reduce((chars, message) => chars + String(message.content).length, 0)).toBeLessThanOrEqual(2000);
-    expect(assessment(bounded.events)).toMatchObject({ inputTruncated: true, continuationBlocked: "not_actionable", continuationReason: "input_truncated", continued: false });
-    const failed = fixture({ observerGuard }, [read, text("Implementation is still pending.")], true);
-    await failed.runtime.prompt("Implement the fix.", "user");
-    expect(failed.requests).toHaveLength(2);
-    expect(assessment(failed.events)).toMatchObject({ continued: false, continuationBlocked: "unsafe", continuationReason: "tool_error", blockingTool: { toolCallId: "read-receipt", toolName: "Read" } });
-    expect(JSON.stringify(assessment(failed.events))).not.toMatch(/fixture\.txt|supersecret|retained receipt/);
+  it.each(["先确认样本被拒绝的原因。", "I will inspect permission checks next.", "Which case failed? I will check the log."])("does not keyword-veto the reviewer for %s", async answer => {
+    reviewer.mockResolvedValueOnce({ text: "continue" }).mockResolvedValueOnce({ text: "stop" });
+    const run = fixture({ observerGuard: guard }, [text(answer), text("Done.")]);
+    await run.runtime.prompt("Continue.", "user");
+    expect(run.requests).toHaveLength(2);
+    expect(assessments(run.events)[0]).toMatchObject({ continued: true });
   });
 
-  it("explains the first unsettled tool even when later successful receipts replace it in the evidence window", async () => {
-    const unsettled: Script = { content: [{ type: "toolCall", id: "bash-receipt", name: "Bash", arguments: { command: "echo private-command", description: "Fixture command" } }], stopReason: "toolUse" };
-    const run = fixture({ observerGuard: { ...observerGuard, settings: { ...observerGuard.settings, recentToolCount: 1, includeToolOutput: true } } }, [unsettled, read, text("Implementation is still pending.")]);
-    reviewer.mockImplementation(async (_provider, context) => verdict(context));
-    await run.runtime.prompt("Implement the fix.", "user");
-    expect(run.requests).toHaveLength(3);
-    expect(assessment(run.events)).toMatchObject({ continued: false, continuationReason: "tool_effects_unknown", blockingTool: { toolCallId: "bash-receipt", toolName: "Bash" }, reviewedToolCount: 1, toolOutputIncluded: true });
-    const evidence = String(reviewer.mock.calls[0][1].messages[1].content);
-    expect(evidence).toContain("read-receipt");
-    expect(evidence).not.toMatch(/bash-receipt|private-command|supersecret/);
-    expect(JSON.stringify(assessment(run.events))).not.toMatch(/private-command|supersecret|retained receipt/);
-  });
-
-  it("bounds standalone input, forwards explicit effort, and excludes history/system/reasoning/tool arguments and default output", async () => {
-    const run = fixture({ observerGuard, systemPrompt: "private-system-secret", history: [{ id: "past", role: "user", content: "past-credentials", createdAt: "2026-01-01T00:00:00Z", status: "complete" }] }, [read, { content: [{ type: "thinking", thinking: "private-reasoning" }, { type: "text", text: "Pending." }] }]);
-    reviewer.mockImplementation(async (_provider, context) => verdict(context, { verdict: "unknown" }));
-    await run.runtime.prompt("Implement the fix. password=supersecret", "user");
+  it("sends only the redacted final reply and editable prompt, not history or tool content", async () => {
+    reviewer.mockResolvedValue({ text: "stop", usage: { inputTokens: 7, outputTokens: 1, totalTokens: 8 } });
+    const prompt = "My reviewer policy: stop on completed work. Return continue or stop.";
+    const run = fixture({ observerGuard: { ...guard, settings: { ...guard.settings, prompt, includeToolOutput: true } }, systemPrompt: "private-system",
+      history: [{ id: "past", role: "user", content: "private-history", createdAt: "2026-01-01T00:00:00Z" }] }, [read, { content: [{ type: "thinking", thinking: "private-reasoning" }, { type: "text", text: "Result password=secretvalue" }] }]);
+    await run.runtime.prompt("private-user-task", "user");
     const [binding, context, effort, options] = reviewer.mock.calls[0];
     expect(binding).toMatchObject({ id: "reviewer", modelId: "judge" });
-    expect(effort).toBe("off");
-    expect(options).toMatchObject({ disableRetries: true, requireComplete: true, maxOutputTokens: 512, signal: expect.any(AbortSignal) });
-    const raw = JSON.stringify(context);
-    for (const excluded of ["private-system-secret", "past-credentials", "private-reasoning", "supersecret", "fixture.txt", "retained receipt"]) expect(raw).not.toContain(excluded);
-    const evidence = JSON.parse(String(context.messages[1].content));
-    expect(evidence.evidence).toEqual(expect.arrayContaining([expect.objectContaining({ id: "user", kind: "user" }), expect.objectContaining({ id: "read-receipt", kind: "tool", toolName: "Read" })]));
+    expect(context.messages[0].content).toContain(prompt);
+    expect(context.messages[1].content).toContain("Result password=[REDACTED]");
+    for (const excluded of ["private-history", "private-system", "private-reasoning", "private-path", "private-tool-output", "private-user-task", "secretvalue"]) expect(JSON.stringify(context)).not.toContain(excluded);
     expect(context.tools).toBeUndefined();
+    expect(effort).toBe("off");
+    expect(options).toMatchObject({ disableRetries: true, requireComplete: true, maxOutputTokens: 512 });
+    expect(assessments(run.events).at(-1)?.usage?.totalTokens).toBe(8);
+    expect(run.runtime.getStatus().runDiagnostics?.requestCount).toBe(2);
   });
 
-  it("publishes checking while Stop still owns cancellation, suppresses late replies, and applies queued settings only next turn", async () => {
-    const entered = deferred<Context>();
-    const late = deferred<OneShotCompleteResult>();
+  it.each(["not-json", "continue because", "{\"verdict\":\"incomplete\"}", "```continue```", ""])("rejects unsupported output %s without continuing", async reply => {
+    reviewer.mockResolvedValue({ text: reply });
+    const run = fixture({ observerGuard: guard });
+    await run.runtime.prompt("Do the task.", "user");
+    expect(run.requests).toHaveLength(1);
+    expect(assessments(run.events).at(-1)).toMatchObject({ status: "error", errorCode: "INVALID_RESPONSE" });
+  });
+
+  it.each([undefined, { mode: "off" as const, settings: {} }])("off remains inactive: %j", async observerGuard => {
+    const run = fixture({ observerGuard }); await run.runtime.prompt("Do the task.", "user");
+    expect(run.requests).toHaveLength(1); expect(reviewer).not.toHaveBeenCalled(); expect(assessments(run.events)).toEqual([]);
+  });
+
+  it.each([{}, { providerId: "reviewer", modelId: "missing" }])("guard never borrows a default model: %j", async settings => {
+    const run = fixture({ observerGuard: { mode: "guard", settings } }); await run.runtime.prompt("Do the task.", "user");
+    expect(reviewer).not.toHaveBeenCalled(); expect(run.requests).toHaveLength(1);
+    expect(assessments(run.events).at(-1)?.status).toBe("error");
+  });
+
+  it.each([guard, endless])("Plan and non-user notices cannot acquire auto-continuation: $mode", async observerGuard => {
+    reviewer.mockResolvedValue({ text: "continue" });
+    const plan = fixture({ observerGuard, mode: "plan" }); await plan.runtime.prompt("Do the task.", "user");
+    expect(plan.requests).toHaveLength(1);
+    expect(assessments(plan.events).at(-1)?.continuationReason).toBe("plan_mode");
+    const notice = fixture({ observerGuard });
+    await notice.runtime.prompt({ text: "Continue", sessionMessage: { kind: "completion", sourceSessionId: "child", sourceTitle: "Child", targetSessionId: "session", messageId: "notice", replyToMessageId: "parent" } });
+    expect(notice.requests).toHaveLength(1); expect(assessments(notice.events)).toEqual([]);
+  });
+
+  it("uses real tool failure state, not a name whitelist, to avoid unsafe correction", async () => {
+    const run = fixture({ observerGuard: endless }, [read, text("Done.")], true);
+    await run.runtime.prompt("Do the task.", "user");
+    expect(run.requests).toHaveLength(2); expect(reviewer).not.toHaveBeenCalled();
+    expect(assessments(run.events).at(-1)).toMatchObject({ continued: false, continuationReason: "runtime_unavailable" });
+  });
+
+  it.each(["error", "aborted", "length"] as const)("does not turn %s termination into automatic continue", async stopReason => {
+    const run = fixture({ observerGuard: endless }, [{ ...text("Partial reply"), stopReason, ...(stopReason === "error" ? { errorMessage: "401 invalid key" } : {}) }]);
+    await run.runtime.prompt("Do the task.", "user");
+    expect(run.requests).toHaveLength(1); expect(reviewer).not.toHaveBeenCalled();
+    expect(assessments(run.events).at(-1)?.status).toBe("skipped");
+  });
+
+  it("ignores queued setting changes until the next explicit turn, then resets its count", async () => {
+    const run = fixture({ observerGuard: { ...endless, settings: { maxContinuations: 1 } } });
+    await run.runtime.prompt("First task", "first"); await run.runtime.prompt("Second task", "second");
+    expect(run.requests).toHaveLength(4);
+    const saved = assessments(run.events);
+    expect(saved.map(row => row.continuationCount)).toEqual([1, 1, 1, 1]);
+    run.runtime.setObserverGuard({ mode: "off", settings: {} }); await run.runtime.prompt("Third task", "third");
+    expect(run.requests).toHaveLength(5); expect(assessments(run.events)).toHaveLength(4);
+  });
+
+  it("Stop aborts review and stale completion cannot revive the session", async () => {
+    const entered = deferred<Context>(), late = deferred<OneShotCompleteResult>();
     reviewer.mockImplementation(async (_provider, context) => { entered.resolve(context); return late.promise; });
-    const run = fixture({ observerGuard });
-    const first = run.runtime.prompt("Implement the fix.", "user");
-    const context = await entered.promise;
-    expect(run.runtime.getStatus().isRunning).toBe(true);
-    expect(assessment(run.events)?.status).toBe("checking");
-    run.runtime.setObserverGuard({ ...observerGuard, mode: "off" });
-    await run.runtime.abort();
-    await first.catch(() => undefined);
-    expect(assessment(run.events)?.errorCode).toBe("CANCELLED");
-    const count = run.events.length;
-    await run.runtime.prompt("Implement the next fix.", "next-user");
-    late.resolve(verdict(context));
-    await Promise.resolve();
-    expect(reviewer).toHaveBeenCalledTimes(1);
-    expect(run.requests).toHaveLength(2);
-    expect(run.events.slice(count).every(({ event }) => !((event.type === "message_update" || event.type === "message_end") && event.message.runDiagnostics?.observer))).toBe(true);
+    const run = fixture({ observerGuard: guard }); const first = run.runtime.prompt("Do the task.", "user");
+    await entered.promise; await run.runtime.abort(); await first.catch(() => undefined);
+    expect(assessments(run.events).at(-1)?.errorCode).toBe("CANCELLED");
+    run.runtime.setObserverGuard({ mode: "off", settings: {} }); await run.runtime.prompt("New task", "next");
+    const count = run.events.length; late.resolve({ text: "continue" }); await Promise.resolve();
+    expect(run.requests).toHaveLength(2); expect(run.events).toHaveLength(count);
   });
 
-  it("times out once with a safe visible error and finalizes normally without retry", async () => {
+  it("graceful Stop beats a reviewer continue decision", async () => {
+    const entered = deferred<void>(), late = deferred<OneShotCompleteResult>();
+    reviewer.mockImplementation(async () => { entered.resolve(); return late.promise; });
+    const run = fixture({ observerGuard: guard }); const first = run.runtime.prompt("Do the task.", "user");
+    await entered.promise; run.runtime.requestGracefulStop(); late.resolve({ text: "continue" }); await first;
+    expect(run.requests).toHaveLength(1); expect(assessments(run.events).at(-1)?.continuationReason).toBe("stop_requested");
+  });
+
+  it("timeouts settle without retry or main-model continuation", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] }); const entered = deferred<void>();
+    reviewer.mockImplementation(async () => { entered.resolve(); return new Promise(() => undefined); });
+    const run = fixture({ observerGuard: { ...guard, settings: { ...guard.settings, timeoutSeconds: 5 } } });
+    const first = run.runtime.prompt("Do the task.", "user"); await entered.promise; await vi.advanceTimersByTimeAsync(5000); await first;
+    expect(run.requests).toHaveLength(1); expect(reviewer).toHaveBeenCalledTimes(1);
+    expect(assessments(run.events).at(-1)?.errorCode).toBe("TIMEOUT");
+  });
+
+  it("oversized final replies stop visibly instead of silently judging a fragment", async () => {
+    const run = fixture({ observerGuard: { ...guard, settings: { ...guard.settings, maxInputChars: 2000 } } }, [text("x".repeat(3000))]);
+    await run.runtime.prompt("Do the task.", "user");
+    expect(run.requests).toHaveLength(1); expect(reviewer).not.toHaveBeenCalled();
+    expect(assessments(run.events).at(-1)).toMatchObject({ inputTruncated: true, continuationReason: "input_truncated", continued: false });
+  });
+});
+
+it.each(["Everything is complete.", "先分析拒绝的原因。", "Please provide more information."])("Endless never makes a semantic judgement about %s", async answer => {
+  const run = fixture({ observerGuard: { ...endless, settings: { maxContinuations: 1 } } }, [text(answer)]);
+  await run.runtime.prompt("Continue the existing work.", "user");
+  expect(run.requests).toHaveLength(2);
+  expect(reviewer).not.toHaveBeenCalled();
+});
+
+it("tools do not replenish Endless continuation count or replay completed work", async () => {
+  const run = fixture({ observerGuard: { ...endless, settings: { maxContinuations: 1 } } }, [text("Next step."), read, text("Done.")]);
+  await run.runtime.prompt("Do the task.", "user");
+  expect(run.requests).toHaveLength(3);
+  expect(run.hostCalls.filter(name => name === "tools.execute")).toHaveLength(1);
+  expect(assessments(run.events).at(-1)).toMatchObject({ continuationReason: "continuation_limit", continuationCount: 1 });
+});
+
+it("does not send another request while a real tool boundary is waiting", async () => {
+  const entered = deferred<void>(), release = deferred<unknown>();
+  const run = fixture({ observerGuard: { ...endless, settings: { maxContinuations: 1 } }, host: { async call<T>(method: string): Promise<T> {
+    if (method === "tools.fileBatchCapabilities") return { version: 1, supported: false } as T;
+    if (method === "provider.delegationSnapshot" || method === "session.appendMessage") return undefined as T;
+    if (method === "todos.get") return { sessionId: "session", todos: [] } as T;
+    if (method === "tools.execute") { entered.resolve(); return await release.promise as T; }
+    return undefined as T;
+  } } }, [read, text("Done.")]);
+  const first = run.runtime.prompt("Do the task.", "user");
+  await entered.promise;
+  expect(run.requests).toHaveLength(1); expect(reviewer).not.toHaveBeenCalled();
+  release.resolve({ ok: true, content: { content: [{ type: "text", text: "Settled." }] } });
+  await first;
+  expect(run.requests).toHaveLength(3);
+});
+
+it("graceful Stop during an Endless continuation prevents the next continuation", async () => {
+  let replies = 0;
+  const run = fixture({ observerGuard: endless, onEvent: ({ event }) => {
+    if (event.type === "message_start" && event.message.role === "assistant" && ++replies === 2) run.runtime.requestGracefulStop();
+  } });
+  await run.runtime.prompt("Do the task.", "user");
+  expect(run.requests).toHaveLength(2); expect(reviewer).not.toHaveBeenCalled();
+  expect(assessments(run.events).at(-1)).toMatchObject({ status: "skipped", skipReason: "stop_requested", continuationCount: 1 });
+});
+
+it("snapshots model, prompt and count while a review is active", async () => {
+  const entered = deferred<void>(), release = deferred<OneShotCompleteResult>();
+  reviewer.mockImplementationOnce(async () => { entered.resolve(); return release.promise; });
+  const run = fixture({ observerGuard: { ...guard, settings: { ...guard.settings, maxContinuations: 1, prompt: "old-prompt" } } });
+  const first = run.runtime.prompt("Do the task.", "user"); await entered.promise;
+  run.runtime.setObserverGuard({ ...endless, settings: { maxContinuations: 2, prompt: "new-prompt" } });
+  release.resolve({ text: "continue" }); await first;
+  expect(run.requests).toHaveLength(2); expect(reviewer).toHaveBeenCalledTimes(1);
+  expect(reviewer.mock.calls[0][1].messages[0].content).toContain("old-prompt");
+  await run.runtime.prompt("Next task.", "next-user");
+  expect(run.requests).toHaveLength(5); expect(reviewer).toHaveBeenCalledTimes(1);
+});
+
+it("steering wins over a pending review and does not acquire a fresh continuation allowance", async () => {
+  const entered = deferred<void>(), release = deferred<OneShotCompleteResult>();
+  reviewer.mockImplementation(async () => { entered.resolve(); return release.promise; });
+  const run = fixture({ observerGuard: guard }); const first = run.runtime.prompt("Do the task.", "user", "turn");
+  await entered.promise;
+  run.runtime.steer({ text: "Only explain now." }, "turn", { id: "steering", role: "user", content: "Only explain now.", createdAt: "2026-01-01T00:00:00Z", status: "complete" });
+  release.resolve({ text: "continue" }); await first;
+  expect(run.requests).toHaveLength(2); expect(reviewer).toHaveBeenCalledTimes(1);
+  expect(assessments(run.events).every(row => !row.continued)).toBe(true);
+});
+
+describe("optional recovery after transient retry exhaustion", () => {
+  const failure = (beforeStart = false, errorMessage = "fetch failed"): Script => ({
+    beforeStart, stopReason: "error", errorMessage, content: beforeStart ? [] : [{ type: "text", text: "Partial result." }],
+  });
+
+  it.each([false, true])("uses the configured shared balance after network exhaustion, beforeStart=%s", async beforeStart => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-    const entered = deferred<void>();
-    let reviewSignal: AbortSignal | undefined;
-    reviewer.mockImplementation(async (_provider, _context, _effort, options) => { reviewSignal = options?.signal; entered.resolve(); return new Promise(() => undefined); });
-    const run = fixture({ observerGuard: { ...observerGuard, settings: { ...observerGuard.settings, timeoutSeconds: 5 } } });
-    const turn = run.runtime.prompt("Implement the fix.", "user");
-    await entered.promise;
-    await vi.advanceTimersByTimeAsync(5000);
-    await turn;
-    expect(reviewSignal?.aborted).toBe(true);
-    expect(assessment(run.events)).toMatchObject({ status: "error", errorCode: "TIMEOUT" });
-    expect(run.requests).toHaveLength(1);
-    expect(reviewer).toHaveBeenCalledTimes(1);
+    const run = fixture({ observerGuard: { ...endless, settings: { maxContinuations: 2, continueOnTransientError: true } } }, [failure(beforeStart)]);
+    const work = run.runtime.prompt("Do the task.", "user");
+    await vi.runAllTimersAsync(); await work;
+    expect(run.requests).toHaveLength(1 + PROVIDER_TRANSIENT_MAX_RETRIES + 2);
+    expect(reviewer).not.toHaveBeenCalled();
+    expect(assessments(run.events).at(-1)).toMatchObject({ status: "skipped", skipReason: "response_error", continuationCount: 2, maxContinuations: 2 });
+    const extra = run.events.flatMap(({ event }) => event.type === "status" && event.status.activity?.phase === "retrying" && event.status.activity.attempt > PROVIDER_TRANSIENT_MAX_RETRIES ? [event.status.activity] : []);
+    expect(extra).toHaveLength(2);
+    expect(extra.every(activity => activity.maxAttempts === PROVIDER_TRANSIENT_MAX_RETRIES + 2)).toBe(true);
+  });
+
+  it.each(["guard", "endless"] as const)("recovers %s after a successful write without replaying it or calling a reviewer", async mode => {
+    const written = deferred<void>();
+    const failures = Array.from({ length: PROVIDER_TRANSIENT_MAX_RETRIES + 1 }, () => failure());
+    const write: Script = { stopReason: "toolUse", content: [{ type: "toolCall", id: "write-once", name: "Write", arguments: { path: "fixture.txt", content: "saved exactly once" } }] };
+    const run = fixture({ observerGuard: { mode, settings: { maxContinuations: 1, continueOnTransientError: true } }, onEvent: ({ event }) => {
+      if (event.type === "tool_end" && event.toolCallId === "write-once") {
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+        written.resolve();
+      }
+    } }, [write, ...failures, text("Done.")]);
+    const work = run.runtime.prompt("Do the task.", "user");
+    await written.promise; await vi.runAllTimersAsync(); await work;
+    expect(run.requests).toHaveLength(PROVIDER_TRANSIENT_MAX_RETRIES + 3);
+    expect(run.hostCalls.filter(name => name === "tools.execute")).toHaveLength(1);
+    expect(JSON.stringify(run.requests.at(-1))).toContain("private-tool-output");
+    expect(assessments(run.events).at(-1)).toMatchObject({ continuationCount: 1, continuationReason: "continuation_limit" });
     expect(run.events.some(({ event }) => event.type === "error")).toBe(false);
+    expect(reviewer).not.toHaveBeenCalled();
   });
 
-  it("never exposes provider exception prose", async () => {
-    const run = fixture({ observerGuard });
-    reviewer.mockRejectedValue(new Error("api_key=private-provider-credential"));
-    await run.runtime.prompt("Implement the fix.", "user");
-    expect(assessment(run.events)?.errorCode).toBe("PROVIDER_UNAVAILABLE");
-    expect(JSON.stringify(run.events)).not.toContain("private-provider-credential");
-  });
-});
-
-describe("Observer Guard lifecycle and request isolation", () => {
-  it("does not reassess after more tool receipts and removes its reminder from later requests", async () => {
-    reviewer.mockImplementation(async (_provider, context) => verdict(context));
-    const run = fixture({ observerGuard }, [text("Implementation is still pending."), read, text("I will now finish the implementation.")]);
-    await run.runtime.prompt("Implement the fix.", "user");
-    expect(run.requests).toHaveLength(3);
-    expect(reviewer).toHaveBeenCalledTimes(1);
-    expect(JSON.stringify(run.requests[0])).not.toContain("observer_guard_correction");
-    expect(JSON.stringify(run.requests[1])).toContain("observer_guard_correction");
-    expect(JSON.stringify(run.requests[2])).not.toContain("observer_guard_correction");
-    expect(JSON.stringify(run.requests[2])).toContain("retained receipt");
+  it("recovery and normal continuation spend one balance even after a successful response", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const failures = Array.from({ length: PROVIDER_TRANSIENT_MAX_RETRIES + 1 }, () => failure());
+    const run = fixture({ observerGuard: { ...endless, settings: { maxContinuations: 2, continueOnTransientError: true } } }, [...failures, text("Next step."), text("Done.")]);
+    const work = run.runtime.prompt("Do the task.", "user"); await vi.runAllTimersAsync(); await work;
+    expect(run.requests).toHaveLength(PROVIDER_TRANSIENT_MAX_RETRIES + 3);
+    expect(assessments(run.events).at(-1)).toMatchObject({ continuationCount: 2, continuationReason: "continuation_limit" });
+    expect(reviewer).not.toHaveBeenCalled();
   });
 
-  it("a queued off setting cannot mutate the active assessment and applies on the next user turn", async () => {
-    const run = fixture({ observerGuard });
-    reviewer.mockImplementation(async (_provider, context) => {
-      run.runtime.setObserverGuard({ ...observerGuard, mode: "off" });
-      return verdict(context);
-    });
-    await run.runtime.prompt("Implement the fix.", "user");
-    expect(run.requests).toHaveLength(2);
-    await run.runtime.prompt("Implement a different fix.", "next");
-    expect(reviewer).toHaveBeenCalledTimes(1);
-    expect(run.requests).toHaveLength(3);
-  });
-
-  it("a zero shared budget stays advisory instead of creating a new allowance", async () => {
-    const run = fixture({ observerGuard, agentOutputGuard: { recoveryLimit: 0 } });
-    reviewer.mockImplementation(async (_provider, context) => verdict(context));
-    await run.runtime.prompt("Implement the fix.", "user");
-    expect(assessment(run.events)?.continuationBlocked).toBe("budget");
-    expect(run.requests).toHaveLength(1);
-  });
-
-  it("honors graceful Stop arriving while the independent review is pending", async () => {
-    const entered = deferred<Context>();
-    const release = deferred<OneShotCompleteResult>();
-    reviewer.mockImplementation(async (_provider, context) => { entered.resolve(context); return release.promise; });
-    const run = fixture({ observerGuard });
-    const turn = run.runtime.prompt("Implement the fix.", "user");
-    const context = await entered.promise;
-    expect(run.runtime.requestGracefulStop().requested).toBe(true);
-    release.resolve(verdict(context));
-    await turn;
-    expect(run.requests).toHaveLength(1);
-    expect(assessment(run.events)).toMatchObject({ continued: false, continuationBlocked: "unsafe", continuationReason: "stop_requested" });
-  });
-
-  it("pending user steering wins without an observer nudge or second review", async () => {
-    const entered = deferred<Context>();
-    const release = deferred<OneShotCompleteResult>();
-    reviewer.mockImplementation(async (_provider, context) => { entered.resolve(context); return release.promise; });
-    const run = fixture({ observerGuard });
-    const turn = run.runtime.prompt("Implement the fix.", "user", "turn");
-    const context = await entered.promise;
-    const steering = "Explain only; do not execute.";
-    expect(run.runtime.steer({ text: steering }, "turn", { id: "steering", role: "user", content: steering, status: "complete", createdAt: "2026-01-01T00:00:00Z" }).accepted).toBe(true);
-    release.resolve(verdict(context));
-    await turn;
-    expect(reviewer).toHaveBeenCalledTimes(1);
-    expect(assessment(run.events)).toMatchObject({ continued: false, continuationReason: "task_changed" });
-    expect(JSON.stringify(run.requests)).not.toContain("observer_guard_correction");
-  });
-
-  it("aborts its independent request on disposal and late output cannot publish or continue", async () => {
-    const entered = deferred<Context>();
-    const release = deferred<OneShotCompleteResult>();
-    let signal: AbortSignal | undefined;
-    reviewer.mockImplementation(async (_provider, context, _effort, options) => { signal = options?.signal; entered.resolve(context); return release.promise; });
-    const run = fixture({ observerGuard });
-    const turn = run.runtime.prompt("Implement the fix.", "user");
-    const context = await entered.promise;
-    await run.runtime.dispose();
-    await turn.catch(() => undefined);
-    const count = run.events.length;
-    release.resolve(verdict(context));
-    await Promise.resolve();
-    expect(signal?.aborted).toBe(true);
-    expect(run.requests).toHaveLength(1);
-    expect(run.events).toHaveLength(count);
-  });
-});
-
-describe("Observer Guard ineligible terminal replies", () => {
   it.each([
-    ["length", "response_length", text("Truncated reply.")], ["error", "response_error", { ...text("Partial reply."), errorMessage: "401: invalid API key" }],
-    ["aborted", "response_aborted", text("Partial reply.")], ["stop", "empty_response", text("")],
-  ] as const)("publishes %s as %s on the owned settled reply only", async (stopReason, skipReason, response) => {
-    const run = fixture({ observerGuard }, [{ ...response, stopReason }]);
-    await run.runtime.prompt("Implement the requested fix.", "user");
+    { mode: "endless" as const, settings: { maxContinuations: 2 } },
+    { mode: "endless" as const, settings: { maxContinuations: 2, continueOnTransientError: false } },
+    { mode: "off" as const, settings: { maxContinuations: 2, continueOnTransientError: true } },
+  ])("preserves the built-in retry limit when not opted in: %j", async observerGuard => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const run = fixture({ observerGuard }, [failure()]);
+    const work = run.runtime.prompt("Do the task.", "user"); await vi.runAllTimersAsync(); await work;
+    expect(run.requests).toHaveLength(1 + PROVIDER_TRANSIENT_MAX_RETRIES);
     expect(reviewer).not.toHaveBeenCalled();
-    const saved = rows(run.events).filter(message => message.runDiagnostics?.observer);
-    expect(saved).toHaveLength(1);
-    expect(saved[0].runDiagnostics?.observer).toMatchObject({ messageId: saved[0].id, mode: "guard", modelKey: "reviewer/judge", status: "skipped", skipReason });
-    expect(saved[0].runDiagnostics?.observer).not.toHaveProperty("verdict");
-    expect(run.requests).toHaveLength(skipReason === "empty_response" ? 2 : 1);
   });
 
-  it.each([undefined, { ...observerGuard, mode: "off" as const }])("does not record a skipped reply with %j", async observerGuard => {
-    const run = fixture({ observerGuard }, [{ ...text("Truncated reply."), stopReason: "length" }]);
-    await run.runtime.prompt("Implement the requested fix.", "user");
+  it("also bounds opted-in temporary rate-limit recovery", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const run = fixture({ observerGuard: { ...endless, settings: { maxContinuations: 1, continueOnTransientError: true } } }, [failure(false, "429 too many requests")]);
+    const work = run.runtime.prompt("Do the task.", "user"); await vi.runAllTimersAsync(); await work;
+    expect(run.requests).toHaveLength(1 + PROVIDER_RATE_LIMIT_MAX_RETRIES + 1);
     expect(reviewer).not.toHaveBeenCalled();
-    expect(assessment(run.events)).toBeUndefined();
   });
 
-  it("records graceful Stop only on the owned response where the run ends", async () => {
-    const requested: boolean[] = [];
-    const run = fixture({ observerGuard, onEvent: ({ event }) => {
-      if (event.type === "message_start" && event.message.role === "assistant") requested.push(run.runtime.requestGracefulStop().requested);
-    } }, [read]);
-    await run.runtime.prompt("Implement the requested fix.", "user");
-    expect(requested).toEqual([true]);
-    expect(run.requests).toHaveLength(1);
-    expect(reviewer).not.toHaveBeenCalled();
-    expect(assessment(run.events)).toMatchObject({ status: "skipped", skipReason: "stop_requested" });
+  it.each(["401 invalid api key", "403 permission denied", "CERT_HAS_EXPIRED", "400 invalid request body"])("does not recover permanent or security failure: %s", async errorMessage => {
+    const run = fixture({ observerGuard: { ...endless, settings: { maxContinuations: 3, continueOnTransientError: true } } }, [failure(false, errorMessage)]);
+    await run.runtime.prompt("Do the task.", "user");
+    expect(run.requests).toHaveLength(1); expect(reviewer).not.toHaveBeenCalled();
   });
 
-  it("records hard Stop during tools only on the last owned response", async () => {
+  it("Stop during the extra recovery backoff prevents the next request", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     let stopped: Promise<void> | undefined;
-    const run = fixture({ observerGuard, onEvent: ({ event }) => {
-      if (event.type === "tool_start" && !stopped) stopped = run.runtime.abort();
-    } }, [read, text("No later reply should run.")]);
-    await run.runtime.prompt("Implement the requested fix.", "user").catch(() => undefined);
+    const run = fixture({ observerGuard: { ...endless, settings: { maxContinuations: 2, continueOnTransientError: true } }, onEvent: ({ event }) => {
+      if (!stopped && event.type === "status" && event.status.activity?.phase === "retrying" && (event.status.activity.attempt ?? 0) > PROVIDER_TRANSIENT_MAX_RETRIES) stopped = run.runtime.abort();
+    } }, [failure()]);
+    const work = run.runtime.prompt("Do the task.", "user").catch(() => undefined);
+    await vi.runAllTimersAsync(); await work; await stopped;
     expect(stopped).toBeDefined();
-    await stopped;
-    expect(run.requests).toHaveLength(1);
+    expect(run.requests).toHaveLength(1 + PROVIDER_TRANSIENT_MAX_RETRIES);
     expect(reviewer).not.toHaveBeenCalled();
-    const replies = rows(run.events).filter(message => message.role === "assistant");
-    expect(replies.flatMap(reply => reply.runDiagnostics?.observer ?? [])).toEqual([expect.objectContaining({ messageId: replies.at(-1)?.id, status: "skipped", skipReason: "stop_requested" })]);
-  });
-
-  it("does not review a queued steering reply; records the changed task only on its settled response", async () => {
-    let accepted = false;
-    const followup = "Explain only; do not execute.";
-    const run = fixture({ observerGuard, onEvent: ({ event }) => {
-      if (!accepted && event.type === "message_start" && event.message.role === "assistant") {
-        accepted = run.runtime.steer({ text: followup }, "turn", { id: "steering", role: "user", content: followup, status: "complete", createdAt: "2026-01-01T00:00:00Z" }).accepted;
-      }
-    } }, [text("Implementation is still pending."), text("Here is the explanation.")]);
-    await run.runtime.prompt("Implement the requested fix.", "user", "turn");
-    expect(accepted).toBe(true);
-    expect(run.requests).toHaveLength(2);
-    expect(reviewer).not.toHaveBeenCalled();
-    const replies = rows(run.events).filter(message => message.role === "assistant");
-    expect(replies[0].runDiagnostics?.observer).toBeUndefined();
-    expect(replies[1].runDiagnostics?.observer).toMatchObject({ messageId: replies[1].id, status: "skipped", skipReason: "task_changed" });
-  });
-
-  it("skips the last closeout response without reviewing the preceding tool batches", async () => {
-    let applied = false;
-    const toolBatches: Script[] = Array.from({ length: MODE_CLOSEOUT_MAX_REQUESTS }, (_, i) => ({
-      content: [{ type: "toolCall", id: `read-${i}`, name: "Read", arguments: { path: "fixture.txt" } }], stopReason: "toolUse",
-    }));
-    const run = fixture({ observerGuard, mode: "goal", modeDefinition: builtinModeDefinition("goal"), onEvent: ({ event }) => {
-      if (!applied && event.type === "message_start" && event.message.role === "assistant") {
-        applied = run.runtime.modeTurnNotice({ turnId: "turn", runId: "run", action: "closeout" }).applied;
-      }
-    } }, [...toolBatches, text("Here is the closeout handoff.")]);
-    await run.runtime.prompt({ text: "Implement the requested fix.", modeTurn: { runId: "run", stageId: "work", origin: "user", enteredStage: false, input: "Implement the requested fix.", artifactPaths: {} } }, "user", "turn");
-    expect(applied).toBe(true);
-    expect(run.requests).toHaveLength(1 + MODE_CLOSEOUT_MAX_REQUESTS);
-    expect(reviewer).not.toHaveBeenCalled();
-    const replies = rows(run.events).filter(message => message.role === "assistant");
-    expect(replies.flatMap(reply => reply.runDiagnostics?.observer ?? [])).toEqual([expect.objectContaining({ messageId: replies.at(-1)?.id, status: "skipped", skipReason: "mode_closeout" })]);
-  });
-
-  it("does not spend the assessment on a silence retry or on later responses after assessing", async () => {
-    const run = fixture({ observerGuard }, [text(""), text("Implementation is still pending."), { ...text("Partial reply."), stopReason: "length" }]);
-    reviewer.mockImplementation(async (_provider, context) => verdict(context));
-    await run.runtime.prompt("Implement the requested fix.", "user");
-    expect(reviewer).toHaveBeenCalledTimes(1);
-    expect(run.requests).toHaveLength(3);
-    expect(rows(run.events).flatMap(message => message.runDiagnostics?.observer ?? [])).toEqual([expect.objectContaining({ status: "assessed", continued: true })]);
-  });
-
-  it("skips an owned reply when there is no current user task text", async () => {
-    const run = fixture({ observerGuard });
-    await run.runtime.prompt(" ", "user");
-    expect(reviewer).not.toHaveBeenCalled();
-    expect(assessment(run.events)).toMatchObject({ status: "skipped", skipReason: "no_user_task" });
   });
 });
 
-describe("Observer Guard new user tasks", () => {
-  it("retains prior diagnostics and assesses a reused runtime's next real user task independently", async () => {
-    const run = fixture({ observerGuard: { ...observerGuard, mode: "observe" } });
-    reviewer.mockRejectedValueOnce(new Error("provider failed"));
-    reviewer.mockImplementationOnce(async (_provider, context) => verdict(context, { verdict: "complete" }));
-    await run.runtime.prompt("Implement the first fix.", "first");
-    await run.runtime.prompt("Implement the second fix.", "second");
-    expect(reviewer).toHaveBeenCalledTimes(2);
-    const saved = rows(run.events).flatMap(message => message.runDiagnostics?.observer ? [message.runDiagnostics.observer] : []);
-    expect(saved.map(row => row.status)).toEqual(["error", "assessed"]);
-    expect(new Set(saved.map(row => row.messageId)).size).toBe(2);
-  });
-
-  it.each(["host", "approval"] as const)("does not infer user authority from a %s continuation's instruction text", async origin => {
-    const run = fixture({ observerGuard });
-    await run.runtime.prompt({ text: "Implement the fix.", modeTurn: { runId: "run", stageId: "stage", origin, enteredStage: false, input: "Implement the fix.", artifactPaths: {} } });
-    expect(reviewer).not.toHaveBeenCalled();
-    expect(run.requests).toHaveLength(1);
-    expect(assessment(run.events)).toBeUndefined();
-  });
+it("a normal continuation already spent reduces the remaining network recovery allowance", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  const error: Script = { stopReason: "error", errorMessage: "fetch failed", content: [] };
+  const run = fixture({ observerGuard: { ...endless, settings: { maxContinuations: 2, continueOnTransientError: true } } }, [text("Next step."), error]);
+  const work = run.runtime.prompt("Do the task.", "user"); await vi.runAllTimersAsync(); await work;
+  expect(run.requests).toHaveLength(1 + 1 + PROVIDER_TRANSIENT_MAX_RETRIES + 1);
+  expect(assessments(run.events).at(-1)).toMatchObject({ continuationCount: 2, skipReason: "response_error" });
 });
 
-describe("Observer continuation task context", () => {
-  const history: UiMessage[] = [
-    { id: "goal", role: "user", content: "Implement display deduplication and verify it across three scenarios without changing original records.", createdAt: "2026-01-01T00:00:00Z", status: "complete" },
-    { id: "previous", role: "assistant", content: "Display deduplication is implemented. Three-scenario validation is still pending.", createdAt: "2026-01-01T00:01:00Z", status: "complete" },
-  ];
-
-  it("supplies the original goal for a restored continuation and permits only the remaining authorized work", async () => {
-    const run = fixture({ observerGuard, history }, [text("Deduplication is complete; multi-scenario validation is still pending."), text("All three requested scenarios now pass.")]);
-    reviewer.mockImplementation(async (_provider, context) => {
-      const input = String(context.messages[1].content);
-      return verdict(context, input.includes("three scenarios without changing original records") ? {} : { verdict: "unknown", confidence: "low" });
-    });
-    await run.runtime.prompt("继续，完成前不需要给我报告了。", "continue-user");
-    expect(run.requests).toHaveLength(2);
-    expect(assessment(run.events)).toMatchObject({ continued: true, reviewedToolCount: 0, inputTruncated: false });
-    const input = JSON.parse(String(reviewer.mock.calls[0][1].messages[1].content));
-    expect(input.evidence).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: "goal", kind: "prior_user", text: history[0].content }),
-      expect.objectContaining({ id: "previous", kind: "prior_assistant", text: history[1].content }),
-    ]));
-  });
-
-  it("retains the goal across live turns and repeated short continuations", async () => {
-    const run = fixture({ observerGuard: { ...observerGuard, mode: "observe" } });
-    reviewer.mockImplementation(async (_provider, context) => verdict(context, { verdict: "unknown" }));
-    await run.runtime.prompt(history[0].content, "live-goal");
-    await run.runtime.prompt("继续。", "first-continue");
-    await run.runtime.prompt("Continue.", "second-continue");
-    const input = JSON.parse(String(reviewer.mock.calls[2][1].messages[1].content));
-    expect(input.evidence).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: "live-goal", kind: "prior_user", text: history[0].content }),
-      expect.objectContaining({ id: "first-continue", kind: "prior_user", text: "继续。" }),
-    ]));
-  });
-
-  it("does not cite a previous answer as proof that the current answer is incomplete", async () => {
-    const run = fixture({ observerGuard, history });
-    reviewer.mockResolvedValue({ text: JSON.stringify({ verdict: "incomplete", confidence: "high", reason: "Old work was pending.", evidenceIds: ["previous"] }) });
-    await run.runtime.prompt("Continue.", "continue-user");
-    expect(assessment(run.events)).toMatchObject({ status: "error", errorCode: "INVALID_RESPONSE" });
-    expect(run.requests).toHaveLength(1);
-  });
-
-  it("does not turn an inherited discussion into execution", async () => {
-    const run = fixture({ observerGuard, history: [{ ...history[0], content: "Only explain the deduplication design; do not execute or modify anything." }] });
-    reviewer.mockImplementation(async (_provider, context) => verdict(context));
-    await run.runtime.prompt("继续，完成前不需要给我报告了。", "continue-user");
-    expect(assessment(run.events)).toMatchObject({ continued: false, continuationReason: "task_not_actionable" });
-    expect(run.requests).toHaveLength(1);
-  });
-
-  it("does not export the previous goal after the user changes tasks", async () => {
-    const run = fixture({ observerGuard, history });
-    reviewer.mockImplementation(async (_provider, context) => verdict(context, { verdict: "complete" }));
-    await run.runtime.prompt("Implement an unrelated calculator.", "new-user");
-    expect(JSON.stringify(reviewer.mock.calls[0][1])).not.toContain("deduplication");
-    expect(run.requests).toHaveLength(1);
-  });
-});
-
-it("continues a concrete Chinese task while retaining object-preservation constraints", async () => {
-  const task = "实现展示去重并验证三个场景。不要修改原始记录。";
-  const run = fixture({ observerGuard, history: [{ id: "goal", role: "user", content: task, createdAt: "2026-01-01T00:00:00Z", status: "complete" }] });
-  reviewer.mockImplementation(async (_provider, context) => verdict(context));
-  await run.runtime.prompt("继续，不要修改原始记录。", "continue-user");
-  expect(assessment(run.events)).toMatchObject({ continued: true, inputTruncated: false });
-  expect(JSON.stringify(reviewer.mock.calls[0][1])).toContain(task);
-  expect(run.requests).toHaveLength(2);
-});
-
-it.each(["Proceed.", "Go ahead.", "Resume.", "Keep going.", "接着做"])("allows a short %s only with an actionable original goal", async task => {
-  const history: UiMessage[] = [{ id: "goal", role: "user", content: "Implement deduplication and verify three scenarios.", createdAt: "2026-01-01T00:00:00Z", status: "complete" }];
-  const run = fixture({ observerGuard, history });
-  reviewer.mockImplementation(async (_provider, context) => verdict(context));
-  await run.runtime.prompt(task, "continue-user");
-  expect(assessment(run.events)).toMatchObject({ continued: true });
-  expect(run.requests).toHaveLength(2);
-});
-
-it("never discards a compound no-execution instruction", async () => {
-  const run = fixture({ observerGuard, history: [{ id: "goal", role: "user", content: "Implement deduplication.", createdAt: "2026-01-01T00:00:00Z", status: "complete" }] });
-  reviewer.mockImplementation(async (_provider, context) => verdict(context));
-  await run.runtime.prompt("继续，不要修改任何代码也不要执行任何命令。", "restricted-user");
-  expect(assessment(run.events)).toMatchObject({ continued: false, continuationReason: "task_not_actionable" });
-  expect(run.requests).toHaveLength(1);
-});
-
-it("marks omitted live attachments in both the current turn and its later continuation", async () => {
-  const run = fixture({ observerGuard });
-  reviewer.mockImplementation(async (_provider, context) => verdict(context));
-  await run.runtime.prompt({ text: "Implement the attached requirements.", attachments: [{ kind: "session", name: "Requirements", path: "other-session", text: "private-attached-requirements" }] }, "attached-user");
-  await run.runtime.prompt("Continue.", "continue-user");
-  expect(run.requests).toHaveLength(2);
-  for (const message of rows(run.events).filter(row => row.runDiagnostics?.observer)) {
-    expect(message.runDiagnostics?.observer).toMatchObject({ inputTruncated: true, continued: false, continuationReason: "input_truncated" });
-  }
-  expect(reviewer).toHaveBeenCalledTimes(2);
-  expect(JSON.stringify(reviewer.mock.calls)).not.toContain("private-attached-requirements");
-});
-
-it("invalidates retained steering when Stop prevents its user event", async () => {
-  const entered = deferred<Context>();
-  const release = deferred<OneShotCompleteResult>();
-  reviewer.mockImplementation(async (_provider, context) => { entered.resolve(context); return release.promise; });
-  const run = fixture({ observerGuard });
-  const first = run.runtime.prompt("Implement deduplication.", "goal", "turn");
-  const context = await entered.promise;
-  const content = "Only explain; do not execute.";
-  run.runtime.steer({ text: content }, "turn", { id: "steering", role: "user", content, steering: true, createdAt: "2026-01-01T00:00:00Z", status: "complete" });
-  await run.runtime.abort(); await first.catch(() => undefined);
-  release.resolve(verdict(context));
-  reviewer.mockImplementation(async (_provider, next) => verdict(next));
-  await run.runtime.prompt("Continue.", "next-user");
-  expect(run.requests).toHaveLength(2);
-  expect(JSON.stringify(reviewer.mock.calls.at(-1)?.[1])).not.toContain("Implement deduplication.");
-  expect(rows(run.events).filter(row => row.runDiagnostics?.observer).at(-1)?.runDiagnostics?.observer).toMatchObject({ continued: false, continuationReason: "task_not_actionable" });
-});
-
-it("retains a preflight-rejected goal for the public observer boundary under its transcript ID", async () => {
-  const run = fixture({ observerGuard, compactionSettings: { enabled: false, reserveTokens: 16_384, keepRecentTokens: 20_000 }, systemPrompt: "context ".repeat(100_000),
-    history: [{ id: "old-goal", role: "user", content: "Implement deduplication.", createdAt: "2026-01-01T00:00:00Z", status: "complete" }] });
-  await run.runtime.prompt("Implement a calculator.", "preflight-user");
-  expect(run.requests).toHaveLength(0);
-  expect(run.events.some(({ event }) => event.type === "error" && event.error.code === "CONTEXT_TOO_LARGE")).toBe(true);
-  // The same reviewer instance receives a synthetic next answer; no history/retention helper is mocked.
-  const observer = (run.runtime as unknown as { turnCorrections: { observer: ObserverGuard } }).turnCorrections.observer;
-  observer.reset(); observer.setTask("Continue."); observer.userMessage("next-user", false);
-  reviewer.mockImplementation(async (_provider, context) => verdict(context));
-  const message: AssistantMessage = { role: "assistant", api: "openai-completions", provider: "fixture", model: "main", timestamp: 1, stopReason: "stop", content: [{ type: "text", text: "Implementation is still pending." }],
-    usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } } };
-  await observer.assess({ message, toolResults: [], newMessages: [], context: { messages: [] } }, { messageId: "answer", publish() {} }, () => undefined, new CorrectiveBudget(1));
-  const input = JSON.parse(String(reviewer.mock.calls[0][1].messages[1].content));
-  expect(input.evidence).toEqual(expect.arrayContaining([expect.objectContaining({ id: "preflight-user", kind: "prior_user", text: "Implement a calculator." })]));
-  expect(JSON.stringify(input)).not.toContain("Implement deduplication.");
+it("changing the error recovery toggle affects only the next user turn", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  let changed = false;
+  const error: Script = { stopReason: "error", errorMessage: "fetch failed", content: [] };
+  const run = fixture({ observerGuard: { ...endless, settings: { maxContinuations: 1, continueOnTransientError: true } }, onEvent: ({ event }) => {
+    if (!changed && event.type === "status" && event.status.activity?.phase === "retrying") {
+      changed = true;
+      run.runtime.setObserverGuard({ ...endless, settings: { maxContinuations: 1, continueOnTransientError: false } });
+    }
+  } }, [error]);
+  const first = run.runtime.prompt("First task.", "first"); await vi.runAllTimersAsync(); await first;
+  expect(run.requests).toHaveLength(1 + PROVIDER_TRANSIENT_MAX_RETRIES + 1);
+  const second = run.runtime.prompt("Next task.", "next"); await vi.runAllTimersAsync(); await second;
+  expect(run.requests).toHaveLength(2 * (1 + PROVIDER_TRANSIENT_MAX_RETRIES) + 1);
+  expect(assessments(run.events).at(-1)?.continuationCount).toBe(0);
 });

@@ -15,7 +15,7 @@ function fixture(thinkingLevel: "off" | "high" = "off") {
     stopReason: "stop", content: [{ type: "text", text: "The requested change is still missing." }],
     usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } } },
     toolResults: [], newMessages: [], context: { messages: [] } };
-  vi.mocked(completeOneShot).mockResolvedValue({ text: JSON.stringify({ verdict: "incomplete", confidence: "high", reason: "The requested change is missing.", evidenceIds: ["answer"] }) });
+  vi.mocked(completeOneShot).mockResolvedValue({ text: "continue" });
   return { policy, turn };
 }
 
@@ -26,7 +26,7 @@ it("keeps observer continuation active for compaction until its request is prepa
   const prepared = policy.prepareRequest({ messages: [] });
   expect(JSON.stringify(prepared)).toContain("observer_guard_correction");
   expect(policy.pending).toBe(false);
-  expect(policy.attempts).toBe(1);
+  expect(policy.attempts).toBe(0);
 });
 
 it("provides a reasoning budget without changing the explicitly selected effort", async () => {
@@ -40,7 +40,7 @@ it.each(["pending_work", "runtime_unavailable"] as const)("records %s without cl
   const { policy, turn } = fixture();
   const publish = vi.fn();
   expect(await policy.finishTurn(turn, new Map(), () => reason, () => {}, undefined, false, { messageId: "answer", publish })).toBeUndefined();
-  expect(publish).toHaveBeenLastCalledWith(expect.objectContaining({ status: "assessed", continued: false, continuationBlocked: "unsafe", continuationReason: reason }));
+  expect(publish).toHaveBeenLastCalledWith(expect.objectContaining({ status: "assessed", continued: false, continuationReason: reason }));
   expect(policy.attempts).toBe(0);
 });
 

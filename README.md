@@ -57,19 +57,17 @@ This edition strengthens the existing framework rather than replacing it.
   fresh budgets. The checklist check reads the host-bound session, even when it
   has no project. Normal checks add no model context or reviewer call; actual
   continuations may add usage and never guarantee completion.
-- **Optional conversation Observer Guard.** Enable Observe or Guard beside the
-  composer controls, with an independent model and effort chosen in Behavior
-  settings. Observe adds advisory assessments; Guard may continue within the
-  existing correction allowance after strict evidence and safety checks. A stable
-  turn summary explains checks, skips and blocked continuations, with links to
-  recorded evidence. Post-response assessments are retained across reloads;
-  unknown legacy reasons stay unknown. Short continuation requests include a
-  bounded, redacted window of earlier task goals and the latest answer, with
-  distinct historical evidence IDs; missing context still cannot authorize work.
-  Independent reviews do not consume or replace the conversation's provider-side
-  message thread.
-  Off adds no requests; enabled assessments add cost/latency, do not recheck
-  continued output, and are not proof of completion.
+- **Bounded automatic continuation.** Choose Guard or Endless beside the composer.
+  Guard asks an independent model whether to continue using only the last reply
+  and an editable prompt. Endless directly continues without a reviewer, even
+  after a completion statement. Set 1-100 additional continuations per user turn
+  (default 3); actual Stop, approvals and pending work remain authoritative.
+  An optional switch uses the same remaining allowance to recover from network
+  or temporary service failures after built-in retries are exhausted, without
+  consulting the reviewer or replaying completed tools.
+  Counts and stop reasons stay visible and survive reloads. Old Observe sessions
+  become off instead of silently enabling execution. Guard adds review cost;
+  both modes can add main-model usage. Neither mode verifies task completion.
 - **Configurable degenerate-output protection.** Interrupt long whitespace/symbol
   runs or sustained exact narrative-paragraph repetition in model text/thinking.
   Behavior settings expose switches and thresholds; partial results are retained

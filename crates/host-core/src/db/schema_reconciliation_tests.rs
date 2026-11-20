@@ -47,6 +47,10 @@ fn has_legacy_trigger(conn: &Connection) -> bool {
 fn fixture(path: &Path, source_version: i64, local: bool) -> std::path::PathBuf {
     let db = Database::open(path).unwrap();
     db.conn()
+        .execute_batch("ALTER TABLE sessions DROP COLUMN observer_mode;")
+        .unwrap();
+    super::super::migrations::session_observer_migration::ensure_column(db.conn()).unwrap();
+    db.conn()
         .execute_batch(
             "INSERT INTO sessions(id,title,mode,observer_mode,created_at,updated_at)
            VALUES('saved','History','goal','observe',1,2),('guarded','Guarded','agent','guard',1,2);
@@ -138,7 +142,7 @@ fn schema_v34_reconciles_both_populated_v33_and_v32_variants_idempotently() {
             assert_eq!(std::fs::read(&transcript).unwrap(), bytes);
             assert!(!has_legacy_trigger(db.conn()));
             let expected = if local {
-                ["guard", "observe"]
+                ["guard", "off"]
             } else {
                 ["off", "off"]
             };

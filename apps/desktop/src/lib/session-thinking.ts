@@ -27,7 +27,7 @@ export type OptimisticSessionConfiguration = {
   mode?: unknown;
   permissionMode?: unknown;
   fastMode?: boolean;
-  observerMode?: "off" | "observe" | "guard";
+  observerMode?: import("@pi-desktop/shared").ObserverGuardMode;
 };
 
 export type ThinkingProviderLike = {

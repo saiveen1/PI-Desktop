@@ -151,7 +151,7 @@ fn observer_migration_fresh_and_upgraded_columns_have_identical_strict_defaults(
                 .observer_mode,
             ObserverMode::Off
         );
-        for valid in ["off", "observe", "guard"] {
+        for valid in ["off", "endless", "guard"] {
             db.conn()
                 .execute("UPDATE sessions SET observer_mode=?1 WHERE id='s'", [valid])
                 .unwrap();
@@ -163,6 +163,7 @@ fn observer_migration_fresh_and_upgraded_columns_have_identical_strict_defaults(
             SqlValue::Text("[]".into()),
             SqlValue::Text("enabled".into()),
             SqlValue::Text("Guard".into()),
+            SqlValue::Text("observe".into()),
         ] {
             assert!(db
                 .conn()
@@ -190,7 +191,7 @@ fn observer_migration_preserves_preexisting_column_on_idempotent_upgrade() {
     let session = sessions::create_session_with_options(
         &db,
         sessions::SessionCreateOptions {
-            observer_mode: ObserverMode::Observe,
+            observer_mode: ObserverMode::Endless,
             ..Default::default()
         },
     )
@@ -204,6 +205,139 @@ fn observer_migration_preserves_preexisting_column_on_idempotent_upgrade() {
             .unwrap()
             .unwrap()
             .observer_mode,
-        ObserverMode::Observe
+        ObserverMode::Endless
     );
+}
+
+fn v35(path: &Path) {
+    let db = Database::open(path).unwrap();
+    db.conn()
+        .execute_batch("ALTER TABLE sessions DROP COLUMN observer_mode;")
+        .unwrap();
+    ensure_column(db.conn()).unwrap();
+    db.conn().execute_batch(
+        "ALTER TABLE sessions ADD COLUMN payload BLOB NOT NULL DEFAULT X'00FE';
+         ALTER TABLE sessions ADD COLUMN label TEXT GENERATED ALWAYS AS (title || ':' || observer_mode) VIRTUAL;
+         CREATE INDEX retained_observer ON sessions(observer_mode) WHERE observer_mode != 'off';
+         CREATE VIEW retained_sessions AS SELECT id,label,payload FROM sessions;
+         CREATE TABLE retained_audit(mode TEXT);
+         CREATE TRIGGER retained_observer_audit AFTER UPDATE OF observer_mode ON sessions
+           BEGIN INSERT INTO retained_audit VALUES(new.observer_mode); END;
+         INSERT INTO sessions(id,title,observer_mode,created_at,updated_at,payload)
+           VALUES('old','Legacy','observe',10,11,X'1234'),('protected','Protected','guard',20,21,X'5678'),
+                 ('disabled','Disabled','off',30,31,X'9ABC');
+         INSERT INTO turns(id,session_id,status,started_at,ended_at) VALUES('old-turn','old','completed',10,11);
+         INSERT INTO session_todo(session_id,position,content,status,updated_at)
+           VALUES('old',0,'Keep this todo','pending',11);
+         PRAGMA user_version = 35;"
+    ).unwrap();
+    let message: sessions::UiMessage = serde_json::from_value(json!({
+        "id": "old-answer", "role": "assistant", "content": "Preserved",
+        "createdAt": "2026-01-01T00:00:00Z",
+        "runDiagnostics": {"observer": {
+            "messageId":"old-answer", "mode":"observe", "status":"assessed",
+            "startedAt":10, "continuationReason":"observe_only"
+        }}
+    }))
+    .unwrap();
+    sessions::append_message(&db, "old", &message, Some("old-turn")).unwrap();
+}
+
+#[test]
+fn observer_migration_v35_disables_observe_and_preserves_guard_data_schema_and_backup() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("pi.sqlite");
+    v35(&path);
+    let source = Connection::open(&path).unwrap();
+    let modes = "SELECT observer_mode FROM sessions ORDER BY id";
+    let saved_modes = rows(&source, modes);
+    let objects = "SELECT name,sql FROM sqlite_master WHERE tbl_name='sessions' AND type IN ('index','trigger') ORDER BY name";
+    let retained_objects = rows(&source, objects);
+    let retained_tables = [
+        "SELECT id,title,created_at,updated_at,payload FROM sessions ORDER BY id",
+        "SELECT * FROM messages",
+        "SELECT * FROM turns",
+        "SELECT * FROM session_todo",
+    ];
+    let retained_rows = retained_tables.map(|sql| rows(&source, sql));
+    let transcript = crate::transcripts::transcript_path(dir.path(), "old").unwrap();
+    let transcript_bytes = std::fs::read(&transcript).unwrap();
+    drop(source);
+
+    let backup_path = migration_backup_path(&path, 35);
+    let db = Database::open(&path).unwrap();
+    let backup_bytes = std::fs::read(&backup_path).unwrap();
+    let backup = Connection::open(&backup_path).unwrap();
+    assert_eq!(version(&backup), 35);
+    assert_eq!(rows(&backup, modes), saved_modes);
+    drop(backup);
+
+    assert_eq!(version(db.conn()), SCHEMA_VERSION);
+    assert_eq!(
+        rows(db.conn(), modes),
+        ["off", "off", "guard"].map(|mode| vec![SqlValue::Text(mode.into())])
+    );
+    assert_eq!(rows(db.conn(), objects), retained_objects);
+    for (sql, expected) in retained_tables.into_iter().zip(retained_rows) {
+        assert_eq!(rows(db.conn(), sql), expected);
+    }
+    assert_eq!(
+        rows(
+            db.conn(),
+            "SELECT label FROM retained_sessions WHERE id='old'"
+        ),
+        vec![vec![SqlValue::Text("Legacy:off".into())]]
+    );
+    assert!(rows(db.conn(), "SELECT * FROM retained_audit").is_empty());
+    assert!(rows(db.conn(), "PRAGMA foreign_key_check").is_empty());
+    assert!(db
+        .conn()
+        .execute("UPDATE session_todo SET session_id='missing'", [])
+        .is_err());
+    db.conn()
+        .execute(
+            "UPDATE sessions SET observer_mode='endless' WHERE id='old'",
+            [],
+        )
+        .unwrap();
+    assert_eq!(
+        rows(db.conn(), "SELECT * FROM retained_audit"),
+        vec![vec![SqlValue::Text("endless".into())]]
+    );
+    drop(db);
+
+    let db = Database::open(&path).unwrap();
+    let detail = sessions::get_session(&db, "old").unwrap().unwrap();
+    assert_eq!(detail.summary.observer_mode, ObserverMode::Endless);
+    assert_eq!(
+        detail.messages[0].run_diagnostics.as_ref().unwrap()["observer"]["mode"],
+        "observe"
+    );
+    assert_eq!(std::fs::read(&transcript).unwrap(), transcript_bytes);
+    assert_eq!(std::fs::read(&backup_path).unwrap(), backup_bytes);
+}
+
+#[test]
+fn observer_migration_v35_rolls_back_on_foreign_key_failure() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("pi.sqlite");
+    v35(&path);
+    let conn = Connection::open(&path).unwrap();
+    conn.execute_batch("PRAGMA foreign_keys=OFF; UPDATE session_todo SET session_id='missing'; PRAGMA foreign_keys=ON;").unwrap();
+    assert!(migrate(&conn, &path)
+        .unwrap_err()
+        .to_string()
+        .contains("foreign key check failed"));
+    assert_eq!(version(&conn), 35);
+    assert_eq!(
+        rows(&conn, "SELECT observer_mode FROM sessions WHERE id='old'"),
+        vec![vec![SqlValue::Text("observe".into())]]
+    );
+    assert!(conn
+        .pragma_query_value(None, "foreign_keys", |row| row.get::<_, bool>(0))
+        .unwrap());
+    assert!(!conn
+        .pragma_query_value(None, "legacy_alter_table", |row| row.get::<_, bool>(0))
+        .unwrap());
+    assert!(migration_backup_path(&path, 35).is_file());
 }

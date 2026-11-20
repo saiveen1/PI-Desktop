@@ -35,7 +35,7 @@ fn persona_migration_v34_preserves_legacy_rows_and_verified_backup_on_reopen() {
     let path = dir.path().join("pi.sqlite");
     let id = v34(&path);
     let fresh = Database::open(&dir.path().join("fresh.sqlite")).unwrap();
-    assert_eq!(version(fresh.conn()), 35);
+    assert_eq!(version(fresh.conn()), SCHEMA_VERSION);
     let expected = schema(fresh.conn()).unwrap();
     let backup_path = migration_backup_path(&path, 34);
     let mut original_backup = None;

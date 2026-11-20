@@ -47,7 +47,7 @@ async fn observer_rpc_create_configure_and_omission_preserve_independent_session
     assert_eq!(default["session"]["providerId"], Value::Null);
     assert_eq!(default["session"]["modelId"], Value::Null);
 
-    for observer in ["off", "observe", "guard"] {
+    for observer in ["off", "endless", "guard"] {
         let created = call(
             &state,
             "session.create",
@@ -61,7 +61,12 @@ async fn observer_rpc_create_configure_and_omission_preserve_independent_session
         .unwrap();
         let id = created["session"]["id"].as_str().unwrap();
         assert_eq!(created["session"]["observerMode"], observer);
-        for mode in ["observe", "guard", "off", "guard"] {
+        let saved_mode = if observer == "guard" {
+            "guard"
+        } else {
+            "endless"
+        };
+        for mode in ["endless", "guard", "off", saved_mode] {
             let configured = call(
                 &state,
                 "session.configure",
@@ -89,16 +94,19 @@ async fn observer_rpc_create_configure_and_omission_preserve_independent_session
         )
         .await
         .unwrap();
-        assert_eq!(configured["session"]["observerMode"], "guard");
+        assert_eq!(configured["session"]["observerMode"], saved_mode);
         assert_eq!(configured["session"]["mode"], "agent");
         assert_eq!(configured["session"]["permissionMode"], "inherit");
         let reopened = crate::db::Database::open_in_dir(dir.path()).unwrap();
         assert_eq!(
-            sessions::session_summary(&reopened, id)
-                .unwrap()
-                .unwrap()
-                .observer_mode,
-            sessions::ObserverMode::Guard
+            serde_json::to_value(
+                sessions::session_summary(&reopened, id)
+                    .unwrap()
+                    .unwrap()
+                    .observer_mode
+            )
+            .unwrap(),
+            saved_mode
         );
     }
     let app = state.lock().await;
@@ -127,7 +135,7 @@ async fn observer_rpc_rejects_explicit_invalid_values_without_partial_writes() {
     let created = call(
         &state,
         "session.create",
-        json!({ "observerMode": "observe" }),
+        json!({ "observerMode": "endless" }),
     )
     .await
     .unwrap();
@@ -143,6 +151,7 @@ async fn observer_rpc_rejects_explicit_invalid_values_without_partial_writes() {
         json!(0),
         json!(""),
         json!("auto"),
+        json!("observe"),
         json!("Guard"),
         json!(" guard "),
     ] {
@@ -156,7 +165,7 @@ async fn observer_rpc_rejects_explicit_invalid_values_without_partial_writes() {
         let saved = call(&state, "session.get", json!({ "id": id }))
             .await
             .unwrap();
-        assert_eq!(saved["session"]["observerMode"], "observe");
+        assert_eq!(saved["session"]["observerMode"], "endless");
         assert_eq!(saved["session"]["providerId"], Value::Null);
     }
     assert_eq!(
@@ -219,5 +228,54 @@ async fn observer_rpc_preserves_handshake_existence_and_idle_authority() {
             .unwrap()
             .observer_mode,
         sessions::ObserverMode::Off
+    );
+}
+
+#[tokio::test]
+async fn observer_rpc_settings_roundtrip_validate_and_reset_prompt() {
+    let (dir, state) = fixture();
+    let saved = json!({"maxContinuations":100,"continueOnTransientError":true,"prompt":"🧪".repeat(4000),"modelId":"guard-model"});
+    let mut incoming = saved.clone();
+    incoming["includeToolOutput"] = json!(true);
+    incoming["recentToolCount"] = json!(8);
+    call(&state, "settings.set", json!({"observerGuard": incoming}))
+        .await
+        .unwrap();
+    for invalid in [
+        json!(null),
+        json!({"maxContinuations":0}),
+        json!({"maxContinuations":101}),
+        json!({"maxContinuations":1.5}),
+        json!({"maxContinuations":"3"}),
+        json!({"continueOnTransientError":null}),
+        json!({"continueOnTransientError":"true"}),
+        json!({"continueOnTransientError":1}),
+        json!({"prompt":4}),
+        json!({"prompt":"bad\0text"}),
+        json!({"prompt":"🧪".repeat(4001)}),
+    ] {
+        let error = call(&state, "settings.set", json!({"observerGuard":invalid}))
+            .await
+            .unwrap_err();
+        assert_eq!(error.data.unwrap()["errorCode"], "INVALID_PARAMS");
+    }
+    drop(state);
+    let mut app = AppState::open(dir.path()).unwrap();
+    app.handshook = true;
+    let state = Arc::new(Mutex::new(app));
+    assert_eq!(
+        call(&state, "settings.get", json!({})).await.unwrap()["observerGuard"],
+        saved
+    );
+    call(
+        &state,
+        "settings.set",
+        json!({"observerGuard":{"maxContinuations":1,"continueOnTransientError":false,"prompt":""}}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        call(&state, "settings.get", json!({})).await.unwrap()["observerGuard"],
+        json!({"maxContinuations":1,"continueOnTransientError":false})
     );
 }

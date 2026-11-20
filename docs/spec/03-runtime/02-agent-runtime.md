@@ -710,76 +710,75 @@ field; raw provider reasons are not fabricated from normalized values. See
 
 ### 5e.4. Optional built-in Observer Guard
 
-Local Desktop sessions may explicitly select `observerMode: observe | guard`
-(default off). Settings `observerGuard` choose an independent exact model and
-effort, with bounded deadline/evidence preferences. Missing/unsupported selection
-is a diagnostic, never a default-model fallback. The Node runtime, not a plugin
-or the renderer, owns the lifecycle and decision. The deterministic guards in
-§5e.3 remain available without an observer model.
+Local Desktop sessions explicitly select `observerMode: off | endless | guard`.
+Off is the default. Stored Observe migrates to off, never to active continuation;
+old assessments remain readable. Native/remote and scheduled runs stay disabled.
 
-At most one eligible text-only normal-stop candidate per user turn receives an
-independent tool-free assessment. It uses the current goal, exact answer and
-bounded recent tool receipts. Explicit English/Chinese continuation requests also
-include a bounded task-history window: up to six user goals/continuations since
-the latest independent request, and the latest prior assistant answer. Retained
-and live history use the same selection rules and real transcript IDs. Historical
-roles (`prior_user`, `prior_assistant`) are distinct from the current user/answer;
-high-confidence incomplete must still cite the current answer. New independent
-tasks do not export previous task prose, including explicit replacement requests
-such as "implement something else instead". Session notices and accepted steering
-(including Stop-retained and restored steering) invalidate the retained chain
-rather than becoming execution authority. A preflight-rejected user input is
-retained under the same transcript ID seen by the main model. Missing
-goals, omitted attachments, dropped history and truncated text cannot authorize
-a continuation; inherited discussion-only scope stays non-executable. History
-shares the existing total input budget and best-effort redaction. System
-instructions, reasoning, child-session prose and tool arguments are excluded.
-Raw tool text is opt-in, with best-effort redaction. Input and
-output are treated as untrusted data. Strictly validate the verdict, confidence,
-bounded reason and references to supplied evidence. Unknown/truncated/incomplete
-assessment evidence never authorizes a continuation. Pending Observer correction
-participates in active-task compaction retention until its request is prepared.
-Standalone output is capped at 512 tokens with effort off and 8,192 with thinking,
-further constrained by the selected model and configured deadline. Scheduled-run
-sessions are explicitly disabled by Main even if their stored mode is non-off.
+Both enabled modes append a fixed one-request "continue current work" reminder
+after eligible non-empty text-only normal-stop replies. They preserve the Agent
+context and successful tool receipts without fake user messages or new scope.
+`observerGuard.maxContinuations` (integer 1-100, default 3) caps extra requests per
+explicit user turn. Tools, retries and reviewer answers never replenish it.
+At the cap, stop visibly with `continuation_limit` without another review call.
+Enabled modes replace legacy checklist/early-end nudges, not stack another
+allowance. Tool-call repair and transport recovery keep their existing budgets;
+Off preserves existing local guards. Pending correction survives compaction until
+the next request consumes the reminder.
 
-Observe only annotates the reply. Guard requires high-confidence `incomplete`,
-valid evidence, an actionable current user task, safe tool/lifecycle state and a
-remaining shared correction allowance. It continues the same loop with retained
-receipts and a fixed temporary reminder, not reviewer-authored commands or a
-synthetic user message. Stop, steering, permissions, approvals, user-input waits,
-non-execution scope and mode closeout remain authoritative. Host notices and
-historical tasks do not acquire new permission.
+**Endless** directly continues up to the cap: no reviewer configuration,
+credentials, model call or text judgement. Even a normal "done" reply continues.
+The name does not mean unbounded execution; main-model requests still cost money.
+Actual Stop, Plan/mode closeout, steering, pending work and unsettled latest tool
+batches remain authoritative. Input/approval tools must settle through their
+existing workflow. Endless does not infer a pending question from plain text;
+users wanting semantic judgement use Guard, or stop manually.
 
-An enabled assessment can add bounded completion latency. A checking diagnostic
-is emitted immediately; the independent request has cancellation/deadline control,
-no observer retries, no tools and no native search. Failure, timeout, malformed
-output or uncertain judgement leaves a visible advisory/error and allows normal
-settlement, without auto-resume. New configuration applies next turn, including
-runtime reuse; stale results never attach to another response.
+**Guard** independently assesses each new final reply while capacity remains,
+using only that reply plus a user-editable `prompt`. Empty prompt restores the
+shipped default; maximum prompt length is 8,000 characters. The default requests
+continue for unfinished work or a concrete worthwhile improvement, and stop for
+completion, genuine input/approval needs or refusal. Accept exactly `continue`
+or `stop` (case/outer whitespace normalized). Remove task-history tracking,
+confidence/evidence-ID validation, tool-name whitelists and answer-keyword vetoes.
+Earlier user/history prose, system instructions, reasoning and tool data are not
+sent. Deprecated tool-output settings are accepted for old files but ignored.
 
-`runDiagnostics.observer` records the owning message, configured model/effort,
-timing, status, verdict/confidence, concise reason/evidence, separate usage and
-continuation decision. New records add optional `skipReason`,
-`continuationReason`, `blockingTool` (bounded tool-call ID/name only),
-`reviewedToolCount` and `toolOutputIncluded`; older records remain valid.
-Terminal ineligible responses with an owned message record a skipped decision
-without a reviewer request. Tool-use steps do not create skipped-record noise,
-and later continuations never replace an earlier assessment. An assessed result
-records whether continuation was requested and the specific reason if not.
-Tool failures, unconfirmed effects, mismatched receipts, Stop, Plan state,
-pending work, task changes, truncated evidence and exhausted allowance are
-distinct diagnostic causes, not a generic claim that a command was dangerous.
-The first unresolved tool boundary remains conservative for the whole user turn;
-a later successful tool does not prove that earlier unknown effects settled.
+The Guard reply-size bound stays 2,000-20,000 characters (default 8,000), separate
+from the prompt cap. Oversized replies stop visibly instead of judging fragments.
+Deadline is 5-90 seconds (default 30); output caps are 512 tokens without thinking
+or 8,192 with thinking. Invalid/empty review output, timeout, cancellation or
+failure stops without retry. No model fallback, reviewer tools, native search,
+parent provider-side thread or reviewer-authored executable command is used.
+Redaction remains best effort. Stop/stale state is rechecked after the await.
 
-Existing Host message metadata persists post-response updates, including an
-intermediate candidate before continuation and before whole-turn completion.
-Restored history does not trigger re-evaluation. Diagnostics do not become
-primary-model context and primary request counters are not inflated with
-observer usage. Missing legacy reasons are explicitly unknown, not reconstructed.
+Configuration is snapshotted per turn. Each candidate is processed once; a later
+final reply can be checked again. Error/abort/length/empty replies are not
+normal-stop continuation; existing recovery owns those paths. Optional
+`observerGuard.continueOnTransientError` (boolean, default false) permits a main
+Agent request to draw from the remaining `maxContinuations` balance after its
+built-in network/transient-service or rate-limit retry budget is exhausted.
+Both request-setup and mid-stream recovery use the same claim path. No reviewer
+is called and no new retry counter, queue or tool replay is added. Existing
+backoff/Retry-After and context-preserving recovery remain authoritative; a
+successful response does not replenish the auto-continuation balance. Once an
+extra recovery is admitted, the retry indicator includes the remaining allowance
+rather than displaying an attempt above its stated limit. Off,
+Stop, steering, Plan/mode closeout, unsafe latest tool state, permanent failures,
+local errors and certificate verification failures cannot claim this allowance.
+The existing explicit infinite-provider-retry policy is unchanged: without
+exhaustion there is no extra continuation claim. Host notices and
+restored history do not start work. Steering cancels correction without resetting
+the count. Opening historical details never makes another request.
+
+The owning response keeps `runDiagnostics.observer`: status, times, optional
+`decision: continue | stop`, `continuationCount`, `maxContinuations`, continued
+and concrete stop/skip reasons. Guard adds independent model/effort/usage;
+Endless has none. Legacy verdict/confidence/evidence fields remain readable,
+not newly produced proof. The turn summary shows the latest result and count,
+not an earlier continued badge as a completion claim. Diagnostic refreshes
+preserve immutable response content and separate primary-model accounting.
 See [the decision](../../adr/builtin-observer-guard.md) and
-E2E-RUNTIME-observer-guard. This optional judge is fallible, not a completion proof.
+E2E-RUNTIME-observer-guard. These modes automate continuation, not acceptance.
 
 ### 5.1 Context checkpoint protection (D158/D203, ADR 0030/0049/0061/0064)
 

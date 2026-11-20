@@ -40,6 +40,15 @@ test("specific decisions never fabricate missing historical reasons or unknown e
   assert.equal(observerDecisionKey({ ...assessed, continued: true }), "observerGuard.notReassessed");
 });
 
+test("new decisions and lifecycle reasons do not imply reviewer use in Endless", () => {
+  const current = { ...checking, status: "assessed", decision: "continue", continued: true, continuationCount: 1, maxContinuations: 3 };
+  assert.equal(observerDecisionKey(current), "observerGuard.decisions.continue");
+  assert.equal(observerDecisionKey({ ...current, mode: "endless" }), "observerGuard.noReviewer");
+  for (const reason of ["continuation_limit", "decision_stop", "user_input_pending"]) {
+    assert.equal(observerDecisionKey({ ...current, continued: false, continuationReason: reason }), `observerGuard.continuationReasons.${reason}`);
+  }
+});
+
 test("transcript keeps an empty assessed response without reviving ordinary empty bubbles", async () => {
   const { buildTranscriptEntries } = await import("../src/lib/assistant-turns.ts");
   const empty = { ...message, content: "", createdAt: "2026-01-01T00:00:00Z", status: "complete" };

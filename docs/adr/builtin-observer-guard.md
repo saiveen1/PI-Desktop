@@ -1,7 +1,7 @@
-# ADR: Built-in per-conversation Observer Guard
+# ADR: Built-in per-conversation continuation modes
 
-- Status: Accepted
-- Date: 2026-11-17
+- Status: Accepted; simplified 2026-11-20
+- Original date: 2026-11-17
 - Amends: [configurable local output guards](configurable-local-output-guards.md)
 - Related: [runtime](../spec/03-runtime/02-agent-runtime.md),
   [IPC](../spec/03-runtime/01-ipc-protocol.md),
@@ -10,107 +10,82 @@
 
 ## Context
 
-The standalone Observer plugin can only approximate turn membership through
-public session reads, and its assessment history disappears on reload. The
-requested product behavior is a conversation-level choice alongside Agent/Plan,
-with a separate observer model and effort selected in Settings. Guarding a live
-turn belongs to the existing runtime, not to a plugin that posts a new request
-or executes a reviewer-authored action.
+The earlier Observe/Guard design tried to prove task completion from a bounded
+history/tool window. It could discard the actual goal, confuse mentions of a
+refusal with a refusal to act, and stop supervising after one correction. The
+2026-11-18 task-history amendment did not solve those product limitations.
+
+The requested product is smaller: automate saying "continue", optionally asking
+an independent model whether another continuation is useful. It is not an
+acceptance system or a new permission authority.
 
 ## Decision
 
-Add local session `observerMode: off | observe | guard`, independently of mode
-and permission. Missing values, newly created sessions and forks are off. A
-fork does not inherit consent to send content to an independent model. Session
-configuration retains the existing idle gate. Remote/native sessions do not
-expose the local control and do not silently forward it to unsupported hosts.
-Rust owns the additive schema migration and durable session value.
+Keep explicit local per-session consent, replacing Observe with Endless:
+`off | endless | guard`. New sessions and forks are off. Migrate stored Observe
+to off rather than turning advisory consent into automatic execution. Keep old
+assessment metadata readable. Host owns the versioned transactional migration;
+configuration remains idle-gated and unsupported remote/native/scheduled paths
+remain disabled. No plugin installation/removal is implied.
 
-The composer displays one compact Observer Guard entry after the delegation
-control. Off is neutral, Observe and Guard are explicitly labeled. Settings →
-Behavior owns `observerGuard`: explicit provider/model and canonical thinking
-level, a bounded deadline, evidence size, recent-tool count and an opt-in for
-raw tool-result excerpts. Selecting a model alone never enables any session.
-There is no implicit fallback to the main model, default provider or subagent
-pool. Unsupported/missing models and effort remain visible rather than silently
-remapping. Credentials remain in the existing Host/Main/sidecar boundaries.
+Both enabled modes use `observerGuard.maxContinuations` (integer 1-100, default
+3), a separate per-user-turn count of automatic continuation requests. Tools and
+transport retries do not reset it. Enabled modes replace legacy normal-stop
+checklist/early-end nudges rather than stacking them. Tool-call repair and
+transport recovery keep their own budgets. At the limit, report the limit and
+stop; do not make another independent request.
 
-The Node runtime observes at most one eligible text-only normal-stop candidate
-per user turn, after local correction paths. It makes an independent tool-free
-completion against the exact configured model. Its input is a bounded current
-user goal, the exact candidate answer and selected current-turn tool receipts.
-For explicit continuation requests, the runtime also supplies up to six retained
-user messages from the latest task chain and its latest assistant answer. This
-2026-11-18 amendment repairs missing task context for short requests such as
-"continue"; it expands the disclosed evidence sent to the selected reviewer,
-not the reviewer's execution authority. Restored and live history use the same
-bounded selector, original transcript IDs and shared input/redaction limits.
-Historical roles stay distinct; a historical answer alone cannot justify a
-high-confidence incomplete verdict. Independent new tasks do not export the old
-chain. Missing goals, truncated history and omitted attachments never authorize
-continuation; earlier discussion constraints remain effective. Authenticated
-session notices and steering invalidate the chain. System instructions, model
-reasoning, child-session prose and tool arguments are not included.
-Tool-result text is opt-in and best-effort redacted. No reviewer transcript,
-verdict or raw reasoning is inserted into the main-model context.
+- Endless makes no judgement and never resolves or calls a reviewer. It sends
+  the fixed continuation reminder after every eligible normal reply, including
+  a completion statement, until the limit or an actual runtime stop boundary.
+- Guard sends only the latest assistant reply and an editable reviewer prompt
+  to the exact chosen model. It accepts only `continue` or `stop`. Each new final
+  candidate can be assessed; the same candidate is never assessed twice.
+- Settings expose prompt editing/reset and the continuation count. Blank prompt
+  restores the default; prompt length is bounded at 8,000 characters. Existing
+  model/effort, deadline and reply-size controls remain Guard-only. Deprecated
+  tool-output/count settings can be read but do not forward data.
 
-Observe records an advisory only. Guard may request a continuation only for a
-strictly validated, high-confidence incomplete verdict with matching evidence,
-when local task/lifecycle checks also allow it. It consumes the existing shared
-corrective allowance, preserves successful tool receipts and uses a fixed
-short temporary reminder, never a reviewer-authored command or synthetic user
-message. It cannot bypass Stop, user questions, discussion-only scope, approvals,
-permissions, unsafe tool effects, pending steering or other active work. Unknown,
-low-confidence, truncated, malformed, failed or timed-out assessment does not
-authorize an action. Existing local guards remain independent and optional.
+Remove the historical task tracker, arbitrary tool-name safety whitelist,
+confidence/evidence schema and keyword-based refusal/input veto. Semantic
+judgement belongs to the configured reviewer prompt. Literal words such as
+"refusal", "permission" or a question mark do not decide execution.
 
-Both enabled modes may add bounded completion latency. Show checking state while
-the observer is running; keep Stop effective. User-turn cancellation and observer
-timeout abort the independent request. No observer retry loop, tool calls or
-native search is allowed. Reused runtimes adopt new configuration next turn, and
-late results cannot mutate another turn or revive work. There is no assessment
-for host completion notices or an inherited historical task.
+Keep actual Stop, Plan/mode closeout, steering, pending tools/delegates and input/
+approval workflows authoritative. Endless does not infer a pending user question
+from plain text. It never supplies an approval or an answer to an input card.
+Error/abort/length/empty replies are not this mode's normal-stop continuation.
+No retry loop, provider fallback, native search or reviewer tool use is added.
+An optional `continueOnTransientError` setting (default false) lets the existing
+provider retry owner use remaining automatic-continuation capacity after its
+normal retry budget is exhausted. This applies to classified retriable network,
+transient service and rate-limit failures in Agent mode, without a reviewer call.
+It preserves backoff, successful receipts and the existing independent infinite
+retry policy; it cannot reset the continuation count or retry permanent/local/
+certificate failures, Stop or mode closeout.
 
-A bounded `runDiagnostics.observer` record identifies the exact message, mode,
-selected model/effort, times, status, verdict/confidence, concise redacted reason,
-evidence IDs, usage and whether continuation was authorized/blocked. Optional
-skip/continuation reason codes and the first blocking tool's bounded identity
-make local gating observable without forwarding tool arguments or output.
-The record remains owned by its response, but its summary is displayed once
-outside the turn's folded process. Details link to the assessed response and
-evidence; continuation is explicitly not a second verification. The composer
-remains inspectable during execution while mode changes stay idle-gated.
+The fixed one-request reminder continues the same Agent context without a fake
+user message, preserving original constraints and completed receipts. Reviewer
+text cannot become a command. Guard redacts its bounded last-reply input and
+keeps its provider-side context independent of the main conversation. A reviewer
+failure settles visibly and does not authorize continuation.
 
-Post-response diagnostic updates are persisted before whole-turn completion.
-The Host's existing idempotent append boundary gains a narrowly validated
-diagnostic-only refresh, not a general upsert: immutable response content and
-unrelated metadata are preserved, identities must match, and stale checking
-cannot replace terminal evidence. This repairs the prior gap between live
-observer updates and an already-settled durable response. Extensible metadata
-keeps old rows compatible without a new schema/table or reconstructing missing
-history. Diagnostics remain separate from primary-model usage and are advice,
-not proof of correctness. No new result database or global reviewer dashboard.
+New diagnostic records store decision, continuation count/limit and stop reason
+on the owning response; Guard additionally stores independent usage/model data.
+Historical Observe/verdict/confidence/evidence fields remain display-compatible.
+The latest result is shown as the turn summary; earlier records stay attached
+to their responses. Neither "continued" nor "stop" proves task completion.
 
-## Compatibility and safety
+## Verification and limits
 
-- Old settings have no selected observer model; old messages have no assessment.
-- A versioned Host migration preserves existing sessions and defaults them off.
-- The original external plugin source/package is preserved, not automatically
-  installed, disabled or uninstalled. Users should disable it when choosing the
-  built-in feature to avoid duplicate independent assessments.
-- Shared validation rejects malformed writes; explicit user selection is model
-  authorization for this narrow tool-free feature, not general delegation.
-- Sending excerpts may reveal private task content even after best-effort
-  redaction. The settings describe the additional model cost and privacy boundary.
-- No provider name is hard-coded. Model accuracy, protocol reliability and
-  self-reported confidence are not guarantees.
+Use synthetic real Agent loops and external provider/Host stubs to verify exact
+N+1 main requests, zero reviewer calls in Endless even without configuration,
+multiple Guard reviews, limit/no-progress bounds, custom prompt/reset, no history
+or tool output forwarding, Stop/disposal/steering and malformed/timeout paths.
+Verify IPC/Host writes, populated migration, reopen, fork-off and legacy metadata,
+plus isolated renderer settings/picker interactions and every locale.
 
-## Verification
-
-Use synthetic provider/Host edges and isolated storage. Verify default/off/no
-model, exact binding and effort, no search/tools, input budgeting/redaction,
-strict verdict/evidence validation, Observe vs Guard, common corrective ceiling,
-Stop/deadline/stale replies, inherited runtime state and session switching,
-durable diagnostic roundtrip, migration/reopen/fork defaults, config validation,
-composer selection, unavailable model repair and all shipped locales. No real
-provider, daily profile, installer or live Desktop is a default test target.
+No running Desktop, daily profile or real provider is a default test target.
+Endless may make unnecessary billed requests; Guard is fallible and a custom
+prompt may be less conservative. The count and runtime permission system are
+hard limits, not claims about task correctness.

@@ -11,7 +11,7 @@ import { useAppStore } from "../../../stores/app-store";
 
 export { matchingObserver } from "../../../lib/observer-guard-presentation";
 
-/** Turn-level placement keeps an intermediate assessment outside folded execution details. */
+/** Keep the latest continuation decision outside folded execution details. */
 export function ObserverGuardTurnSummary({ parts, sessionId }: { parts: readonly AssistantTurnPart[]; sessionId?: string | null }) {
   const runtime = useAppStore(state => sessionId ? state.agentStatuses[sessionId] : undefined);
   const live = runtime?.isRunning ? runtime.runDiagnostics?.observer : undefined;
@@ -33,7 +33,9 @@ export function ObserverGuardDisclosure({ message, sessionId }: { message: UiMes
   const interrupted = assessment.status === "checking" && !(runtime?.isRunning &&
     (live?.messageId === message.id || (message.runDiagnostics?.turnId && runtime.currentTurnId === message.runDiagnostics.turnId)));
   const assessed = assessment.status === "assessed";
-  const modelLabel = assessment.modelKey ? observerModelLabel(assessment.modelKey, providers) : undefined;
+  const endless = assessment.mode === "endless";
+  const modelLabel = !endless && assessment.modelKey ? observerModelLabel(assessment.modelKey, providers) : undefined;
+  const decisionKey = observerDecisionKey(assessment, interrupted);
   const reveal = async (evidenceId: string) => {
     if (!sessionId || useAppStore.getState().activeSessionId !== sessionId) return;
     const request = ++navigation.current;
@@ -55,20 +57,23 @@ export function ObserverGuardDisclosure({ message, sessionId }: { message: UiMes
     <div className="observer-assessment-summary" role="status" aria-live="polite">
       <strong>{t("observerGuard.title")}</strong>
       <span>{t(observerSummaryKey(assessment, interrupted))}</span>
-      {assessed ? <span>{t(observerVerdictKey(assessment))}</span> : null}
+      {endless ? <span>{t("observerGuard.noReviewer")}</span> : null}
+      {!endless && assessment.decision === "continue" && decisionKey !== "observerGuard.decisions.continue" ? <span>{t("observerGuard.decisions.continue")}</span> : null}
+      {assessed && assessment.verdict ? <span>{t(observerVerdictKey(assessment))}</span> : null}
+      {assessment.continuationCount !== undefined && assessment.maxContinuations !== undefined ? <span>{t("observerGuard.continuationProgress", { current: assessment.continuationCount, max: assessment.maxContinuations })}</span> : null}
     </div>
-    <p className="observer-assessment-decision">{t(observerDecisionKey(assessment, interrupted))}</p>
+    {decisionKey !== "observerGuard.noReviewer" ? <p className="observer-assessment-decision">{t(decisionKey)}</p> : null}
     {assessed && assessment.reason ? <p className="observer-assessment-reason">{assessment.reason}</p> : null}
     {assessment.blockingTool ? <p className="observer-assessment-tool">
       {t("observerGuard.relatedTool")}: {evidenceButton(assessment.blockingTool.toolCallId, assessment.blockingTool.toolName)}
     </p> : null}
     <details>
       <summary onClick={event => notifyAnchor?.(event.currentTarget)}>{t("observerGuard.details")}</summary>
-      <p className="observer-assessment-advisory">{t("observerGuard.advisory")}</p>
+      {!endless ? <p className="observer-assessment-advisory">{t("observerGuard.advisory")}</p> : null}
       <dl>
         <div><dt>{t("observerGuard.mode")}</dt><dd>{t(`observerGuard.${assessment.mode}`)}</dd></div>
         {modelLabel ? <div><dt>{t("observerGuard.model")}</dt><dd>{modelLabel}</dd></div> : null}
-        {assessment.thinkingLevel ? <div><dt>{t("observerGuard.effort")}</dt><dd>{t(`observerGuard.level.${assessment.thinkingLevel}`)}</dd></div> : null}
+        {!endless && assessment.thinkingLevel ? <div><dt>{t("observerGuard.effort")}</dt><dd>{t(`observerGuard.level.${assessment.thinkingLevel}`)}</dd></div> : null}
         <div><dt>{t("observerGuard.started")}</dt><dd>{new Date(assessment.startedAt).toLocaleString()}</dd></div>
         {assessment.endedAt !== undefined ? <div><dt>{t("observerGuard.duration")}</dt><dd>{Math.max(0, assessment.endedAt - assessment.startedAt)} ms</dd></div> : null}
         {assessed && assessment.confidence ? <div><dt>{t("observerGuard.verdict")}</dt><dd>{t(`observerGuard.confidence.${assessment.confidence}`)}</dd></div> : null}
@@ -76,8 +81,8 @@ export function ObserverGuardDisclosure({ message, sessionId }: { message: UiMes
         {assessment.reviewedToolCount !== undefined ? <div><dt>{t("observerGuard.recentToolCount")}</dt><dd>{assessment.reviewedToolCount}</dd></div> : null}
         {assessment.toolOutputIncluded !== undefined ? <div><dt>{t("observerGuard.includeToolOutput")}</dt><dd>{t(assessment.toolOutputIncluded ? "observerGuard.yes" : "observerGuard.no")}</dd></div> : null}
         {assessment.inputTruncated ? <div><dt>{t("observerGuard.input")}</dt><dd>{t("observerGuard.truncated")}</dd></div> : null}
-        {assessment.usage ? <div><dt>{t("observerGuard.usage")}</dt><dd>{t("observerGuard.tokens", { input: assessment.usage.inputTokens, output: assessment.usage.outputTokens })}</dd></div> : null}
-        <div><dt>{t("observerGuard.reviewedResponse")}</dt><dd>{evidenceButton(message.id, t("observerGuard.openResponse"))}</dd></div>
+        {!endless && assessment.usage ? <div><dt>{t("observerGuard.usage")}</dt><dd>{t("observerGuard.tokens", { input: assessment.usage.inputTokens, output: assessment.usage.outputTokens })}</dd></div> : null}
+        <div><dt>{t(!endless && (assessment.decision || assessment.verdict) ? "observerGuard.reviewedResponse" : "observerGuard.response")}</dt><dd>{evidenceButton(message.id, t("observerGuard.openResponse"))}</dd></div>
         {assessment.evidenceIds?.length ? <div><dt>{t("observerGuard.evidence")}</dt><dd className="observer-assessment-evidence">
           {assessment.evidenceIds.map((id, index) => <span key={id}>{evidenceButton(id, t("observerGuard.openEvidence", { index: index + 1 }))}<code>{id}</code></span>)}
         </dd></div> : null}

@@ -212,7 +212,7 @@ export const SETTINGS_NAV: SettingsNavEntry[] = [
       "settings.autoContinueUnfinishedTodos",
       "settings.autoContinueUnfinishedTodosDesc",
       "observerGuard.title", "observerGuard.description", "observerGuard.model", "observerGuard.effort",
-      "observerGuard.timeoutSeconds", "observerGuard.maxInputChars", "observerGuard.recentToolCount", "observerGuard.includeToolOutput",
+      "observerGuard.maxContinuations", "observerGuard.continueOnTransientError", "observerGuard.continueOnTransientErrorHint", "observerGuard.prompt", "observerGuard.timeoutSeconds", "observerGuard.maxInputChars",
       "outputGuard.title",
       "outputGuard.description",
       "outputGuard.mode",

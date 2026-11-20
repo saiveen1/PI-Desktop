@@ -523,18 +523,22 @@ Card order is **Session defaults → Execution → Computer use**.
   Help distinguishes no-extra-model local detection from potentially billed
   continuations, and explains that these heuristics do not guarantee completion.
   Warnings and diagnostic counters do not become main-Agent prompt context.
-- **Observer Guard** is a separate Behavior card. It selects an explicit observer
-  provider/model and one of that binding's supported thinking levels (effort),
-  not the primary model or an automatic fallback. Missing/disabled model and
-  unavailable effort remain visible; the user can repair or clear the binding.
-  Optional controls set deadline (5-90 seconds, default 30), input characters
-  (2,000-20,000, default 8,000), recent tools (0-8, default 3), and whether tool
-  result excerpts may be sent (default false). Help explains billed independent
-  requests, best-effort redaction and bounded completion latency. Selecting a
-  model does not enable any conversation. The composer owns each local session's
-  Off/Observe/Guard choice; forks/new sessions start off. All preferences use
-  shared validation and sibling-preserving saves. No plugin installation is
-  required, and no existing plugin is modified automatically.
+- **Observer Guard** is a separate Behavior card. Off/Endless/Guard is selected
+  per local conversation; new/forked sessions are off and old Observe becomes off.
+  Both enabled modes use a visible maximum continuation count (1-100, default 3)
+  per explicit user turn. A separate off-by-default toggle allows additional
+  recovery after built-in network/transient-service retries exhaust, spending
+  the same remaining count without calling the reviewer. It does not disable
+  existing retries or override the independently selected infinite-retry policy.
+  Endless needs no reviewer and does not judge completion.
+  Guard alone uses the exact independent provider/model and supported effort,
+  never a silent fallback. Its multiline prompt has explicit Save and Reset to
+  default; blank means default and the maximum is 8,000 characters. Partial saves
+  preserve siblings and invalid writes fail. Advanced Guard controls retain
+  deadline (5-90 seconds, default 30) and reply-size bound (2,000-20,000, default
+  8,000); tool-count/output controls are removed. Help explains that Guard sends
+  only the last reply, while Endless sends no reviewer request; both can incur
+  main-model continuation costs. Changes apply next turn. No plugin is required.
 - **Computer use** card: last on the page. It omits card/row explanatory copy
   and the static scope note; controls, platform and permission status, errors,
   and the missing-model hint remain unchanged.

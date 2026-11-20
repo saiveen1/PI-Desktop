@@ -15,7 +15,7 @@ const selection = { providerId: "reviewer", modelId: "small", thinkingLevel: "of
 
 test("off and missing selection do not resolve credentials or use a fallback", async () => {
   const f = fixture();
-  for (const mode of [undefined, "off", "invalid"]) assert.equal((await resolveObserverGuardBinding(mode, selection, f.deps)).mode, "off");
+  for (const mode of [undefined, "off", "invalid", "observe"]) assert.equal((await resolveObserverGuardBinding(mode, selection, f.deps)).mode, "off");
   for (const settings of [{}, { modelId: "small" }, { providerId: "reviewer" }]) {
     assert.equal((await resolveObserverGuardBinding("guard", settings, f.deps)).errorCode, "MODEL_NOT_CONFIGURED");
   }
@@ -24,8 +24,8 @@ test("off and missing selection do not resolve credentials or use a fallback", a
 
 test("uses the exact ready independent binding and captures policy", async () => {
   const f = fixture();
-  const result = await resolveObserverGuardBinding("observe", { ...selection, timeoutSeconds: 15, maxInputChars: 4000 }, f.deps);
-  assert.equal(result.mode, "observe"); assert.equal(result.provider.id, "reviewer"); assert.equal(result.provider.modelId, "small");
+  const result = await resolveObserverGuardBinding("guard", { ...selection, timeoutSeconds: 15, maxInputChars: 4000 }, f.deps);
+  assert.equal(result.mode, "guard"); assert.equal(result.provider.id, "reviewer"); assert.equal(result.provider.modelId, "small");
   assert.equal(result.provider.apiKey, ""); assert.equal(result.settings.timeoutSeconds, 15);
   assert.equal(result.settings.maxInputChars, 4000); assert.deepEqual(f.calls, []);
 });
@@ -55,7 +55,7 @@ test("respects saved capability overrides and resolves only the chosen secret", 
 
 test("OAuth uses its own endpoint and catalog, never a saved API secret", async () => {
   const f = fixture({ providers: [{ ...provider, authKind: OAUTH_AUTH_KIND }], vendorBinding: async () => ({ baseUrl: "http://oauth.invalid", apiStyle: "responses", modelConfig: catalog }) });
-  const result = await resolveObserverGuardBinding("observe", selection, f.deps);
+  const result = await resolveObserverGuardBinding("guard", selection, f.deps);
   assert.equal(result.provider.baseUrl, "http://oauth.invalid"); assert.equal(result.provider.apiStyle, "responses");
   assert.equal(result.provider.authKind, OAUTH_AUTH_KIND); assert.deepEqual(f.calls, []);
   assert.equal((await resolveObserverGuardBinding("guard", selection, fixture({ providers: [{ ...provider, authKind: OAUTH_AUTH_KIND }] }).deps)).errorCode, "MODEL_UNAVAILABLE");
@@ -63,7 +63,7 @@ test("OAuth uses its own endpoint and catalog, never a saved API secret", async 
 
 test("credential or catalog failure is bounded and never exposes upstream prose", async () => {
   const f = fixture({ providers: [{ ...provider, authKind: "api-key" }], getSecret: async () => { throw Error("private credential details"); } });
-  const result = await resolveObserverGuardBinding("observe", selection, f.deps);
+  const result = await resolveObserverGuardBinding("guard", selection, f.deps);
   assert.equal(result.errorCode, "PROVIDER_UNAVAILABLE"); assert.equal(result.provider, undefined);
   assert.equal(JSON.stringify(result).includes("private credential"), false);
 });
@@ -81,4 +81,14 @@ test("the independent assessment cannot inherit native web search", async () => 
   const f = fixture({ catalogModel: () => ({ ...catalog, webSearch: true }), providers: [{ ...provider, models: [{ id: "small", thinkingLevels: ["off"], nativeWebSearch: true }] }] });
   const result = await resolveObserverGuardBinding("guard", selection, f.deps);
   assert.equal(result.provider.modelConfig.webSearch, false);
+});
+
+test("Endless never resolves a reviewer, catalog, or credential even with a stale model selection", async () => {
+  const unexpected = () => { throw Error("reviewer dependency must not run"); };
+  const f = fixture({ providers: [], getSecret: unexpected, catalogModel: unexpected, vendorBinding: unexpected, isImageModel: unexpected });
+  for (const settings of [{}, { ...selection, maxContinuations: 7 }]) {
+    const result = await resolveObserverGuardBinding("endless", settings, f.deps);
+    assert.equal(result.mode, "endless"); assert.equal(result.provider, undefined); assert.equal(result.errorCode, undefined);
+    assert.equal(result.settings.maxContinuations, settings.maxContinuations ?? 3);
+  }
 });

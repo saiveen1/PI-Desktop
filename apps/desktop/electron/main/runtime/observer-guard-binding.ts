@@ -25,7 +25,7 @@ export async function resolveObserverGuardBinding(
   const mode = resolveObserverGuardMode(modeValue);
   const settings = resolveObserverGuardSettings(settingsValue);
   const fail = (errorCode: ObserverGuardError): ObserverGuardRuntimeConfig => ({ mode, settings, errorCode });
-  if (mode === "off") return { mode, settings };
+  if (mode !== "guard") return { mode, settings };
   if (!settings.providerId || !settings.modelId) return fail("MODEL_NOT_CONFIGURED");
   const provider = deps.providers.find(row => row.id === settings.providerId && row.enabled !== false);
   if (!provider || provider.extensionAgentKey || deps.isImageModel(provider.id, settings.modelId)) return fail("MODEL_UNAVAILABLE");

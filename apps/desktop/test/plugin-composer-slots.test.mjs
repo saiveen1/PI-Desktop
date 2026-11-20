@@ -23,7 +23,7 @@ const HOST_LEFT = [
   "Persona: Default. Checking whether the conversation is ready.",
   "settings.mode: settings.modeAgent",
   "chat.permissionMode",
-  "Start a conversation before enabling Observer Guard.",
+  "Start a conversation before enabling auto continuation.",
 ];
 const HOST_RIGHT = ["context", "chat.model: Model. chat.reasoningLevel: Off", "chat.send"];
 

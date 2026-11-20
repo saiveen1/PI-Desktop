@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 pub enum ObserverMode {
     #[default]
     Off,
-    Observe,
+    Endless,
     Guard,
 }
 
@@ -15,7 +15,7 @@ impl ObserverMode {
     fn as_str(self) -> &'static str {
         match self {
             Self::Off => "off",
-            Self::Observe => "observe",
+            Self::Endless => "endless",
             Self::Guard => "guard",
         }
     }
@@ -27,9 +27,9 @@ impl TryFrom<String> for ObserverMode {
     fn try_from(value: String) -> Result<Self, Self::Error> {
         match value.as_str() {
             "off" => Ok(Self::Off),
-            "observe" => Ok(Self::Observe),
+            "endless" => Ok(Self::Endless),
             "guard" => Ok(Self::Guard),
-            _ => Err("observerMode must be off, observe, or guard"),
+            _ => Err("observerMode must be off, endless, or guard"),
         }
     }
 }
@@ -46,7 +46,7 @@ impl FromSql for ObserverMode {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
         match value.as_str()? {
             "off" => Ok(Self::Off),
-            "observe" => Ok(Self::Observe),
+            "endless" => Ok(Self::Endless),
             "guard" => Ok(Self::Guard),
             _ => Err(FromSqlError::InvalidType),
         }

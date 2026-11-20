@@ -169,6 +169,16 @@ installed behavior and do not establish general reviewer accuracy. The bounded
 real-model exercise and its limitations are recorded in
 [continuation validation](observer-continuation-validation.md).
 
+The 2026-11-20 simplification on personal base `59a9c26b0` rechecks the same
+locally recorded upstream `4d16de71a34b02fd8711c1102a288664b3d171c1` (no fetch):
+its tree lacks `observer-guard.ts`. This local increment replaces Observe with
+bounded model-free Endless continuation, makes the Guard prompt editable, and
+reduces Guard input to the final reply with a continue/stop decision. The former
+task-history tracker and answer-keyword veto are removed. Old Observe consent
+maps to off; old diagnostics remain readable. The original Agent/Host permission
+and transport-recovery foundations remain. Historical Luna validation above
+describes the earlier design, not coverage of these new modes.
+
 The local tool observer was implemented on personal base `2dea25a27` and checked
 against locally recorded upstream `aa35fee4b15c354303bb5a0c77c9c33a731d097f`
 without fetching. At that revision, `developer-sections.tsx` contains the developer

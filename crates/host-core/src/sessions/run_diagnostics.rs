@@ -5,6 +5,39 @@ use super::{
 use rusqlite::params;
 use serde_json::{Map, Value};
 
+fn valid_observer(value: &Value, message_id: &str) -> bool {
+    let mode = value["mode"].as_str();
+    value["messageId"].as_str() == Some(message_id)
+        && matches!(mode, Some("observe" | "endless" | "guard"))
+        && matches!(
+            value["status"].as_str(),
+            Some("checking" | "assessed" | "error" | "skipped")
+        )
+        && value["startedAt"].as_i64().is_some()
+        && value
+            .get("decision")
+            .is_none_or(|field| matches!(field.as_str(), Some("continue" | "stop")))
+        && value
+            .get("continuationCount")
+            .is_none_or(|field| field.as_u64().is_some())
+        && value.get("maxContinuations").is_none_or(|field| {
+            field
+                .as_u64()
+                .is_some_and(|count| (1..=100).contains(&count))
+        })
+        && (mode != Some("endless")
+            || [
+                "modelKey",
+                "thinkingLevel",
+                "effort",
+                "usage",
+                "verdict",
+                "confidence",
+            ]
+            .iter()
+            .all(|key| value.get(*key).is_none()))
+}
+
 pub(super) fn refresh(
     db: &Database,
     session_id: &str,
@@ -24,15 +57,7 @@ pub(super) fn refresh(
         || diagnostics["startedAt"].as_i64().is_none()
         || (observer.is_none() && ended_at.is_none())
         || ended_at.is_some_and(|end| end.as_i64().is_none())
-        || observer.is_some_and(|value| {
-            value["messageId"].as_str() != Some(message.id.as_str())
-                || !matches!(value["mode"].as_str(), Some("observe" | "guard"))
-                || !matches!(
-                    value["status"].as_str(),
-                    Some("checking" | "assessed" | "error" | "skipped")
-                )
-                || value["startedAt"].as_i64().is_none()
-        })
+        || observer.is_some_and(|value| !valid_observer(value, &message.id))
         || diagnostics
             .get("termination")
             .is_some_and(|value| value["messageId"].as_str() != Some(message.id.as_str()))

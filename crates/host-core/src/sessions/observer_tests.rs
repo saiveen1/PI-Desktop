@@ -33,6 +33,7 @@ fn observer_defaults_off_for_legacy_wire_and_new_conversations() {
         json!(1),
         json!("Guard"),
         json!("enabled"),
+        json!("observe"),
     ] {
         legacy["observerMode"] = invalid;
         assert!(serde_json::from_value::<SessionSummary>(legacy.clone()).is_err());
@@ -92,7 +93,7 @@ fn observer_forks_default_off_without_mutating_source_or_other_configuration() {
     let db = Database::open_in_dir(dir.path()).unwrap();
     let project = dir.path().join("project");
     std::fs::create_dir(&project).unwrap();
-    for observer_mode in [ObserverMode::Observe, ObserverMode::Guard] {
+    for observer_mode in [ObserverMode::Endless, ObserverMode::Guard] {
         let source = create_session_with_options(
             &db,
             SessionCreateOptions {
@@ -291,8 +292,9 @@ fn observer_diagnostic_refresh_cannot_insert_or_rewrite_unowned_rows() {
     }
     let snapshot = |id: &str| {
         json!({"observer": {
-            "messageId": id, "mode": "observe", "status": "skipped", "startedAt": 2000,
-            "endedAt": 2001, "skipReason": "unsafe_effect",
+            "messageId": id, "mode": "endless", "status": "skipped", "startedAt": 2000,
+            "endedAt": 2001, "continuationReason": "user_input_pending",
+            "continuationCount": 0, "maxContinuations": 3,
             "blockingTool": {"toolCallId": "some-call", "toolName": "Write"},
         }})
     };
@@ -322,6 +324,28 @@ fn observer_diagnostic_refresh_cannot_insert_or_rewrite_unowned_rows() {
     append_message(&db, &session.id, &wrong_created_at, Some(&turn)).unwrap();
     let wrong_message = refresh(&main, &turn, snapshot(&delegate.id));
     append_message(&db, &session.id, &wrong_message, Some(&turn)).unwrap();
+    for (key, value) in [
+        ("decision", json!("retry")),
+        ("continuationCount", json!(-1)),
+        ("continuationCount", json!(1.5)),
+        ("maxContinuations", json!(101)),
+        ("maxContinuations", json!(0)),
+        ("modelKey", json!("provider/model")),
+        ("thinkingLevel", json!("off")),
+        ("usage", json!({})),
+        ("verdict", json!("complete")),
+        ("confidence", json!("high")),
+    ] {
+        let mut invalid = snapshot(&main.id);
+        invalid["observer"][key] = value;
+        append_message(
+            &db,
+            &session.id,
+            &refresh(&main, &turn, invalid),
+            Some(&turn),
+        )
+        .unwrap();
+    }
     let wrong_termination = refresh(
         &main,
         &turn,
@@ -380,4 +404,48 @@ fn observer_diagnostic_refresh_cannot_insert_or_rewrite_unowned_rows() {
         response.meta.unwrap()["runDiagnostics"]["observer"]["status"],
         "error"
     );
+}
+
+#[test]
+fn observer_endless_decisions_and_legacy_assessment_survive_reopen() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = Database::open_in_dir(dir.path()).unwrap();
+    let session = create_session(&db, None, None, None, None, None).unwrap();
+    let turn = begin_turn(&db, &session.id, None, None).unwrap();
+    let mut assessments = Vec::new();
+    for (index, mode, decision, reason) in [
+        (0, "endless", Some("continue"), None),
+        (1, "endless", Some("stop"), Some("decision_stop")),
+        (2, "endless", None, Some("continuation_limit")),
+        (3, "observe", None, Some("observe_only")),
+    ] {
+        let mut row = message();
+        row.id = format!("candidate-{index}");
+        row.run_diagnostics = None;
+        append_message(&db, &session.id, &row, Some(&turn)).unwrap();
+        let mut assessment =
+            json!({"messageId":row.id, "mode":mode, "status":"assessed", "startedAt":2000});
+        if mode == "endless" {
+            assessment["continuationCount"] = json!(index);
+            assessment["maxContinuations"] = json!(3);
+        }
+        if let Some(decision) = decision {
+            assessment["decision"] = json!(decision);
+        }
+        if let Some(reason) = reason {
+            assessment["continuationReason"] = json!(reason);
+        }
+        let patch = refresh(&row, &turn, json!({"observer": assessment}));
+        append_message(&db, &session.id, &patch, Some(&turn)).unwrap();
+        assessments.push(assessment);
+    }
+    end_turn(&db, &turn, "completed", None, None, false).unwrap();
+    drop(db);
+
+    let db = Database::open_in_dir(dir.path()).unwrap();
+    let detail = get_session(&db, &session.id).unwrap().unwrap();
+    assert_eq!(detail.messages.len(), assessments.len());
+    for (row, expected) in detail.messages.iter().zip(assessments) {
+        assert_eq!(row.run_diagnostics.as_ref().unwrap()["observer"], expected);
+    }
 }

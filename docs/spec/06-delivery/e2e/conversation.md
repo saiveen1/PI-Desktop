@@ -5176,64 +5176,48 @@ Build two actual runtimes with identical configuration and different scratch dir
   end-to-end execution is not claimed by these isolated tests.
 
 ## E2E-RUNTIME-observer-guard
-- **Title:** A conversation explicitly opts into independent Observe/Guard assessment.
-- **Preconditions:** Synthetic independent/main provider streams and Host boundaries;
-  isolated storage, no real credentials, daily profile or Desktop installation.
-- **Steps:** Configure an explicit observer model and supported effort in Behavior,
-  save/reload partial settings, then choose Off/Observe/Guard in one local session.
-  Switch sessions during a pending save; verify native/remote/running cases. End a
-  current task with normal text after tool receipts. Exercise every verdict,
-  confidence, invalid JSON/reference, missing model/effort, timeout, Stop, steering,
-  failures, uncertain effects and input truncation. Spend the local correction
-  allowance before Observer, and continue after a permitted Guard verdict. Reopen
-  history and fork the session. Upgrade a populated pre-Observer database.
-- **Expected:** Off and unconfigured settings cause no independent model request;
-  no silent provider/model/effort fallback. Observe only advises. Guard continues
-  only a locally eligible high-confidence incomplete task within the shared
-  allowance, once assessed per user turn. No replay, new user message, review
-  tools, native search or permanent main prompt is added. Deadline/cancellation
-  and stale-state fences settle safely; uncertainty/error never grants execution.
-  Per-response diagnostic results survive roundtrip and appear only on their
-  owning message. Settings/configuration preserve siblings and old user data;
-  new/forked/old migrated sessions are off. Model reasons render as text, and
-  extra costs/privacy limits remain explicit. No installed plugin is altered.
-  Exercise the actual two-stage write: persist the settled assistant first,
-  then checking and terminal observer updates, then reopen the Host transcript.
-  Both the final response and an intermediate response followed by continuation
-  retain their assessment. Diagnostic-only refresh cannot alter text, thinking,
-  usage, timestamps or unrelated metadata, cross an owner/turn boundary, or
-  regress terminal state to checking. Local summary remains outside the folded
-  process after continuation/reload. While running, open the composer menu to
-  inspect current state but verify every mode choice stays disabled. Check
-  skipped terminal responses, specific blocking-tool causes, missing legacy
-  reasons, evidence navigation, exact session ownership and all locale keys.
-  Also stop after a filtered, unsigned tool-only response: its original snapshot
-  must be queued before the late skip refresh without duplicate usage. Redaction
-  and length cuts must preserve valid Unicode in persisted reasons. Resolve
-  provider-local tool IDs to the owning session's stored receipt ID and abandon
-  a delayed evidence jump when the active session changes.
-  Resume a multi-step task using only "continue" in restored and reused runtimes:
-  the reviewer receives the bounded earlier goal, later user constraints and
-  latest answer under distinct historical roles with real transcript IDs. The
-  current answer must be cited before high-confidence incomplete can continue.
-  Switch to an unrelated task and verify old task prose is absent. Exercise
-  repeated continuations, discussion-only history, missing/oversized goals,
-  omitted attachments in live and restored turns, failed replies, session notices,
-  Stop-retained/restored steering and preflight-rejected inputs. Exercise short
-  continuation synonyms, explicit task replacement and compound no-execution
-  instructions; object-preservation clauses must not erase those prohibitions.
-  Input stays
-  within its existing cap, historical credentials are redacted, tool counts do
-  not include historical messages, and all Stop/Plan/budget/effect gates remain.
-  Optional explicitly authorized live-model simulations use synthetic evidence
-  only, an exact reviewer binding, bounded requests and no automatic retries;
-  record their results separately from deterministic runtime assertions.
+- **Title:** A conversation opts into bounded Guard or model-free Endless continuation.
+- **Preconditions:** Synthetic independent/main providers and Host boundaries;
+  isolated storage, no credentials, daily profile or Desktop installation.
+- **Steps:** Choose Off/Endless/Guard, including Endless without a configured
+  reviewer. Set continuation counts 1, 3 and 5. Save a custom reviewer prompt,
+  reset it, reject invalid limits/prompts and preserve sibling settings. Verify
+  idle configuration gates, session changes and unsupported native/remote paths.
+  Feed successive normal-stop replies, intervening tools, completed replies,
+  input/approval waits, Stop/steering and errors/aborts. Have Guard return
+  continue/continue/stop, always continue, malformed output, and timeout. Include
+  innocent mentions of refusal, permissions and question marks. Reopen persisted
+  diagnostics, upgrade a populated Observe database, and fork a session.
+- **Expected:** Endless makes exactly N additional main-model requests and zero
+  independent calls/credential resolutions, regardless of answer semantics.
+  Guard sees only the redacted last reply plus the editable prompt, not system,
+  history, reasoning or tool data; only continue/stop is accepted. Guard reassesses
+  each new final candidate while capacity remains. No mode exceeds its count or
+  stacks legacy checklist/early-end nudges. Actual Stop, Plan, pending work,
+  permission/input state, stale-generation and malformed/timeout/error boundaries
+  remain effective. No synthetic user rows, tool replay or persisted resume job
+  is added. Counts reset only with a new explicit user turn.
+  The latest owning response displays the actual count and stop reason, while
+  older assessments remain readable. Endless never shows a fabricated reviewer,
+  usage, confidence or completion verdict. Post-response diagnostic refreshes
+  preserve response text/thinking/usage and cannot overwrite another response.
+  Migration maps Observe to off, preserves Guard and all unrelated data, and
+  supports Endless create/configure/reopen; forks stay off. Legacy Observe
+  diagnostics display without re-enabling that mode. All locales describe costs
+  and distinguish a continuation decision from verified completion.
+  Toggle optional transient-error continuation. After the built-in network or
+  rate-limit budget exhausts, each additional recovery consumes one remaining
+  auto-continuation, with no reviewer call and no reset on phase changes or
+  successful replies. Cover before-header and mid-stream failure, recovery after
+  a completed Write (exactly one write), normal continuation sharing the balance,
+  Stop during retry backoff, false/missing setting, and invalid boolean writes.
+  Permanent/auth/certificate/local errors retain their existing terminal behavior.
 - **Specs:** Runtime §5e.4; Observer Guard ADR; IPC session.configure; storage;
   Behavior settings; transcript §7.4c.
 - **Acceptance:** C / E / Privacy / Quality.
 - **Milestone:** Maintenance.
 - **Status:** Offline runtime, boundary, renderer interaction and migration
-  fixtures; installed-upgrade, real-model accuracy and live UI remain separate.
+  fixtures; installed upgrades, real-model judgement and live UI remain separate.
 
 ## E2E-RUNTIME-configurable-output-guards
 - **Title:** Ordinary Agent early endings are advisory or boundedly corrected.

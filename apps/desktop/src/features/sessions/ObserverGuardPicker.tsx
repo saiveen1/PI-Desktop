@@ -29,7 +29,7 @@ export function ObserverGuardPicker({ sessionId }: { sessionId?: string }) {
   const diagnostics = runtime?.runDiagnostics;
   const assessment = running && runtime?.isRunning && diagnostics?.turnId === runtime.currentTurnId ? diagnostics?.observer : undefined;
   const statusKey = mode === "off" ? "observerGuard.off" : assessment ? observerSummaryKey(assessment)
-    : running ? "observerGuard.waiting" : !ready ? "observerGuard.unavailable" : "observerGuard.ready";
+    : running ? "observerGuard.waiting" : mode === "guard" && !ready ? "observerGuard.unavailable" : "observerGuard.ready";
   const label = `${t("observerGuard.title")}: ${t(`observerGuard.${mode}`)}. ${t(statusKey)}`;
   const hint = !session ? t("observerGuard.draft") : `${label}${running || pending ? `. ${t("observerGuard.busy")}` : ""}`;
   const actualModel = assessment?.modelKey ? observerModelLabel(assessment.modelKey, providers) : undefined;
@@ -37,7 +37,7 @@ export function ObserverGuardPicker({ sessionId }: { sessionId?: string }) {
     const state = useAppStore.getState();
     const target = state.sessions.find(row => row.id === sessionId);
     if (!target || target.scheduledRun || target.id.startsWith("native-pi:") || isRemoteSession(target) || (target.source && target.source !== "desktop") || state.runningSessions[target.id] || state.pendingPlans[target.id]?.status === "pending") return;
-    if (next !== "off" && !observerSelection(state.settings, state.providers, state.providerModels).available) return;
+    if (next === "guard" && !observerSelection(state.settings, state.providers, state.providerModels).available) return;
     setOpen(false); setSaving(true);
     try {
       await state.configureActiveSession({ mode: target.mode, observerMode: next }, target.id);
@@ -49,16 +49,18 @@ export function ObserverGuardPicker({ sessionId }: { sessionId?: string }) {
     menuClassName="composer-mode-menu" label={t("observerGuard.title")} role="menu" align="start" side="top"
     trigger={ref => <TooltipButton ref={ref} type="button" className={`icon-btn mode-chip composer-mode-chip ${mode !== "off" ? "active" : ""}`}
       tooltip={hint} ariaLabel={hint} aria-haspopup="menu" aria-expanded={open && Boolean(session)} disabled={!session || saving}
-      onClick={() => setOpen(current => !current)}><IconEye size={15} aria-hidden /><span className="composer-mode-chip-label text-sm">{t(`observerGuard.${mode}`)}{mode !== "off" && (!ready || running) ? ` · ${t(statusKey)}` : ""}</span></TooltipButton>}>
+      onClick={() => setOpen(current => !current)}><IconEye size={15} aria-hidden /><span className="composer-mode-chip-label text-sm">{t(`observerGuard.${mode}`)}{mode !== "off" && (statusKey === "observerGuard.unavailable" || running) ? ` · ${t(statusKey)}` : ""}</span></TooltipButton>}>
     {OBSERVER_GUARD_MODES.map(candidate => <Button key={candidate} variant="ghost" type="button" role="menuitemradio"
-      aria-checked={mode === candidate} disabled={blocked || (candidate !== "off" && !ready)}
+      aria-checked={mode === candidate} disabled={blocked || (candidate === "guard" && !ready)}
       className={`composer-plus-item ${mode === candidate ? "active" : ""}`} onClick={() => void choose(candidate)}>
       <span className="flex-1 text-left">{t(`observerGuard.${candidate}`)}</span>{mode === candidate ? <IconCheck size={13} /> : null}
     </Button>)}
     <p className="session-delegation-hint" role="status">{t(statusKey)}</p>
-    <p className="session-delegation-hint">{assessment ? t(observerDecisionKey(assessment)) : t("observerGuard.triggerHint")}</p>
-    <p className="session-delegation-hint">{t(actualModel ? "observerGuard.model" : "observerGuard.configuredModel")}: {actualModel ?? selection.selected?.label ?? (selection.value.modelId || t("observerGuard.noModel"))}</p>
-    <p className="session-delegation-hint">{t("observerGuard.modeHint")}</p>
+    {assessment ? <p className="session-delegation-hint">{t(observerDecisionKey(assessment))}</p> : null}
+    {assessment?.continuationCount !== undefined && assessment.maxContinuations !== undefined ? <p className="session-delegation-hint">{t("observerGuard.continuationProgress", { current: assessment.continuationCount, max: assessment.maxContinuations })}</p> : null}
+    {mode !== "endless" ? <p className="session-delegation-hint">{t(actualModel ? "observerGuard.model" : "observerGuard.configuredModel")}: {actualModel ?? selection.selected?.label ?? (selection.value.modelId || t("observerGuard.noModel"))}</p> : null}
+    <p className="session-delegation-hint">{t("observerGuard.endlessHint")}</p>
+    <p className="session-delegation-hint">{t("observerGuard.privacy")}</p>
     {running || pending ? <p className="session-delegation-hint">{t("observerGuard.busy")}</p> : null}
     <Button variant="ghost" type="button" role="menuitem" className="composer-plus-item" onClick={() => { setOpen(false); useAppStore.getState().setSettingsTab("behavior"); }}>{t("observerGuard.configure")}</Button>
   </AnchoredMenu>;
