@@ -165,7 +165,7 @@ export function assistantTurnMenuItems({
     });
   }
   if (onEdit) {
-    items.push({ id: "edit-reply", label: t("chat.editReply"), icon: pencilIcon(), separatorBefore: items.length > 0, onSelect: onEdit });
+    items.push({ id: "edit-context", label: t("turnContext.edit"), icon: pencilIcon(), separatorBefore: items.length > 0, onSelect: onEdit });
   }
   if (complete) {
     items.push({

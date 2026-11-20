@@ -396,6 +396,17 @@ precedence, then a preceding anchor, then the record's continuation position.
 Forks remap surviving anchor IDs. Normal system notices remain visible; internal
 model-state rows do not produce transcript bubbles or search text.
 
+Optional `meta.contextOverride` version 1 supplies a model-facing overlay for an
+assistant or tool row. Assistant fields are `content`, `thinking`, `excludeContent`
+and `excludeThinking`; tools use `toolArgs` (object), `toolResultText` and
+`excludeTool`. Original blocks, provider metadata and execution receipts are never
+rewritten by these edits. The original transcript remains the display/audit source;
+runtime projection applies the overlay and drops invalidated signatures only in
+memory. Context overrides survive fork, revision activation and restart. Restore
+removes this turn's overlays and legacy thinking flags. Any affected compaction
+and its dependent chain is invalidated atomically with the overlays. This extends
+open metadata in schema 2, with no SQLite migration; older runtimes may ignore it.
+
 Assistant rows may carry optional `meta.excludeThinkingFromContext`, projected
 as the same optional `UiMessage` boolean. `true` excludes this row's reasoning
 from subsequent model context while leaving its original thinking blocks visible

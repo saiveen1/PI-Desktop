@@ -1,6 +1,7 @@
 use super::*;
 
 mod assistant_edit;
+mod turn_context;
 
 fn fixture() -> (tempfile::TempDir, Database, String) {
     let dir = tempfile::tempdir().unwrap();

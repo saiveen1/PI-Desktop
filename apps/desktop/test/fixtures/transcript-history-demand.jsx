@@ -6,7 +6,7 @@ import { en, zhCN } from "@pi-desktop/i18n";
 import { ChatTranscript } from "../../src/features/chat/transcript/ChatTranscript";
 import { SessionPane } from "../../src/components/SessionPane";
 import { sessionReadingState } from "../../src/lib/transcript-reading-position";
-import { api } from "../../src/lib/api";
+import { exerciseTurnContext } from "./turn-context-editor.jsx";
 import { useAppStore } from "../../src/stores/app-store";
 import "../../src/styles/tokens.css";
 import "../../src/styles/ui-kit.css";
@@ -181,108 +181,4 @@ window.historyDemand = {
   },
 };
 
-window.exerciseReplyEdit = async () => {
-  const id = "reply-edit";
-  const answer = { ...message("answer"), role: "assistant", content: "  **Final reply**\n" };
-  const rows = [message("older-prompt"), { ...message("older-answer"), role: "assistant" }, message("prompt"),
-    { ...message("narration"), role: "assistant" }, { ...message("tool"), role: "tool", toolName: "read" }, answer];
-  const writes = [];
-  const errors = [];
-  const failure = Promise.withResolvers();
-  api.editAssistantReply = async (input) => {
-    writes.push(input);
-    if (writes.length === 2) return failure.promise;
-    return {
-      ok: true,
-      thinkingContextUpdates: [{ messageId: answer.id, excludeThinkingFromContext: input.thinkingContext !== "keep" }],
-    };
-  };
-  for (const operation of ["prompt", "forkSession", "getSession"]) {
-    api[operation] = () => { throw Error(`Unexpected ${operation}`); };
-  }
-  useAppStore.setState({ page: "chat", activeSessionId: id, messages: rows,
-    sessions: [{ id, source: "desktop" }], showToast: (text) => errors.push(text) });
-  function Conversation() {
-    const live = useAppStore((state) => state.messages);
-    return <ChatTranscript sessionId={id} messages={live} isRunning={false} />;
-  }
-  flushSync(() => root.render(<I18nextProvider i18n={i18n}><Conversation /></I18nextProvider>));
-  const actions = () => [...document.querySelectorAll('button[aria-label="Edit reply"]')];
-  const textarea = () => document.querySelector('textarea[aria-label="Edit reply"]');
-  const chooser = () => document.querySelector('.message-edit select');
-  const choose = async mode => {
-    chooser().value = mode;
-    chooser().dispatchEvent(new Event('change', { bubbles: true }));
-    await frame();
-  };
-  const formButton = text => [...document.querySelectorAll('.message-edit button')].find(b => b.textContent === text);
-  const open = async () => { actions()[0].click(); await until(textarea, "reply editor did not open"); };
-  const change = value => {
-    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(textarea(), value);
-    textarea().dispatchEvent(new Event('input', { bubbles: true }));
-  };
-  const actionCount = actions().length;
-  await open();
-  const source = textarea().value;
-  const focused = textarea() === document.activeElement;
-  const dropdown = { value: chooser().value, options: [...chooser().options].map(o => [o.value, o.textContent]),
-    label: chooser().labels[0]?.firstElementChild.textContent,
-    hint: document.getElementById(chooser().getAttribute('aria-describedby'))?.textContent };
-  const form = textarea().form;
-  const footerLayout = (width) => {
-    form.style.width = `${width}px`;
-    const field = chooser().closest('.message-edit-thinking-context').getBoundingClientRect();
-    const buttons = formButton('Save').parentElement.getBoundingClientRect();
-    const footer = chooser().closest('.message-edit-actions').getBoundingClientRect();
-    return { wrapped: buttons.top >= field.bottom, right: footer.right - buttons.right <= 9,
-      left: field.left - footer.left <= 9, fits: field.right <= footer.right && buttons.right <= footer.right };
-  };
-  const layout = [footerLayout(500), footerLayout(230)];
-  form.style.width = '';
-  const unchangedCanSave = !formButton('Save').disabled;
-  await choose('turn');
-  change('   ');
-  await until(() => formButton('Save')?.disabled, "blank text allowed a save");
-  formButton('Cancel').click();
-  await until(() => !textarea(), "Cancel did not close reply editor");
-  const afterCancel = { writes: writes.length, content: useAppStore.getState().messages.at(-1).content };
-  await open();
-  formButton('Save').click();
-  await until(() => !textarea() && useAppStore.getState().messages.at(-1).excludeThinkingFromContext,
-    "saving the same text must apply the default context selection");
-  await open();
-  await choose('turn');
-  const beforeExplicitSave = writes.length;
-  change("  **Corrected reply**\n");
-  await until(() => !formButton('Save')?.disabled && textarea().value.includes('Corrected reply'), "Save did not accept the changed draft");
-  textarea().form.requestSubmit();
-  textarea().form.requestSubmit();
-  await until(() => chooser()?.disabled, "Save did not lock the chooser");
-  const pending = { writes: writes.length, readOnly: textarea().readOnly, cancelDisabled: formButton('Cancel').disabled,
-    saveDisabled: textarea().form.querySelector('[type="submit"]').disabled };
-  failure.reject(Error("Reply changed"));
-  await until(() => errors.length === 1 && formButton('Save'), "Host refusal did not return to the editor");
-  const afterFailure = { text: textarea().value, mode: chooser().value, enabled: !chooser().disabled };
-  formButton('Save').click();
-  await until(() => !textarea() && document.querySelector('[data-message-id="answer"]')?.textContent.includes('Corrected reply'), "confirmed reply did not render");
-  await open();
-  await choose('keep');
-  formButton('Save').click();
-  await until(() => !textarea() && useAppStore.getState().messages.at(-1).excludeThinkingFromContext === false,
-    "saving the same text must also restore thinking");
-  window.previewReplyEditor = async () => {
-    const style = document.createElement('style');
-    style.textContent = '.thread-scroll{width:760px;height:700px}[data-message-id]{height:auto;overflow:visible}';
-    document.head.append(style);
-    await open();
-    await i18n.changeLanguage('zh-CN');
-    await frame();
-    const form = document.querySelector('.message-edit');
-    form.scrollIntoView({ block: 'center' });
-    await frame();
-    const { x, y, width, height } = form.getBoundingClientRect();
-    return { x: x + window.scrollX, y: y + window.scrollY, width, height };
-  };
-  return { actionCount, source, focused, unchangedCanSave, dropdown, layout, afterCancel, beforeExplicitSave,
-    pending, afterFailure, errors, writes, ids: useAppStore.getState().messages.map(row => row.id) };
-};
+window.exerciseTurnContext = () => exerciseTurnContext({ root, i18n, message, frame, until });

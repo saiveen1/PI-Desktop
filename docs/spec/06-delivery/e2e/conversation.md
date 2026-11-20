@@ -2517,21 +2517,21 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
   prompt. 4) Reopen the source and inspect it. 5) Append a prompt to the child,
   restart and inspect both. 6) Repeat during a later source turn. 7) Repeat toolbar
   and context-menu Fork after paging/search/reading restoration reveals an old reply.
-  8) On a reply with several thinking/tool iterations, inspect the footer's
-  default reply-only selection, save unchanged text, then repeat with turn-wide
-  exclusion and keep-all. Cancel a changed selection and inject a save failure.
+  8) Open Edit context on the latest idle turn. Edit intermediate text, thinking,
+  tool JSON/result text and the final answer; preview counts before Save. Try
+  exclude-all-thinking, final-only, explicit final exclusion and restore.
+  Cancel a draft, inject a save failure and navigate during reads/saves.
   Reopen after each save and capture the next provider request.
 - **Expected**: A historical completed assistant response offers Copy, Fork and
-  Regenerate, but not Delete or in-place Edit. On a local idle child, edit its
-  final reply, cancel once and then save. The child keeps the edited text after
-  reopening; the next provider request carries that text as the assistant's
-  message, not the original or an appended user correction. Saving alone makes
-  no provider request. Reply-only excludes the selected row's reasoning, never
-  the last earlier row that contains thinking. Turn-wide excludes all top-level
-  assistant reasoning in this turn; keep-all restores it. Original thinking
-  remains visible, earlier turns/tool pairs stay intact, and no covering
-  checkpoint or signed reasoning resurrects excluded content. Same-text saves
-  work, cancellation writes nothing, and failed saves retain the draft/choice.
+  Regenerate, but not Delete or in-place Edit context. A local idle child exposes
+  all top-level assistant/tool blocks from its current turn. Defaults preserve
+  current context; only explicit Save persists overlays. The next request uses
+  edited content, not an appended user correction. Tool exclusions remove both
+  call and result; editing results never executes or undoes tools. Original
+  transcript and receipts stay intact, including media represented by editor
+  placeholders. An included final answer must be nonblank; it may be excluded.
+  Earlier turns remain untouched. Stale saves fail atomically; cancelled drafts
+  write nothing and failed saves retain inputs. Restoring removes overlays.
   Fork
   activates a separately titled child ending at the selected response; later source
   turns are absent. Completed historical prefixes stay forkable during a later turn;
@@ -2546,14 +2546,15 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
 - **Milestone**: M5
 - **Status**: Unit-covered (`sessions::tests::message_scoped_fork_stops_at_selected_assistant_response`,
   `session-fork.test.mjs`, `session-fork-running.test.mjs`, `transcript-style.test.mjs`).
-  `scripts/e2e-edit-assistant-reply.mjs` covers the IPC edit of a forked long
-  reply, stale-save rejection, compaction invalidation, Host restart and the
-  next provider request using synthetic data. Its thinking-context fixture adds
-  three model calls with paired tools, same-text saves, turn-to-reply/keep
-  restoration, no-thinking final replies and checkpoint invalidation. Runtime
-  tests also cover signed/encrypted reasoning and DeepSeek field compatibility;
-  standalone Chromium tests cover footer layout and select/save/cancel behavior.
-  Full restart UI scenario Draft.
+  `scripts/e2e-turn-context.mjs` covers actual IPC/Host overlay persistence,
+  stale-save rejection, compaction invalidation, Host restart, independent forks,
+  restoration and the next provider request with synthetic data/transport.
+  Host tests cover raw-record preservation, ownership, size and media boundaries;
+  runtime tests cover signed reasoning, modified channels and complete tool pairs.
+  Standalone Chromium tests cover block editing, counts/preview, shortcuts,
+  cancellation, failed/stale saves, narrow layout and navigation races.
+  `scripts/e2e-edit-assistant-reply.mjs` retains legacy API coverage.
+  Full installed-Desktop restart UI scenario Draft.
 
 ## E2E-071b: Forked session retains messages after the first AI turn completes
 

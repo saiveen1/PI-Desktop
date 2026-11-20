@@ -23,6 +23,8 @@
  * `toolResultFromUi`.
  */
 
+import { historyForModelContext } from "@pi-desktop/shared";
+import { editedThinkingForReplay } from "./assistant-provider-replay.js";
 import { estimateTokens } from "./pi-runtime-estimates.js";
 import type {
   AssistantMessage,
@@ -259,7 +261,7 @@ export function chainRowsToMessages(
   const messages: Message[] = [];
   let toolCarrier: AssistantMessage | undefined;
 
-  for (const row of rows) {
+  for (const row of historyForModelContext(rows)) {
     const timestamp = timestampMs(row.createdAt) || Date.now();
     if (row.role === "user") {
       toolCarrier = undefined;
@@ -293,7 +295,7 @@ export function chainRowsToMessages(
       }
       const assistant: AssistantMessage = {
         role: "assistant",
-        content,
+        content: editedThinkingForReplay(row, content),
         api,
         provider: model.provider,
         model: model.id,

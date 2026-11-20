@@ -520,7 +520,8 @@ test("message toolbars are icon-only with hover tooltips", () => {
 });
 
 test("streaming assistant turns hide answer copy until idle", () => {
-  assert.ok(transcriptSource.includes("{complete && actionMessage && !editingMessageId ? ("));
+  assert.ok(transcriptSource.includes("{complete && actionMessage ? ("));
+  assert.ok(transcriptSource.includes("{editor.snapshot && editor.signal ? <TurnContextEditor"));
   assert.ok(
     transcriptSource.includes(
       '<CopyButton text={content} label={t("chat.copy")} />',

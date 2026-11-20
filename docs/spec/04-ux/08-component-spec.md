@@ -2248,17 +2248,21 @@ Single message render — either user (plaintext) or assistant (markdown streami
   assistant turns; Fork and Regenerate on completed assistant turns; Edit and
   Delete on user turns. A streaming assistant turn omits its Copy action until
   the response settles. The last completed text reply in an idle, editable local
-  Desktop conversation also offers Edit: Save replaces the assistant's answer
-  in the transcript and next model context; Cancel leaves it unchanged. The
-  editor footer places a labeled Thinking context select before Cancel/Save:
-  exclude only the final answer's thinking (default), exclude all thinking used
-  for this answer, or keep all thinking used for this answer. The hint explicitly
-  limits the choice to this answer, leaves earlier turns unaffected, and confirms
-  that original thinking stays in history. The footer wraps on narrow panes.
-  An explicit selection may be saved with unchanged text. Selection alone never
-  saves or starts a model request. Neither
-  action retries the prompt. Older replies require Fork first; the source and
-  its later turns remain unchanged. Assistant rows never offer Delete. Chips
+  Desktop conversation offers **Edit context** for its entire current turn.
+  An ordered editor exposes thinking, intermediate prose, paired tool arguments
+  and result text, then the final answer. Each block has inclusion, editing and
+  original/reset controls; tools are included/excluded as complete call/result
+  pairs. Default preserves existing context. Shortcuts exclude all thinking or
+  retain only the final answer; a count summary and preview show the proposed
+  current-turn context before Save. An included final answer must be nonblank;
+  explicitly excluding it is allowed. Recognized media bytes in tool results
+  appear as placeholders, not inline binary text; editing result text replaces
+  model-visible media, never the original execution record.
+  Original execution records stay visible, with a context-edited notice rather
+  than substituted tool receipts. Restore removes overrides without executing
+  anything. Save/cancel, errors, stale reads and narrow layouts remain guarded;
+  older turns require Fork first. See [whole-turn editor](../../adr/whole-turn-context-editing.md).
+  Neither action retries the prompt. Assistant rows never offer Delete. Chips
   render the glyph
   alone: the label is carried by `aria-label` plus a themed hover/focus
   tooltip 8px above the chip (compact raised shadow, not the composer glow),

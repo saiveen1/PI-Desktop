@@ -19,8 +19,9 @@ mod display_preview_tests;
 mod fork_files;
 mod history_mutations;
 pub use history_mutations::{
-    activate_message_revision_canonical, delete_message, edit_assistant_reply,
-    retract_pending_prompt, running_turn, EditAssistantReply,
+    activate_message_revision_canonical, delete_message, edit_assistant_reply, edit_turn_context,
+    get_turn_context, retract_pending_prompt, running_turn, EditAssistantReply, EditTurnContext,
+    GetTurnContext,
 };
 mod model_system;
 mod observer;
@@ -263,6 +264,9 @@ pub struct UiMessage {
     /// Context-only exclusion; absent/false includes the preserved thinking blocks.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exclude_thinking_from_context: Option<bool>,
+    /// Optional model-context overlay; visible text and execution receipts remain original.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_override: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<String>,
     /// Additive transcript metadata; older records have no truncation marker.
@@ -468,6 +472,9 @@ pub(crate) fn ui_to_record(message: &UiMessage) -> (MessageRecord, Option<String
     if let Some(excluded) = message.exclude_thinking_from_context {
         meta_obj.insert("excludeThinkingFromContext".into(), json!(excluded));
     }
+    if let Some(overlay) = &message.context_override {
+        meta_obj.insert("contextOverride".into(), overlay.clone());
+    }
     if let Some(command) = &message.command {
         meta_obj.insert("command".into(), json!(command));
     }
@@ -643,6 +650,10 @@ pub(crate) fn record_to_ui(record: MessageRecord) -> UiMessage {
     let exclude_thinking_from_context = meta
         .get("excludeThinkingFromContext")
         .and_then(Value::as_bool);
+    let context_override = meta
+        .get("contextOverride")
+        .filter(|value| !value.is_null())
+        .cloned();
     let command = meta
         .get("command")
         .and_then(Value::as_str)
@@ -805,6 +816,7 @@ pub(crate) fn record_to_ui(record: MessageRecord) -> UiMessage {
             created_at: record.created_at,
             thinking,
             exclude_thinking_from_context,
+            context_override,
             status,
             model_id,
             provider_id,
@@ -865,6 +877,7 @@ pub(crate) fn record_to_ui(record: MessageRecord) -> UiMessage {
             created_at: record.created_at,
             thinking,
             exclude_thinking_from_context,
+            context_override,
             status,
             model_id,
             provider_id,
@@ -4902,6 +4915,7 @@ mod tests {
             model_system: None,
             provider_replay: None,
             exclude_thinking_from_context: None,
+            context_override: None,
             session_message: None,
         }
     }
@@ -5877,6 +5891,7 @@ mod tests {
             model_system: None,
             provider_replay: None,
             exclude_thinking_from_context: None,
+            context_override: None,
             session_message: None,
         };
         append_message(&db, &session.id, &tool, None).unwrap();
@@ -6748,6 +6763,7 @@ mod tests {
             model_system: None,
             provider_replay: None,
             exclude_thinking_from_context: None,
+            context_override: None,
             session_message: None,
         };
         append_message(&db, &session.id, &assistant, None).unwrap();
@@ -6896,6 +6912,7 @@ mod tests {
             model_system: None,
             provider_replay: None,
             exclude_thinking_from_context: None,
+            context_override: None,
             hosted_search: Some(json!({
                 "status": "completed",
                 "rounds": [

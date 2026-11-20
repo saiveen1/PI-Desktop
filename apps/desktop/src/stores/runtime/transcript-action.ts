@@ -128,46 +128,16 @@ export async function editAssistantReply(
     if (!bodyChanged && !flags.size) return true;
     const changedIds = new Set(flags.keys());
     if (bodyChanged) changedIds.add(messageId);
-    const current = get();
-    const replace = (messages: UiMessage[]) => {
-      const { positions } = getSessionMessageSnapshot(messages);
-      const changed: number[] = [];
-      let next: UiMessage[] | undefined;
-      for (const id of changedIds) {
-        const index = positions.get(id);
-        if (index === undefined) continue;
-        const message = messages[index];
-        const body = bodyChanged && id === messageId && isEditableReply(message) &&
-          matchesReplySource(message.content, expectedContent);
-        const flag = flags.get(id);
-        if (!body && (flag === undefined || flag === message.excludeThinkingFromContext)) continue;
-        next ??= messages.slice();
-        next[index] = {
-          ...message,
-          ...(body ? { content, providerReplay: undefined } : {}),
-          ...(flag === undefined ? {} : { excludeThinkingFromContext: flag }),
-        };
-        changed.push(index);
-      }
-      return next ? registerSessionMessageReplacements(messages, next, changed) : messages;
-    };
-    // Keep each projection's window and patch only the Host-confirmed identities.
-    const active = current.activeSessionId === sessionId ? current.messages : undefined;
-    const retained = current.retainedTranscripts[sessionId];
-    const cached = runtime.sessionTranscriptCache.get(sessionId) ?? retained;
-    const updatedActive = active && replace(active);
-    const updatedCache = cached && (cached === active ? updatedActive : replace(cached));
-    runtime.recordConfirmedReplyEdit(sessionId);
-    if (updatedCache && updatedCache !== cached) runtime.cacheSessionTranscript(sessionId, updatedCache);
-    const view = current.transcriptViews[sessionId];
-    const reading = view && replace(view.messages);
-    const updatedRetained = retained && (retained === active ? updatedActive : retained === cached ? updatedCache : replace(retained));
-    set({
-      ...(updatedActive && updatedActive !== active ? { messages: updatedActive } : {}),
-      ...(updatedRetained && updatedRetained !== retained ? { retainedTranscripts: { ...current.retainedTranscripts, [sessionId]: updatedRetained } } : {}),
-      ...(view && reading && (reading !== view.messages || updatedActive !== active || view.loading) ? {
-        transcriptViews: { ...current.transcriptViews, [sessionId]: { ...view, messages: reading, loading: null } },
-      } : {}),
+    patchConfirmedTranscriptEdit({ get, set }, runtime, sessionId, changedIds, (message) => {
+      const body = bodyChanged && message.id === messageId && isEditableReply(message) &&
+        matchesReplySource(message.content, expectedContent);
+      const flag = flags.get(message.id);
+      if (!body && (flag === undefined || flag === message.excludeThinkingFromContext)) return message;
+      return {
+        ...message,
+        ...(body ? { content, providerReplay: undefined } : {}),
+        ...(flag === undefined ? {} : { excludeThinkingFromContext: flag }),
+      };
     });
     return true;
   } catch (error) {
@@ -176,4 +146,78 @@ export async function editAssistantReply(
   } finally {
     saving.delete(sessionId);
   }
+}
+
+export async function editTurnContext(
+  store: StoreAccess,
+  runtime: SessionRuntime,
+  saving: Set<string>,
+  ...[input, signal]: Parameters<AppState["editTurnContext"]>
+): Promise<boolean> {
+  const { sessionId, anchorMessageId } = input;
+  if (signal.aborted || saving.has(sessionId) || getEditableAssistantReply(store.get(), sessionId)?.id !== anchorMessageId) return false;
+  saving.add(sessionId);
+  try {
+    const { updates } = await api.editTurnContext(input);
+    const confirmed = new Map(updates.map((update) => [update.messageId, update]));
+    if (confirmed.size) patchConfirmedTranscriptEdit(store, runtime, sessionId, confirmed.keys(), (message) => {
+      const update = confirmed.get(message.id);
+      if (!update) return message;
+      const { contextOverride, excludeThinkingFromContext } = update;
+      return {
+        ...message,
+        contextOverride: contextOverride ?? undefined,
+        ...(excludeThinkingFromContext === undefined ? {} : { excludeThinkingFromContext }),
+      };
+    });
+    return true;
+  } finally {
+    saving.delete(sessionId);
+  }
+}
+
+function patchConfirmedTranscriptEdit(
+  { get, set }: StoreAccess,
+  runtime: SessionRuntime,
+  sessionId: string,
+  changedIds: Iterable<string>,
+  patch: (message: UiMessage) => UiMessage,
+) {
+  const current = get();
+  const ids = [...changedIds];
+  const replace = (messages: UiMessage[]) => {
+    const { positions } = getSessionMessageSnapshot(messages);
+    const changed: number[] = [];
+    let next: UiMessage[] | undefined;
+    for (const id of ids) {
+      const index = positions.get(id);
+      if (index === undefined) continue;
+      const message = messages[index];
+      const updated = patch(message);
+      if (updated === message) continue;
+      next ??= messages.slice();
+      next[index] = updated;
+      changed.push(index);
+    }
+    return next ? registerSessionMessageReplacements(messages, next, changed) : messages;
+  };
+  // Preserve each window, including after navigation, and invalidate reads issued before the save.
+  const active = current.activeSessionId === sessionId ? current.messages : undefined;
+  const retained = current.retainedTranscripts[sessionId];
+  const cached = runtime.sessionTranscriptCache.get(sessionId) ?? retained;
+  const view = current.transcriptViews[sessionId];
+  const updatedActive = active && replace(active);
+  const updatedCache = cached && (cached === active ? updatedActive : replace(cached));
+  const reading = view && replace(view.messages);
+  const updatedRetained = retained && (retained === active ? updatedActive : retained === cached ? updatedCache : replace(retained));
+  const distinctWindow = (cached && cached !== active) || (retained && retained !== active);
+  runtime.recordConfirmedReplyEdit(sessionId, distinctWindow && updatedActive !== active ? updatedActive : undefined);
+  if (updatedCache && updatedCache !== cached) runtime.cacheSessionTranscript(sessionId, updatedCache);
+  set({
+    ...(updatedActive && updatedActive !== active ? { messages: updatedActive } : {}),
+    ...(updatedRetained && updatedRetained !== retained ? { retainedTranscripts: { ...current.retainedTranscripts, [sessionId]: updatedRetained } } : {}),
+    ...(view && reading && (reading !== view.messages || updatedActive !== active || view.loading) ? {
+      transcriptViews: { ...current.transcriptViews, [sessionId]: { ...view, messages: reading, loading: null } },
+    } : {}),
+  });
 }

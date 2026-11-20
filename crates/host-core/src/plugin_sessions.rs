@@ -315,6 +315,7 @@ fn parse_message(
         model_system: None,
         provider_replay: None,
         exclude_thinking_from_context: None,
+        context_override: None,
         session_message: None,
     })
 }

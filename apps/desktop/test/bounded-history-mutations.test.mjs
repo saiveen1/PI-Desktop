@@ -87,6 +87,7 @@ function ipcHarness(pending = false, result = { ok: true }, { disposeError, acti
   return { events, invoke: (channel, input) => { assert.equal(typeof handlers.get(IPC.invoke[channel]), "function"); return handlers.get(IPC.invoke[channel])(input); } };
 }
 for (const [channel, method, input] of [
+  ["sessionEditTurnContext", "session.editTurnContext", { sessionId: "s", anchorMessageId: "a2", expectedRevision: "revision", edits: [{ messageId: "a1", contextOverride: { version: 1, excludeContent: true } }] }],
   ["sessionEditAssistantReply", "session.editAssistantReply", { sessionId: "s", messageId: "a2", expectedContent: "old", content: "  corrected\n" }],
   ["sessionDeleteMessage", "session.deleteMessage", { sessionId: "s", messageId: "u1" }],
   ["sessionRetractPendingPrompt", "session.retractPendingPrompt", { sessionId: "s", userMessageId: "u2", turnId: "turn" }],
@@ -101,6 +102,25 @@ for (const [channel, method, input] of [
     assert.deepEqual(h.events, [["lock"], ["fence"], ["strict-drain", "s"], ["rollback"], ["release"]]);
   });
 }
+test("turn context reads are data-only and saves fail closed on old-runtime disposal", async () => {
+  const h = ipcHarness(false, { snapshot: { revision: "v1" } });
+  const target = { sessionId: "s", anchorMessageId: "a2" };
+  assert.deepEqual(await h.invoke("sessionGetTurnContext", target), { snapshot: { revision: "v1" } });
+  assert.deepEqual(h.events, [["session.getTurnContext", target]]);
+  const busy = ipcHarness(false, undefined, { disposeError: new Error("old context still active") });
+  await assert.rejects(busy.invoke("sessionEditTurnContext", { ...target, expectedRevision: "v1", edits: [] }), /old context still active/);
+  assert.ok(!busy.events.some(([method]) => method === "session.editTurnContext"));
+});
+test("turn context rejects invalid targets and shapes before starting a mutation", async () => {
+  const h = ipcHarness();
+  const request = { sessionId: "s", anchorMessageId: "a2", expectedRevision: "v1", edits: [] };
+  for (const patch of [{ anchorMessageId: "" }, { expectedRevision: "" }, { edits: null }, { restore: "yes" }]) {
+    await assert.rejects(h.invoke("sessionEditTurnContext", { ...request, ...patch }), { errorCode: "INVALID_ARGUMENT" });
+  }
+  await assert.rejects(h.invoke("sessionGetTurnContext", { sessionId: "native-pi:s", anchorMessageId: "a2" }), { errorCode: "INVALID_ARGUMENT" });
+  await assert.rejects(h.invoke("sessionEditTurnContext", { ...request, sessionId: "remote:h:s" }), { errorCode: "CAPABILITY_UNAVAILABLE" });
+  assert.deepEqual(h.events, []);
+});
 for (const thinkingContext of ["reply", "turn", "keep"]) {
   test(`reply edit forwards ${thinkingContext} and returns authoritative thinking updates`, async () => {
     const result = { ok: true, thinkingContextUpdates: [{ messageId: "a1", excludeThinkingFromContext: thinkingContext !== "keep" }] };
@@ -185,7 +205,7 @@ test("new ID mutations preserve the existing remote read-only capability boundar
   const { guardRemoteInvocation } = load("../src/lib/remote-ipc-safety.ts", {
     "@pi-desktop/shared": { IPC }, i18next: { default: { t: () => "Remote history is read-only" } },
   });
-  for (const channel of [IPC.invoke.sessionEditAssistantReply, IPC.invoke.sessionDeleteMessage, IPC.invoke.sessionRetractPendingPrompt]) {
+  for (const channel of [IPC.invoke.sessionGetTurnContext, IPC.invoke.sessionEditTurnContext, IPC.invoke.sessionEditAssistantReply, IPC.invoke.sessionDeleteMessage, IPC.invoke.sessionRetractPendingPrompt]) {
     assert.throws(() => guardRemoteInvocation(channel, { sessionId: "remote:host:session", messageId: "m" }), { code: "CAPABILITY_UNAVAILABLE" });
     assert.doesNotThrow(() => guardRemoteInvocation(channel, { sessionId: "local-session", messageId: "m" }));
   }
@@ -226,6 +246,7 @@ test("the real store/API/preload/IPC path uploads bounded ids with more than 64 
       assert.ok(["sessionEditAssistantReply", "sessionDeleteMessage", "sessionRetractPendingPrompt", "sessionActivateRevision"].includes(key));
       return { ok: true, data: await ipc.invoke(key, input) };
     } } }, "@pi-desktop/shared": shared, "@pi-desktop/shared/protocol": shared,
+    "../performance-heartbeat": load("../electron/performance-heartbeat.ts", {}),
     "../composer-file-selection": load("../electron/composer-file-selection.ts", {}),
     // Boot-animation descriptor decoding (D679); no argument, nothing to read.
     "@pi-desktop/shared/startup-animation": { decodeStartupAnimationArgument: () => null },

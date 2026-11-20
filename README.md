@@ -135,13 +135,13 @@ This edition strengthens the existing framework rather than replacing it.
   inside a folded tool run, go directly to the preceding prompt without loading
   all intervening tool records. Older tool details remain available on demand.
 
-- **Edit the last assistant reply.** In an idle local conversation, save a
-  corrected answer and continue with that text as the assistant's reply, without
-  rerunning the model. Choose whether to exclude only the final answer's thinking
-  (default), all thinking used to produce this answer, or keep it all in future
-  context. Earlier turns are unaffected; original thinking stays visible in
-  history. For an older answer, fork at the reply
-  and edit the copy.
+- **Edit an answer's model context.** In an idle local conversation, edit or
+  exclude intermediate prose, thinking, tool arguments/results and the final
+  answer before continuing. Preview the proposed context, exclude all thinking,
+  keep only the final answer, or restore originals. Original transcript and tool
+  receipts remain visible and are never re-executed or undone by edits. Earlier
+  turns are unchanged; fork an older answer first. Oversized editing snapshots
+  are refused instead of silently truncated.
 
 - **Project-scoped groups, colored labels, and deliberate ordering.** Groups
   control placement; multiple labels do not duplicate conversations. Local project

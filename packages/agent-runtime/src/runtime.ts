@@ -12,7 +12,7 @@ import { subagentTaskDeclaration } from "./delegation-tool.js";
 import { parseSubagentTerminalDiagnostics } from "./subagent-terminal.js";
 import { buildDelegationModelTool } from "./delegation-model-tool.js";
 import { resolveDelegationRunPolicy, describeDelegationRunPolicy, isDelegationRunPolicySnapshot, type DelegationRunPolicy, type DelegationSettings, type DelegationApprovalDecision, DelegationRequestError, resolveUnknownUpstreamRetryLimit } from "@pi-desktop/shared";
-import { appendLocalFileReferenceContext } from "@pi-desktop/shared";
+import { appendLocalFileReferenceContext, historyForModelContext } from "@pi-desktop/shared";
 import { buildJobTools } from "./background-job-tools.js";
 import {
   mutationFailureKey, mutationTerminationAdvice, mutationTerminationMessage, mutationTerminationCode,
@@ -168,6 +168,7 @@ import { checkGenUiFragment, genUiFragmentCheckNote, isGenUiFragmentPath } from 
 import type { RuntimeHost } from "./host-client.js";
 import { classifyAgentError } from "./agent-errors.js";
 import {
+  editedThinkingForReplay,
   captureAssistantProviderReplay,
   restoreAssistantProviderReplay,
   providerReplayForBubble,
@@ -2028,7 +2029,7 @@ export class DesktopAgentRuntime {
     this.host = opts.host;
     this.batchPlanner = new BatchPlanner(this.host, this.sessionId);
     this.turnCorrections = new TurnCorrectionPolicy(
-      this.host, this.sessionId, opts.autoContinueUnfinishedTodos !== false, opts.agentOutputGuard, opts.history,
+      this.host, this.sessionId, opts.autoContinueUnfinishedTodos !== false, opts.agentOutputGuard, opts.history ? historyForModelContext(opts.history) : undefined,
     );
     this.turnCorrections.observer.setConfig(opts.observerGuard);
     this.onDiagnostic = opts.onDiagnostic ?? (() => undefined);
@@ -3163,7 +3164,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     let carrierToolSignatures = new Map<string, string>();
     let compactedCarrier: AssistantMessage | undefined;
     let previousRowId: string | undefined;
-    for (const m of orderSystemRows(history)) {
+    for (const m of orderSystemRows(historyForModelContext(history))) {
       // A carrier before this boundary is removed by context compaction. Tool
       // rows after it must reconstruct their calls on a surviving carrier.
       if (compactionThroughMessageId && previousRowId === compactionThroughMessageId) {
@@ -3246,7 +3247,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
         // end up with no content and no calls are dropped at the end.
         const assistant: AssistantMessage = {
           role: "assistant",
-          content,
+          content: editedThinkingForReplay(m, content),
           api,
           // Persisted providerId identifies a local account; Pi compares its
           // vendor identity to decide whether native thinking can be replayed.
@@ -3281,7 +3282,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           if (!compactedCarrier) carrierToolSignatures = new Map();
           compactedCarrier = undefined;
         }
-        const thoughtSignature = carrierToolSignatures.get(m.toolCallId);
+        const thoughtSignature = m.contextOverride?.toolArgs === undefined ? carrierToolSignatures.get(m.toolCallId) : undefined;
         toolCarrier.content.push({
           type: "toolCall",
           id: m.toolCallId,

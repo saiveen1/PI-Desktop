@@ -11,6 +11,29 @@ Host verifies canonical message/turn ownership and meaningful reply activity;
 a refused retract leaves history intact. Repeating an already completed deletion
 or retraction does not delete another prompt. No history array is required.
 
+### Whole-turn model-context overlays
+
+`session.getTurnContext({ sessionId, anchorMessageId }) -> { snapshot }` reads
+the latest eligible completed turn under the Host lock. The snapshot contains
+original, uncapped top-level assistant/tool rows, their existing context overrides,
+and an opaque revision. Recognized binary image/audio payloads in result text
+use explicit editor placeholders; canonical results remain complete. Ordinary
+prose is not truncated. Native/remote/imported/scheduled/busy histories are rejected.
+
+`session.editTurnContext({ sessionId, anchorMessageId, expectedRevision, edits,
+restore? }) -> { snapshot, updates }` applies a sparse list of desired per-row
+`contextOverride` objects (or null to restore a row). `restore: true` requires
+an empty edit list and clears this turn's overrides and legacy thinking exclusions.
+The revision covers source content and current overlays; stale edits fail atomically.
+The final answer may be excluded; when included its text must be nonblank.
+Tools preserve their names/IDs/status;
+only context arguments/result text or paired inclusion can change. Unknown fields,
+wrong roles, duplicate/foreign row IDs, and malformed argument objects fail closed.
+The snapshot and edit payload are limited to 8 MiB and 1024 rows, never silently
+truncated. Only override metadata changes; canonical evidence stays intact.
+Main uses strict drain and acknowledged runtime disposal. See
+[whole-turn context editing](../../adr/whole-turn-context-editing.md).
+
 `session.editAssistantReply({ sessionId, messageId, expectedContent, content,
 thinkingContext? })` accepts `thinkingContext: "reply" | "turn" | "keep"`.
 Omitting it preserves the original text-only operation and `{ ok: true }` reply.

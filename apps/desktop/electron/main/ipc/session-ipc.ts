@@ -630,6 +630,37 @@ export function registerSessionIpc({
       );
     },
   );
+  const turnContextTarget = (input: { sessionId: string; anchorMessageId: string }) => {
+    if (!input || typeof input.sessionId !== "string" || !input.sessionId.trim() ||
+        typeof input.anchorMessageId !== "string" || !input.anchorMessageId.trim()) {
+      throw Object.assign(new Error("Invalid turn context target"), { errorCode: ErrorCodes.INVALID_ARGUMENT });
+    }
+    rejectNativeMutation(input.sessionId, "context editing");
+    if (input.sessionId.startsWith("remote:")) {
+      throw Object.assign(new Error("Remote context editing is unavailable"), { errorCode: ErrorCodes.CAPABILITY_UNAVAILABLE });
+    }
+  };
+  handle(IPC.invoke.sessionGetTurnContext, async (input: import("@pi-desktop/shared").GetTurnContextRequest) => {
+    if (!host) throw new Error("host unavailable");
+    turnContextTarget(input);
+    return host.call<{ snapshot: import("@pi-desktop/shared").TurnContextSnapshot }>("session.getTurnContext", input);
+  });
+  handle(IPC.invoke.sessionEditTurnContext, async (input: import("@pi-desktop/shared").EditTurnContextRequest) => {
+    if (!host) throw new Error("host unavailable");
+    turnContextTarget(input);
+    if (typeof input.expectedRevision !== "string" || !input.expectedRevision.trim() ||
+        !Array.isArray(input.edits) || input.edits.length > 1024 ||
+        (input.restore !== undefined && typeof input.restore !== "boolean")) {
+      throw Object.assign(new Error("Invalid turn context edit"), { errorCode: ErrorCodes.INVALID_ARGUMENT });
+    }
+    if (Buffer.byteLength(JSON.stringify(input), "utf8") > 8 * 1024 * 1024) {
+      throw Object.assign(new Error("Turn context edit exceeds 8 MiB"), { errorCode: ErrorCodes.LIMIT_EXCEEDED });
+    }
+    const currentHost = host;
+    return runTranscriptRewrite(input.sessionId, "turn context editing", currentHost,
+      () => currentHost.call<import("@pi-desktop/shared").EditTurnContextResult>("session.editTurnContext", input),
+      { strictDrain: true, requireDisposal: true });
+  });
   handle(IPC.invoke.sessionEditAssistantReply, async (input: EditAssistantReplyRequest) => {
     if (!host) throw new Error("host unavailable");
     const { sessionId, messageId, expectedContent, content, thinkingContext } = input ?? {};

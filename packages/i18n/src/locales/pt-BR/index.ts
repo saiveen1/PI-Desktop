@@ -6,7 +6,9 @@ import { delegationReliabilitySettings, delegationDiagnostics } from "./delegati
 import { sessionLabels, sessionGroups, sessionDelegation, delegationDetails } from "./session-management.js";
 import { en, type EnglishCatalog } from "../en/index.js";
 
+import { turnContext } from "../turn-context.js";
 export const ptBR = {
+  turnContext: turnContext["pt-BR"],
   outputGuard: outputGuard["pt-BR"],
   observerGuard: observerGuard["pt-BR"],
   toolObserver: en.toolObserver,

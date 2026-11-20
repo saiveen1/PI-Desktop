@@ -6,6 +6,8 @@ mod tests;
 
 mod assistant_edit;
 pub use assistant_edit::{edit_assistant_reply, EditAssistantReply};
+mod turn_context;
+pub use turn_context::{edit_turn_context, get_turn_context, EditTurnContext, GetTurnContext};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]

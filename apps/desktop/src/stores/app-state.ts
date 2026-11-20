@@ -278,6 +278,7 @@ export type AppState = import("./slices/session-management-slice").SessionManage
     sessionId: string, messageId: string, expectedContent: string, content: string,
     signal?: AbortSignal, thinkingContext?: AssistantReplyThinkingContext,
   ) => Promise<boolean>;
+  editTurnContext: (input: import("@pi-desktop/shared").EditTurnContextRequest, signal: AbortSignal) => Promise<boolean>;
   /** Read canonical text before opening a user-message editor. */
   prepareUserMessageEdit: (messageId: string, signal?: AbortSignal) => Promise<UiMessage | null>;
   /** Replace a user prompt and regenerate from it. */

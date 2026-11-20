@@ -1244,6 +1244,10 @@ export const api = {
     ),
   replaceSessionMessages: (sessionId: string, messages: UiMessage[]) =>
     invoke(IPC.invoke.sessionReplaceMessages, { sessionId, messages }),
+  getTurnContext: (input: import("@pi-desktop/shared").GetTurnContextRequest) =>
+    invoke<{ snapshot: import("@pi-desktop/shared").TurnContextSnapshot }>(IPC.invoke.sessionGetTurnContext, input),
+  editTurnContext: (input: import("@pi-desktop/shared").EditTurnContextRequest) =>
+    invoke<import("@pi-desktop/shared").EditTurnContextResult>(IPC.invoke.sessionEditTurnContext, input),
   editAssistantReply: (input: import("@pi-desktop/shared").EditAssistantReplyRequest) =>
     invoke<import("@pi-desktop/shared").EditAssistantReplyResult>(IPC.invoke.sessionEditAssistantReply, input),
   deleteSessionMessage: (input: { sessionId: string; messageId: string }) =>

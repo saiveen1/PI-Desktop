@@ -1402,6 +1402,50 @@ pub(crate) fn update_messages_lines(
     records: &[&MessageRecord],
     changed_suffix: Option<&std::collections::HashSet<&str>>,
 ) -> Result<bool> {
+    splice_message_lines(data_dir, session_id, records, changed_suffix, false)
+}
+
+/// Patch only context keys, including on duplicate physical rows with different originals.
+pub(crate) fn update_message_context_lines(
+    data_dir: &Path,
+    session_id: &str,
+    records: &[&MessageRecord],
+    changed_suffix: &std::collections::HashSet<&str>,
+) -> Result<bool> {
+    splice_message_lines(data_dir, session_id, records, Some(changed_suffix), true)
+}
+
+fn splice_context_meta(
+    fields: &mut serde_json::Map<String, Value>,
+    record: &MessageRecord,
+) -> Result<()> {
+    const OVERRIDE: &str = "contextOverride";
+    if let Some(overlay) = record.meta.as_ref().and_then(|meta| meta.get(OVERRIDE)) {
+        let current = fields.entry("meta").or_insert(Value::Null);
+        if current.is_null() {
+            *current = Value::Object(serde_json::Map::new());
+        }
+        current
+            .as_object_mut()
+            .context("invalid message metadata")?
+            .insert(OVERRIDE.to_owned(), overlay.clone());
+    } else if let Some(current) = fields.get_mut("meta").and_then(Value::as_object_mut) {
+        let had_override = current.remove(OVERRIDE).is_some();
+        let had_legacy = current.remove("excludeThinkingFromContext").is_some();
+        if current.is_empty() && (had_override || had_legacy) {
+            fields.remove("meta");
+        }
+    }
+    Ok(())
+}
+
+fn splice_message_lines(
+    data_dir: &Path,
+    session_id: &str,
+    records: &[&MessageRecord],
+    changed_suffix: Option<&std::collections::HashSet<&str>>,
+    context_metadata_only: bool,
+) -> Result<bool> {
     let Some(record) = records.first() else {
         return Ok(false);
     };
@@ -1482,11 +1526,15 @@ pub(crate) fn update_messages_lines(
                         let mut original = binary_storage::decode(serde_json::from_slice(&line)?)?;
                         let fields = original.as_object_mut().context("invalid message record")?;
                         fields.remove("type");
-                        fields.insert("blocks".into(), record.blocks.clone());
-                        if let Some(meta) = &record.meta {
-                            fields.insert("meta".into(), meta.clone());
+                        if context_metadata_only {
+                            splice_context_meta(fields, record)?;
                         } else {
-                            fields.remove("meta");
+                            fields.insert("blocks".into(), record.blocks.clone());
+                            if let Some(meta) = &record.meta {
+                                fields.insert("meta".into(), meta.clone());
+                            } else {
+                                fields.remove("meta");
+                            }
                         }
                         edited_line = tagged("message", &original)?;
                         &edited_line

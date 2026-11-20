@@ -199,6 +199,8 @@ export const IPC = {
     sessionImportRun: "pi-desktop/session/importRun",
     modelConfigImportScan: "pi-desktop/modelConfig/importScan",
     modelConfigImportRun: "pi-desktop/modelConfig/importRun",
+    sessionGetTurnContext: "pi-desktop/session/getTurnContext",
+    sessionEditTurnContext: "pi-desktop/session/editTurnContext",
     sessionEditAssistantReply: "pi-desktop/session/editAssistantReply",
     sessionDeleteMessage: "pi-desktop/session/deleteMessage",
     sessionRetractPendingPrompt: "pi-desktop/session/retractPendingPrompt",

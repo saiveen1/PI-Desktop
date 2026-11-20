@@ -137,6 +137,8 @@ export type UiMessage = {
   thinking?: string;
   /** Explicit reply-edit choice: keep history visible but omit reasoning from model context. */
   excludeThinkingFromContext?: boolean;
+  /** Human-authored model-context overlay; original text and execution facts stay intact. */
+  contextOverride?: import("../turn-context.js").MessageContextOverride;
   createdAt: string;
   status?: "streaming" | "complete" | "error" | "aborted";
   /** The provider cut off this text response at its output-token limit. */

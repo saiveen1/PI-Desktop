@@ -441,4 +441,5 @@ git history.
 | local-tool-observer | [Local tool observation and developer review](local-tool-observer.md) | Accepted; additive diagnostics only |
 | developer-performance-capture | [Opt-in local performance captures](developer-performance-capture.md) | Accepted; additive local developer IPC |
 | configurable-local-output-guards | [Configurable local output guards](configurable-local-output-guards.md) | Accepted; additive settings and normalized termination diagnostics |
+| whole-turn-context-editing | [Whole-turn model-context editing](whole-turn-context-editing.md) | Accepted; reversible context overlays over original execution history |
 | builtin-observer-guard | [Built-in per-conversation Observer Guard](builtin-observer-guard.md) | Accepted; optional independent assessment and bounded Guard continuation |

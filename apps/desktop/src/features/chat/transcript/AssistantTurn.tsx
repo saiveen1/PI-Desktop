@@ -54,7 +54,7 @@ import {
   reuseReferences,
 } from "../../../lib/transcript-summary";
 import { AssistantTurnParts } from "./AssistantTurnParts";
-import { AssistantReplyEditor, useAssistantReplyEditor } from "./AssistantReplyEditor";
+import { TurnContextEditor, useTurnContextEditor } from "./TurnContextEditor";
 import { ObserverGuardTurnSummary } from "./ObserverGuardDisclosure";
 import { splitAtAnsweredQuestions } from "../../../lib/turn-question-sections";
 import { AskHistoryCard } from "../../../components/ToolDetails";
@@ -298,8 +298,7 @@ export const AssistantTurn = memo(function AssistantTurn({
   const responseModelId = modelSource?.responseModelId;
   const complete = !isActive && !summary.hasError && summary.hasContent && Boolean(actionMessage);
   const answerId = complete && summary.responses.at(-1)?.message === actionMessage ? actionMessage?.id : undefined;
-  const replyEditor = useAssistantReplyEditor(paneSessionId, answerId);
-  const editingMessageId = replyEditor.draft ? answerId : undefined;
+  const editor = useTurnContextEditor(paneSessionId, answerId);
   // A live reply is joined only on menu/copy demand. Finished reply plugins
   // still receive exactly the text that the completed turn's Copy action uses.
   const content = useMemo(
@@ -320,7 +319,7 @@ export const AssistantTurn = memo(function AssistantTurn({
     owned by a single message part could not offer them honestly.
   */
   const onContextMenu = (event: ReactMouseEvent<HTMLDivElement>) => {
-    if (editingMessageId) { event.stopPropagation(); return; }
+    if (editor.snapshot) { event.stopPropagation(); return; }
     openTranscriptMenu(event, {
       label: t("chat.messageMenu"),
       items: assistantTurnMenuItems({
@@ -334,7 +333,7 @@ export const AssistantTurn = memo(function AssistantTurn({
           ].at(-1) ?? null,
         complete: complete && Boolean(actionMessage) && canEditMessages,
         actions: { copyText, selectText },
-        onEdit: replyEditor.editable && !replyEditor.loading ? () => void replyEditor.begin() : undefined,
+        onEdit: editor.editable && !editor.loading ? () => void editor.begin() : undefined,
         onRegenerate: () => {
           if (actionMessage) void retryAssistantMessage(actionMessage.id);
         },
@@ -403,6 +402,8 @@ export const AssistantTurn = memo(function AssistantTurn({
       aria-label={t("chat.assistantMessage")}
     >
       <div className="message-col">
+        {editor.snapshot && editor.signal ? <TurnContextEditor snapshot={editor.snapshot} editable={editor.editable}
+          signal={editor.signal} cancel={editor.cancel} /> : <>
         {sections.map((section, index) => {
           if (section.kind === "ask") {
             return <AskHistoryCard key={`ask-${section.key}`} messageId={section.key} block={section.block} />;
@@ -431,8 +432,7 @@ export const AssistantTurn = memo(function AssistantTurn({
         })}
         {/* The answer stays outside the process disclosure: it is what the turn
             produced, not part of what it did. */}
-        {editingMessageId ? <AssistantReplyEditor messageId={editingMessageId} editor={replyEditor} /> :
-          <AssistantTurnParts parts={responses} {...partContext} />}
+        <AssistantTurnParts parts={responses} {...partContext} />
         <ObserverGuardTurnSummary parts={entry.parts} sessionId={paneSessionId} />
         <TurnToolImages parts={entry.parts} />
         {/* Recorded work remains reachable during streaming and after interruption. */}
@@ -451,18 +451,16 @@ export const AssistantTurn = memo(function AssistantTurn({
           <RunStatusIndicator key={metaMessage.runDiagnostics.turnId} diagnostics={metaMessage.runDiagnostics}
             summary label={t("chat.runDetails.title")} />
         ) : null}
-        {complete && actionMessage && !editingMessageId ? (
+        {entry.parts.some((part) => (part.kind === "message" ? [part] : part.items).some(({ message }) =>
+          message.contextOverride || message.excludeThinkingFromContext)) &&
+          <p className="turn-context-notice">{t("turnContext.notice")}</p>}
+        {complete && actionMessage ? (
           <div className="message-actions">
             <MessageTimestamp createdAt={actionMessage.createdAt} />
             <ActionSlotSide slot="assistantAction" side="left" message={slotReply} />
             <CopyButton text={content} label={t("chat.copy")} />
-            {replyEditor.editable ? <TooltipButton
-              className="copy-btn icon"
-              tooltip={t("chat.editReply")}
-              ariaLabel={t("chat.editReply")}
-              disabled={replyEditor.loading}
-              onClick={() => void replyEditor.begin()}
-            >
+            {editor.editable ? <TooltipButton className="copy-btn icon" tooltip={t("turnContext.edit")}
+              ariaLabel={t("turnContext.edit")} disabled={editor.loading} onClick={() => void editor.begin()}>
               <IconPencil size={13} />
             </TooltipButton> : null}
             {canEditMessages ? <TooltipButton
@@ -485,6 +483,7 @@ export const AssistantTurn = memo(function AssistantTurn({
           </div>
         ) : null}
         {slotReply ? <EntryExtraStack message={slotReply} /> : null}
+        </>}
       </div>
     </div>
   );

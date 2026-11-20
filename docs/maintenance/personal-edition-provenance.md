@@ -11,6 +11,13 @@ new local capabilities.
 
 ## In-place assistant reply editing
 
+The whole-turn editor extends local `3339b26f1` on personal base `a29332497`.
+Locally recorded upstream `95df2e0f9` has no `session.getTurnContext`,
+`session.editTurnContext` or `contextOverride` contract. The local increment
+is an original-preserving context overlay, per-block editor, paired tool
+exclusion and reset; existing transcript storage/fork and Pi adapters remain
+inherited foundations. See [the ADR](../adr/whole-turn-context-editing.md).
+
 Against locally recorded upstream `3dd8b955a`, response-level Fork is inherited:
 `a52166dae` previously edited by forking; `007cc482f` moved editing to user
 prompts. The current upstream `AssistantTurn.tsx` has Fork and Regenerate but

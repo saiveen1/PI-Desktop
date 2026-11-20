@@ -3259,6 +3259,36 @@ async fn handle_request(
                 .map_err(|e| rpc_err(1000, e.to_string(), "INTERNAL"))?;
             Ok(json!({ "ok": true }))
         }
+        "session.getTurnContext" | "session.editTurnContext" => {
+            let invalid = || {
+                rpc_err(
+                    1002,
+                    "expected named turn context parameters",
+                    "INVALID_PARAMS",
+                )
+            };
+            if !params.is_object() {
+                return Err(invalid());
+            }
+            let result = if method == "session.getTurnContext" {
+                let request: sessions::GetTurnContext =
+                    serde_json::from_value(params).map_err(|_| invalid())?;
+                let st = state.lock().await;
+                sessions::get_turn_context(&st.db, &request)
+            } else {
+                if !params["edits"]
+                    .as_array()
+                    .is_some_and(|edits| edits.iter().all(Value::is_object))
+                {
+                    return Err(invalid());
+                }
+                let request: sessions::EditTurnContext =
+                    serde_json::from_value(params).map_err(|_| invalid())?;
+                let st = state.lock().await;
+                sessions::edit_turn_context(&st.db, &request)
+            };
+            result.map_err(session_collaboration_rpc_err)
+        }
         "session.editAssistantReply" => {
             if !params.is_object() {
                 return Err(rpc_err(
@@ -6038,6 +6068,62 @@ mod tests {
     use crate::sessions;
     use crate::state::AppState;
     use std::time::Duration;
+
+    #[tokio::test]
+    async fn turn_context_rpc_requires_named_parameters_and_rejects_stale_edits() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut app = AppState::open(dir.path()).unwrap();
+        app.handshook = true;
+        let session = sessions::create_session(&app.db, None, None, None, None, None).unwrap();
+        for (id, role, content) in [
+            ("user", "user", "prompt"),
+            ("reply", "assistant", "original"),
+        ] {
+            let row = serde_json::from_value(
+                json!({"id":id,"role":role,"content":content,"createdAt":"2026-11-01T00:00:00Z"}),
+            )
+            .unwrap();
+            sessions::append_message(&app.db, &session.id, &row, None).unwrap();
+        }
+        let state = Arc::new(Mutex::new(app));
+        let tx = mpsc::unbounded_channel().0;
+        let call = |method, request| handle_request(state.clone(), method, request, tx.clone());
+        let get = "session.getTurnContext";
+        let edit = "session.editTurnContext";
+        let code = |error: JsonRpcError| error.data.unwrap()["errorCode"].clone();
+        assert_eq!(
+            code(call(get, json!([session.id, "reply"])).await.unwrap_err()),
+            "INVALID_PARAMS"
+        );
+        let read = call(
+            get,
+            json!({"sessionId":session.id,"anchorMessageId":"reply"}),
+        )
+        .await
+        .unwrap();
+        let mut request = json!({
+            "sessionId":session.id,"anchorMessageId":"reply","expectedRevision":read["snapshot"]["revision"],
+            "edits":[["reply",null]],
+        });
+        assert_eq!(
+            code(call(edit, request.clone()).await.unwrap_err()),
+            "INVALID_PARAMS"
+        );
+        request["edits"] = json!([{"messageId":"reply"}]);
+        assert_eq!(
+            code(call(edit, request.clone()).await.unwrap_err()),
+            "INVALID_PARAMS"
+        );
+        request["edits"] =
+            json!([{"messageId":"reply","contextOverride":{"version":1,"content":"replacement"}}]);
+        let saved = call(edit, request.clone()).await.unwrap();
+        assert_eq!(saved["snapshot"]["messages"][0]["content"], "original");
+        assert_eq!(
+            saved["updates"][0]["contextOverride"]["content"],
+            "replacement"
+        );
+        assert_eq!(code(call(edit, request).await.unwrap_err()), "CONFLICT");
+    }
 
     #[tokio::test]
     async fn assistant_edit_rpc_requires_four_raw_strings_and_returns_only_ack() {

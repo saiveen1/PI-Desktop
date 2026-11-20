@@ -1326,10 +1326,15 @@ transient and never restored into durable UI messages or transcript records.
   prompt creates a fresh pi runtime and restores context only from the child
   transcript, including the remapped tool call/result pairs.
 - Message-scoped Fork stops the independent child at the selected reply.
-  Editing its last reply (or the last reply of the original idle conversation)
-  invalidates that session's cached runtime. The next prompt reconstructs the
-  assistant message from the edited transcript, not the old provider replay or
-  a checkpoint containing the replaced response.
+  Editing its last turn (or the last turn of the original idle conversation)
+  invalidates that session's cached runtime. Before rebuilding provider or
+  delegation history, `historyForModelContext` projects version-1 context
+  overrides without altering original `UiMessage` records. Excluded tool rows
+  contribute neither a call nor its result. Changed text, thinking and arguments
+  lose only their invalidated signatures. User-edited thinking is sent as labeled
+  ordinary assistant text, never forged provider-signed reasoning. Original
+  transcript display remains unchanged; affected checkpoints are invalidated.
+  Legacy final-only edits still rebuild from their replaced transcript text.
 - `UiMessage.excludeThinkingFromContext === true` leaves the stored/displayed
   reasoning intact but omits its thinking content from restored model messages.
   This also filters signed, redacted and encrypted reasoning blocks; text and

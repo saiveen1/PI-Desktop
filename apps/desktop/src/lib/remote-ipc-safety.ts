@@ -5,6 +5,7 @@ const localOnly = new Set<string>([
   IPC.invoke.sessionConfigure, IPC.invoke.sessionFork, IPC.invoke.sessionMoveProject,
   IPC.invoke.sessionTrash, IPC.invoke.sessionTrashRestore, IPC.invoke.sessionTrashDelete,
   IPC.invoke.sessionReplaceMessages, IPC.invoke.sessionSaveRevision,
+  IPC.invoke.sessionGetTurnContext, IPC.invoke.sessionEditTurnContext,
   IPC.invoke.sessionEditAssistantReply, IPC.invoke.sessionDeleteMessage, IPC.invoke.sessionRetractPendingPrompt,
   IPC.invoke.sessionListRevisions, IPC.invoke.sessionActivateRevision,
   IPC.invoke.sessionGetScratchPath, IPC.invoke.sessionOpenScratchPath,

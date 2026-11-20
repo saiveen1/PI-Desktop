@@ -57,6 +57,8 @@ export function transcriptRewriteHarness(host, dataDir, sidecar = null) {
   return {
     persistenceOutbox,
     replace: (input) => handlers.get(shared.IPC.invoke.sessionReplaceMessages)(input),
+    getTurnContext: (input) => handlers.get(shared.IPC.invoke.sessionGetTurnContext)(input),
+    editTurnContext: (input) => handlers.get(shared.IPC.invoke.sessionEditTurnContext)(input),
     editAssistantReply: (input) => handlers.get(shared.IPC.invoke.sessionEditAssistantReply)(input),
     deleteMessage: (input) => handlers.get(shared.IPC.invoke.sessionDeleteMessage)(input),
     retractPendingPrompt: (input) => handlers.get(shared.IPC.invoke.sessionRetractPendingPrompt)(input),

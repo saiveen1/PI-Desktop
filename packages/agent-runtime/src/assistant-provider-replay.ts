@@ -19,6 +19,7 @@ import type {
   AssistantProviderReplay,
   AssistantProviderReplayBlock,
   AssistantProviderReplayToolCall,
+  UiMessage,
 } from "@pi-desktop/shared";
 
 /**
@@ -197,6 +198,18 @@ export function restoreAssistantProviderReplay(
     }
   }
   return restored;
+}
+
+/** Human-authored thinking is ordinary context, not provider-signed reasoning. */
+export function editedThinkingForReplay(
+  message: UiMessage, content: AssistantMessage["content"],
+): AssistantMessage["content"] {
+  if (message.contextOverride?.thinking === undefined || message.excludeThinkingFromContext) return content;
+  // Human text has no provider-issued reasoning signature. Send it visibly as
+  // context rather than forging a signature or letting signed-only APIs drop it.
+  return content.map(block => block.type === "thinking"
+    ? { type: "text", text: `[User-edited thinking]\n${block.thinking}` }
+    : block);
 }
 
 /**

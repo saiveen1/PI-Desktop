@@ -19,7 +19,7 @@ import { withReviewChangeState } from "../../lib/workspace-review";
 import { settleStoppedAssistantMetrics } from "../../lib/context-usage";
 import type { AppState } from "../app-state";
 import type { SessionRuntime } from "../runtime/session-runtime";
-import { editAssistantReply, prepareAssistantReplyEdit, prepareTranscriptAction } from "../runtime/transcript-action";
+import { editAssistantReply, editTurnContext, prepareAssistantReplyEdit, prepareTranscriptAction } from "../runtime/transcript-action";
 import type { StoreAccess } from "./types";
 
 export type TranscriptSliceDependencies = StoreAccess & {
@@ -47,6 +47,7 @@ export function createTranscriptSlice({
   | "retryAssistantMessage"
   | "prepareAssistantReplyEdit"
   | "editAssistantReply"
+  | "editTurnContext"
   | "editUserMessage"
   | "prepareUserMessageEdit"
   | "retryLastPrompt"
@@ -127,6 +128,7 @@ export function createTranscriptSlice({
     prepareAssistantReplyEdit: (...args) => prepareAssistantReplyEdit({ get, set }, ...args),
 
     editAssistantReply: (...args) => editAssistantReply({ get, set }, runtime, pendingAssistantReplyEdits, ...args),
+    editTurnContext: (...args) => editTurnContext({ get, set }, runtime, pendingAssistantReplyEdits, ...args),
 
     prepareUserMessageEdit: async (messageId, signal) => {
       if (!canEdit()) return null;

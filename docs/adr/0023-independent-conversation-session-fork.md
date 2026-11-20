@@ -50,6 +50,10 @@ would let an older host fail only when the new command runs.
 
 ## Amendment: edit the idle assistant tail in place
 
+The later [whole-turn context editor](whole-turn-context-editing.md) supersedes
+the final-only UI below. Legacy APIs remain compatible where no turn overlays
+exist; new edits preserve originals through context-only overlays.
+
 A user may correct the text of the last completed local assistant reply without
 starting a turn, appending a user correction or creating a revision. The Host
 owns the compare-and-replace, including validating the target and discarding

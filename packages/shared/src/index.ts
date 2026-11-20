@@ -94,6 +94,7 @@ export * from "./native-web-search-transport.js";
 export * from "./header-value.js";
 export * from "./secret-refs.js";
 
+export * from "./turn-context.js";
 export * from "./session-todos.js";
 export * from "./tool-call-lineage.js";
 export * from "./event-usage.js";

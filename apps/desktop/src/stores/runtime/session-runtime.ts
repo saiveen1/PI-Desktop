@@ -49,7 +49,7 @@ export type SessionRuntime = {
   readonly pendingNewSessionRequests: Map<string, Promise<string | null>>;
   readonly sessionTranscriptCache: Map<string, UiMessage[]>;
   readonly confirmedReplyEdits: ReadonlyMap<string, symbol>;
-  recordConfirmedReplyEdit: (sessionId: string) => void;
+  recordConfirmedReplyEdit: (sessionId: string, patchedActive?: UiMessage[]) => void;
   readonly liveSessionTranscripts: Set<string>;
   readonly sessionHistoryCache: Map<string, SessionHistoryWindow>;
   readonly submittedComposerDrafts: Map<string, SubmittedComposerDraft>;
@@ -139,6 +139,7 @@ export function createSessionRuntime({ get, set }: StoreAccess): SessionRuntime 
   const sessionModeSelections = new Map<string, number>();
   const sessionDetailLoads = new Map<string, ReturnType<typeof api.getSession>>();
   const toolStartsByCallId = new Map<string, ToolStart>();
+  const confirmedPatchedActive = new WeakSet<UiMessage[]>();
   const planSyncGenerations = new Map<string, number>();
 
   function cacheSessionTranscript(
@@ -216,6 +217,8 @@ export function createSessionRuntime({ get, set }: StoreAccess): SessionRuntime 
     if (state.messages === previous.messages && state.activeSessionId === previous.activeSessionId) return;
     const id = state.activeSessionId;
     if (!id) return;
+    // Confirmed edits already patched each window independently.
+    if (confirmedPatchedActive.delete(state.messages)) return;
     if (state.runningSessions[id] || previous.runningSessions[id]) liveSessionTranscripts.add(id);
     cacheSessionTranscript(id, state.messages, state.sessionHistory[id]);
     if (state.retainedTranscripts[id] === state.messages) return;
@@ -408,7 +411,8 @@ export function createSessionRuntime({ get, set }: StoreAccess): SessionRuntime 
     pendingNewSessionRequests,
     sessionTranscriptCache,
     confirmedReplyEdits,
-    recordConfirmedReplyEdit: (id) => {
+    recordConfirmedReplyEdit: (id, patchedActive) => {
+      if (patchedActive) confirmedPatchedActive.add(patchedActive);
       confirmedReplyEdits.set(id, Symbol());
       // Later selections must not join a read issued before this save.
       sessionDetailLoads.delete(id);

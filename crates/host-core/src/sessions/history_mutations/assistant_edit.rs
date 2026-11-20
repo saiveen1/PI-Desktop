@@ -40,9 +40,9 @@ pub struct EditAssistantReplyResult {
     thinking_context_updates: Option<Vec<ThinkingContextUpdate>>,
 }
 
-fn top_level(record: &MessageRecord) -> bool {
+pub(super) fn top_level(record: &MessageRecord) -> bool {
     let meta = record.meta.as_ref().unwrap_or(&Value::Null);
-    record.tool_name.is_none()
+    (record.role == "tool" || record.tool_name.is_none())
         && [
             "parentToolCallId",
             "nestedParentToolCallId",
@@ -63,19 +63,10 @@ fn user_boundary(record: &MessageRecord) -> bool {
             .is_none_or(|meta| meta["steering"] != true)
 }
 
-/// Edit the last conversational record, not an earlier fragment or a tool carrier.
-/// System journal rows and non-message events do not close the editing window.
-pub fn edit_assistant_reply(
-    db: &Database,
-    edit: &EditAssistantReply,
-) -> Result<EditAssistantReplyResult> {
-    let session = edit.session_id.as_str();
-    if session.trim().is_empty()
-        || edit.message_id.trim().is_empty()
-        || edit.content.trim().is_empty()
-    {
+pub(super) fn check_edit_gate(db: &Database, session: &str, anchor: &str) -> Result<()> {
+    if session.trim().is_empty() || anchor.trim().is_empty() {
         return Err(anyhow!(
-            "INVALID_PARAMS: sessionId, messageId and content must not be blank"
+            "INVALID_PARAMS: session and anchor IDs must not be blank"
         ));
     }
     let local = db
@@ -99,68 +90,87 @@ pub fn edit_assistant_reply(
         || transcripts::read_inflight(db.data_dir(), session)?.is_some()
     {
         return Err(anyhow!(
-            "AGENT_BUSY: settle pending work before editing a reply"
+            "AGENT_BUSY: settle pending work before editing context"
         ));
     }
+    Ok(())
+}
+
+pub(super) struct EditableTurn {
+    pub records: Vec<MessageRecord>,
+    pub anchor: usize,
+    pub members: Vec<usize>,
+    pub owner: Option<String>,
+}
+
+fn ineligible() -> anyhow::Error {
+    anyhow!("CONFLICT: only the latest completed top-level assistant text reply is editable")
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("NOT_FOUND: message not found in this session")]
+pub(super) struct MissingAnchor;
+
+pub(super) fn load_editable_turn(
+    db: &Database,
+    session: &str,
+    anchor: &str,
+    legacy: bool,
+) -> Result<EditableTurn> {
+    check_edit_gate(db, session, anchor)?;
     let settled = db
         .conn()
         .query_row(
             "SELECT m.role = 'assistant' AND COALESCE(m.streaming, 0) = 0 AND m.is_error = 0
-            AND NOT EXISTS(SELECT 1 FROM messages newer WHERE newer.session_id = m.session_id
-                 AND newer.seq > m.seq AND newer.role != 'system')
+            AND (NOT ?3 OR NOT EXISTS(SELECT 1 FROM messages newer WHERE newer.session_id = m.session_id
+                 AND newer.seq > m.seq AND newer.role != 'system'))
             AND (m.turn_id IS NULL OR EXISTS(SELECT 1 FROM turns t WHERE t.id = m.turn_id
                  AND t.session_id = m.session_id AND t.status = 'completed'))
          FROM messages m WHERE m.session_id = ?1 AND m.id = ?2",
-            params![session, edit.message_id],
+            params![session, anchor, legacy],
             |row| row.get::<_, bool>(0),
         )
         .optional()?
-        .ok_or_else(|| anyhow!("NOT_FOUND: message not found in this session"))?;
-    let ineligible = || {
-        anyhow!("CONFLICT: only the latest completed top-level assistant text reply is editable")
-    };
+        .ok_or(MissingAnchor)?;
     if !settled {
         return Err(ineligible());
     }
 
     // Durable ownership wins over prompt-shaped rows. Manual forks have no turn IDs.
-    let turn_rows = if edit.thinking_context.is_some() {
-        if let Some(turn) = message_turn(db, session, &edit.message_id)? {
-            Some(
-                db.conn()
-                    .prepare(
-                        "SELECT id FROM messages WHERE session_id=?1 AND turn_id=?2 ORDER BY seq",
-                    )?
-                    .query_map(params![session, turn], |row| row.get::<_, String>(0))?
-                    .collect::<rusqlite::Result<Vec<_>>>()?,
-            )
-        } else {
-            None
-        }
-    } else {
-        None
-    };
-    let whole_turn = edit.thinking_context.is_some();
+    let owner = message_turn(db, session, anchor)?;
+    let turn_rows = owner
+        .as_ref()
+        .map(|turn| -> Result<Vec<String>> {
+            Ok(db
+                .conn()
+                .prepare("SELECT id FROM messages WHERE session_id=?1 AND turn_id=?2 ORDER BY seq")?
+                .query_map(params![session, turn], |row| row.get(0))?
+                .collect::<rusqlite::Result<_>>()?)
+        })
+        .transpose()?;
     let suffix = transcripts::read_closed_message_suffix(db.data_dir(), session, |records| {
-        if !whole_turn {
-            records.iter().any(|r| r.role != "system")
-        } else if let Some(ids) = &turn_rows {
+        if let Some(ids) = &turn_rows {
             records.iter().any(|r| ids.first() == Some(&r.id))
         } else {
-            records.iter().any(user_boundary)
+            let mut seen = std::collections::HashSet::new();
+            records
+                .iter()
+                .rev()
+                .filter(|r| seen.insert(&r.id))
+                .any(user_boundary)
         }
     })?;
-    let mut records = dedupe_records(match suffix {
+    let records = dedupe_records(match suffix {
         Some(records) => records,
         None => transcripts::read_transcript(db.data_dir(), session)?,
     });
     let index = records
         .iter()
-        .rposition(|r| r.role != "system")
+        .rposition(|r| r.role != "system" && (legacy || top_level(r)))
         .ok_or_else(ineligible)?;
-    let record = &mut records[index];
+    let record = &records[index];
     let meta = record.meta.as_ref().unwrap_or(&Value::Null);
-    if record.id != edit.message_id
+    if record.id != anchor
         || record.role != "assistant"
         || record.is_error
         || !top_level(record)
@@ -169,6 +179,59 @@ pub fn edit_assistant_reply(
     {
         return Err(ineligible());
     }
+    let members = if let Some(ids) = &turn_rows {
+        let owned: std::collections::HashSet<_> = ids.iter().map(String::as_str).collect();
+        let members: Vec<_> = records
+            .iter()
+            .enumerate()
+            .filter_map(|(i, row)| owned.contains(row.id.as_str()).then_some(i))
+            .collect();
+        if members.len() != ids.len() || !members.contains(&index) {
+            return Err(anyhow!("CONFLICT: canonical turn membership has changed"));
+        }
+        members
+    } else {
+        let start = records[..index].iter().rposition(user_boundary);
+        if start.is_none() && !legacy {
+            return Err(ineligible());
+        }
+        (start.unwrap_or(0)..=index).collect()
+    };
+    Ok(EditableTurn {
+        records,
+        anchor: index,
+        members,
+        owner,
+    })
+}
+
+/// Edit the last conversational record, not an earlier fragment or a tool carrier.
+/// System journal rows and non-message events do not close the editing window.
+pub fn edit_assistant_reply(
+    db: &Database,
+    edit: &EditAssistantReply,
+) -> Result<EditAssistantReplyResult> {
+    let session = edit.session_id.as_str();
+    if edit.content.trim().is_empty() {
+        return Err(anyhow!("INVALID_PARAMS: content must not be blank"));
+    }
+    let EditableTurn {
+        mut records,
+        anchor: index,
+        members,
+        ..
+    } = load_editable_turn(db, session, &edit.message_id, true)?;
+    if members.iter().any(|&i| {
+        records[i]
+            .meta
+            .as_ref()
+            .is_some_and(|meta| !meta["contextOverride"].is_null())
+    }) {
+        return Err(anyhow!(
+            "CONFLICT: this turn has context overrides; use the turn context editor"
+        ));
+    }
+    let record = &mut records[index];
     let previous = record_index_text(record)
         .filter(|s| !s.trim().is_empty())
         .ok_or_else(ineligible)?;
@@ -208,18 +271,9 @@ pub fn edit_assistant_reply(
     }
     let mut updates = edit.thinking_context.map(|_| Vec::new());
     if let Some(mode) = edit.thinking_context {
-        let start = records[..=index]
-            .iter()
-            .rposition(user_boundary)
-            .unwrap_or(0);
-        let owned: Option<std::collections::HashSet<&str>> = turn_rows
-            .as_ref()
-            .map(|ids| ids.iter().map(String::as_str).collect());
-        for (i, row) in records[..=index].iter_mut().enumerate() {
-            let belongs = owned
-                .as_ref()
-                .map_or(i >= start, |ids| ids.contains(row.id.as_str()));
-            if !belongs || row.role != "assistant" || !top_level(row) {
+        for i in members {
+            let row = &mut records[i];
+            if row.role != "assistant" || !top_level(row) {
                 continue;
             }
             let excluded =

@@ -17,7 +17,10 @@ async function debugPort(profile) {
   const watcher = watch(profile, { signal: AbortSignal.timeout(8000) });
   try {
     for (;;) {
-      const contents = await readFile(file, 'utf8').catch(error => { if (error.code !== 'ENOENT') throw error; return ''; });
+      const contents = await readFile(file, 'utf8').catch(error => {
+        if (error.code !== 'ENOENT' && error.code !== 'EBUSY') throw error;
+        return ''; // Chromium can still hold its port file open while writing it on Windows.
+      });
       if (/^\d+\r?\n\//.test(contents)) return Number(contents.split('\n')[0]);
       await watcher.next();
     }
@@ -54,7 +57,7 @@ function command(socket, id, method, params) {
   });
 }
 
-test('transcript history demand and inline reply editing', { timeout: 30000, skip: !browser && 'Standalone Chromium unavailable' }, async t => {
+test('transcript history demand and turn context editing', { timeout: 30000, skip: !browser && 'Standalone Chromium unavailable' }, async t => {
   const dir = await mkdtemp(join(process.env.PI_SCRATCH_DIR || tmpdir(), 'transcript-demand-'));
   const profile = join(dir, 'profile');
   let stop, socket;
@@ -204,38 +207,57 @@ test('transcript history demand and inline reply editing', { timeout: 30000, ski
       assert.deepEqual(open.calls, ['raw-page']);
       assert.equal(open.promptVisible, false);
     });
-    await t.test('Edit reply saves each thinking choice explicitly, including unchanged text', async () => {
-      const result = await evaluate('exerciseReplyEdit()');
-      const original = '  **Final reply**\n';
-      const corrected = '  **Corrected reply**\n';
+    await t.test('Edit context previews and saves only the latest turn’s model overlays', async () => {
+      const result = await evaluate('exerciseTurnContext()');
       assert.equal(result.actionCount, 1);
-      assert.equal(result.source, original);
-      assert.equal(result.focused, true);
-      assert.equal(result.unchangedCanSave, true);
-      assert.deepEqual(result.dropdown, { value: 'reply', label: 'Thinking context',
-        options: [['reply', "Exclude only the final answer's thinking"], ['turn', 'Exclude all thinking used for this answer'], ['keep', 'Keep all thinking used for this answer']],
-        hint: 'Only this answer; earlier turns and saved thinking are unchanged.' });
+      assert.equal(result.forkCount, 2);
+      assert.deepEqual(result.defaults, { kinds: ['thinking', 'text', 'tool', 'thinking', 'final'],
+        checked: [true, true, true, true, true], saveDisabled: true, count: 'Included: 5 / Omitted: 0' });
       assert.deepEqual(result.layout, [
-        { wrapped: false, right: true, left: true, fits: true },
-        { wrapped: true, right: true, left: true, fits: true },
+        { wraps: false, fits: true, bounded: true, noHorizontalScroll: true },
+        { wraps: true, fits: true, bounded: true, noHorizontalScroll: true },
       ]);
-      assert.deepEqual(result.afterCancel, { writes: 0, content: original });
-      assert.equal(result.beforeExplicitSave, 1);
-      assert.deepEqual(result.pending, { writes: 2, readOnly: true, cancelDisabled: true, saveDisabled: true });
-      assert.deepEqual(result.afterFailure, { text: corrected, mode: 'turn', enabled: true });
-      assert.deepEqual(result.errors, ['Reply changed']);
-      const write = { sessionId: 'reply-edit', messageId: 'answer', expectedContent: original, content: corrected, thinkingContext: 'turn' };
-      assert.deepEqual(result.writes, [
-        { ...write, content: original, thinkingContext: 'reply' }, write, write,
-        { ...write, expectedContent: corrected, thinkingContext: 'keep' },
-      ]);
-      assert.deepEqual(result.ids, ['older-prompt', 'older-answer', 'prompt', 'narration', 'tool', 'answer']);
-      if (process.env.PI_REPLY_EDITOR_SCREENSHOT) {
-        await send('Emulation.setDeviceMetricsOverride', { width: 1000, height: 800, deviceScaleFactor: 1, mobile: false });
-        const clip = await evaluate('previewReplyEditor()');
+      assert.equal(result.noThinking, 'Included: 3 / Omitted: 2');
+      assert.equal(result.blankFinalBlocked, true);
+      assert.equal(result.finalExclusionAllowed, true);
+      assert.deepEqual(result.noThinkingKinds, ['text', 'tool', 'final']);
+      assert.deepEqual(result.finalOnly, { count: 'Included: 1 / Omitted: 4', values: ['Original final answer'] });
+      assert.equal(result.writesAfterCancel, 0);
+      assert.deepEqual(result.invalidArgs, { save: true, preview: true, alert: 'Enter a valid JSON object.' });
+      assert.deepEqual(result.preview, [['Edited middle thinking'], ['{"path":"model-only.md"}', 'Edited result'], ['Final thinking'], ['Original final answer']]);
+      assert.deepEqual(result.pending, { writes: 1, readOnly: true, cancelDisabled: true });
+      assert.deepEqual(result.afterFailure, { text: 'Edited middle text', excluded: true, message: 'This turn or draft exceeds the context editor’s size limit.' });
+      const toolOverlay = { version: 1, toolArgs: { path: 'model-only.md' }, toolResultText: 'Edited result' };
+      assert.deepEqual(result.windows, [6, 4, 5].map(length => ({ length, override: toolOverlay })));
+      assert.deepEqual(result.original, { final: 'Original final answer', tool: 'Read', status: 'success', result: 'Original tool result' });
+      assert.equal(result.editedAfterReload, true);
+      assert.deepEqual(result.reopened, ['Edited middle text', 'Edited result']);
+      assert.equal(result.originalDetails, 'Original intermediate text');
+      assert.deepEqual(result.restoration, { count: 'Included: 5 / Omitted: 0', text: 'Original intermediate text', writes: 3 });
+      assert.equal(result.clearAfterReload, true);
+      assert.equal(result.staleReadStarted, 5);
+      assert.equal(result.staleReadIgnored, true);
+      assert.equal(result.staleSaveIgnored, true);
+      assert.equal(result.busyDisabled, true);
+      assert.equal(result.busyWrites, 4);
+      if (process.env.PI_TURN_CONTEXT_SCREENSHOT) {
+        await send('Emulation.setDeviceMetricsOverride', { width: 1000, height: 1000, deviceScaleFactor: 1, mobile: false });
+        const clip = await evaluate('previewTurnContextEditor()');
         const shot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true, clip: { ...clip, scale: 1 } });
-        await writeFile(process.env.PI_REPLY_EDITOR_SCREENSHOT, Buffer.from(shot.data, 'base64'));
+        await writeFile(process.env.PI_TURN_CONTEXT_SCREENSHOT, Buffer.from(shot.data, 'base64'));
       }
+      assert.deepEqual(result.errors, []);
+      const target = { sessionId: 'context-edit', anchorMessageId: 'answer' };
+      assert.deepEqual(result.reads, Array.from({ length: 6 }, () => target));
+      const update = { ...target, expectedRevision: '0', edits: [
+        { messageId: 'middle', contextOverride: { version: 1, thinking: 'Edited middle thinking', content: 'Edited middle text', excludeContent: true } },
+        { messageId: 'tool', contextOverride: toolOverlay },
+      ] };
+      assert.deepEqual(result.writes, [update, update,
+        { ...target, expectedRevision: '1', edits: [{ messageId: 'tool', contextOverride: null }] },
+        { ...target, expectedRevision: '2', edits: [], restore: true },
+        { ...target, expectedRevision: '3', edits: [{ messageId: 'answer', contextOverride: { version: 1, content: 'Edited final answer' } }] },
+      ]);
     });
   } finally {
     if (socket?.readyState === WebSocket.OPEN) {
