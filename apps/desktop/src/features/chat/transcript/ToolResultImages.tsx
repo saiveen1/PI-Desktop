@@ -11,6 +11,7 @@ import { useAppStore } from "../../../stores/app-store";
 import { GeneratedImages } from "./GeneratedImages";
 import { GeneratedImageThumbnail } from "./GeneratedImageThumbnail";
 import { GeneratedImageViewer } from "./GeneratedImageViewer";
+import { useRestoredToolImages } from "./use-restored-tool-images";
 import "../../../styles/generated-images.css";
 import "../../../styles/tool-result-images.css";
 
@@ -26,20 +27,21 @@ export const ToolResultImages = memo(function ToolResultImages({ message }: { me
   const key = `${sessionId}:${message.id}`;
   if (result.generated) return <GeneratedImages key={key} message={message} />;
   if (!result.images.length && !result.issueCodes.length && !result.displayOmitted) return null;
-  return <ToolImageGallery key={key} message={message} />;
+  return <ToolImageGallery key={key} message={message} sessionId={sessionId} />;
 });
 
-function ToolImageGallery({ message }: { message: UiMessage }) {
+function ToolImageGallery({ message, sessionId }: { message: UiMessage; sessionId?: string }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(true);
   const [viewerKey, setViewerKey] = useState<string | null>(null);
   const focusReturnRef = useRef<HTMLElement | null>(null);
-  const result = toolResultImageSet(message);
+  const { result, restoring } = useRestoredToolImages(message, sessionId, open);
   const images = useMemo(() => result.images.map((image) => ({
     ...image,
+    path: restoring && !image.dataUrl ? "" : image.path,
     key: JSON.stringify([message.id, image.index]),
     label: image.path.split(/[\\/]/).at(-1) || t("toolImages.image", { index: image.index + 1 }),
-  })), [result, message.id, t]);
+  })), [result, message.id, restoring, t]);
   const viewerIndex = images.findIndex((image) => image.key === viewerKey);
   return <section className="tool-result-images" data-tool-image-message-id={message.id} aria-label={t("toolImages.title")}>
     {images.length ? <>

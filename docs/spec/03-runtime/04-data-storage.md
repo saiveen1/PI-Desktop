@@ -1835,8 +1835,11 @@ The renderer independently validates details and content candidates, allowing an
 intact content image to recover an older clipped details mirror; clipped paths
 and binary prefixes never become active image sources. The projection retains
 the existing 256-entry container ceiling and bounds preparation to 4096 nodes
-and 64 levels. These are read-only preview rules: stored binary data, lossless
-restoration, and uncapped provider history are unchanged.
+and 64 levels. A local gallery may request the same message with the existing
+256 KiB content limit to restore omitted bytes without rereading its source
+path or increasing the regular history page budget. These are read-only preview
+rules: stored binary data, lossless restoration, and uncapped provider history
+are unchanged.
 
 A bounded window is served through a per-session **transcript layout**: the byte
 offset of every message and compaction line, plus the file identity and complete

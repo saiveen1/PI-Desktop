@@ -2258,11 +2258,16 @@ Renderer IPC kept for the Plan-safe preview facade and URL fallback:
   (ADR 0339); no path is withheld, since the file is only shown to the user who
   clicked it. Relative traversal, `~`, and other escapes are rejected
   (`INVALID_ARGUMENT`).
-- `fs/readImageDataUrl({ref, mimeType?})` → `FsImageDataUrlResult`
+- `fs/readImageDataUrl({ref, mimeType?, sessionId?, allowThumbnail?})` → `FsImageDataUrlResult`
   (`image` with `dataUrl`, or `missing` / `notImage` / `tooLarge`). Root
   containment only: the ADR 0339 external-file rule does not apply, so a
   model-written image reference cannot render an arbitrary local image. Never returns non-image bytes. Renderer-only;
-  not a plugin host API.
+  not a plugin host API. Local generated-image cards opt into `allowThumbnail: true`.
+  A contained PNG/JPEG/WebP that exceeds the ordinary 5 MiB budget can then get
+  a PNG preview if the local decoder supports the source (up to 1024 px on
+  the preview's long edge), with `isThumbnail: true`.
+  The source must stay within the generation byte cap and 16 million pixels.
+  The option does not change remote reads or file-panel preview limits.
 - `fs/reveal({path})` → reveal in Finder. Same rules as `fs/read`,
   including the ADR 0339 external-file rule.
 - `fs/open({path, mimeType?})` → open an existing regular file with the OS

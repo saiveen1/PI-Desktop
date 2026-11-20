@@ -10,9 +10,10 @@ import { repositoryRoot, resolveElectronBinary } from "../../../scripts/e2e/boot
 
 const root = repositoryRoot();
 const { build } = createRequire(join(root, "packages/agent-runtime/package.json"))("esbuild");
-const stages = ["open", "next", "previous", "close", "keyboard-open", "close-again",
+const inspectionStages = ["open", "next", "previous", "close", "keyboard-open", "close-again",
   "lightbox-open", "lightbox-drag", "lightbox-image", "lightbox-zoom", "lightbox-left", "lightbox-reopen", "lightbox-right",
-  "restore", "states", "read-disclosure", "turn", "group", "group-next", "group-close", "group-boundaries", "generated", "generated-dismiss", "snapshot-light", "snapshot-dark", "finish"];
+  "restore", "retained-image", "states", "read-disclosure", "turn", "group", "group-next", "group-close", "group-boundaries"];
+const generationStages = ["generated-large", "generated", "generated-dismiss", "snapshot-light", "snapshot-dark", "finish"];
 
 async function runFixture(temp) {
   const entry = join(temp, "main.cjs");
@@ -24,13 +25,13 @@ async function runFixture(temp) {
         if (String(file) !== "result.json") return;
         void readFile(join(temp, "result.json"), "utf8").then(text => resolve(JSON.parse(text)), reject);
       });
-      timer = setTimeout(() => reject(Error("Tool image fixture did not complete within 30s")), 30_000);
     });
     try {
       const command = `"${binary}" "${entry}"`;
       const script = `$r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{CommandLine='${command.replaceAll("'", "''")}'}; if ($r.ReturnValue -ne 0) { throw 'WMI fixture launch failed' }; $r.ProcessId`;
       pid = Number(execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], { encoding: "utf8" }).trim());
       assert.ok(pid > 0);
+      timer = setTimeout(() => reject(Error("Tool image fixture did not complete within 30s")), 30_000);
       return await report;
     } finally {
       watcher?.close(); clearTimeout(timer);
@@ -51,9 +52,13 @@ async function runFixture(temp) {
   } finally { clearTimeout(timeout); }
 }
 
-test("Read details and output galleries preserve keyboard viewing, history, session isolation and generation", {
-  skip: process.platform === "linux" && !process.env.DISPLAY ? "Electron requires a display" : false,
-}, async () => {
+const requiresDisplay = { skip: process.platform === "linux" && !process.env.DISPLAY ? "Electron requires a display" : false };
+test("Read details and output galleries preserve keyboard viewing, history and session isolation", requiresDisplay,
+  () => checkImages(inspectionStages));
+test("Generated image cards preview small and large results and save the original", requiresDisplay,
+  () => checkImages(generationStages, true));
+
+async function checkImages(stages, nativePreview = false) {
   const temp = await mkdtemp(join(process.env.PI_SCRATCH_DIR || tmpdir(), "pi-tool-images-ui-"));
   console.log(`TOOL_IMAGES_ARTIFACTS ${temp}`);
   try {
@@ -72,9 +77,12 @@ test("Read details and output galleries preserve keyboard viewing, history, sess
     await writeFile(cssPath, (await readFile(cssPath, "utf8")).replace(/@theme\s*\{/g, ":root {"));
     await writeFile(join(temp, "index.html"), '<!doctype html><meta charset="utf-8"><title>Tool image regression</title><link rel="stylesheet" href="renderer.css"><div id="root"></div><script type="module" src="renderer.js"></script>');
     await writeFile(join(temp, "main.cjs"), `
-const { app, BrowserWindow } = require("electron");
+const { app, BrowserWindow, nativeImage } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
+const assert = require("node:assert/strict");
+const { randomBytes } = require("node:crypto");
+const { pathToFileURL } = require("node:url");
 app.setPath("userData", path.join(__dirname, "profile"));
 let output = "";
 const log = text => { output += text + "\\n"; console.log(text); fs.appendFileSync(path.join(__dirname, "progress.log"), text + "\\n"); };
@@ -88,6 +96,24 @@ app.whenReady().then(async () => {
     webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, backgroundThrottling: false } });
   win.webContents.on("console-message", event => log(event.message));
   try {
+    if (${nativePreview}) {
+      log("TOOL_IMAGES_NATIVE_PREVIEW");
+      const { readGeneratedImagePreview } = await import(pathToFileURL(${JSON.stringify(join(root, "apps/desktop/electron/main/generated-image-preview.ts"))}).href);
+      const width = 2304, height = 1536;
+      const pixels = randomBytes(width * height * 4);
+      for (let offset = 3; offset < pixels.length; offset += 4) pixels[offset] = 255;
+      const original = nativeImage.createFromBitmap(pixels, { width, height }).toPNG();
+      assert.ok(original.length > 5 * 1024 * 1024 && original.length < 16 * 1024 * 1024);
+      const raster = path.join(__dirname, "large.png");
+      fs.writeFileSync(raster, original);
+      const preview = await readGeneratedImagePreview(raster, __dirname, [], "image/png", (bytes, width, height) =>
+        nativeImage.createFromBuffer(bytes).resize({ width, height }).toPNG());
+      assert.equal(preview.isThumbnail, true);
+      assert.ok(preview.size < original.length);
+      assert.deepEqual(nativeImage.createFromDataURL(preview.dataUrl).getSize(), { width: 1024, height: 683 });
+      assert.deepEqual(fs.readFileSync(raster), original);
+      log("TOOL_IMAGES_NATIVE_PREVIEW passed");
+    }
     await win.loadFile(path.join(__dirname, "index.html"));
     win.webContents.focus();
     for (const stage of ${JSON.stringify(stages)}) {
@@ -122,4 +148,4 @@ app.whenReady().then(async () => {
       .map(line => JSON.parse(line.slice("TOOL_IMAGES ".length)));
     assert.deepEqual(results, stages.map(stage => ({ passed: true, stage })));
   } finally { if (!process.env.PI_SCRATCH_DIR) await rm(temp, { recursive: true, force: true }); }
-});
+}

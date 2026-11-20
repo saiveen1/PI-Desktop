@@ -1853,11 +1853,12 @@ export const api = {
       ...(mimeType ? { mimeType } : {}),
       ...(sessionId ? { sessionId } : {}),
     }),
-  fsReadImageDataUrl: (ref: string, mimeType?: string, sessionId?: string) =>
+  fsReadImageDataUrl: (ref: string, mimeType?: string, sessionId?: string, allowThumbnail?: true) =>
     invoke<FsImageDataUrlResult>(IPC.invoke.fsReadImageDataUrl, {
       ref,
       ...(mimeType ? { mimeType } : {}),
       ...(sessionId ? { sessionId } : {}),
+      ...(allowThumbnail ? { allowThumbnail } : {}),
     }),
   fsReveal: (path: string, sessionId?: string) => invoke(IPC.invoke.fsReveal, { path, ...(sessionId ? { sessionId } : {}) }),
   fsRevealDirectory: (path: string, sessionId: string) =>

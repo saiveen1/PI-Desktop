@@ -181,10 +181,23 @@ switching sessions closes the viewer. Presentation never merges underlying tool
 messages or provider content.
 
 History uses the existing lossless tool-result storage and decoded image blocks;
-there is no new attachment store, persistence format or migration. Persisted
-inline images remain viewable after their original file is removed. Reference-only
-results depend on the referenced resource remaining available. Tests use isolated
-profiles and synthetic images, not the installed Desktop or a paid provider.
+there is no new attachment store, persistence format or migration. When a local
+history projection omits valid inline image bytes, the visible gallery may load
+that same session and message with the existing 256 KiB single-message content
+limit. Recovered original bytes take precedence over path-only previews, so the
+image remains viewable after the source moves or when its path is outside the
+project. Images that still do not fit can use an existing contained file reference;
+without one they remain unavailable. Model-input diagnostics and archived bytes
+are unchanged.
+
+Local generated images above the ordinary 5 MiB preview limit can use a PNG
+thumbnail, bounded to a 1024 px longest edge. Source reads and decodes are
+serialized, limited to the generator's byte budget and 16 million pixels, and
+use the same contained image path rules. The card and viewer share the preview
+cache. Saving a thumbnail-backed image opens the existing contained Save As
+flow for the original file; it never downloads the preview bytes as the original.
+Tests use isolated profiles and synthetic images, not the installed Desktop or a
+paid provider.
 
 ## Pi 1.1.0 operation boundary
 

@@ -2,15 +2,15 @@ import { useSlotSessionId } from "../../../plugins/renderer-slots/use-slots";
 import { useChatNativeFilesAllowed, useChatSessionCapability } from "../../../hooks/use-chat-session-capability";
 import { useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
-import { IconChevronLeft, IconChevronRight, IconClose, IconDownload, IconExternal, IconFolder, IconMinus, IconPlus } from "../../../components/icons";
+import { IconChevronLeft, IconChevronRight, IconClose, IconExternal, IconFolder, IconMinus, IconPlus } from "../../../components/icons";
 import { Button, OverlayBackdrop, TooltipButton } from "../../../components/ui";
 import { useOpenChatFileRef } from "../../../hooks/use-preview-target";
 import { api } from "../../../lib/api";
 import { useBlockingOverlay } from "../../../lib/blocking-overlay";
 import { portalToBody } from "../../../lib/portal-visibility";
-import { useReferencedImageDataUrl } from "../../../lib/use-referenced-image-data-url";
+import { useReferencedImagePreview } from "../../../lib/use-referenced-image-data-url";
 import { useAppStore } from "../../../stores/app-store";
-import { generatedImageDownloadName } from "./generated-image-download";
+import { ImageDownload } from "./ImageDownload";
 import { GeneratedImageThumbnail, type GeneratedImageRef } from "./GeneratedImageThumbnail";
 
 export function GeneratedImageViewer({ images, selectedIndex, onSelect, onClose, focusReturnRef }: {
@@ -35,8 +35,8 @@ export function GeneratedImageViewer({ images, selectedIndex, onSelect, onClose,
   const [manualZoom, setManualZoom] = useState<{ src: string; value: number } | null>(null);
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const selected = images[selectedIndex];
-  const referencedSrc = useReferencedImageDataUrl(selected?.dataUrl ? null : selected?.path, selected?.mimeType);
-  const src = selected?.dataUrl ?? referencedSrc;
+  const referenced = useReferencedImagePreview(selected?.dataUrl ? null : selected?.path, selected?.mimeType, selected?.allowThumbnail);
+  const src = selected?.dataUrl ?? referenced?.dataUrl ?? null;
   const label = selected?.label ?? t("settings.generatedImage", { index: (selected?.index ?? 0) + 1 });
   const size = selected && src && failedSrc !== src
     ? knownNaturalSizesRef.current.get(selected.index) ?? (natural?.src === src ? natural : null)
@@ -45,7 +45,6 @@ export function GeneratedImageViewer({ images, selectedIndex, onSelect, onClose,
     ? Math.min(1, viewport.width / size.width, viewport.height / size.height)
     : 1;
   const zoom = manualZoom?.src === src ? manualZoom.value : fit;
-  const downloadName = generatedImageDownloadName(src, selected?.index ?? 0);
   const openFile = useOpenChatFileRef();
   useBlockingOverlay();
 
@@ -141,7 +140,7 @@ export function GeneratedImageViewer({ images, selectedIndex, onSelect, onClose,
           <div className="generated-image-viewer-header-actions">
             {selected.path ? <TooltipButton type="button" onClick={() => { closeViewer(); void openFile(selected.path); }} tooltip={t("chat.previewFile")}><IconExternal size={18} /></TooltipButton> : null}
             {nativeFilesAllowed && selected.path ? <TooltipButton type="button" onClick={() => void reveal()} tooltip={t("settings.revealGeneratedImage")}><IconFolder size={18} /></TooltipButton> : null}
-            {src && failedSrc !== src && downloadName ? <a href={src} download={downloadName} aria-label={t("settings.downloadGeneratedImage")} title={t("settings.downloadGeneratedImage")}><IconDownload size={18} /></a> : null}
+            {src && failedSrc !== src ? <ImageDownload src={src} index={selected.index} originalPath={referenced?.isThumbnail ? selected.path : undefined} /> : null}
           </div>
         </header>
         <div className="generated-image-viewer-body">

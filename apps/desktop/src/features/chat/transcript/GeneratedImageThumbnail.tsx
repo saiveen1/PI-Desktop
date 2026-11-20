@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { ToolResultImage } from "../../../lib/tool-result-images";
 import { useTranslation } from "react-i18next";
 import { TooltipButton } from "../../../components/ui";
-import { useReferencedImageDataUrl } from "../../../lib/use-referenced-image-data-url";
+import { useReferencedImagePreview } from "../../../lib/use-referenced-image-data-url";
 
 export type GeneratedImageRef = ToolResultImage;
 
@@ -14,8 +14,8 @@ export function GeneratedImageThumbnail({ image, selected, onSelect, className, 
   source?: string;
 }) {
   const { t } = useTranslation();
-  const referencedSrc = useReferencedImageDataUrl(image.dataUrl ? null : image.path, image.mimeType);
-  const src = image.dataUrl ?? referencedSrc;
+  const referenced = useReferencedImagePreview(image.dataUrl ? null : image.path, image.mimeType, image.allowThumbnail);
+  const src = image.dataUrl ?? referenced?.dataUrl;
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const label = image.label ?? t("settings.generatedImage", { index: image.index + 1 });
   return (

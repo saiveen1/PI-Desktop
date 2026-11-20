@@ -1,14 +1,13 @@
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { UiMessage } from "@pi-desktop/shared";
-import { useReferencedImageDataUrl } from "../../../lib/use-referenced-image-data-url";
+import { useReferencedImagePreview } from "../../../lib/use-referenced-image-data-url";
 import { toolResultPayload } from "../../../lib/tool-presentation";
 import { useAppStore } from "../../../stores/app-store";
 import { Button, TooltipButton } from "../../../components/ui";
-import { IconDownload } from "../../../components/icons";
 import { GeneratedImageViewer } from "./GeneratedImageViewer";
 import { GeneratedImageThumbnail, type GeneratedImageRef } from "./GeneratedImageThumbnail";
-import { generatedImageDownloadName } from "./generated-image-download";
+import { ImageDownload } from "./ImageDownload";
 
 function ImageResult({
   path,
@@ -22,8 +21,8 @@ function ImageResult({
   onOpen: (trigger: HTMLButtonElement) => void;
 }) {
   const { t } = useTranslation();
-  const dataUrl = useReferencedImageDataUrl(path, mimeType);
-  const downloadName = generatedImageDownloadName(dataUrl, index);
+  const preview = useReferencedImagePreview(path, mimeType, true);
+  const dataUrl = preview?.dataUrl;
   return (
     <figure className="generated-image-card">
       <TooltipButton
@@ -39,11 +38,7 @@ function ImageResult({
         )}
       </TooltipButton>
       <figcaption className="generated-image-actions">
-        {downloadName && dataUrl ? (
-          <a href={dataUrl} download={downloadName} aria-label={t("settings.downloadGeneratedImage")} title={t("settings.downloadGeneratedImage")}>
-            <IconDownload size={18} />
-          </a>
-        ) : null}
+        <ImageDownload src={dataUrl} index={index} originalPath={preview?.isThumbnail ? path : undefined} />
       </figcaption>
     </figure>
   );
@@ -63,7 +58,7 @@ export function GeneratedImages({ message }: { message: UiMessage }) {
     if (!raw || typeof raw !== "object") return [];
     const item = raw as Record<string, unknown>;
     return item.status === "succeeded" && typeof item.path === "string"
-      ? [{ path: item.path, index, mimeType: typeof item.mimeType === "string" ? item.mimeType : undefined }]
+      ? [{ path: item.path, index, mimeType: typeof item.mimeType === "string" ? item.mimeType : undefined, allowThumbnail: true }]
       : [];
   });
   const selectedPosition = Math.min(selectedImageIndex, Math.max(0, images.length - 1));

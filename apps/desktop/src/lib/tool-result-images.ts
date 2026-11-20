@@ -6,6 +6,7 @@ export type ToolResultImage = {
   mimeType?: string;
   dataUrl?: string;
   label?: string;
+  allowThumbnail?: true;
 };
 export type ImageInputIssueCode = "MODEL_NO_VISION" | "IMAGE_TOO_LARGE" | "IMAGE_INVALID";
 export type ToolImageSet = {
@@ -14,6 +15,8 @@ export type ToolImageSet = {
   issueCodes: ImageInputIssueCode[];
   /** Display-budget omission, never an authoritative model-input rejection. */
   displayOmitted: boolean;
+  /** Valid binary omitted from a bounded history projection, even with a path fallback. */
+  inlineOmitted: boolean;
 };
 
 function record(value: unknown): Record<string, unknown> | undefined {
@@ -56,7 +59,7 @@ export function toolResultImageSet(message: { toolResult?: unknown }): ToolImage
   const details = record(payload);
   const result: ToolImageSet = {
     generated: details?.kind === "generated-images" || details?.kind === "image-generation-error",
-    images: [], issueCodes: [], displayOmitted: false,
+    images: [], issueCodes: [], displayOmitted: false, inlineOmitted: false,
   };
   const issues = record(details?.imageInput)?.issues;
   const addIssue = (code: ImageInputIssueCode) => {
@@ -75,6 +78,8 @@ export function toolResultImageSet(message: { toolResult?: unknown }): ToolImage
   const entries = groups.flatMap((group, source) => group.map((value, index) => ({
     value, index, source, defaultPath: group.length === 1 ? details?.path : undefined,
   })));
+  const inline = [new Set<number>(), new Set<number>()];
+  const omittedInline: Array<{ source: number; index: number }> = [];
   const byData = new Map<string, ToolResultImage>();
   const byRef = new Map<string, ToolResultImage>();
   const visible = [new Set<number>(), new Set<number>()];
@@ -103,11 +108,13 @@ export function toolResultImageSet(message: { toolResult?: unknown }): ToolImage
         dataUrl = `data:${mimeType};base64,${data}`;
       }
     }
+    if (!dataUrl && omitted && data === undefined) omittedInline.push({ source, index });
     if (!dataUrl && !path) {
       if (clipped || omitted && data === undefined) omit();
       else addIssue("IMAGE_INVALID");
       return;
     }
+    if (dataUrl) inline[source].add(index);
     visible[source].add(index);
     const refIdentity = path ? `${mimeType}:${path}` : undefined;
     const duplicate = dataUrl ? byData.get(dataUrl) : refIdentity ? byRef.get(refIdentity) : undefined;
@@ -130,6 +137,8 @@ export function toolResultImageSet(message: { toolResult?: unknown }): ToolImage
   // an extra missing original when provider content contains fewer images.
   result.displayOmitted = omissions.some(({ source, index }) =>
     original.length !== fallback.length || !visible[1 - source].has(index));
+  result.inlineOmitted = omittedInline.some(({ source, index }) =>
+    original.length !== fallback.length || !inline[1 - source].has(index));
   cache.set(message, result);
   return result;
 }

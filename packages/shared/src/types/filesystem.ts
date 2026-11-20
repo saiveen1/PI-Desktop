@@ -20,6 +20,8 @@ export type FsImageDataUrlResult = {
   dataUrl?: string;
   size?: number;
   errorCode?: string;
+  /** Display-only bytes; save the contained original instead. */
+  isThumbnail?: true;
 };
 
 export type AgentInstructionFile = {

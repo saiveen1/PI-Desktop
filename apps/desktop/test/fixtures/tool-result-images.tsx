@@ -46,9 +46,19 @@ const galleryImages = ["red", "blue", "green", "orange", "purple", "cyan"].map((
 }));
 const gallery = message("gallery", { images: galleryImages }, "mcp_screenshot");
 const reads: Array<{ ref: string; sessionId?: string }> = [];
-api.fsReadImageDataUrl = async (ref, _mimeType, sessionId) => {
+const savedOriginals: Array<{ path: string; sessionId?: string }> = [];
+api.fsSaveAs = async (path, sessionId) => {
+  savedOriginals.push({ path, sessionId });
+  return { canceled: false };
+};
+api.fsReadImageDataUrl = async (ref, _mimeType, sessionId, allowThumbnail) => {
   reads.push({ ref, sessionId });
-  return ref === "missing.png" ? { kind: "missing" } : { kind: "image", dataUrl: ref === "blue.png" ? blueUrl : redUrl };
+  if (ref === "outside.png" || ref === "missing.png") return { kind: "missing" };
+  if (ref === "large.png") {
+    check(allowThumbnail === true, "Generated card did not request a thumbnail fallback");
+    return { kind: "image", dataUrl: blueUrl, isThumbnail: true };
+  }
+  return { kind: "image", dataUrl: ref === "blue.png" ? blueUrl : redUrl };
 };
 useAppStore.setState({ activeSessionId: "unrelated-active-session" });
 const render = (messages: UiMessage[], sessionId = "session-a", turn: boolean | "subagent" | "row" = false, active = false) => {
@@ -70,19 +80,21 @@ const render = (messages: UiMessage[], sessionId = "session-a", turn: boolean | 
 const thumb = () => document.querySelector<HTMLButtonElement>(".tool-result-image-thumb")!;
 const dialog = () => document.querySelector<HTMLDialogElement>("dialog.generated-image-viewer");
 const selectedImage = () => document.querySelector<HTMLImageElement>(".generated-image-viewer-viewport img");
-const waitForSelectedImage = async (src: string) => {
+const waitForImage = async (selector: string, src: string) => {
+  const current = () => document.querySelector<HTMLImageElement>(selector);
   await new Promise<void>((resolve, reject) => {
     const observer = new MutationObserver(checkSelection);
-    const timer = setTimeout(() => { observer.disconnect(); reject(new Error("Viewer did not select the expected image")); }, 2000);
+    const timer = setTimeout(() => { observer.disconnect(); reject(new Error(`Image did not load: ${selector}`)); }, 2000);
     function checkSelection() {
-      if (selectedImage()?.src !== src) return;
+      if (current()?.src !== src) return;
       clearTimeout(timer); observer.disconnect(); resolve();
     }
     observer.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["src"] });
     checkSelection();
   });
-  await selectedImage()?.decode();
+  await current()?.decode();
 };
+const waitForSelectedImage = (src: string) => waitForImage(".generated-image-viewer-viewport img", src);
 const decodeThumbnails = async () => {
   await Promise.all([...document.querySelectorAll<HTMLImageElement>(".tool-result-image-thumb img, .generated-image-thumb img")].map((img) => img.decode()));
 };
@@ -156,6 +168,28 @@ Object.assign(window, { toolImagesProbe: async (stage: string) => {
     render([message("mcp", { images: [blue] })], "session-b"); await decodeThumbnails();
     check(!dialog(), "Viewer leaked across sessions with identical message IDs");
     check(document.querySelector<HTMLImageElement>(".tool-result-image-thumb img")?.src === blueUrl, "Previous session image leaked");
+  } else if (stage === "retained-image") {
+    const omitted = message("retained", { details: { path: "outside.png", images: [{ mimeType: "image/png", displayImageOmitted: true }] } });
+    const requests: string[] = [];
+    let resolveOld: (() => void) | undefined;
+    api.getSession = async (id, options) => {
+      requests.push(id);
+      check(options?.messageAround === omitted.id && options.messageLimit === 1 && options.contentLimit === 256 * 1024, "Expected bounded single-message rehydration");
+      if (id === "session-a") await new Promise<void>((resolve) => { resolveOld = resolve; });
+      const restored = { ...omitted, toolResult: { images: [id === "session-a" ? red : blue] } };
+      return { session: { id, messages: [restored] } as NonNullable<Awaited<ReturnType<typeof api.getSession>>["session"]> };
+    };
+    render([omitted], "session-a"); await frame();
+    render([omitted], "session-b"); await frame();
+    check(requests.join(",") === "session-a,session-b", "History read was not scoped to the owning session");
+    check(!reads.some((item) => item.ref === "outside.png"), "Retained image reopened a source outside the project");
+    resolveOld?.(); await frame();
+    const thumbnail = thumb().querySelector("img");
+    check(thumbnail?.src === blueUrl, "Historical image bytes were not restored or a stale session won");
+    await thumbnail?.decode();
+    flushSync(() => thumb().click()); await waitForSelectedImage(blueUrl);
+    check(document.querySelector<HTMLAnchorElement>("dialog a[download]")?.href === blueUrl, "Retained original bytes are not downloadable");
+    render([]);
   } else if (stage === "states") {
     const warning = message("unsupported", { content: [], details: { images: [red], imageInput: {
       imageCount: 1, includedCount: 0, issues: [{ index: 0, code: "MODEL_NO_VISION", message: "omitted" }],
@@ -280,23 +314,38 @@ Object.assign(window, { toolImagesProbe: async (stage: string) => {
   } else if (stage === "group-boundaries") {
     render(groupedReads, "read-batch", true);
     check(!document.querySelector(".tool-result-images"), "Consecutive Reads still echo input images");
-    render([gallery, ...groupedReads], "child-output", "subagent"); await decodeThumbnails();
+    render([gallery, ...groupedReads], "child-output", "subagent");
     check(document.querySelectorAll(".tool-result-images").length === 1 && document.querySelectorAll(".tool-result-image-thumb").length === 6, "Subagent loses output or promotes Reads");
-    flushSync(() => thumb().click()); await frame();
-    render([{ ...gallery, toolResult: { images: [blue] } }], "session-b", "subagent"); await decodeThumbnails();
+    flushSync(() => thumb().click());
+    render([{ ...gallery, toolResult: { images: [blue] } }], "session-b", "subagent");
     check(!dialog(), "Viewer leaked across owning sessions");
+  } else if (stage === "generated-large") {
+    render([message("large", { kind: "generated-images", results: [{ status: "succeeded", path: "large.png", mimeType: "image/png" }] }, "GenerateImages")]);
+    await waitForImage(".generated-image-preview img", blueUrl);
+    const save = document.querySelector<HTMLButtonElement>(".generated-image-actions button");
+    check(save && !document.querySelector(".generated-image-actions a[download]"), "Thumbnail became a downloadable original");
+    save?.click();
+    flushSync(() => document.querySelector<HTMLButtonElement>(".generated-image-preview")?.click());
+    await waitForSelectedImage(blueUrl);
+    const viewerSave = Array.from(dialog()!.querySelectorAll<HTMLButtonElement>("button"))
+      .find((button) => button.getAttribute("aria-label") === i18n.t("settings.downloadGeneratedImage"));
+    check(viewerSave && !dialog()?.querySelector("a[download]"), "Viewer linked the thumbnail instead of enabling Save As");
+    viewerSave?.click();
+    check(savedOriginals.length === 2 && savedOriginals.every((item) => item.path === "large.png" && item.sessionId === "session-a"), "Save As did not target the original in the owning session");
+    check(reads.filter((item) => item.ref === "large.png").length === 1, "Card and viewer loaded the same thumbnail twice");
+    render([]);
   } else if (stage === "generated") {
     const generated = message("generated", { details: { kind: "generated-images", results: [
       { status: "succeeded", path: "red.png", mimeType: "image/png" },
       { status: "succeeded", path: "blue.png", mimeType: "image/png" },
       { status: "failed", errorCode: "IMAGE_DOWNLOAD_FAILED" },
     ] } }, "renamed-image-tool");
-    render([generated]); await frame(); await decodeThumbnails();
+    render([generated]); await waitForImage(".generated-image-preview img", redUrl);
     check(document.querySelectorAll(".generated-image-card").length === 1, "Generation card was removed");
     check(document.body.textContent?.includes("IMAGE_DOWNLOAD_FAILED"), "Generation failure feedback was removed");
     const thumbs = document.querySelectorAll<HTMLButtonElement>(".generated-image-thumb");
     check(thumbs.length === 2, "Generated batch lost thumbnails");
-    flushSync(() => thumbs[1].click()); await frame();
+    flushSync(() => thumbs[1].click()); await waitForImage(".generated-image-preview img", blueUrl);
     check(document.querySelector<HTMLAnchorElement>(".generated-image-actions a")?.href === blueUrl, "Generated download did not follow selection");
     trigger = document.querySelector<HTMLButtonElement>(".generated-image-preview")!;
     flushSync(() => trigger.click()); await waitForSelectedImage(blueUrl); await frame();

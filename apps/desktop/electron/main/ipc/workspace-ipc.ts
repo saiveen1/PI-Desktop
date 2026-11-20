@@ -4,7 +4,7 @@ import { readComposerClipboardDirectories } from "../composer-clipboard-director
 import { referenceComposerFiles } from "../composer-file-references";
 import { importComposerSelection } from "../composer-file-import";
 import { COMPOSER_FILE_SELECTION_CHANNEL } from "../../composer-file-selection";
-import { BrowserWindow, dialog, shell, type OpenDialogOptions } from "electron";
+import { BrowserWindow, dialog, nativeImage, shell, type OpenDialogOptions } from "electron";
 import { dirname } from "node:path";
 import { homedir } from "node:os";
 import { existsSync, statSync } from "node:fs";
@@ -53,6 +53,7 @@ import { saveFileAs } from "../fs-save-as";
 import { isChatRefOutsideRoots, resolveChatFileRef, resolveExternalChatRef } from "../chat-ref-resolve";
 import { rebaseWorktreeRef, type WorktreeRefContext } from "../worktree-ref";
 import { getWorkspaceFileIndex, searchWorkspaceFiles } from "../fs-index";
+import { readGeneratedImagePreview } from "../generated-image-preview";
 import {
   projectFolderPaths,
   refreshProjectGroups,
@@ -998,21 +999,19 @@ handleWithEvent(
 
   handle(
     IPC.invoke.fsReadImageDataUrl,
-    async (input: { ref?: string; mimeType?: string; sessionId?: string } = {}) => {
+    async (input: { ref?: string; mimeType?: string; sessionId?: string; allowThumbnail?: boolean } = {}) => {
       const ref = String(input.ref ?? "").trim();
-      if (await isLocalStoredFile(ref)) return readOpenableImage(ref, null, localFileStores, input.mimeType);
+      const read = (root: string | null, roots: string[]) => input.allowThumbnail === true
+        ? readGeneratedImagePreview(ref, root, roots, input.mimeType, (bytes, width, height) => {
+          const image = nativeImage.createFromBuffer(bytes);
+          return image.isEmpty() ? Buffer.alloc(0) : image.resize({ width, height }).toPNG();
+        })
+        : readOpenableImage(ref, root, roots, input.mimeType);
+      if (await isLocalStoredFile(ref)) return read(null, localFileStores);
       const remote = await remoteFileWorkspace(input.sessionId);
-      if (remote) {
-        return readRemoteFiles(remote, "image", ref, input.mimeType);
-      }
+      if (remote) return readRemoteFiles(remote, "image", ref, input.mimeType);
       const workspaceRoot = await optionalWorkspaceRoot(input.sessionId);
-      const requested = String(input.ref ?? "").trim();
-      return readOpenableImage(
-        requested,
-        workspaceRoot,
-        await fsExtraRoots(workspaceRoot),
-        input.mimeType,
-      );
+      return read(workspaceRoot, await fsExtraRoots(workspaceRoot));
     },
   );
 

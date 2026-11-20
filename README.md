@@ -192,8 +192,9 @@ This edition strengthens the existing framework rather than replacing it.
   are now saved and linked instead of being silently discarded; image-only replies
   and delivery failures do not automatically repeat generation. Tool and generated
   images open over the conversation and close with a click in the surrounding
-  space. Existing preview limits still apply, with file access for larger retained
-  images.
+  space. History restores retained tool-image bytes when they fit a bounded
+  single-message read, even if the source file is outside the project. Oversized
+  local generated images use a bounded thumbnail while downloads keep the original.
 
 ### Fixes that matter in daily use
 

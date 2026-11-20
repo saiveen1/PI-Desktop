@@ -5347,6 +5347,10 @@ Build two actual runtimes with identical configuration and different scratch dir
   window with 31,929-, 7,255-, 37,395- and 29,152-byte
   inline images duplicated in content/details. Repeat with an over-budget inline
   image, a missing original file, clipped legacy mirrors and invalid/unsafe refs.
+  Load a 152 KB-class retained screenshot whose source path is outside the
+  project: the bounded page omits its bytes, and a one-message read restores
+  them. Switch sessions while that read is pending. Generate a contained PNG
+  larger than 5 MiB, open its thumbnail, then Save As from card and viewer.
   Open thumbnails, navigate with left/right, close with Escape, switch sessions
   with identical message IDs, and open process details. Return six consecutive
   successful Read images and confirm none is promoted outside process details.
@@ -5372,9 +5376,12 @@ Build two actual runtimes with identical configuration and different scratch dir
   stays visible under the scrim; image clicks, controls and cross-boundary drags
   do not dismiss the preview. Clicking either blank side dismisses without
   activating the conversation and restores focus to the originating thumbnail.
-  Keyboard selection, download targets and session isolation work. Missing
-  resources display an unavailable state without a download. Tool details contain
-  no typed binary dump. Generation retains its original cards and error/setup actions.
+  Keyboard selection, download targets and session isolation work. A retained
+  screenshot fits the targeted read without reopening its original file. Large
+  generated thumbnails decode within the preview budget and Save As preserves
+  the original bytes. Missing resources display an unavailable state without
+  a download. Tool details contain no typed binary dump. Generation retains
+  its original cards and error/setup actions.
   Bounded history never string-clips image bytes or identity fields. Fitting
   retained bytes do not depend on the original file; over-budget previews use
   typed refs or explicit display-only unavailability, not model-input rejection.
