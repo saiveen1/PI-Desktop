@@ -224,7 +224,7 @@ impl Database {
             26 => {
                 migrate_v26_to_v27(&conn, path)?;
             }
-            27..=35 => {}
+            27..=36 => {}
             legacy @ 1..=6 => {
                 let _ = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
                 drop(conn);
@@ -319,6 +319,10 @@ impl Database {
         let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
         if version == 35 {
             super::migrations::session_observer_migration::migrate(&conn, path)?;
+        }
+        let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+        if version == 36 {
+            super::model_discovery_migration::migrate_reported_context_window(&conn, path)?;
         }
         let db = Self { conn, data_dir };
         db.boot_maintenance()?;

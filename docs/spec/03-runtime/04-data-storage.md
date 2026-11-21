@@ -1,4 +1,4 @@
-# 04. Data Storage (Schema v36)
+# 04. Data Storage (Schema v37)
 
 ### Session personas (schema 35)
 
@@ -857,6 +857,7 @@ CREATE TABLE models (
   source            TEXT NOT NULL DEFAULT 'user',  -- bundled | discovered | user
   capabilities_json TEXT NOT NULL DEFAULT '[]',
   context_window    INTEGER,
+  reported_context_window INTEGER,
   max_output_tokens INTEGER,
   deprecated        INTEGER NOT NULL DEFAULT 0,
   discovery_state   TEXT CHECK (discovery_state IN ('published', 'unlisted')),
@@ -868,6 +869,13 @@ CREATE TABLE models (
 Refresh (spec 13 §6/§9) upserts `discovered` rows and **never overwrites
 `source='user'`** rows. Recent-model MRU stays in `kv(cache)` — it is a
 bounded display list, not relational data.
+
+Personal schema v37 adds nullable `models.reported_context_window` for a limit
+explicitly reported by the endpoint. The 36-to-37 upgrade preserves a verified
+backup and the display cache; it leaves the new field unknown unless endpoint
+provenance was already recorded. Upstream schema 34 already has the field and
+keeps it through the personal persona and Observer migrations. The final step
+also ensures the personal delegation-history index exists for either source.
 
 Schema v25 adds nullable `discovery_state`, distinct from metadata deprecation.
 The v24 upgrade backs up first, adds the field transactionally, and marks
