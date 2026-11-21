@@ -39,6 +39,7 @@ import {
 } from "../work-panel-window";
 import { readWindowState, writeWindowState } from "../window-preferences";
 import { suppressLinuxFramelessSystemMenu } from "../frameless-system-menu";
+import { installEditableContextMenu } from "../application-menu";
 import { isWindowFullScreen } from "../window-fullscreen";
 import { installWindowsNativeSnap } from "../window-native-snap";
 import {
@@ -285,6 +286,7 @@ export async function createWindow({
     },
   });
   const window = windowState.mainWindow;
+  installEditableContextMenu(window);
   installMaximizedWindowGuard(window, process.platform);
   const setNativeMinimumSize = (width: number, height: number) => {
     if (window.isMaximized() || isWindowFullScreen(window)) return;

@@ -84,6 +84,7 @@ export function createInitialState(): AppStateData {
     planCheckpoints: {},
     sessionTodos: {},
     page: "chat",
+    settingsOpen: false,
     settingsTab: DEFAULT_SETTINGS_TAB,
     settingsAnchor: null,
     settingsTabNonce: 0,

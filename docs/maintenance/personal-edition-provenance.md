@@ -99,6 +99,10 @@ Observer reviews: upstream's `one-shot-complete.ts` does not set it. The
 loopback `pi-anthropic-message-threads.test.ts` regression verifies both the
 independent request and preservation of the next main-turn continuation.
 
+The [023ed8688 integration record](upstream-integration-023ed8688.md) records
+how the personal beta release line, Responses settlement, runtime compaction and
+sidebar behavior were preserved while adopting upstream's source changes.
+
 The post-merge local recovery fix on `9ba56d329` preserves the requested model,
 selection rationale and pre-clamp effort in the resumable delegation chain. Host
 history now falls back to settled scheduling metadata when `Task(resume)` omits

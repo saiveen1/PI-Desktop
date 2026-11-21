@@ -51,7 +51,7 @@ function definition(): SubagentDefinition {
 type DelegateAgent = {
   state: { messages: unknown[] };
   prepareNextTurnWithContext?: (
-    turn: unknown,
+    turn: { toolResults: unknown[]; context: { messages: unknown[] } },
     signal: AbortSignal,
   ) => Promise<{ context?: { messages: unknown[] } } | undefined>;
 };
@@ -103,7 +103,7 @@ describe("SubagentRun loop context ownership (D620)", () => {
     ];
 
     const update = await agent.prepareNextTurnWithContext!(
-      { toolResults: [] },
+      { toolResults: [], context: { messages: [...agent.state.messages] } },
       new AbortController().signal,
     );
 
@@ -131,7 +131,10 @@ describe("SubagentRun loop context ownership (D620)", () => {
         messages: [createCompactionSummaryMessage("Confirmed a.ts:12; next inspect b.ts.", 1000, 1)],
       });
       const agent = createDelegate(scratchDir);
-      await agent.prepareNextTurnWithContext!({ toolResults: [] }, new AbortController().signal);
+      await agent.prepareNextTurnWithContext!(
+        { toolResults: [], context: { messages: [...agent.state.messages] } },
+        new AbortController().signal,
+      );
       const stored = JSON.parse(readFileSync(join(scratchDir, "delegations", "task-1", "checkpoint.json"), "utf8"));
       expect(stored).toMatchObject({ status: "running", contextCompactions: 1 });
       expect(stored.report).toContain("Confirmed a.ts:12; next inspect b.ts.");

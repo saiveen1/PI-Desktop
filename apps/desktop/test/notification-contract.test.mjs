@@ -71,7 +71,7 @@ test("terminal notifications flow from host completion to the renderer", () => {
   assert.match(storeSource, /unreadNotificationCount/);
   assert.match(notificationRuntimeSource, /api\.onNotificationChanged/);
   assert.match(sidebarSource, /<NotificationCenter onBeforeOpen=\{\(\) => closeMenus\(false\)\} \/>/);
-  assert.doesNotMatch(appSource, /<NotificationCenter \/>/);
+  assert.doesNotMatch(appSource, /<NotificationCenter\b/);
   const changedHandler = notificationRuntimeSource.match(
     /api\.onNotificationChanged[\s\S]*?\n\s*\}\);/,
   )?.[0] ?? "";

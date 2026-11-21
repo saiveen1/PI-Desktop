@@ -46,3 +46,16 @@ test("the scheduled task switch remains searchable in Behavior in English and Ch
     assert.ok(hits.some((hit) => hit.tab === "behavior" && hit.rowKey === "settings.scheduledTasks"));
   }
 });
+
+test("new Execution switches are searchable by title and description in both locales", () => {
+  for (const catalog of [en, zhCN]) {
+    const copy = flattenCatalog(catalog);
+    for (const setting of ["backgroundJobContinuation", "codemode"]) {
+      for (const suffix of ["", "Desc"]) {
+        const key = `settings.${setting}${suffix}`;
+        const hits = searchSettings(copy[key].slice(0, 30), (candidate) => copy[candidate] ?? candidate);
+        assert.ok(hits.some(hit => hit.tab === "behavior" && hit.rowKey === key), key);
+      }
+    }
+  }
+});

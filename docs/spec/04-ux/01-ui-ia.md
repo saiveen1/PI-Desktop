@@ -17,23 +17,31 @@ destination, chat as the home surface, tools and permissions inline.
 | Platform titlebar: macOS traffic lights / Windows/Linux actions     |
 +------------------+--------------------------------+------------------+
 | Sidebar (275px) | Main pane (active destination) | Work panel       |
-|                  |  chat home / transcript        |  (optional,      |
-|                  |  or Extensions page            |   resizable      |
-|                  |                                |   ≥244px, dynamic|
-|  Sessions     +↕ |                                | surface          |
-|   Recent rows ↕  |                                |                  |
-|  Projects      + |                                | ◫ | App.tsx  ⌄ × |
-|   Project A      |                                | > |              |
-|   Project B      |                                | ◎ | Active       |
-| Footer [⚙][plug][☾][bell] |  Floating composer (chat) |   | resource     |
+|            [⇤]   |  chat home / transcript        |  (optional,      |
+|  + New task      |  or Extensions page            |   resizable      |
+|  ◷ Scheduled     |                                |   ≥244px, dynamic|
+|  ⧉ Plugin market |                                | surface          |
+|  Sessions     +↕ |                                |                  |
+|   Recent rows ↕  |                                | ◫ | App.tsx  ⌄ × |
+|  Projects      + |                                | > |              |
+|   Project A      |                                | ◎ | Active       |
+| ⚙ Settings  v0.x |  Floating composer (chat)      |   | resource     |
 +------------------+--------------------------------+------------------+
 ```
 
 - **Sidebar**: primary navigation — path-less conversations under a compact
   **Sessions** section with new-session and sort actions, retained open-project
   groups under a following **Projects** section with a persistent new-project
-  action, and the WorkBuddy-inspired footer. The footer keeps compact Settings,
-  Extensions, Scheduled (clock), and notification icon actions. Each retained
+  action. Above the lists, three labelled primary rows: **New task**,
+  **Scheduled** (hidden while scheduled tasks are disabled) and **Plugin
+  market** (opens the Extensions page on its Market tab; activating it again
+  while Extensions is active performs one Back step). The footer pairs a
+  labelled **Settings** entry (opens the Settings dialog) on the left and the
+  version/update chip on the right. The personal edition retains the footer's
+  notification inbox. Every configurable sidebar module can be hidden from Settings →
+  Appearance → Sidebar modules (`AppSettings.sidebarModules`; all shown by
+  default). Hiding Pinned sessions returns pins to their own lists; hiding
+  Projects lets the Sessions list take the freed height. Each retained
   project is a
   path-keyed tab/group that can be
   collapsed independently. Project and conversation rows expose
@@ -82,10 +90,10 @@ destination, chat as the home surface, tools and permissions inline.
   macOS keeps native traffic lights and its existing fullscreen insets.
   Destination history is
   shortcut-first (`Cmd/Ctrl+[` and `Cmd/Ctrl+]`) with no dedicated back/forward
-  chrome; while Extensions is active, the footer Plugins button performs one
-  Back step as the only pointer affordance. The main titlebar has no
-  notification action; the durable local inbox opens from the sidebar footer
-  bell instead (D130/D117). In work-panel preview mode, MainChat is unmounted
+  chrome; while Extensions is active, the sidebar Plugin market row performs one
+  Back step as the only pointer affordance. The main titlebar has no notification
+  action; the durable local inbox opens from the sidebar footer bell. In
+  work-panel preview mode, MainChat is unmounted
   and a window-level 46px chrome row keeps New Task, sidebar, and native window
   controls available without owning a drag or no-drag rectangle across the
   panel. The panel header alone owns dragging in the preview pane; its actual
@@ -357,7 +365,7 @@ read without closing the editor or waiting for the old request to settle.
 A replacement failure exposes the existing Retry action.
 
 Settings → Behavior → Execution → Scheduled tasks controls this feature, on by default
-(`scheduledTasksEnabled` absent or true). Off hides the footer and search page
+(`scheduledTasksEnabled` absent or true). Off hides the sidebar Scheduled row and search page
 entries and prevents new runs without deleting tasks or run history. The
 settings switch remains searchable so the feature can be re-enabled.
 
@@ -390,7 +398,7 @@ session search never list it, and Open conversation is the explicit action that
 carries it into the chat route, and the chat top bar then offers that
 conversation's own way back: the row names the task it belongs to, and returning
 restores the same task and the same run, reusing the navigation history when
-this route is directly behind it. The footer clock and global search open
+this route is directly behind it. The sidebar Scheduled row and global search open
 this route. Run now dispatches in the background, selects the run it admitted,
 and leaves the reader on this page. Automatic runs never steal foreground
 focus. See [desktop automations](../../adr/scheduled-desktop-automations.md).
@@ -453,13 +461,13 @@ set apart by tone and spacing, and hairlines are reserved for floating layers
 (menus, sheet, dialogs). MCP, Skills, and Subagents are not tabs or sections of
 Extensions.
 
-### 3.5 Settings (full-page takeover)
-### 3.5 Settings (full-page takeover)
-Settings replaces the whole shell (D063): back-to-app + search + a grouped
-settings rail with concise, parallel destination labels. The Agent group
-contains independent Skills, MCP, and Subagents destinations alongside
-Instructions and Model configuration; selecting one
-changes the page destination rather than a tab inside a shared capability panel.
+### 3.5 Settings (modal dialog)
+
+Settings opens over the current destination without adding a history entry.
+The dialog has search and a grouped rail; Escape and its Close button return
+to the underlying surface. The Agent group contains independent Skills, MCP,
+and Subagents destinations alongside Instructions and Model configuration;
+selecting one changes the dialog destination, not the underlying page.
 Appearance lives inside General; global AI behavior (permissions and context
 management) lives inside 全局 AI; keyboard shortcuts and global/project
 instructions have their own destinations; provider management lives inside
@@ -510,17 +518,20 @@ shared capability contract:
 | Notification inbox | sidebar footer bell | All/Unread/Needs action; retained successful and failed tasks plus read-only approval receipts; bulk read and confirmed history-only clear |
 | Global delegations | persistent conversation/home toolbar entry | all-project paginated execution history, source-aware details without navigation, explicit Open source and handoff to existing approval controls; not a session work-panel tab |
 | Session subagents | persistent text entry in the conversation topbar | current-session running/approval status and history; opens the session index directly in the work panel and reuses existing task detail tabs |
+| Settings dialog | sidebar footer Settings, `Mod+,`, deep links | modal over the current page; waits behind the startup guide and announcement ([06-settings-ia](06-settings-ia.md) §1) |
+| Startup guide / announcement | first launch (once) or Settings → About / first launch of a release with an enabled announcement (once) | [05-onboarding](05-onboarding.md) §3–§5 |
 | Toasts | events (plugin toast, backend restored, copy) | top-center of the live main-content safe area; viewport fallback; 4s default, 8s for errors |
 | Project switcher | empty-home underlined project name | sidebar open projects + search + clone git project + open project |
 
 ## 5. Navigation model
 
-- `page` state: `chat | scheduled | plugins | settings`; `chat` is the
-  conversation-surface route, not an operating mode. The project
+- `page` state: `chat | scheduled | plugins`; `chat` is the
+  conversation-surface route, not an operating mode. Settings is a modal
+  dialog (`settingsOpen`), not a page; it records no history. The project
   archive is the `projects` settings tab rather than a standalone page.
 - Destination history is linear; `Cmd/Ctrl+[` and `Cmd/Ctrl+]` traverse it
   without persistent back/forward chrome. While Extensions is active, the
-  footer Plugins button reuses one Back step (§2 shell regions); no separate
+  sidebar Plugin market row reuses one Back step (§2 shell regions); no separate
   back or forward control is added.
 - Selecting a project tab reuses `project.set` when its path differs from the
   selected host workspace and keeps the other tabs retained.
@@ -532,14 +543,22 @@ shared capability contract:
   switcher of the sidebar's open projects instead of the folder picker. An
   open project with no session yet names the hero the same way, because that
   empty home already belongs to it and a task started there lands in the
-  project. A temporary session shows dedicated temporary-chat copy with no
-  project underline or switcher; and with no project open the generic welcome
-  title stands.
-- New task resolves the current project or temporary group by its most recent
-  session: if that session has `messageCount = 0`, it is selected and reused;
-  otherwise a durable empty session is created immediately and appears in the
-  sidebar. Repeated clicks therefore keep one empty slot per visible group;
-  an empty slot remains persisted until the user deletes or archives it.
+  project. A temporary session shows dedicated temporary-chat copy whose scope
+  word ("temporarily" / 临时) is underlined like a project name and opens the
+  same switcher; with no project and no session the generic welcome title
+  stands. The switcher
+  lists "Temporary chat" first, so the next task can leave or join a project from
+  the empty home.
+- New task resolves the temporary group by its most recent session: if that
+  session has `messageCount = 0`, it is selected and reused; otherwise a
+  durable empty session is created immediately and appears in the sidebar. A
+  project row's `+` and the empty-home switcher resolve their target group the
+  same way. Repeated clicks therefore keep one empty slot per target group; an
+  empty slot remains persisted until the user deletes or archives it.
+- The conversation topbar's project crumb (or a "Temporary chat" crumb for a
+  temporary session) opens a menu that moves an idle local conversation into
+  another open project or out of any project. Running, remote, native, and
+  isolated-worktree sessions show the static crumb.
 
 ## 6. Keyboard map (IA level)
 

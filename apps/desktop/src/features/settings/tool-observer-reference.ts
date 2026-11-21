@@ -73,7 +73,7 @@ export function toolObserverTarget(state: TargetState): string {
 
 export function canReferenceToolObservations(state: AppState, target: string): boolean {
   const session = state.sessions.find((item) => item.id === state.activeSessionId);
-  return state.settings?.developerMode === true && state.page === "settings"
+  return state.settings?.developerMode === true && state.settingsOpen
     && toolObserverTarget(state) === target && !state.selectingSessionId && !state.composerPrefill
     && !state.workspace?.remote
     && Boolean(session && (!session.source || session.source === "desktop")
@@ -81,7 +81,7 @@ export function canReferenceToolObservations(state: AppState, target: string): b
       && (!session.projectPath || session.projectPath === state.activeProjectPath));
 }
 
-/** Settings has unmounted Composer: its layout cleanup has cached text and chips. No send path is involved. */
+/** Prefill the owning Composer draft without dispatching a message. */
 export function referenceToolObservationGroup(
   target: string,
   report: ToolObservationReport,
@@ -106,6 +106,10 @@ export function referenceToolObservationGroup(
     added = true;
     return { composerPrefill: { ...next, sessionId } };
   });
-  if (added) useAppStore.getState().setPage("chat");
+  if (added) {
+    const state = useAppStore.getState();
+    state.setPage("chat");
+    state.closeSettings();
+  }
   return added;
 }

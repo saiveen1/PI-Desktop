@@ -7,6 +7,7 @@ import { EARLY_END_REMINDER, EARLY_END_SECTION, suspectedEarlyEnd } from "./earl
 import { TextToolCallRecovery } from "./text-tool-call-recovery.js";
 import { UnfinishedTodoContinuation } from "./unfinished-todo-continuation.js";
 import { ObserverGuard, type ObserverRuntimeBlock } from "./observer-guard.js";
+import { assistantContent } from "./agent-messages.js";
 
 type EarlyEnd = NonNullable<AgentResponseTermination["earlyEnd"]>;
 
@@ -115,7 +116,7 @@ export class TurnCorrectionPolicy {
     if (generation !== this.generation || signal?.aborted || !canContinue() || autonomous ||
       this.settings.earlyEndMode === "off" || this.latestBatchUnsafe || this.pending ||
       message.stopReason !== "stop" || message.content.some(block => block.type === "toolCall")) return;
-    const response = message.content.flatMap(block => block.type === "text" ? [block.text] : []).join("\n");
+    const response = assistantContent(message.content).text;
     if (!suspectedEarlyEnd(this.task, response, this.hasToolProgress)) return;
     if (this.settings.earlyEndMode === "warn") {
       annotate("suspected", this.attempts);

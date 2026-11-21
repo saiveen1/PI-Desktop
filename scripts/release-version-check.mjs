@@ -1,10 +1,14 @@
-export function resolveReleaseDocumentCheck(currentVersion, requestedVersion, latestStableVersion) {
+export function resolveReleaseDocumentCheck(currentVersion, requestedVersion, stableVersions = []) {
   const beta = /^(\d+\.\d+)\.(\d+)-beta\.\d+$/.exec(currentVersion);
-  const stable = /^(\d+\.\d+)\.(\d+)$/.exec(latestStableVersion ?? "");
-  // Personal beta source checks retain the inherited catalog, not a fictitious release.
-  const useStableCatalog = requestedVersion === undefined && beta !== null && stable !== null
-    && beta[1] === stable[1] && BigInt(stable[2]) <= BigInt(beta[2]);
-  const documentVersion = requestedVersion ?? (useStableCatalog ? latestStableVersion : currentVersion);
+  // Find the compatible inherited baseline in the newest-first catalog. An
+  // upstream merge can bring newer entries without changing the personal beta.
+  const stableBaseline = requestedVersion === undefined && beta
+    ? stableVersions.find(version => {
+        const stable = /^(\d+\.\d+)\.(\d+)$/.exec(version);
+        return stable && beta[1] === stable[1] && BigInt(stable[2]) <= BigInt(beta[2]);
+      })
+    : undefined;
+  const documentVersion = requestedVersion ?? stableBaseline ?? currentVersion;
   const isPrereleasePreview =
     requestedVersion !== undefined &&
     currentVersion !== documentVersion &&
@@ -12,7 +16,7 @@ export function resolveReleaseDocumentCheck(currentVersion, requestedVersion, la
 
   return {
     documentVersion,
-    surfaceVersion: useStableCatalog || isPrereleasePreview ? currentVersion : documentVersion,
+    surfaceVersion: stableBaseline || isPrereleasePreview ? currentVersion : documentVersion,
     isPrereleasePreview,
   };
 }

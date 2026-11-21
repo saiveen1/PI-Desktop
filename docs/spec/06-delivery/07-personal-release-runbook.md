@@ -52,9 +52,10 @@ not allocate a build identifier, reserve a version, or write a release.
 `pnpm check:release-docs` checks a personal `X.Y.Z-beta.N` checkout without
 inventing a stable release entry for that beta. All workspace, Cargo and
 `APP_VERSION` surfaces must match the exact source beta. The in-app catalog is
-checked against its newest English stable entry only when it has the same
-major/minor and no later patch than the beta target. Every locale, highlight
-count, catalog test pin and both README release lines still must agree.
+checked against its newest compatible English stable entry: the same major/minor
+and no later patch than the beta target. Newer inherited upstream entries may
+remain in the catalog without advancing the personal release line. Every locale,
+highlight count, catalog test pin and both README release lines still must agree.
 
 This source check is not stable-release qualification and changes no version
 or personal release history. An explicit `pnpm check:release-docs X.Y.Z`

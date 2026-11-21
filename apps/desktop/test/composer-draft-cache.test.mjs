@@ -180,3 +180,8 @@ test("composer handles home drafts, deleted sessions, and async sends by key", (
   assert.match(composer, /readComposerDraftRevision\(key\) !== expectedRevision/);
   assert.doesNotMatch(composer, /if \(accepted\) clearDraft\(\);/);
 });
+
+test("opening modal settings snapshots the mounted composer's live draft", () => {
+  assert.match(draftHook, /if \(state\.settingsOpen && !previous\.settingsOpen\) persistDraft\(\)/);
+  assert.match(draftHook, /const persistDraft = \(key = draftKeyRef\.current\) =>\s*captureComposerDraft\(\s*key,\s*readLiveDraft\(\),\s*fileReferencesRef\.current,/);
+});

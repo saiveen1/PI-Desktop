@@ -57,12 +57,15 @@ export type OneShotCompleteOptions = {
   disableRetries?: boolean;
   /** Reject partial, tool-calling, or non-final output instead of accepting its text. */
   requireComplete?: boolean;
-  /** Separate per-attempt accounting, including a consumed but rejected response. */
-  onUsage?: (usage: MessageUsage | undefined) => void;
   emptyErrorCode?: string;
   emptyErrorMessage?: string;
   /** Conversation id forwarded to OpenCode as `x-opencode-session`. */
   sessionId?: string;
+  /**
+   * Observe each physical attempt's identified usage as it is reported, so a
+   * caller can write the ledger even when a later attempt fails.
+   */
+  onUsage?: (usage: MessageUsage) => void;
 };
 
 export type OneShotCompleteResult = {
@@ -156,7 +159,10 @@ export async function completeOneShot(
     sessionOptions,
     (retryOptions) => accountModelStream(model, () => streamSimple(model, context, retryOptions), {
       providerId: provider.id, nativeCost: provider.modelConfig?.nativeCost,
-      onUsage: attemptUsage => { usage = addUsage(usage, attemptUsage); options.onUsage?.(usage); },
+      onUsage: attemptUsage => {
+        usage = addUsage(usage, attemptUsage);
+        options.onUsage?.(attemptUsage);
+      },
     }),
     {
       allowOutputLimitRepair: () => !options.disableRetries,

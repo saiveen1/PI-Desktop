@@ -7,6 +7,7 @@ import {
 } from "@pi-desktop/shared";
 import type { RuntimeProviderConfig } from "./provider-binding.js";
 import { completeOneShot } from "./one-shot-complete.js";
+import { assistantContent } from "./agent-messages.js";
 import { parseObserverDecision, redactObserverText } from "./observer-guard-evidence.js";
 
 export type ObserverGuardRuntimeConfig = {
@@ -105,7 +106,7 @@ export class ObserverGuard {
     if (message.stopReason === "length") return this.deferSkip(sink, "response_length");
     if (message.stopReason !== "stop") return;
     if (this.invalidated) return this.deferSkip(sink, "task_changed");
-    const answer = message.content.flatMap(block => block.type === "text" ? [block.text] : []).join("\n");
+    const answer = assistantContent(message.content).text;
     if (!answer.trim()) return this.deferSkip(sink, "empty_response");
     if (!this.task?.trim() || !this.userId) return this.deferSkip(sink, "no_user_task");
     const config = this.active;

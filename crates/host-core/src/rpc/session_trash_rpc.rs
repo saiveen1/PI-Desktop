@@ -47,10 +47,12 @@ pub(super) async fn handle(
     let _operation = gate.lock().await;
     match method {
         "session.trash" => {
-            let st = state.lock().await;
+            let mut st = state.lock().await;
             let ok = session_trash::trash(&st.db, id).map_err(map_error)?;
             if ok {
                 st.background_tasks.stop_session_running(id);
+                st.background_tasks
+                    .cancel_continuations(Some(id), None, None);
                 st.hashline.drop_session(id);
             }
             Ok(json!({ "ok": ok }))

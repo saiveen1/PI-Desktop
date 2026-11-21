@@ -36,7 +36,7 @@ export function RemoteProjectGroups({
   groups: RemoteProjectGroup[];
   renderSessions: (key: string, create?: (groupId: string | null) => void) => ReactNode;
   catalogGroups: (key: string) => readonly SessionGroup[];
-  onCreate: (project: RemoteProjectEntry, groupId: string | null) => Promise<void>;
+  onCreate?: (project: RemoteProjectEntry, groupId: string | null) => Promise<void>;
   eligibleSessions: SessionSummary[];
   pendingSessionIds: ReadonlySet<string>;
   sessionOutcomes: Readonly<Record<string, "completed" | "failed" | undefined>>;
@@ -55,7 +55,7 @@ export function RemoteProjectGroups({
   const projectCollapsed = useAppStore((state) => state.projectCollapsed);
   const setProjectCollapsed = useAppStore((state) => state.setProjectCollapsed);
   const open = async (project: RemoteProjectEntry, groupId: string | null) => {
-    if (busy) return;
+    if (busy || !onCreate) return;
     setBusy(project.key);
     try {
       await onCreate(project, groupId);
@@ -121,8 +121,8 @@ export function RemoteProjectGroups({
                 {showRunBadge ? <ProjectRunBadge summary={runSummary} /> : null}
                 {showRunCount ? <ProjectRunCount summary={runSummary} /> : null}
               </Button>
-              <ProjectGroupCreateButton groups={catalogGroups(project.key)} onCreate={create} disabled={busy !== null}
-                label={`${t("nav.newTask")}: ${project.label} · ${project.hostLabel}`} />
+              {onCreate && <ProjectGroupCreateButton groups={catalogGroups(project.key)} onCreate={create} disabled={busy !== null}
+                label={`${t("nav.newTask")}: ${project.label} · ${project.hostLabel}`} />}
             </div>
             <div
               id={`${project.key}-sessions`}
@@ -133,7 +133,7 @@ export function RemoteProjectGroups({
             >
               <div className="sidebar-session-group-clip">
                 <div className="sidebar-session-group-list">
-                  {renderSessions(project.key, busy === null ? create : undefined)}
+                  {renderSessions(project.key, onCreate && busy === null ? create : undefined)}
                 </div>
               </div>
             </div>

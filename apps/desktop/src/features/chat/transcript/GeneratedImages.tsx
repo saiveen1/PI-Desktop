@@ -82,7 +82,6 @@ export function GeneratedImages({ message }: { message: UiMessage }) {
               const state = useAppStore.getState();
               state.setSettingsTab("agent");
               state.setSettingsAnchor("settings.imageModel");
-              state.setPage("settings");
             }}
           >
             {t("settings.configureImageModel")}

@@ -58,6 +58,17 @@ describe("Responses terminal content preservation", () => {
     },
   );
 
+  it("keeps a streamed commentary phase and text when the done item omits both", async () => {
+    const progress = messageFrames(0, "Checking the fixture.").map(frame =>
+      frame.type === "response.output_item.added"
+        ? { ...frame, item: { id: "msg_0", type: "message", role: "assistant", status: "in_progress", content: [], phase: "commentary" } }
+        : frame,
+    );
+    const { result } = await decode([...progress, ...messageFrames(1, answer, [])]);
+    expect(textOf(result)).toEqual(["Checking the fixture.", answer]);
+    expect(result.content[0]).toMatchObject({ textSignature: expect.stringContaining('"phase":"commentary"') });
+  });
+
   it.each([dsmlTail, "</｜DSML｜ invoke>\n</｜DSML｜ calls>", "</｜DSML｜ calls>"])(
     "retains the full streamed answer when the terminal item repeats only its DSML tail: %s", async (tail) => {
       const text = `${answer}\n${dsmlTail}`;

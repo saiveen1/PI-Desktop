@@ -85,7 +85,7 @@ export function NotificationPreferences({ scope }: { scope: "global" | "delegati
         disabled={saving || !settings || !draft || !isNotificationSettings(value)} onClick={() => void save()}>{t(saving ? "common.saving" : "common.save")}</Button>
       <Button disabled={saving || !effective.sound || effective.volume <= 0} onClick={() => playNotificationChime(effective.volume)}>{t("notificationSettings.preview")}</Button>
       {delegation ? <Button onClick={() => {
-        useAppStore.getState().setSettingsTab("notifications"); useAppStore.getState().setPage("settings");
+        useAppStore.getState().openSettings("notifications");
       }}>{t("notificationSettings.openGlobal")}</Button> :
         <Button disabled={saving || Boolean(draft)} onClick={() => void test()}>{t("notificationSettings.test")}</Button>}
     </div>

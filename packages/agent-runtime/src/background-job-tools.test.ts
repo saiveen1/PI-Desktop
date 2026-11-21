@@ -50,7 +50,7 @@ describe("session job controls", () => {
     await stop.execute("stop", {});
     expect(dispatch).not.toHaveBeenCalled();
     await wait.execute("one", { job: { kind: "delegation", id: "delegate" }, timeoutSeconds: 12 });
-    expect(delegates.wait.execute).toHaveBeenLastCalledWith("one", { delegationIds: ["delegate"], timeoutSeconds: 12 }, undefined, undefined);
+    expect(delegates.wait.execute).toHaveBeenLastCalledWith("one", { job: undefined, delegationIds: ["delegate"], timeoutSeconds: 12 }, undefined, undefined);
     await stop.execute("one", { job: { kind: "delegation", id: "delegate" } });
     expect(delegates.stop.execute).toHaveBeenLastCalledWith("one", { delegationIds: ["delegate"] }, undefined, undefined);
   });

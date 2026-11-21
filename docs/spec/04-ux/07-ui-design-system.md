@@ -1573,11 +1573,9 @@ adjacent form inputs; dense surfaces may override that metric locally.
   row is the header of the card that opens under it — so the detail repeats no
   name, path, or tag. It has no hero block, no decorative gradient, and no
   page-level counter run
-- **Settings**: full-page Codex shell per D063/D090/D133/D166 (275px compact
-  navigation rail sharing the main sidebar material, elevated content cards, Back to app);
-  per D092, the content cards fill the pane width available from the current
-  window instead of retaining D070's fixed 720px cap — the earlier in-shell
-  200px rail and broad grouped directory are superseded
+- **Settings**: a modal over the current destination with a grouped side rail,
+  search, Close and elevated content cards. The content pane responds to the
+  dialog width instead of enforcing a fixed 720px cap. See [Settings IA](06-settings-ia.md).
 - **Inline import workbenches**: model configuration, external skills, and
   external MCP scans live in Models, Skills, and MCP respectively. Each page
   exposes an explicit scan action and an inline selection workbench; opening a

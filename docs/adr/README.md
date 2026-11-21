@@ -35,6 +35,7 @@ git history.
 | delegation-terminal-reliability | [Truthful delegation delivery and bounded recovery](delegation-terminal-reliability.md) | Accepted, implementation candidate |
 | session-organization-and-scoped-delegation | [Session organization and scoped on-demand delegation](session-organization-and-scoped-delegation.md) | Accepted, implementation candidate |
 | unified-core-notifications | [Unified core notification delivery](unified-core-notifications.md) | Accepted, implementation candidate |
+| codemode-sandbox-boundary | [Codemode sandbox execution boundary](codemode-sandbox-boundary.md) | Accepted |
 | mode-definitions | [User-definable modes as staged workflows](mode-definitions.md) | Proposed |
 | session-personas | [Session personas with pinned delegation inheritance](session-personas.md) | Implemented candidate |
 | sidebar-layout-recovery | [Recover sidebar layout independently of Chromium storage](sidebar-layout-recovery.md) | Accepted |
@@ -46,6 +47,7 @@ git history.
 | append-only-review-state | [Append-only review state](append-only-review-state.md) | Implemented candidate |
 | lossless-tool-image-storage | [Lossless tool-image storage and bounded history mutations](lossless-tool-image-storage.md) | Implemented candidate |
 | plugin-remote-workspace-reads | [Plugin reads in remote workspaces](plugin-remote-workspace-reads.md) | Implemented candidate |
+| plugin-net-fetch-binary-response | [Bounded binary response mode for plugin net.fetch](plugin-net-fetch-binary-response.md) | Accepted |
 | browser-background-lifecycle | [Browser page execution outlives side-panel presentation](browser-background-lifecycle.md) | Accepted |
 | asktool-draft-survives-session-switch | [AskTool drafts survive a card remount](asktool-draft-survives-session-switch.md) | Accepted |
 | tool-abort-abandons-host-call | [A user stop ends the turn even when the running tool cannot be cancelled](tool-abort-abandons-host-call.md) | Accepted for implementation |
@@ -444,3 +446,6 @@ git history.
 | configurable-local-output-guards | [Configurable local output guards](configurable-local-output-guards.md) | Accepted; additive settings and normalized termination diagnostics |
 | whole-turn-context-editing | [Whole-turn model-context editing](whole-turn-context-editing.md) | Accepted; reversible context overlays over original execution history |
 | builtin-observer-guard | [Built-in per-conversation Observer Guard](builtin-observer-guard.md) | Accepted; optional independent assessment and bounded Guard continuation |
+| plugin-transcript-selection-views | [Docked views can accept transcript selections](plugin-transcript-selection-views.md) | Accepted (issue #2395) |
+| opt-in-background-job-continuation | [Opt-in background job continuation](opt-in-background-job-continuation.md) | Proposed (#2143) |
+| plugin-turn-observation-model-context-and-suggestion-targets | [Publish turn observations, scoped model context, and Composer suggestion targets](plugin-turn-observation-model-context-and-suggestion-targets.md) | Accepted (#2470) |

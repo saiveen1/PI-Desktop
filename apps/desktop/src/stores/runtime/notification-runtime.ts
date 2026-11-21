@@ -11,6 +11,7 @@ import { notificationToastVariant } from "../../lib/notification-presentation";
 
 const seen = new Set<string>();
 const listeners = new Set<() => void>();
+const emptyPendingSnapshot: NotificationEntry[] = [];
 let pendingSnapshot: NotificationEntry[] = [];
 let active: ReturnType<typeof createNotificationDelivery> | undefined;
 const source = () => delegationApprovalState(api);
@@ -44,6 +45,7 @@ export function usePendingNotifications() {
   return useSyncExternalStore(
     listener => { listeners.add(listener); return () => { listeners.delete(listener); }; },
     () => pendingSnapshot,
+    () => emptyPendingSnapshot,
   );
 }
 function targets() {

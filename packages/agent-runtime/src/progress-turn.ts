@@ -19,8 +19,10 @@ export function isProgressOnlyAssistantTurn(message: unknown): boolean {
   if (!message || typeof message !== "object" || !("role" in message) || message.role !== "assistant") return false;
   const content = "content" in message ? message.content : undefined;
   if (Array.isArray(content) && content.some(part => part?.type === "toolCall")) return false;
-  const text = assistantContent(content).text.trim();
+  const response = assistantContent(content);
+  const text = response.text.trim();
+  if (!text && response.transcript?.text.trim()) return true;
   const forward = (value: string) => FORWARD_INTENT.some(pattern => pattern.test(value));
-  if (!text || !forward(text)) return false;
+  if (response.hasFinalAnswer || !text || !forward(text)) return false;
   return !TERMINAL_LEAD.test(text) || forward(text.replace(TERMINAL_LEAD, ""));
 }

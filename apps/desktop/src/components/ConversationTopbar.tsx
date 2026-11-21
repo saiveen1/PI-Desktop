@@ -29,6 +29,7 @@ import {
 } from "./icons";
 import { TooltipButton } from "./ui";
 import { SessionDelegationsButton } from "../features/delegations/SessionDelegationsButton";
+import { ConversationProjectMenu } from "./ConversationProjectMenu";
 
 function projectName(path?: string | null, name?: string | null) {
   if (name) return name;
@@ -45,14 +46,12 @@ function isDefaultSessionTitle(title?: string | null) {
 
 export function ConversationTopbar({
   sidebarCollapsed,
-  workPanelOpen,
   onToggleSidebar,
   onNewTask,
   onOpenSearch,
   onOpenDelegations,
 }: {
   sidebarCollapsed: boolean;
-  workPanelOpen: boolean;
   onToggleSidebar: () => void;
   onNewTask: () => void;
   onOpenSearch: () => void;
@@ -230,9 +229,7 @@ export function ConversationTopbar({
 
   return (
     <div
-      className={`conversation-topbar${sidebarCollapsed ? " ct-collapsed" : ""}${
-        workPanelOpen ? " ct-work-panel-open" : ""
-      }`}
+      className={`conversation-topbar${sidebarCollapsed ? " ct-collapsed" : ""}`}
       role="toolbar"
       aria-label={t("nav.conversation")}
     >
@@ -273,7 +270,9 @@ export function ConversationTopbar({
           className="ct-title-wrap"
           title={editing ? undefined : breadcrumbTitle}
         >
-          {project ? (
+          {activeSession && !remoteSession ? (
+            <ConversationProjectMenu session={activeSession} project={project} />
+          ) : project ? (
             <>
               <span className="ct-project">
                 <IconFolder size={12} aria-hidden />

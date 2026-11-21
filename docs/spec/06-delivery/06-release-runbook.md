@@ -268,7 +268,8 @@ Blocking steps:
    non-release bump.
    For an independent personal beta source snapshot, the no-argument command
    instead validates exact beta version surfaces and the newest compatible
-   stable catalog (same major/minor, patch no newer than the beta target).
+   stable entry (same major/minor, patch no newer than the beta target), even
+   if the inherited catalog contains newer upstream entries.
    This is not stable-release qualification; it neither requires fictitious
    beta catalog entries nor relaxes the explicit target check. See the
    [personal source check](07-personal-release-runbook.md#source-documentation-check).

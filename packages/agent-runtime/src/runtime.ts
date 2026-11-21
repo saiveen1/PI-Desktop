@@ -45,6 +45,8 @@ import { computerUseDescription, computerUseParameters } from "./computer-use/to
 import { imageGenerationDescription, imageGenerationParameters } from "./image-generation/tool.js";
 import { todoWriteDescription, todoWriteParameters } from "./todo-tool.js";
 import { createJevClassifierTool } from "./jev-classifier-tool.js";
+import { CODEMODE_TOOL_NAME } from "./codemode/limits.js";
+import { createSessionCodemodeTool } from "./codemode/session.js";
 import { scheduledToolParameters, scheduledToolDescriptions } from "./scheduled-tools.js";
 import { withPiFileOpToolNames } from "./pi-file-ops.js";
 import { remoteMutationIdentity } from "./remote-workspace.js";
@@ -177,6 +179,8 @@ import {
 } from "./assistant-provider-replay.js";
 import {
   assistantContent,
+  sameCommentaryBoundaries,
+  type CommentaryTranscript,
   isRecord,
   nowIso,
   timestampMs,
@@ -204,6 +208,7 @@ import {
 } from "./pi-runtime-estimates.js";
 import { convertToLlm } from "./pi-runtime-messages.js";
 import { runtimeModelIdentityPrompt } from "./runtime-model-identity.js";
+import { withPluginModelContext, type ReadPluginModelContext } from "./plugin-model-context.js";
 import type {
   CompactionEntry,
   CompactionPreparation,
@@ -262,6 +267,7 @@ import {
   effectiveModelContextWindow,
   estimateOutputCapInputTokens,
   requestTranscript,
+  supportsMidConversationSystemMessages,
 } from "./output-cap.js";
 import {
   composeSubagentSystemPrompt,
@@ -309,6 +315,7 @@ import {
   openCodeEndpointFromProvider,
   withOpenCodeSessionHeaders,
 } from "./opencode-session-headers.js";
+import { withCodexCacheableInstructions } from "./codex-cacheable-instructions.js";
 import { withFastModeOptions } from "./fast-mode.js";
 import { withSessionAffinityOptions } from "./session-affinity.js";
 import { withCompactionRequestHeaders } from "./compaction-request.js";
@@ -380,6 +387,8 @@ export type RuntimePromptAttachment = Omit<AgentPromptAttachment, "kind"> & {
 
 export type RuntimePrompt = {
   text: string;
+  /** Trusted Main delivery, already recorded as a tool row. */
+  backgroundCompletion?: UiMessage;
   /** Explicit user selection, resolved against the host-provided tool catalog. */
   mcpServerIds?: string[];
   mcpToolNames?: string[];
@@ -801,6 +810,12 @@ const COMPACTION_FALLBACK_NOTICE_TOKENS = 512;
  * history than a successful checkpoint would (`fallbackRetainedTail`).
  */
 const COMPACTION_FALLBACK_KEEP_RECENT_RATIO = 0.25;
+/**
+ * Smallest fraction of that window the recovery path shrinks to before it
+ * gives up: seven halvings, enough for a calibrated estimate many times the
+ * local one (`recoverCompactionFailure`, issue #2494).
+ */
+const COMPACTION_FALLBACK_MIN_TAIL_SCALE = 1 / 128;
 export const COMPACTION_FALLBACK_MARKER =
   "[automatic context recovery: older context was omitted after summary generation failed]";
 /** Stored in place of a carried-forward summary when a fallback had none. */
@@ -1002,6 +1017,22 @@ function turnAbortedError(message: string): Error {
 }
 
 /**
+ * Tools a codemode script never calls: tool discovery, user interaction, mode
+ * and stage control, context control, and delegation lifecycle all belong to
+ * the model's own turn, not to a script.
+ */
+const CODEMODE_EXCLUDED_TOOL_NAMES: ReadonlySet<string> = new Set([
+  CODEMODE_TOOL_NAME,
+  TOOL_SEARCH_NAME,
+  ASK_TOOL_NAME,
+  ...MODE_TRANSITION_TOOL_NAMES,
+  COMPLETE_STAGE_TOOL_NAME,
+  SUBAGENT_TOOL_NAME,
+  SUBAGENT_WAIT_TOOL_NAME,
+  SUBAGENT_LIST_TOOL_NAME,
+  SUBAGENT_STOP_TOOL_NAME,
+]);
+/**
  * Two-tier budget reminder, matching Codex's `TokenBudgetReminder` and
  * `AutoCompactFallbackPrompt`. Codex reads both thresholds and both texts from
  * per-model metadata; we have no such feed, so the thresholds are derived from
@@ -1062,6 +1093,7 @@ export type AgentRuntimeOptions = {
   modeDefinition?: ModeDefinition;
   /** Durable host turn ID for the current prompt, used by plan identity. */
   turnId?: string;
+  readPluginModelContext?: ReadPluginModelContext;
   provider: RuntimeProviderConfig;
   thinkingLevel: SessionThinkingLevel;
   /** Persisted opt-in for retrying transient provider failures until success. */
@@ -1073,6 +1105,7 @@ export type AgentRuntimeOptions = {
   autoContinueUnfinishedTodos?: boolean;
   agentOutputGuard?: AgentOutputGuardSettings;
   observerGuard?: ObserverGuardRuntimeConfig;
+  backgroundJobContinuationEnabled?: boolean;
   /**
    * Fast mode for main turns, already resolved by the launcher from the
    * session `/fast` switch and the model binding's opt-in (ADR 0334).
@@ -1086,6 +1119,11 @@ export type AgentRuntimeOptions = {
    * prompt rather than advertised and refused on every call.
    */
   computerUseEnabled?: boolean;
+  /**
+   * Whether the opt-in `codemode` tool is offered (ADR
+   * codemode-sandbox-boundary). Resolved by Electron main from settings.
+   */
+  codemodeEnabled?: boolean;
   systemPrompt?: string;
   /** pi-compatible SYSTEM.md / APPEND_SYSTEM.md resolved for the session (issue #542). */
   customSystemPrompt?: CustomSystemPrompt;
@@ -1168,6 +1206,7 @@ export type RuntimeMatchConfig = {
   thinkingLevel: SessionThinkingLevel;
   jevApiKey?: string;
   computerUseEnabled?: boolean;
+  codemodeEnabled?: boolean;
   pluginTools?: PluginToolDef[];
   pluginSkills?: PluginSkillDef[];
   trustedExtensions?: TrustedExtensionSpec[];
@@ -1203,7 +1242,6 @@ function messageRequestsTools(message: unknown): boolean {
     content.some((part) => isRecord(part) && part.type === "toolCall")
   );
 }
-
 
 function boundedText(value: string, maxChars: number): string {
   const text = value.trim();
@@ -1426,7 +1464,7 @@ function commandShellToolDescription(
     shellSyntaxGuidance(shell),
     `The session scratch directory variable is ${shellScratchVariable(shell)}.`,
     `An optional timeout from 1 to ${MAX_COMMAND_TIMEOUT_SECONDS} seconds may be supplied; without it, the command defaults to a 60-second timeout. This is an execution deadline, not a progress-check interval: a 30-second observation checkpoint does not require timeout: 30.`,
-    `Use runInBackground: true before starting a build, test, or other command that may exceed an observation interval, when you need to inspect progress without terminating it. Also use it for long-lived processes needed after the turn ends (dev servers, watchers). A background call returns a backgroundTaskId immediately, survives turn aborts and foreground timeouts, and its output is visible in the composer's running-tasks bar. In Agent mode on supported local Hosts, use TaskList to find it, TaskWait with its job reference to read results, and TaskStop with that reference to stop it. TaskWait timeout only ends observation, not the command; choose and enforce a deliberate total budget, not repeated blind waits. Background completion does not automatically resume the model. After a foreground timeout, inspect existing effects and process state before deciding to rerun; do not replay side-effecting commands automatically.`,
+    `Use runInBackground: true before starting a build, test, or other command that may exceed an observation interval, when you need to inspect progress without terminating it. Also use it for long-lived processes needed after the turn ends (dev servers, watchers). A background call returns a backgroundTaskId immediately, survives turn aborts and foreground timeouts, and its output is visible in the composer's running-tasks bar. In Agent mode on supported local Hosts, use TaskList to find it, TaskWait with its job reference to read results, and TaskStop with that reference to stop it. TaskWait timeout only ends observation, not the command; choose and enforce a deliberate total budget, not repeated blind waits. By default, background completion does not automatically resume the model. If notifyOnExit is available in the schema, it can arrange completion-triggered continuation for finite tests/builds. After a foreground timeout, inspect existing effects and process state before deciding to rerun; do not replay side-effecting commands automatically.`,
     ...(formattedScratch ? [`The session scratch directory is ${formattedScratch}.`] : []),
   ].join(" ");
 }
@@ -1778,6 +1816,7 @@ export class DesktopAgentRuntime {
   private runDiagnostics?: RunDiagnosticsTracker;
   private runDiagnosticMessage?: UiMessage;
   private currentAssistant?: UiMessage;
+  private liveCommentary?: CommentaryTranscript;
   private pluginTools: PluginToolDef[];
   private pluginSkills: PluginSkillDef[];
   private trustedExtensionSpecs: TrustedExtensionSpec[];
@@ -1787,6 +1826,7 @@ export class DesktopAgentRuntime {
   private extensionTurnIndex = 0;
   /** Headers an extension edited in `before_provider_headers` for the current turn. */
   private extensionProviderHeaders?: Record<string, string>;
+  private extensionProviderRequestId = 0;
   /** Subagent definitions offered through the `Task` tool (ADR 0062). */
   private subagents: SubagentDefinition[];
   private subagentProviders: Record<string, RuntimeProviderConfig>;
@@ -1915,9 +1955,12 @@ export class DesktopAgentRuntime {
   /** Opt-in mode removes only the retry-count ceiling; abort and backoff stay intact. */
   private infiniteProviderRetry = false;
   private readonly turnCorrections: TurnCorrectionPolicy;
+  private backgroundJobContinuationEnabled = false;
+  private readPluginModelContext?: ReadPluginModelContext;
   private fastMode = false;
   private jevApiKey?: string;
   private computerUseEnabled = false;
+  private codemodeEnabled = false;
   private activeProviderRetryAttempt = 0;
   private providerRetryInProgress = false;
   private suppressProviderRetryRunEnd = false;
@@ -1994,6 +2037,8 @@ export class DesktopAgentRuntime {
   private compactionAborted = false;
   /** Set by trusted extension ctx.compact(), consumed at the next turn boundary. */
   private pendingExtensionCompaction = false;
+  /** Why the latest checkpoint attempt failed, for the turn error it causes. */
+  private lastCompactionFailure?: string;
   /** One-shot request to finish the current turn at the next boundary. */
   private gracefulStopRequested = false;
   /** Codex's `claim_*` flags: one of each reminder per context window. */
@@ -2029,9 +2074,12 @@ export class DesktopAgentRuntime {
     this.infiniteProviderRetry = opts.infiniteProviderRetry === true;
     this.unknownUpstreamRetryLimit = resolveUnknownUpstreamRetryLimit(opts.unknownUpstreamRetryLimit);
     this.providerStreamIdleTimeoutMinutes = opts.providerStreamIdleTimeoutMinutes;
+    this.backgroundJobContinuationEnabled = opts.backgroundJobContinuationEnabled === true;
+    this.readPluginModelContext = opts.readPluginModelContext;
     this.fastMode = opts.fastMode === true;
     this.jevApiKey = opts.jevApiKey;
     this.computerUseEnabled = opts.computerUseEnabled === true;
+    this.codemodeEnabled = opts.codemodeEnabled === true;
     this.host = opts.host;
     this.batchPlanner = new BatchPlanner(this.host, this.sessionId);
     this.turnCorrections = new TurnCorrectionPolicy(
@@ -2216,7 +2264,10 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
         // one-shot requests build their own options and keep the default.
         const hookedOptions = withFastModeOptions(
           withSessionAffinityOptions(
-            this.withExtensionProviderHooks(requestOptions, m),
+            this.withExtensionProviderHooks(
+              withCodexCacheableInstructions(requestOptions, m),
+              m,
+            ),
             {
               provider: this.provider,
               api: m.api,
@@ -2250,18 +2301,17 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
         }
         const usageTurnId = this.turnId;
         let diagnosticAttempt: number | undefined;
-        const retryStream = createProviderRetryStream(
-          m,
-          requestContext,
-          attemptOptions,
-          (retryOptions) => {
-            const attempt = diagnosticAttempt;
-            if (diagnostics === this.runDiagnostics) diagnostics?.setOutputLimit(retryOptions.maxTokens);
-            return withHostedImageOutputs(m, retryOptions, this.scratchDir, imageOptions => withModelOutputGuard(m, imageOptions, guardedOptions => withProviderStreamIdleTimeout(m, guardedOptions,
-              streamIdleTimeoutMs(this.providerStreamIdleTimeoutMinutes), timedOptions => accountModelStream(m, () =>
+        const openAttempt = (retryOptions: SimpleStreamOptions, input = requestContext) => {
+          const attempt = diagnosticAttempt;
+          const options = input !== requestContext && retryOptions.maxTokens !== undefined
+            ? { ...retryOptions, maxTokens: clampOutputToContext(m, input, retryOptions.maxTokens) }
+            : retryOptions;
+          if (diagnostics === this.runDiagnostics) diagnostics?.setOutputLimit(options.maxTokens);
+          return withHostedImageOutputs(m, options, this.scratchDir, imageOptions => withModelOutputGuard(m, imageOptions, guardedOptions => withProviderStreamIdleTimeout(m, guardedOptions,
+            streamIdleTimeoutMs(this.providerStreamIdleTimeoutMinutes), timedOptions => accountModelStream(m, () =>
               this.thinkingLevel === "omit"
-                ? this.models.stream(omitThinkingModel(m), requestContext, timedOptions)
-                : this.models.streamSimple(m, requestContext, timedOptions), {
+                ? this.models.stream(omitThinkingModel(m), input, timedOptions)
+                : this.models.streamSimple(m, input, timedOptions), {
                 providerId: this.provider.id,
                 nativeCost: this.provider.modelConfig?.nativeCost,
                 onUsage: (usage) => this.emit({ type: "usage", usage }, usageTurnId),
@@ -2274,7 +2324,28 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
                 if (!this.disposed && !this.runCancelled && diagnostics === this.runDiagnostics)
                   this.setAgentActivity({ phase: "waiting-model", since, slow: true });
               }), this.turnCorrections.settings));
-          },
+        };
+        const readPluginContext = this.readPluginModelContext;
+        const retryStream = createProviderRetryStream(
+          m,
+          requestContext,
+          attemptOptions,
+          readPluginContext && usageTurnId && this.activeTurnSettlements.has(usageTurnId)
+            ? async (retryOptions) => {
+                const signal = retryOptions.signal;
+                signal?.throwIfAborted();
+                const contributions = await readPluginContext({
+                  sessionId: this.sessionId, turnId: usageTurnId,
+                  modelKey: `${this.provider.id}/${m.id}`,
+                }, signal).catch(() => undefined);
+                signal?.throwIfAborted();
+                const messages = this.turnId === usageTurnId && !this.runCancelled
+                  ? withPluginModelContext(requestContext.messages, contributions)
+                  : requestContext.messages;
+                return openAttempt(retryOptions, messages === requestContext.messages
+                  ? requestContext : { ...requestContext, messages });
+              }
+            : openAttempt,
           {
             claim: (error, phase) => this.claimProviderRetry(error, phase),
             headers: () => this.providerRetryHeaders,
@@ -2392,6 +2463,18 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     process.stderr.write(
       `[agent-runtime] event handler failed (session=${this.sessionId} turn=${this.turnId} event=${event.type}): ${detail}\n`,
     );
+  }
+
+  /** Applied before the next prompt rebuilds its tool declarations. */
+  setBackgroundJobContinuationEnabled(enabled: boolean): void {
+    if (this.disposed) throw new Error("runtime disposed");
+    this.backgroundJobContinuationEnabled = enabled;
+  }
+
+  /** Refresh the per-launch opt-in without rebuilding an idle runtime. */
+  setPluginModelContextReader(reader?: ReadPluginModelContext): void {
+    if (this.disposed) throw new Error("runtime disposed");
+    this.readPluginModelContext = reader;
   }
 
   /** Update the opt-in retry policy without rebuilding an idle runtime. */
@@ -2817,6 +2900,8 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       // Turning computer use on or off changes the tool list, so the runtime
       // is retired rather than left advertising a stale set.
       ["computerUseEnabled", this.computerUseEnabled === (config.computerUseEnabled === true)],
+      // Codemode changes the tool list as well.
+      ["codemodeEnabled", this.codemodeEnabled === (config.codemodeEnabled === true)],
       ["thinkingLevel", this.thinkingLevel === clampThinkingLevel(config.provider, config.thinkingLevel)],
       ["pluginTools", current === next],
       ["commandShell", safeJson(this.commandShell) === safeJson(config.commandShell)],
@@ -3035,6 +3120,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           tokens: budget.tokens,
           contextWindow: budget.hardLimit,
           percent: budget.hardLimit > 0 ? Math.round((budget.tokens / budget.hardLimit) * 100) : null,
+          autoCompactAt: runtime.compactionEnabled ? automaticCompactionThresholdFor(budget) : null,
         };
       },
       compact: () => {
@@ -3186,6 +3272,10 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       // report, and replaying a delegate's messages would both contradict that
       // and reintroduce the context cost delegation exists to avoid.
       if (m.parentToolCallId) continue;
+      // Calls a codemode script made are transcript children of the script's
+      // call. The model only ever saw the script's own result, and these rows
+      // have no issuing assistant call to attach to (ADR codemode-sandbox-boundary).
+      if (m.nestedParentToolCallId) continue;
       const timestamp = Date.parse(m.createdAt) || Date.now();
       if (m.role === "system" && m.modelSystem) {
         // An update recorded while a tool ran sits between the call and its
@@ -3552,6 +3642,9 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
               `Optional command timeout in seconds from 1 to ${MAX_COMMAND_TIMEOUT_SECONDS}; defaults to 60 seconds.`,
           }),
         ),
+        ...(this.backgroundJobContinuationEnabled && this.mode === "agent" && !this.remoteWorkspace ? {
+          notifyOnExit: Type.Optional(Type.Boolean({ description: "With runInBackground, arrange automatic delivery to this conversation after a finite test/build completes, even after the current turn ends. No extra approval; existing permissions still apply. Do not use for servers/watchers. TaskWait may still collect the result first." })),
+        } : {}),
         runInBackground: Type.Optional(
           Type.Boolean({
             description:
@@ -4028,6 +4121,8 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       agentLevel && this.jevApiKey
         ? [createJevClassifierTool(this.jevApiKey)]
         : [];
+    const codemodeTools: AgentTool[] =
+      agentLevel && this.codemodeEnabled ? [this.buildCodemodeTool()] : [];
 
     // Plugins contribute Agent tools by default. Plan/Goal modes only
     // expose plugins that declare plan-safe actions (ADR 0211); the
@@ -4138,6 +4233,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     return [
       ...builtins,
       ...jevTools,
+      ...codemodeTools,
       askTool,
       ...pluginTools,
       ...skillTools,
@@ -4152,6 +4248,41 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
    * declarations. Execution activation and Host permissions remain separate
    * from the provider-visible schemas.
    */
+  /**
+   * The opt-in `codemode` tool. Scripts call the session's active tools
+   * through the same hooks and Host path as direct calls; control,
+   * interactive and delegation tools stay out of reach.
+   */
+  private buildCodemodeTool(): AgentTool {
+    const tool = createSessionCodemodeTool({
+      sessionId: this.sessionId,
+      catalog: () => [...this.toolCatalog.values()],
+      active: () => this.activeTools().filter((tool) => this.isToolAllowedInMode(tool.name)),
+      excluded: CODEMODE_EXCLUDED_TOOL_NAMES,
+      hooks: {
+        beforeToolCall: (context) => this.beforeToolCall(context),
+        afterToolCall: (context) => this.afterToolCall(context),
+      },
+      model: () => this.model,
+      turnId: () => this.turnId,
+      emit: (envelope) => this.onEvent(envelope),
+      emitUsage: (usage, turnId) => this.emit({ type: "usage", usage }, turnId),
+      activeToolCalls: this.activeToolCalls,
+      settleBatch: (message) => this.batchPlanner.settleBatch(message),
+      provider: () => this.provider,
+      ...(this.jevApiKey ? { jevApiKey: this.jevApiKey } : {}),
+    });
+    return {
+      ...tool,
+      // Like a direct Read after a writable `Task` in the same message, a
+      // script waits for that delegate before any nested call runs.
+      execute: async (toolCallId, params, signal, onUpdate) => {
+        await this.waitForBatchWritableDelegations(toolCallId, signal);
+        return tool.execute(toolCallId, params, signal, onUpdate);
+      },
+    };
+  }
+
   private guardSteeredTool(tool: AgentTool): AgentTool {
     return { ...tool, execute: async (id, args, signal, update) => {
       if (tool.name !== SUBAGENT_WAIT_TOOL_NAME && this.pendingSteering.size &&
@@ -4268,6 +4399,8 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       name === SUBAGENT_STOP_TOOL_NAME ||
       // A stage's completion must never hide behind ToolSearch.
       name === COMPLETE_STAGE_TOOL_NAME ||
+      // Codemode is opt-in; once enabled it is declared up front.
+      name === CODEMODE_TOOL_NAME ||
       (this.modeState.isAgentLevel()
         ? AGENT_CORE_TOOL_NAMES.has(name)
         : CONTRACT_CORE_TOOL_NAMES.has(name) || this.isPlanSafePluginTool(name))
@@ -6137,7 +6270,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           delegations.length === 0
             ? "No subagents have been started in this session."
             : delegations
-                .map((record) => `- ${formatDelegationHeartbeat(record)}; job=${JSON.stringify({ kind: "delegation", id: record.delegationId })}`)
+                .map((record) => `- ${formatDelegationHeartbeat(record)}; delegationIds=${JSON.stringify([record.delegationId])}`)
                 .join("\n"),
           this.delegationChains.resumableBlock({ runningDelegationIds }),
         ]
@@ -7011,8 +7144,16 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     const owner = turnId ?? this.turnId;
     if (event.type === "agent_end" || event.type === "error") finishDiagnosticMessage(this.turnCorrections, this.runDiagnostics, owner, ts,
       this.runDiagnosticMessage, message => this.emit({ type: "message_update", message }, owner, ts), this.runCancelled);
+    // Business state is answer-only. The transcript (including later
+    // diagnostic updates) retains signed commentary for rendering and replay.
     if ((event.type === "message_start" || event.type === "message_update" || event.type === "message_end") &&
-      event.message.role === "assistant" && !event.message.parentToolCallId) {
+        event.message.role === "assistant" && !event.message.parentToolCallId) {
+      if (this.liveCommentary && event.message.id === this.currentAssistant?.id) {
+        const replay = event.type === "message_end" ? event.message.providerReplay : this.liveCommentary.replay;
+        if (replay?.blocks.length) {
+          event = { ...event, message: { ...event.message, content: this.liveCommentary.text, providerReplay: replay } };
+        }
+      }
       const diagnostics = this.runDiagnostics?.snapshot(ts);
       if (diagnostics && diagnostics.turnId === owner) {
         event = { ...event, message: { ...event.message, runDiagnostics: diagnosticsForMessage(diagnostics, event.message.id) } };
@@ -7732,9 +7873,11 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       }
       // Continuing would immediately issue the provider request that this
       // guard exists to prevent. The Agent wrapper converts this failure to
-      // the normal error/agent_end event sequence.
+      // the normal error/agent_end event sequence. The checkpoint's own cause
+      // rides along so the turn error says why (#2494).
+      const cause = this.lastCompactionFailure;
       throw new Error(
-        "CONTEXT_COMPACTION_FAILED: unable to create a checkpoint before the next model request",
+        `CONTEXT_COMPACTION_FAILED: unable to create a checkpoint before the next model request${cause ? `: ${cause}` : ""}`,
       );
     }
     context = this.rebuiltAgentContext();
@@ -7755,19 +7898,16 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     const remaining = Math.max(0, budget.hardLimit - budget.tokens);
     const reminder = this.claimContextBudgetReminder(remaining, budget);
     if (!reminder) return context;
-    const legacyContext = context as AgentContext & { systemPrompt?: string };
-    const systemPrompt =
-      typeof legacyContext.systemPrompt === "string"
-        ? `${legacyContext.systemPrompt}\n\n${reminder}`
-        : undefined;
-    return {
-      ...context,
-      ...(systemPrompt ? { systemPrompt } : {}),
-      messages: [
-        ...context.messages,
-        { role: "system", content: "", sections: { [CONTEXT_BUDGET_SECTION]: reminder }, timestamp: Date.now() },
-      ],
-    } as AgentContext;
+    // The reminder changes on every claim, so it must never reach the request
+    // prefix (issue #2458). A system section stays at the tail only where the
+    // adapter keeps mid-conversation system messages; elsewhere pi-ai folds it
+    // into the leading system message and invalidates the whole prefix cache.
+    // There it rides as a request-only user message appended at the tail,
+    // like steering, and is neither persisted nor carried into the next run.
+    const message: AgentMessage = supportsMidConversationSystemMessages(this.model)
+      ? { role: "system", content: "", sections: { [CONTEXT_BUDGET_SECTION]: reminder }, timestamp: Date.now() }
+      : { role: "user", content: [{ type: "text", text: reminder }], timestamp: Date.now() };
+    return { ...context, messages: [...context.messages, message] };
   }
 
   private claimContextBudgetReminder(
@@ -7803,6 +7943,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     if (this.compactionInProgress) return false;
     this.compactionInProgress = true;
     this.compactionAborted = false;
+    this.lastCompactionFailure = undefined;
     const previous = this.agentActivity;
     this.setAgentActivity({
       phase: "compacting",
@@ -7854,6 +7995,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     // A checkpoint cut short by the user's Stop is not a failed compaction;
     // it reports under the abort code so the turn reads as stopped.
     const aborted = this.compactionAborted;
+    if (!aborted) this.lastCompactionFailure = message;
     this.emit({
       type: "compaction_end",
       reason,
@@ -8030,6 +8172,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     retentionMode: CompactionRetentionMode,
     budget: ContextBudget,
     failureReason: CompactionFailureReason,
+    tailScale = 1,
   ): ContextCompactionRecord {
     const previousSummary = preparation.previousSummary
       ? boundedText(
@@ -8052,6 +8195,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       budget,
       maxSummaryChars,
       retentionMode,
+      tailScale,
     );
     return this.createCheckpoint(
       {
@@ -8089,6 +8233,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     budget: ContextBudget,
     maxSummaryChars: number,
     retentionMode: CompactionRetentionMode,
+    tailScale: number,
   ): AgentMessage[] {
     const summaryTokens = Math.ceil(maxSummaryChars / 4);
     const available = Math.max(
@@ -8104,7 +8249,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     );
     return selectRecentTail(
       preparation.messagesToSummarize,
-      Math.min(target, available),
+      Math.max(1, Math.floor(Math.min(target, available) * tailScale)),
       { latestUserGoal: retentionMode === "active_turn" },
     );
   }
@@ -8349,36 +8494,45 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       return false;
     }
 
-    const checkpoint = this.createFallbackCheckpoint(
-      fallbackPreparation,
-      throughMessageId,
-      Math.max(
-        256,
-        Math.min(
-          COMPACTION_FALLBACK_MAX_SUMMARY_CHARS,
-          Math.floor(budget.hardLimit * 0.75),
+    // The tail is sized from the local estimate, but the install check below
+    // measures the calibrated one. A provider whose tokenizer counts more than
+    // the estimate (CJK text, for one) makes the first window too large, and
+    // failing here leaves every later turn at the same hard limit (#2494).
+    // Halve the window until it fits; the newest message is always kept.
+    for (let tailScale = 1; ; tailScale /= 2) {
+      const checkpoint = this.createFallbackCheckpoint(
+        fallbackPreparation,
+        throughMessageId,
+        Math.max(
+          256,
+          Math.min(
+            COMPACTION_FALLBACK_MAX_SUMMARY_CHARS,
+            Math.floor(budget.hardLimit * 0.75),
+          ),
         ),
-      ),
-      retentionMode,
-      budget,
-      failureReason,
-    );
-    const persisted = await this.persistCheckpoint(
-      checkpoint,
-      reason,
-      willRetry,
-      true,
-      "retained_tail",
-    );
-    if (persisted === "persisted") return true;
-    if (persisted === "oversized") {
-      this.emitCompactionFailure(
-        reason,
-        checkpoint.tokensBefore,
-        "Automatic context recovery could not reduce the retained context below the safe model budget",
+        retentionMode,
+        budget,
+        failureReason,
+        tailScale,
       );
+      const persisted = await this.persistCheckpoint(
+        checkpoint,
+        reason,
+        willRetry,
+        true,
+        "retained_tail",
+      );
+      if (persisted === "persisted") return true;
+      if (persisted === "failed") return false;
+      if (tailScale <= COMPACTION_FALLBACK_MIN_TAIL_SCALE) {
+        this.emitCompactionFailure(
+          reason,
+          checkpoint.tokensBefore,
+          "Automatic context recovery could not reduce the retained context below the safe model budget",
+        );
+        return false;
+      }
     }
-    return false;
   }
 
   private async generateCompaction(
@@ -8832,7 +8986,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
         if (event.message.role === "assistant") {
           this.clearAgentActivity();
           this.streamStartedAt = Date.now();
-          const content = assistantContent((event.message as any).content);
+          const content = assistantContent(event.message.content);
           const retryingAssistant =
             this.providerRetryInProgress ||
             this.overflowRecoveryInProgress ||
@@ -8855,6 +9009,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
               : this.progressTurnRerunInProgress || this.overflowRecoveryInProgress
                 ? retryingAssistant?.content ?? ""
                 : content.text;
+          this.liveCommentary = initialText === content.text ? content.transcript : undefined;
           this.currentAssistant = {
             id: retryingAssistant?.id ?? randomUUID(),
             role: "assistant",
@@ -8896,7 +9051,9 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       case "message_update": {
         if (this.currentAssistant && event.message.role === "assistant") {
           this.applyHostedSearch(event.message);
-          const content = assistantContent((event.message as any).content);
+          const content = assistantContent(event.message.content);
+          const previousCommentary = this.liveCommentary;
+          if (content.hasText) this.liveCommentary = content.transcript;
           const previousText = this.currentAssistant.content;
           const previousThinking = this.currentAssistant.thinking ?? "";
           const nextText = content.hasText ? content.text : previousText;
@@ -8904,7 +9061,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
             ? content.thinking
             : previousThinking;
           const textDelta = content.hasText
-            ? cumulativeDelta(previousText, content.text)
+            ? cumulativeDelta(previousCommentary?.text ?? previousText, this.liveCommentary?.text ?? content.text)
             : { delta: "", reset: false };
           const thinkingDelta = content.hasThinking
             ? cumulativeDelta(previousThinking, content.thinking)
@@ -8919,7 +9076,9 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
                 : {}),
             status: "streaming",
           };
-          if (
+          if (!sameCommentaryBoundaries(previousCommentary, this.liveCommentary) || (this.liveCommentary && textDelta.reset)) {
+            this.emit({ type: "message_update", message: this.currentAssistant });
+          } else if (
             textDelta.delta ||
             thinkingDelta.delta ||
             textDelta.reset ||
@@ -8950,6 +9109,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
               } });
             }
             this.currentAssistant = undefined;
+            this.liveCommentary = undefined;
             if (steering.toolNames.length) {
               this.activateDeferredTools(steering.toolNames);
               this.setAgentTools(this.activeTools());
@@ -8974,7 +9134,9 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
         if (this.currentAssistant && event.message.role === "assistant") {
           const assistantId = this.currentAssistant.id;
           this.runDiagnostics?.settleResponse(assistantId, event.message, this.turnCorrections.attempts);
-          const content = assistantContent((event.message as any).content);
+          const content = assistantContent(event.message.content);
+          const visibleTranscript = content.hasText ? content.transcript?.text : this.liveCommentary?.text;
+          this.liveCommentary = content.transcript;
           // pi-agent-core encodes stream failures in the final message
           // (stopReason "error"/"aborted" + errorMessage) and resolves the
           // prompt normally, so this is where provider/model errors surface.
@@ -9083,6 +9245,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
             !failed &&
             !aborted &&
             responseText.trim().length === 0 &&
+            !content.transcript?.text.trim() &&
             !messageRequestsTools(event.message);
           // A completion notice needs no acknowledgement, so its own reply may
           // stay silent (D446). The exception covers exactly that reply: the
@@ -9248,7 +9411,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           const responseOutputTokens =
             aborted && (!usage || usage.outputTokens <= 0)
               ? estimateVisibleResponseOutputTokens({
-                  content: nextText,
+                  content: visibleTranscript ?? nextText,
                   thinking: nextThinking,
                 })
               : undefined;
@@ -9291,7 +9454,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
             providerReplay: failed
               ? undefined
               : providerReplayForBubble(
-                  captureAssistantProviderReplay((event.message as any).content),
+                  captureAssistantProviderReplay(event.message.content),
                   nextText === content.text && nextThinking === content.thinking,
                 ),
           };
@@ -9300,6 +9463,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           if (failed || aborted || emptyResponse) recordRuntimeObserverSkip(this.turnCorrections, this.runDiagnostics, this.turnId, assistantId,
             this.runCancelled ? "stop_requested" : aborted ? "response_aborted" : failed ? "response_error" : "empty_response");
           this.emit({ type: "message_end", message: this.currentAssistant });
+          this.liveCommentary = undefined;
           this.activeProviderRetryAttempt = 0;
           this.streamStartedAt = undefined;
           this.currentAssistant = undefined;
@@ -9519,7 +9683,10 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
         (responseDurationMs ?? 0);
       const responseOutputTokens =
         status === "aborted"
-          ? estimateVisibleResponseOutputTokens(this.currentAssistant)
+          ? estimateVisibleResponseOutputTokens({
+              content: this.liveCommentary?.text ?? this.currentAssistant.content,
+              thinking: this.currentAssistant.thinking,
+            })
           : undefined;
       this.currentAssistant = {
         ...this.currentAssistant,
@@ -9544,6 +9711,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     // burns its retries before giving up shows here as a large providerWaitMs.
     this.streamStartedAt = undefined;
     this.currentAssistant = undefined;
+    this.liveCommentary = undefined;
   }
   /** Keep a pre-flight user message in context so a reused runtime and the
    * next turn both see it, even though no provider request was made. */
@@ -9563,10 +9731,10 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
   }
 
   private failBeforeProviderRequest(
-    incomingUserMessage: AgentMessage,
+    incomingUserMessage: AgentMessage | undefined,
     error: ReturnType<typeof classifyAgentError>,
   ): void {
-    this.keepPreflightUserMessage(incomingUserMessage);
+    if (incomingUserMessage) this.keepPreflightUserMessage(incomingUserMessage);
     this.failCurrentPreflight(error);
   }
 
@@ -9621,6 +9789,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     this.turnEpoch += 1;
     this.abortDelegationsFromPreviousTurns();
     this.currentAssistant = undefined;
+    this.liveCommentary = undefined;
     this.requestStartedAt = runStartedAt;
     // An approved plan runs as a plain Agent turn, never as a mode run turn.
     this.modeState.clearTurn();
@@ -9751,7 +9920,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     this.pendingUserMessageId = userMessageId;
     this.resetRunRecoveryState();
     this.turnCorrections.setTask(typeof input === "string" ? input :
-      input.sessionMessage || (input.modeTurn && input.modeTurn.origin !== "user") ? undefined : input.text);
+      input.sessionMessage || input.backgroundCompletion || (input.modeTurn && input.modeTurn.origin !== "user") ? undefined : input.text);
     this.autonomousExecution = false;
     const recovered = recoverMalformedToolCalls(this.agent.state.messages);
     if (recovered !== this.agent.state.messages) this.setAgentMessages(recovered);
@@ -9780,34 +9949,37 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       if (selectedTools.length) this.activateDeferredTools(selectedTools);
       this.setAgentTools(this.activeTools());
       if (modePromptChanged) this.setAgentSystemPrompt(this.composeSystemPrompt());
+      const completion = typeof input === "string" ? undefined : input.backgroundCompletion;
+      const completionEntries = completion ? this.historyToEntries([completion]) : [];
       const content = promptContent(modelInput);
       const incomingUserMessage: AgentMessage = {
         role: "user",
         content,
         timestamp: Date.now(),
       };
-      if (this.automaticCompactionNeeded([incomingUserMessage])) {
+      const incomingMessages = completion ? completionEntries.map(entry => entry.message) : [incomingUserMessage];
+      if (this.automaticCompactionNeeded(incomingMessages)) {
         const compacted = await this.runCompaction("threshold", false);
         if (!compacted) {
           if (this.compactionAborted) {
             // Stop landed during the pre-flight checkpoint. Keep the user's
             // message in context and end the turn as aborted, the same way a
             // stop during the provider request ends it (the catch below).
-            this.keepPreflightUserMessage(incomingUserMessage);
+            if (!completion) this.keepPreflightUserMessage(incomingUserMessage);
             throw turnAbortedError("Turn aborted while compacting context");
           }
           // A soft-trigger summary failure is recoverable while the hard
           // provider budget still has room; retain the hard guard below.
-          if (this.automaticCompactionWouldExceedHardLimit([incomingUserMessage])) {
-            this.failBeforeProviderRequest(incomingUserMessage, {
+          if (this.automaticCompactionWouldExceedHardLimit(incomingMessages)) {
+            this.failBeforeProviderRequest(completion ? undefined : incomingUserMessage, {
               code: "CONTEXT_COMPACTION_FAILED",
               message: "Automatic context compaction failed before the model request",
               retriable: false,
             });
             return { turnId: this.turnId };
           }
-        } else if (this.automaticCompactionWouldExceedHardLimit([incomingUserMessage])) {
-          this.failBeforeProviderRequest(incomingUserMessage, {
+        } else if (this.automaticCompactionWouldExceedHardLimit(incomingMessages)) {
+          this.failBeforeProviderRequest(completion ? undefined : incomingUserMessage, {
             code: "CONTEXT_TOO_LARGE",
             message:
               "The pending prompt still exceeds the safe model context budget after compaction",
@@ -9818,9 +9990,9 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       }
       if (
         !this.compactionEnabled &&
-        this.automaticCompactionWouldExceedHardLimit([incomingUserMessage])
+        this.automaticCompactionWouldExceedHardLimit(incomingMessages)
       ) {
-        this.failBeforeProviderRequest(incomingUserMessage, {
+        this.failBeforeProviderRequest(completion ? undefined : incomingUserMessage, {
           code: "CONTEXT_TOO_LARGE",
           message:
             "The pending prompt exceeds the safe model context budget while automatic compaction is disabled",
@@ -9830,22 +10002,27 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       }
       await this.extensionBeforeAgentStart(modelInput);
       if (this.runCancelled || this.disposed) {
-        this.keepPreflightUserMessage(incomingUserMessage);
+        if (!completion) this.keepPreflightUserMessage(incomingUserMessage);
         throw turnAbortedError("Turn aborted during extension hooks");
       }
-      try {
-        if (!origin) await this.recoverParentInterruptedDelegations();
-      } catch (error) {
-        this.keepPreflightUserMessage(incomingUserMessage);
-        throw error;
-      }
-      if (typeof modelInput === "string") {
-        await this.agent.prompt(modelInput);
+      if (completion) {
+        for (const entry of completionEntries) this.appendLiveEntry(entry.id, entry.message);
+        this.setAgentMessages([...this.agent.state.messages, ...incomingMessages]);
+        await this.agent.continue();
       } else {
-        // pi's `(text, images)` form appends every image after the text; the
-        // message form keeps an inline image block where the user placed it,
-        // which is the same content `promptContent` already built above.
-        await this.agent.prompt(incomingUserMessage);
+        try {
+          if (!origin) await this.recoverParentInterruptedDelegations();
+        } catch (error) {
+          this.keepPreflightUserMessage(incomingUserMessage);
+          throw error;
+        }
+        if (typeof modelInput === "string") {
+          await this.agent.prompt(modelInput);
+        } else {
+          // pi's `(text, images)` moves images to the end. The message form
+          // keeps inline images where the user placed them.
+          await this.agent.prompt(incomingUserMessage);
+        }
       }
       await this.waitForIdleAndSteering();
       void this.extensionRunner?.emit("agent_settled", { type: "agent_settled" });
@@ -9910,6 +10087,8 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     const runner = this.extensionRunner;
     if (!runner) return options;
     const next: SimpleStreamOptions = { ...options };
+    // Notification handlers can finish out of order; this local id never leaves the process.
+    const contextRequestId = ++this.extensionProviderRequestId;
     if (this.extensionProviderHeaders) {
       next.headers = mergeProviderHeaders(options.headers, this.extensionProviderHeaders);
     }
@@ -9917,7 +10096,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       next.onPayload = async (payload, payloadModel) => {
         const base = await options.onPayload?.(payload, payloadModel);
         const current = base ?? payload;
-        const replaced = await runner.emitBeforeProviderRequest(current);
+        const replaced = await runner.emitBeforeProviderRequest(current, { contextRequestId });
         return replaced ?? base;
       };
     }
@@ -9926,6 +10105,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
         await options.onResponse?.(response, responseModel);
         void runner.emit("after_provider_response", {
           type: "after_provider_response",
+          contextRequestId,
           response,
           model: model as unknown,
         });

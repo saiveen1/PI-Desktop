@@ -56,7 +56,7 @@ being fetched on every subsequent poll.
 
 - **Preconditions:** Isolated desktop profile, built task candidate, local SSE
   fixture model; no real provider credentials or paid API.
-- **Steps:** Open the footer clock; create a daily Morning task at 09:00; select
+- **Steps:** Open Scheduled from the sidebar; create a daily Morning task at 09:00; select
   another saved project, Auto permission and a non-default configured model; edit its name;
   select a daily time period from four fixed defaults; open the weekday menu,
   select custom days, save and reopen; reject empty days; verify the four defaults,

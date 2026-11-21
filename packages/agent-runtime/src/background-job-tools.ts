@@ -109,7 +109,7 @@ export function buildJobTools(
 
   const wait: AgentTool = {
     ...delegates.wait,
-    description: `${delegates.wait.description}\nFor subagents, use delegationIds for a batch or job for one. If both are supplied, a nonempty list of distinct IDs containing job.id sets the wait targets; mode, minCompleted and timeoutSeconds still apply. For a background Bash command, pass its job reference ({kind: "bash", id: backgroundTaskId}); it selects the target, and delegationIds, mode and minCompleted are ignored. timeoutSeconds still applies. Returns state, exitCode and bounded stdout/stderr tails. Timeout or interrupted waiting leaves the process running. Bash completion is not automatically delivered; call TaskWait again when needed.`,
+    description: `${delegates.wait.description}\nFor subagents, use delegationIds for a batch or job for one. If both are supplied, a nonempty list of distinct IDs containing job.id sets the wait targets; mode, minCompleted and timeoutSeconds still apply. Omit job to keep the existing subagent defaults. For a background Bash command, pass its job reference ({kind: "bash", id: backgroundTaskId}); it selects the target, and delegationIds, mode and minCompleted are ignored. timeoutSeconds still applies. Returns state, exitCode and bounded stdout/stderr tails. Timeout or interrupted waiting leaves the process running. Unless automatic completion was explicitly arranged when launching the job, call TaskWait again when needed.`,
     parameters: Type.Object({ ...(delegates.wait.parameters as TObject).properties, job: Type.Optional(jobSchema) }),
     prepareArguments: prepareJobArguments,
     execute: async (id, input, signal, update) => {

@@ -59,7 +59,7 @@ try {
 const { documentVersion, surfaceVersion, isPrereleasePreview } = resolveReleaseDocumentCheck(
   currentVersion,
   requested,
-  catalogs?.en?.[0]?.version,
+  catalogs?.en?.map(entry => entry.version),
 );
 const releaseLine = `${documentVersion.split(".").slice(0, 2).join(".")}.x`;
 
@@ -169,7 +169,7 @@ if (catalogs) {
       fail("packages/shared/src/changelog.ts", `${locale} has no entry for ${documentVersion}`);
       continue;
     }
-    if (entries[0].version !== documentVersion) {
+    if ((requested !== undefined || surfaceVersion === documentVersion) && entries[0].version !== documentVersion) {
       fail(
         "packages/shared/src/changelog.ts",
         `${locale} lists ${entries[0].version} first; ${documentVersion} must be newest-first`,

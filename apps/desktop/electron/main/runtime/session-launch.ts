@@ -783,6 +783,7 @@ export function createSessionLaunchRuntime({
       workspaceRoot,
       sidecarParams: {
         sessionId,
+        pluginModelContextEnabled: true,
         mode,
         delegationSettings: delegation,
         ...(customModelKeys !== undefined ? { delegationSelectionMode: "task-fit" as const } : {}),
@@ -796,6 +797,7 @@ export function createSessionLaunchRuntime({
         autoContinueUnfinishedTodos: settings.autoContinueUnfinishedTodos !== false,
         agentOutputGuard: resolveAgentOutputGuardSettings(settings.agentOutputGuard),
         observerGuard,
+        backgroundJobContinuationEnabled: settings.backgroundJobContinuationEnabled === true && mode === "agent",
         // The session `/fast` switch only reaches a model the user allowed it
         // for in model settings (ADR 0334).
         fastMode: session.fastMode === true && storedModel?.fastModeAllowed === true,
@@ -804,6 +806,10 @@ export function createSessionLaunchRuntime({
         // and refused on every call (ADR 0342 §13).
         ...(mode === "agent" && settings.computerUse?.enabled === true
           ? { computerUseEnabled: true }
+          : {}),
+        // Codemode is opt-in and Agent-only (ADR codemode-sandbox-boundary).
+        ...(mode === "agent" && settings.codemodeEnabled === true
+          ? { codemodeEnabled: true }
           : {}),
         commandShell,
         scratchDir: join(dataDir, "scratch", sessionId),

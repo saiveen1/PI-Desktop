@@ -14,6 +14,7 @@ import { classifyAgentError } from "./agent-errors.js";
 import { readLocalRequestErrorDetails } from "./local-request-errors.js";
 import {
   DesktopAgentRuntime,
+  type AgentRuntimeOptions,
   type PluginToolDef,
   type RuntimePrompt,
   type RuntimePromptAttachment,
@@ -120,6 +121,7 @@ type RuntimeParams = {
   modeDefinition?: unknown;
   /** Durable host turn ID for the prompt currently being executed. */
   turnId?: string;
+  pluginModelContextEnabled?: boolean;
   thinkingLevel?: SessionThinkingLevel;
   infiniteProviderRetry?: boolean;
   unknownUpstreamRetryLimit?: number;
@@ -127,10 +129,16 @@ type RuntimeParams = {
   autoContinueUnfinishedTodos?: boolean;
   agentOutputGuard?: AgentOutputGuardSettings;
   observerGuard?: ObserverGuardRuntimeConfig;
+  backgroundJobContinuationEnabled?: boolean;
+  backgroundCompletion?: UiMessage;
   /** Session `/fast` switch AND the model's opt-in, resolved by main (ADR 0334). */
   fastMode?: boolean;
   /** Opt-in TypeSafe classifier credential resolved by Electron main. */
   jevApiKey?: string;
+  /** Set by main only for Agent sessions with computer use switched on. */
+  computerUseEnabled?: boolean;
+  /** Set by main only for Agent sessions with codemode switched on. */
+  codemodeEnabled?: boolean;
   provider: RuntimeProviderConfig;
   commandShell: CommandShellOption;
   pluginTools?: PluginToolDef[];
@@ -236,6 +244,10 @@ async function runtimeFor(
       withVendorAuth(sessionId, pinned),
     ]),
   );
+  const readPluginModelContext: AgentRuntimeOptions["readPluginModelContext"] =
+    params.pluginModelContextEnabled === true ? (input, signal) => signal?.aborted
+      ? Promise.resolve(undefined)
+      : hostProxy.call("plugins.modelContext.read", input, 600) : undefined;
   const observerGuard = params.observerGuard && { ...params.observerGuard,
     provider: params.observerGuard.provider && withVendorAuth(sessionId, params.observerGuard.provider),
   };
@@ -272,6 +284,8 @@ async function runtimeFor(
     delegationSelectionMode: params.delegationSelectionMode,
     delegationAuthorization: params.delegationAuthorization,
     jevApiKey: params.jevApiKey,
+    computerUseEnabled: params.computerUseEnabled === true,
+    codemodeEnabled: params.codemodeEnabled === true,
     projectInstructions: params.projectInstructions,
     customSystemPrompt: params.customSystemPrompt,
     persona: params.persona,
@@ -301,6 +315,8 @@ async function runtimeFor(
     reusable.setAutoContinueUnfinishedTodos(params.autoContinueUnfinishedTodos !== false);
     reusable.setAgentOutputGuard(params.agentOutputGuard);
     reusable.setObserverGuard(observerGuard);
+    reusable.setBackgroundJobContinuationEnabled(params.backgroundJobContinuationEnabled === true);
+    reusable.setPluginModelContextReader(readPluginModelContext);
     reusable.setFastMode(params.fastMode === true);
     reusable.setMode(mode, modeDefinition);
     return reusable;
@@ -318,6 +334,7 @@ async function runtimeFor(
     });
   }
   let restoredMessages = detail.session.messages ?? [];
+  if (params.backgroundCompletion) restoredMessages = restoredMessages.filter(message => message.id !== params.backgroundCompletion!.id);
   // The current prompt is sent separately below. Exclude its persisted row
   // before attachment hydration so it cannot consume the history byte budget.
   if (currentPrompt !== undefined && params.userMessageId) {
@@ -336,7 +353,7 @@ async function runtimeFor(
   // Older callers without a stable message id retain the previous content match.
   // A Host-started mode turn has no user row at all (its content is a fixed
   // continuation notice), so nothing in the history is its prompt.
-  const hostStartedTurn = modeTurn !== undefined && modeTurn.origin !== "user";
+  const hostStartedTurn = Boolean(params.backgroundCompletion) || (modeTurn !== undefined && modeTurn.origin !== "user");
   if (currentPrompt !== undefined && !params.userMessageId && !hostStartedTurn) {
     const last = history.at(-1);
     if (last?.role === "user" && last.content === currentPrompt) {
@@ -345,6 +362,7 @@ async function runtimeFor(
   }
   const runtime = new DesktopAgentRuntime({
     host: hostProxy,
+    readPluginModelContext,
     sessionId,
     mode,
     modeDefinition,
@@ -358,8 +376,11 @@ async function runtimeFor(
     autoContinueUnfinishedTodos: params.autoContinueUnfinishedTodos !== false,
     agentOutputGuard: params.agentOutputGuard,
     observerGuard,
+    backgroundJobContinuationEnabled: params.backgroundJobContinuationEnabled === true,
     fastMode: params.fastMode === true,
     jevApiKey: params.jevApiKey,
+    computerUseEnabled: config.computerUseEnabled,
+    codemodeEnabled: config.codemodeEnabled,
     history,
     compaction,
     compactionSettings: params.compactionSettings,
@@ -533,6 +554,7 @@ async function handle(method: string, params: any): Promise<unknown> {
       }
       const prompt: RuntimePrompt = {
         text: content,
+        ...(params.backgroundCompletion ? { backgroundCompletion: params.backgroundCompletion } : {}),
         mcpServerIds: parseMcpServerIds(params.mcpServerIds),
         mcpToolNames: parseMcpToolNames(params.mcpToolNames),
         attachments,

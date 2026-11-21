@@ -5503,3 +5503,9 @@ replace legacy normal-stop nudges while enabled. Runtime Stop, permissions,
 pending work and transport recovery remain authoritative. Historical diagnostic
 records stay readable; continuation is not a task-completion proof. See
 [the amended decision](../../adr/builtin-observer-guard.md) and runtime §5e.4.
+
+## Bundled Official Enhancements defaults
+
+- Enable only generated session titles on first use. Keep next-message
+  suggestions, prompt enhancement, and AI memory opt-in. Preserve explicit
+  settings and keep the deterministic fallback and manual-title protections.

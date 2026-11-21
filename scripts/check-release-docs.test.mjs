@@ -58,6 +58,20 @@ test("the real CLI checks a personal beta without inventing a stable release", t
   assert.match(result.output, /not stable-release qualification/i);
 });
 
+test("newer upstream entries do not replace the personal beta's stable baseline", t => {
+  const f = fixture(t, "0.23.1-beta.1", "0.23.1");
+  for (const entries of Object.values(f.catalogs)) {
+    entries.unshift({ version: "0.24.0", highlights: ["Inherited upstream capability"] });
+  }
+  f.saveCatalogs();
+  const automatic = f.run();
+  assert.equal(automatic.code, 0, automatic.output);
+  assert.match(automatic.output, /stable catalog 0\.23\.1/);
+  const explicit = f.run("0.23.1");
+  assert.equal(explicit.code, 1, explicit.output);
+  assert.match(explicit.output, /0\.23\.1 must be newest-first/);
+});
+
 test("explicit stable preview and stable release checks retain their original contracts", async t => {
   await t.test("matching explicit preview succeeds", t => {
     const result = fixture(t, "0.23.1-beta.1", "0.23.1").run("0.23.1");

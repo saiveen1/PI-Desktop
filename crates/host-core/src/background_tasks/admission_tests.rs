@@ -25,7 +25,7 @@ async fn blocked_spawn(
     state: &Mutex<crate::state::AppState>,
     session: &str,
 ) -> Result<String, (String, String)> {
-    spawn_background_task_with(state, session, "marker", "test", config(), |_| {
+    spawn_background_task_with(state, session, "marker", "test", config(), None, |_| {
         pending::<SpawnResult>()
     })
     .await
@@ -42,6 +42,7 @@ async fn assert_refused_without_launch(
         "marker",
         "test",
         config(),
+        None,
         |_| -> std::future::Ready<SpawnResult> {
             panic!("refused admission reached executable spawn boundary");
         },
@@ -135,13 +136,14 @@ async fn spawn_failure_releases_reservation_without_holding_app_state() {
     let dir = tempfile::tempdir().unwrap();
     let state = Mutex::new(crate::state::AppState::open(dir.path()).unwrap());
     let session = super::tests::new_session(&*state.lock().await);
-    let error = spawn_background_task_with(&state, &session, "marker", "test", config(), |_| {
-        let st = state.try_lock().expect("spawn must not hold AppState");
-        assert_eq!(st.background_tasks.running_count_for(&session), 1);
-        std::future::ready(Err(("SPAWN_FAILED".into(), "injected".into())))
-    })
-    .await
-    .unwrap_err();
+    let error =
+        spawn_background_task_with(&state, &session, "marker", "test", config(), None, |_| {
+            let st = state.try_lock().expect("spawn must not hold AppState");
+            assert_eq!(st.background_tasks.running_count_for(&session), 1);
+            std::future::ready(Err(("SPAWN_FAILED".into(), "injected".into())))
+        })
+        .await
+        .unwrap_err();
     assert_eq!(error.0, "SPAWN_FAILED");
     assert_eq!(state.lock().await.background_tasks.running_count(), 0);
     let mut retry = Box::pin(blocked_spawn(&state, &session));
@@ -196,6 +198,7 @@ async fn shutdown_refuses_new_spawn_before_executable_dispatch() {
         "marker",
         "test",
         config(),
+        None,
         |_| -> std::future::Ready<SpawnResult> {
             panic!("shutdown must not dispatch executable config");
         },
@@ -204,4 +207,47 @@ async fn shutdown_refuses_new_spawn_before_executable_dispatch() {
     .unwrap_err();
     assert_eq!(error.0, "TOOL_ABORTED");
     assert_eq!(state.lock().await.background_tasks.running_count(), 0);
+}
+
+#[tokio::test]
+async fn disabled_and_stale_continuations_do_not_dispatch_executable_config() {
+    let dir = tempfile::tempdir().unwrap();
+    let state = Mutex::new(crate::state::AppState::open(dir.path()).unwrap());
+    let (session, turn) = {
+        let st = state.lock().await;
+        let session = super::tests::new_session(&st);
+        let turn = crate::sessions::begin_turn(&st.db, &session, None, None).unwrap();
+        (session, turn)
+    };
+    for (enabled, expected) in [(false, "PERMISSION_DENIED"), (true, "TOOL_ABORTED")] {
+        {
+            let st = state.lock().await;
+            st.db
+                .set_setting(
+                    "app",
+                    &serde_json::json!({"backgroundJobContinuationEnabled": enabled}),
+                )
+                .unwrap();
+            if enabled {
+                crate::sessions::end_turn(&st.db, &turn, "aborted", None, None, false).unwrap();
+            }
+        }
+        let error = spawn_background_task_with(
+            &state,
+            &session,
+            "marker",
+            "test",
+            config(),
+            Some(&turn),
+            |_| -> std::future::Ready<SpawnResult> {
+                panic!("refused continuation reached executable spawn boundary");
+            },
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(error.0, expected);
+        let st = state.lock().await;
+        assert_eq!(st.background_tasks.running_count(), 0);
+        assert!(st.background_tasks.continuations.is_empty());
+    }
 }

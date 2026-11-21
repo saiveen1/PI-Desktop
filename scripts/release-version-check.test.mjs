@@ -31,7 +31,7 @@ test("does not hide a mismatched requested version", () => {
 
 test("a personal beta checks the latest compatible stable catalog without changing source versions", () => {
   for (const stable of ["0.23.0", "0.23.1"]) {
-    assert.deepEqual(resolveReleaseDocumentCheck("0.23.1-beta.1", undefined, stable), {
+    assert.deepEqual(resolveReleaseDocumentCheck("0.23.1-beta.1", undefined, ["0.24.0", "0.23.2", stable]), {
       documentVersion: stable,
       surfaceVersion: "0.23.1-beta.1",
       isPrereleasePreview: false,
@@ -41,7 +41,7 @@ test("a personal beta checks the latest compatible stable catalog without changi
 
 test("automatic beta checking cannot use a future, unrelated, missing or prerelease catalog", () => {
   for (const stable of ["0.23.2", "0.24.0", "0.22.0", "1.23.0", "0.23.0-beta.1", "invalid", undefined]) {
-    assert.deepEqual(resolveReleaseDocumentCheck("0.23.1-beta.1", undefined, stable), {
+    assert.deepEqual(resolveReleaseDocumentCheck("0.23.1-beta.1", undefined, [stable].filter(Boolean)), {
       documentVersion: "0.23.1-beta.1",
       surfaceVersion: "0.23.1-beta.1",
       isPrereleasePreview: false,
@@ -50,16 +50,16 @@ test("automatic beta checking cannot use a future, unrelated, missing or prerele
 });
 
 test("stable releases and explicit requests never fall back to the inherited catalog", () => {
-  assert.deepEqual(resolveReleaseDocumentCheck("0.23.1", undefined, "0.23.0"), {
+  assert.deepEqual(resolveReleaseDocumentCheck("0.23.1", undefined, ["0.23.0"]), {
     documentVersion: "0.23.1", surfaceVersion: "0.23.1", isPrereleasePreview: false,
   });
-  assert.deepEqual(resolveReleaseDocumentCheck("0.23.1-beta.1", "0.23.0", "0.23.0"), {
+  assert.deepEqual(resolveReleaseDocumentCheck("0.23.1-beta.1", "0.23.0", ["0.23.0"]), {
     documentVersion: "0.23.0", surfaceVersion: "0.23.0", isPrereleasePreview: false,
   });
-  assert.deepEqual(resolveReleaseDocumentCheck("0.23.1-beta.1", "0.23.1", "0.23.0"), {
+  assert.deepEqual(resolveReleaseDocumentCheck("0.23.1-beta.1", "0.23.1", ["0.23.0"]), {
     documentVersion: "0.23.1", surfaceVersion: "0.23.1-beta.1", isPrereleasePreview: true,
   });
-  assert.deepEqual(resolveReleaseDocumentCheck("0.23.1-rc.1", undefined, "0.23.0"), {
+  assert.deepEqual(resolveReleaseDocumentCheck("0.23.1-rc.1", undefined, ["0.23.0"]), {
     documentVersion: "0.23.1-rc.1", surfaceVersion: "0.23.1-rc.1", isPrereleasePreview: false,
   });
 });

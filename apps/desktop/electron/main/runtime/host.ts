@@ -48,6 +48,7 @@ export type HostRuntimeDependencies = {
   superviseRestart: (kind: "host" | "sidecar") => Promise<void>;
   isQuitting: () => boolean;
   ensureSystemProxyRelay: () => Promise<string>;
+  onBackgroundTasksChanged?: () => void;
 };
 
 export function createHostRuntime({
@@ -75,6 +76,7 @@ export function createHostRuntime({
   superviseRestart,
   isQuitting,
   ensureSystemProxyRelay,
+  onBackgroundTasksChanged,
 }: HostRuntimeDependencies): {
   wireHost: (host: HostProcess) => void;
   startHost: () => Promise<void>;
@@ -118,8 +120,7 @@ export function createHostRuntime({
       return;
     }
     if (method === "backgroundTasks.changed") {
-      // Fan-out only: the renderer re-lists on the event and renders the
-      // running-tasks bar above the composer. No main-process decisions.
+      onBackgroundTasksChanged?.();
       sendToRenderer(IPC.event.backgroundTasksChanged, params);
       return;
     }

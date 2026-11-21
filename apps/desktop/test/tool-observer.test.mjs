@@ -110,7 +110,7 @@ test("observer read lifecycle, bounded references and real store/cache handoff",
 
   function reset() {
     cache.resetComposerDraftCache();
-    useAppStore.setState({ page: "settings", settings: { developerMode: true }, activeSessionId: "local", activeProjectPath: "/synthetic/project",
+    useAppStore.setState({ page: "chat", settingsOpen: true, settings: { developerMode: true }, activeSessionId: "local", activeProjectPath: "/synthetic/project",
       workspace: { path: "/synthetic/project", name: "Synthetic" }, selectingSessionId: undefined, composerPrefill: null,
       sessions: [{ id: "local", source: "desktop", projectPath: "/synthetic/project" }] });
   }
@@ -127,16 +127,17 @@ test("observer read lifecycle, bounded references and real store/cache handoff",
     assert.equal(refs.referenceToolObservationGroup(target, report, report.groups[0], copy), true);
     const state = useAppStore.getState();
     assert.equal(state.page, "chat");
+    assert.equal(state.settingsOpen, false);
     assert.equal(state.composerPrefill.sessionId, "local");
     assert.ok(state.composerPrefill.text.startsWith(`${draft.text}\n\n`));
     assert.deepEqual(state.composerPrefill.fileReferences, draft.fileReferences);
     assert.deepEqual(cache.readComposerDraft("local").fileReferences, draft.fileReferences);
     assert.equal(draft.text, "Keep my text \ue001 \ue002");
-    useAppStore.setState({ page: "settings", composerPrefill: null });
+    useAppStore.setState({ settingsOpen: true, composerPrefill: null });
     const before = cache.readComposerDraft("local").text;
     assert.equal(refs.referenceToolObservationGroup(target, report, report.groups[0], copy), false);
     assert.equal(cache.readComposerDraft("local").text, before);
-    assert.equal(useAppStore.getState().page, "settings");
+    assert.equal(useAppStore.getState().settingsOpen, true);
   });
 
   await t.test("no session, disabled developer mode, pending prefill, switching, remote and changed targets are blocked", () => {
