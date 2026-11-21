@@ -22,11 +22,7 @@ import { hasAnnouncementContent, RELEASE_ANNOUNCEMENT } from "./announcements/ca
 import { useStartupGuideRequest } from "./startup-guide-request";
 import type { StartupGuideExit } from "./StartupGuideDialog";
 
-// The dialogs carry the Settings destinations and a Markdown renderer; keep
-// them out of the startup bundle until one is actually shown.
-const SettingsDialog = lazy(() =>
-  import("../settings/SettingsDialog").then((module) => ({ default: module.SettingsDialog })),
-);
+// Keep the guide's Settings content and announcement Markdown lazy.
 const StartupGuideDialog = lazy(() =>
   import("./StartupGuideDialog").then((module) => ({ default: module.StartupGuideDialog })),
 );
@@ -51,10 +47,8 @@ function useHasUsableModel(): boolean {
 type ActiveGuide = { plan: StartupGuidePlan; source: "auto" | "manual" };
 
 /**
- * Owns the app-level modal overlays and shows at most one of them, by
- * priority: startup guide > release announcement > Settings. A Settings
- * request made while a higher overlay is up stays pending (`settingsOpen`)
- * and opens once they are gone.
+ * Shows at most one startup overlay: the guide before the release announcement.
+ * The Settings route is independent of this queue.
  *
  * The automatic guide and the announcement are decided once, when the shell
  * first becomes interactive (`active`), so the audience cannot change
@@ -62,8 +56,6 @@ type ActiveGuide = { plan: StartupGuidePlan; source: "auto" | "manual" };
  * current state and never touches the first-launch marker.
  */
 export function AppOverlayHost({ active }: { active: boolean }) {
-  const settingsOpen = useAppStore((s) => s.settingsOpen);
-  const closeSettings = useAppStore((s) => s.closeSettings);
   const setSettingsTab = useAppStore((s) => s.setSettingsTab);
   const replayRequested = useStartupGuideRequest((s) => s.requested);
   const clearReplay = useStartupGuideRequest((s) => s.clear);
@@ -112,7 +104,6 @@ export function AppOverlayHost({ active }: { active: boolean }) {
     ? resolveAppOverlay({
         guide: guide !== null,
         announcement: announcement !== null,
-        settings: settingsOpen,
       })
     : null;
 
@@ -148,8 +139,6 @@ export function AppOverlayHost({ active }: { active: boolean }) {
         onUnavailable={closeAnnouncement}
       />
     );
-  } else if (overlay === "settings") {
-    dialog = <SettingsDialog onClose={closeSettings} />;
   }
   return dialog ? <Suspense fallback={null}>{dialog}</Suspense> : null;
 }

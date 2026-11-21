@@ -20,6 +20,7 @@ import {
   IconBookOpen,
   IconBot,
   IconChat,
+  IconChevronLeft,
   IconFileText,
   IconGlobe,
   IconInfo,
@@ -34,7 +35,7 @@ import {
   IconMic,
   IconWorkflow,
 } from "../../components/icons";
-import { Badge, cx } from "../../components/ui";
+import { Badge, Button, Input, cx } from "../../components/ui";
 import { PluginScenicThemesDestination } from "../../components/settings/PluginScenicThemesDestination";
 import { SettingsDestinationContent, type SettingsTab } from "./SettingsDestinationContent";
 import { useSettingsPersistence } from "./useSettingsPersistence";
@@ -52,13 +53,13 @@ type NavItem = {
 };
 
 /**
- * Settings rail + destination content. Hosted by the Settings dialog; each
- * destination body comes from `SettingsDestinationContent` so other surfaces
- * can embed one destination without the rail.
+ * Full-window Settings route. Other surfaces can embed an individual
+ * destination via `SettingsDestinationContent` without this page's rail.
  */
 export function SettingsPage() {
   const { t } = useTranslation();
   const tab = useAppStore((s) => s.settingsTab);
+  const setPage = useAppStore((s) => s.setPage);
   const setSettingsTab = useAppStore((s) => s.setSettingsTab);
   const settingsAnchor = useAppStore((s) => s.settingsAnchor);
   const settingsTabNonce = useAppStore((s) => s.settingsTabNonce);
@@ -139,9 +140,9 @@ export function SettingsPage() {
     let timer: number | undefined;
     const tryFind = (attempt: number) => {
       if (cancelled) return;
-      const titles = document.querySelectorAll<HTMLElement>(
-        ".settings-content .settings-row-title, .settings-content .settings-card-heading, .settings-content .about-update-title",
-      );
+      const titles = contentRef.current?.querySelectorAll<HTMLElement>(
+        ".settings-row-title, .settings-card-heading, .about-update-title",
+      ) ?? [];
       const match = [...titles].find(
         (node) => node.textContent?.trim() === target,
       );
@@ -239,11 +240,12 @@ export function SettingsPage() {
 
   return (
     <div className="settings-shell settings-shell-full">
+      <div className="settings-titlebar" aria-hidden="true" />
       <aside className="settings-nav sidebar-surface" aria-label={t("settings.title")}>
-        <div className="settings-nav-top">
-          <div className="settings-search-wrap">
+        <div className="settings-nav-top drag">
+          <div className="settings-search-wrap no-drag">
             <IconSearch size={14} />
-            <input
+            <Input
               ref={settingsSearchRef}
               className="settings-search"
               value={query}
@@ -310,9 +312,21 @@ export function SettingsPage() {
           )}
         </div>
 
+        <div className="settings-nav-footer no-drag">
+          <Button
+            type="button"
+            variant="ghost"
+            className="settings-back no-drag"
+            data-nav="back-to-app"
+            onClick={() => setPage("chat")}
+          >
+            <IconChevronLeft size={15} aria-hidden />
+            <span>{t("settings.backToApp")}</span>
+          </Button>
+        </div>
       </aside>
 
-      <div className="settings-content" ref={contentRef}>
+      <div className="settings-content" role="main" ref={contentRef}>
         <div className="settings-content-inner">
           <div className="settings-content-enter">
           {/*

@@ -34,7 +34,7 @@ test("observer React results selection, reference action, loading/error/empty an
   const previousWindow = globalThis.window;
   globalThis.window = { piDesktop: { invoke() { assert.fail("Rendering and referencing must not send or call tools/providers"); } } };
   t.after(() => { globalThis.window = previousWindow; cache.resetComposerDraftCache(); });
-  useAppStore.setState({ settings: { developerMode: true }, page: "chat", settingsOpen: true, activeSessionId: "local",
+  useAppStore.setState({ settings: { developerMode: true }, page: "settings", activeSessionId: "local",
     activeProjectPath: "/synthetic", workspace: { path: "/synthetic", name: "Synthetic" },
     sessions: [{ id: "local", source: "desktop", projectPath: "/synthetic" }], composerPrefill: null });
   const target = refs.toolObserverTarget(useAppStore.getState());
@@ -116,7 +116,6 @@ test("observer React results selection, reference action, loading/error/empty an
     assert.ok(prefill.text.startsWith("Keep this \ue001\n\n"));
     assert.equal(prefill.fileReferences[0].path, "/outside/image.png");
     assert.equal(useAppStore.getState().page, "chat");
-    assert.equal(useAppStore.getState().settingsOpen, false);
   });
 
   await t.test("Developer section hides the observer when disabled and uses the existing day selector when enabled", () => {

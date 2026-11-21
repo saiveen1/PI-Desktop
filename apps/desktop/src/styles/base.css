@@ -175,6 +175,10 @@ html {
   display: contents;
 }
 
+.app-chat-shell[hidden] {
+  display: none;
+}
+
 .app-scenic-backdrop {
   position: fixed;
   inset: 0;

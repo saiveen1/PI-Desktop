@@ -12,7 +12,8 @@
 :root[data-platform="darwin"],
 :root[data-platform="darwin"] body,
 :root[data-platform="darwin"] #root,
-:root[data-platform="darwin"] .app-shell {
+:root[data-platform="darwin"] .app-shell,
+:root[data-platform="darwin"] .settings-shell {
   background: transparent;
 }
 
@@ -1460,7 +1461,9 @@
 /* End every native drag rectangle before the window-control hit targets.
  * Visual padding alone does not exclude an Electron draggable region. */
 :root[data-platform="win32"] .main-titlebar,
-:root[data-platform="linux"] .main-titlebar {
+:root[data-platform="linux"] .main-titlebar,
+:root[data-platform="win32"] .settings-titlebar,
+:root[data-platform="linux"] .settings-titlebar {
   right: var(--ds-window-controls-width);
 }
 

@@ -73,7 +73,7 @@ export function toolObserverTarget(state: TargetState): string {
 
 export function canReferenceToolObservations(state: AppState, target: string): boolean {
   const session = state.sessions.find((item) => item.id === state.activeSessionId);
-  return state.settings?.developerMode === true && state.settingsOpen
+  return state.settings?.developerMode === true && state.page === "settings"
     && toolObserverTarget(state) === target && !state.selectingSessionId && !state.composerPrefill
     && !state.workspace?.remote
     && Boolean(session && (!session.source || session.source === "desktop")
@@ -106,10 +106,6 @@ export function referenceToolObservationGroup(
     added = true;
     return { composerPrefill: { ...next, sessionId } };
   });
-  if (added) {
-    const state = useAppStore.getState();
-    state.setPage("chat");
-    state.closeSettings();
-  }
+  if (added) useAppStore.getState().setPage("chat");
   return added;
 }

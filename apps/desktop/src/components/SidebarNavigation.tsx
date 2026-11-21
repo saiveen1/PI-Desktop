@@ -103,7 +103,6 @@ export function SidebarFooter({ actions, onBeforeSettings }: {
   onBeforeSettings?: () => void;
 }) {
   const { t } = useTranslation();
-  const settingsOpen = useAppStore((s) => s.settingsOpen);
   const openSettings = useAppStore((s) => s.openSettings);
   const setSettingsTab = useAppStore((s) => s.setSettingsTab);
   const setSettingsAnchor = useAppStore((s) => s.setSettingsAnchor);
@@ -133,10 +132,8 @@ export function SidebarFooter({ actions, onBeforeSettings }: {
     <div className="sidebar-footer no-drag">
       <button
         type="button"
-        className={cx("footer-settings", settingsOpen && "active")}
+        className="footer-settings"
         data-nav="settings"
-        aria-haspopup="dialog"
-        aria-expanded={settingsOpen}
         onClick={() => {
           onBeforeSettings?.();
           openSettings();

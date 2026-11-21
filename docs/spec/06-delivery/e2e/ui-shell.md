@@ -1318,7 +1318,7 @@
   a long version label may truncate instead.
 - Tab to Recycle bin and press Enter; expect the existing dialog to open.
   Escape closes it and restores focus. The notification bell still opens its
-  own inbox; clicking Settings opens Settings over the current page.
+  own inbox; clicking Settings navigates to the full-window Settings page.
 - Clicking the build/version chip checks for updates when current, or opens
   Settings → Info when an actionable update is available.
 - Traffic lights sit at Codex `{x:16,y:16}` with a 46px toolbar; the expanded
@@ -1418,20 +1418,21 @@
 - Switch the sort to Name and expect rows to reorder inside every section with
   no row hidden; clear the search and expect the complete index back.
 
-## US-UI-24 Settings dialog
+## US-UI-24 Full-window Settings route
 - Open Settings from the sidebar footer, `Mod+,`, global search, or an in-app
-  "Open settings" deep link.
-- Expect a **modal dialog** over the current page (sidebar and page stay
-  mounted beneath the scrim). The rail has search and the destination
-  directory of `04-ux/06-settings-ia.md` §2, plus any plugin-contributed
-  destinations; the close button sits at the dialog's top-right.
-- Deep links land on their destination and flash the anchored row. A plugin
-  settings destination renders inside the dialog.
-- Close with the close button, `Escape`, or a backdrop press and expect the
-  page underneath unchanged. `Escape` inside an open menu, the shortcut
-  recorder, or a nested dialog closes only that layer.
-- Opening a project or session from Settings → Project archive closes the
-  dialog and lands on chat.
+  deep link. Expect a full-window page, not a dialog or scrim. The application
+  shell is still mounted, but not visible or focusable; chat-owned portals
+  must not appear over Settings (see E2E-LAYOUT-sidebar-settings).
+- The rail has search, the [Settings directory](../../04-ux/06-settings-ia.md),
+  plugin-contributed destinations, and **Back to app** pinned at its foot.
+  Deep links land on their destination and flash the anchored row, even when
+  leaving a plugin destination.
+- Press `Escape` on the page or click outside a card: Settings stays open.
+  Open a nested dialog or menu and press `Escape`: only that layer closes.
+- From Scheduled or Extensions, open Settings; history Back returns to that
+  route and Forward revisits Settings. Then use **Back to app**: expect chat,
+  not Scheduled or Extensions. Opening a project or session from Settings →
+  Project archive also navigates to chat.
 
 ## US-UI-24a Startup guide
 - **Fresh profile, no model**: on first launch the guide opens after the boot
@@ -1442,9 +1443,10 @@
   right. Keycaps start dimmed; pressing the configured shortcut (or *Open
   plugin launcher*) opens the launcher and the keycaps turn active. *Skip*
   and *Done* both end the guide.
+- *Change shortcut* ends the guide and navigates to Settings → Shortcuts.
 - Relaunch: the guide does not reappear. Settings → Info → *Startup guide*
-  replays it for the current state, Settings returns when it ends, and the
-  next launch still shows no guide.
+  replays it over the same page; dismiss it and expect Info to remain selected.
+  The next launch still shows no guide.
 - The chat home shows no first-run checklist.
 
 ## US-UI-24b Release announcement and modal priority
@@ -1452,8 +1454,8 @@
 - With an announcement enabled (fixture build): first launch shows the guide,
   then the announcement (Markdown text + bundled image), then nothing.
   Relaunch: the announcement does not reappear for the same release.
-- Press `Mod+,` while the guide or announcement is open: Settings does not
-  cover it and opens once both are closed.
+- Navigate to Settings with `Mod+,` while a startup overlay is open: the active
+  overlay stays on top. After dismissal, expect the Settings page, not a dialog.
 
 ## US-UI-27 Dark destination pages
 - Force dark theme and open Plugins and Settings → Project archive.
@@ -3652,7 +3654,7 @@ PowerShell-launched fixture; activation must not restore the native outline.
 - **Expected**: Both navigation surfaces share one material. Settings navigation
   and shell have no entrance animation; only a nested content-enter wrapper
   inside its opaque pane animates, and that motion is opacity-only so it cannot
-  trap `position: fixed` overlays. Settings dialogs cover the full window, including the rail. On macOS
+  trap `position: fixed` overlays. Nested dialogs cover the full window, including the rail. On macOS
   all ancestors behind the rail are transparent, while right
   content and titlebar stay opaque. Returning to an expanded sidebar starts and
   stays at 275px without sidebar-in events; a collapsed sidebar stays absent.

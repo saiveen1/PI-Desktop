@@ -468,10 +468,10 @@ export function useComposerDraft({
   }, []);
 
   useEffect(() => {
-    // The Settings dialog leaves Composer mounted; capture its current text
+    // The Settings page hides the mounted Composer; capture its current text
     // before a settings action can append to the same draft.
     return useAppStore.subscribe((state, previous) => {
-      if (state.settingsOpen && !previous.settingsOpen) persistDraft();
+      if (state.page === "settings" && previous.page !== "settings") persistDraft();
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- persistDraft reads current refs
   }, []);

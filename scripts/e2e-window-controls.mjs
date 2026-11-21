@@ -428,11 +428,11 @@ try {
   await waitFor(() => evaluate(`!document.querySelector('.work-panel')`), "panel closed again");
   await checkControls("panel closed again");
   await evaluate(`window.__PI_DESKTOP__.setPage('settings')`);
-  await waitFor(() => evaluate(`!!document.querySelector('[data-surface="settings-dialog"]')`), "settings opened");
+  await waitFor(() => evaluate(`!!document.querySelector('.settings-shell-full') && document.querySelector('.app-chat-shell[hidden][inert]') !== null`), "Settings route opened");
   await settle();
-  await checkControls("settings dialog");
-  await click('[data-nav="close-settings"]');
-  await waitFor(() => evaluate(`!document.querySelector('[data-surface="settings-dialog"]')`), "settings closed");
+  await checkControls("Settings page");
+  await click('[data-nav="back-to-app"]');
+  await waitFor(() => evaluate(`!document.querySelector('.settings-shell-full') && document.querySelector('.app-chat-shell:not([hidden])') !== null`), "returned to app");
   await click(".app-work-panel-toggle");
   await settle();
   await checkControls("panel reopened after settings");

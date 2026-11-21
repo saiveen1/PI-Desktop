@@ -57,7 +57,7 @@ export async function checkSidebarSettings({ cdp, check, waitFor, artifactDir })
       size: style.backgroundSize, repeat: style.backgroundRepeat,
       animation: style.animationName, opacity: style.opacity,
       width: rect.width, height: rect.height, top: rect.top, ancestors,
-      content: getComputedStyle(document.querySelector('.settings-content, .main-pane')).backgroundColor,
+      content: getComputedStyle(document.querySelector('.settings-content') ?? document.querySelector('.main-pane')).backgroundColor,
       titlebar: document.querySelector('.settings-titlebar')
         ? getComputedStyle(document.querySelector('.settings-titlebar')).backgroundColor : null,
       shellAnimation: document.querySelector('.settings-shell')
@@ -102,15 +102,18 @@ export async function checkSidebarSettings({ cdp, check, waitFor, artifactDir })
     const retainedChat = await cdp.evaluate(`(() => {
       const chatShell = document.querySelector('.app-chat-shell');
       const chatSurface = chatShell?.querySelector('.chat-surface');
+      const settings = document.querySelector('.settings-shell-full');
       window.__settingsReturnChatSurface = chatSurface ?? null;
       return {
         hidden: chatShell?.hidden === true,
+        inert: chatShell?.inert === true,
+        independent: !!settings?.closest('.app-shell') && !settings.closest('[role="dialog"], [aria-modal="true"], .app-chat-shell'),
         mounted: chatSurface?.isConnected === true,
       };
     })()`);
     check(
-      retainedChat.hidden && retainedChat.mounted,
-      `${label}: Settings hides the chat while keeping it mounted`,
+      retainedChat.hidden && retainedChat.inert && retainedChat.mounted && retainedChat.independent,
+      `${label}: Settings is an independent page; the mounted chat is hidden and inert`,
       JSON.stringify(retainedChat),
     );
     await startTrace();

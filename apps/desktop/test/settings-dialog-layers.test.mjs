@@ -11,10 +11,9 @@ const zIndex = (styles, selector) => {
   return Number(block.match(/z-index:\s*(\d+)/)?.[1]);
 };
 
-test("menus opened inside the Settings dialog mount above it", async () => {
-  const [portal, settingsDialog, guide, anchoredMenu, styles] = await Promise.all([
+test("Settings menus inside the startup guide use its modal layer", async () => {
+  const [portal, guide, anchoredMenu, styles] = await Promise.all([
     read("../src/lib/portal-visibility.tsx"),
-    read("../src/features/settings/SettingsDialog.tsx"),
     read("../src/features/startup/StartupGuideDialog.tsx"),
     read("../src/components/settings/AnchoredMenu.tsx"),
     loadStyles(),
@@ -22,14 +21,11 @@ test("menus opened inside the Settings dialog mount above it", async () => {
   // Body-level layers follow the enclosing modal's layer host.
   assert.match(portal, /createPortal\(visiblePortalContent\(node\), host \?\? document\.body\)/);
   assert.match(portal, /className="modal-layer-host"/);
-  // Both modals that embed Settings destinations provide that host.
-  for (const dialog of [settingsDialog, guide]) {
-    assert.match(dialog, /portalOverlay\(\s*<ModalLayer>/);
-  }
+  assert.match(guide, /portalOverlay\(\s*<ModalLayer>/);
   assert.match(anchoredMenu, /portalToBody\(/);
   // The host stacks above the dialog layer and never eats clicks itself.
   const host = zIndex(styles, ".modal-layer-host");
-  assert.ok(host > zIndex(styles, ".settings-dialog-overlay"), `host z ${host}`);
+  assert.doesNotMatch(styles, /\.settings-dialog\b/);
   assert.ok(host > zIndex(styles, ".startup-guide-overlay"), `host z ${host}`);
   assert.match(styles, /\.modal-layer-host\s*\{[^}]*pointer-events:\s*none;/);
   assert.match(styles, /\.modal-layer-host > \*\s*\{\s*pointer-events:\s*auto;/);

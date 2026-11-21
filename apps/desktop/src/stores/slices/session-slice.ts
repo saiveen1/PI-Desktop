@@ -434,7 +434,7 @@ export function createSessionSlice({
         );
       }
       if (stateAtStart.sessionMeta[id]?.unread) stateAtStart.setSessionUnread(id, false);
-      set({ selectingSessionId: id, page: "chat", settingsOpen: false });
+      set({ selectingSessionId: id, page: "chat" });
       const outcomeAcknowledgement = get().acknowledgeSessionOutcome(id);
 
       const commitSelection = (

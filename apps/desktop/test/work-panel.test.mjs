@@ -728,8 +728,10 @@ test("preview mode keeps shell actions and restores routes before navigation", (
   );
   assert.match(
     appSource,
-    /if \(workPanelMaximized && page !== "chat"\) \{\s*setWorkPanelMaximized\(false\);/s,
+    /if \(workPanelMaximized && surfacePage !== "chat"\) \{\s*setWorkPanelMaximized\(false\);/s,
   );
+  assert.match(appSource, /const surfacePage = page === "settings" \? retainedPage : page;/);
+  assert.match(appSource, /panelBlocked=\{searchOpen \|\| settingsActive\}/);
   assert.match(
     appSource,
     /case "newTask":[\s\S]*?if \(workPanelMaximizedRef\.current\) setWorkPanelMaximized\(false\);/,

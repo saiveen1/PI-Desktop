@@ -64,6 +64,11 @@ export function useAppShellRuntime() {
   const bootstrap = useAppStore((s) => s.bootstrap);
   const ready = useAppStore((s) => s.ready);
   const page = useAppStore((s) => s.page);
+  const [retainedPage, setRetainedPage] = useState<Exclude<typeof page, "settings">>(
+    page === "settings" ? "chat" : page,
+  );
+  if (page !== "settings" && page !== retainedPage) setRetainedPage(page);
+  const surfacePage = page === "settings" ? retainedPage : page;
   const activeSessionId = useAppStore((s) => s.activeSessionId);
   const acknowledgeSessionOutcome = useAppStore(
     (s) => s.acknowledgeSessionOutcome,
@@ -118,7 +123,7 @@ export function useAppShellRuntime() {
   const [sidebarWidth, setSidebarWidth] = useState(() => loadSidebarWidth());
   const { sidebarEntering, sidebarExiting, handleSidebarAnimationEnd } = useSidebarTransition(
     sidebarCollapsed,
-    ready,
+    ready && page !== "settings",
   );
   const [shellWidth, setShellWidth] = useState(0);
   const appShellRef = useRef<HTMLDivElement>(null);
@@ -284,10 +289,10 @@ export function useAppShellRuntime() {
   // restore that pane before the destination is presented; otherwise the
   // sidebar can change `page` successfully while the route stays unmounted.
   useEffect(() => {
-    if (workPanelMaximized && page !== "chat") {
+    if (workPanelMaximized && surfacePage !== "chat") {
       setWorkPanelMaximized(false);
     }
-  }, [page, workPanelMaximized]);
+  }, [surfacePage, workPanelMaximized]);
 
   useEffect(() => {
     workPanelExitingRef.current = workPanelExiting;
@@ -350,7 +355,7 @@ export function useAppShellRuntime() {
   }, []);
 
   useEffect(() => {
-    const pageHidesWorkPanel = page === "plugins" || page === "scheduled";
+    const pageHidesWorkPanel = surfacePage !== "chat";
     const shouldPresent =
       ready && !pageHidesWorkPanel && workPanelOpen;
     const request = ++workPanelReservationRequest.current;
@@ -388,7 +393,7 @@ export function useAppShellRuntime() {
       isCurrent: () => request === workPanelReservationRequest.current,
       commit: () => setPresentedWorkPanelOpen(shouldPresent),
     });
-  }, [page, ready, workPanelOpen]);
+  }, [surfacePage, ready, workPanelOpen]);
 
   // Fallback if animationend is skipped (display:none mid-flight, etc.).
   useEffect(() => {
@@ -425,7 +430,6 @@ export function useAppShellRuntime() {
         switch (command) {
           case "newTask":
             if (workPanelMaximizedRef.current) setWorkPanelMaximized(false);
-            store.closeSettings();
             await store.newSession();
             requestAnimationFrame(() =>
               document.querySelector<HTMLTextAreaElement>(".composer-input")?.focus(),
@@ -894,9 +898,7 @@ export function useAppShellRuntime() {
             break;
           case "openWorkPanel": {
             const p = useAppStore.getState().page;
-            if (p !== "plugins" && p !== "scheduled") {
-              useAppStore.getState().toggleWorkPanel();
-            }
+            if (p === "chat") useAppStore.getState().toggleWorkPanel();
             break;
           }
           case "abort":
@@ -1081,6 +1083,7 @@ export function useAppShellRuntime() {
     t,
     ready,
     page,
+    surfacePage,
     activeSessionId,
     workPanelOpen,
     searchOpen,

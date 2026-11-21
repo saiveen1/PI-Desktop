@@ -27,6 +27,7 @@ import { WindowControls } from "../../components/WindowControls";
 import { useCopyTex } from "../../hooks/use-copy-tex";
 import { api } from "../../lib/api";
 import { installMaximizedWindowChrome } from "../../lib/maximized-window-chrome";
+import { PortalVisibilityProvider } from "../../lib/portal-visibility";
 import { workPanelLayout } from "../../lib/work-panel-resize";
 import { LiveVoiceStatusHost } from "../voice/live/LiveVoiceStatusHost";
 import { AppOverlayHost } from "../startup/AppOverlayHost";
@@ -35,6 +36,9 @@ import { DelegationHistoryDialog } from "../delegations/DelegationHistoryDialog"
 import { SessionDelegationsButton } from "../delegations/SessionDelegationsButton";
 import { useAppShellRuntime } from "./useAppShellRuntime";
 
+const SettingsPage = lazy(() =>
+  import("../settings/SettingsPage").then((module) => ({ default: module.SettingsPage })),
+);
 const ScheduledPage = lazy(() =>
   import("../../pages/ScheduledPage").then((module) => ({
     default: module.ScheduledPage,
@@ -61,6 +65,7 @@ export function AppShell() {
     t,
     ready,
     page,
+    surfacePage,
     activeSessionId,
     workPanelOpen,
     searchOpen,
@@ -100,6 +105,7 @@ export function AppShell() {
     workPanelToggleTooltip,
     requestedWorkPanelWidth,
   } = useAppShellRuntime();
+  const settingsActive = page === "settings";
   const [toastAnchor, setToastAnchor] = useState<HTMLElement | null>(null);
   const [delegationsOpen, setDelegationsOpen] = useState(false);
   useCopyTex();
@@ -146,7 +152,8 @@ export function AppShell() {
   if (ready) {
     shell = (
       <>
-        <div className="app-chat-shell">
+        <PortalVisibilityProvider visible={!settingsActive}>
+        <div className="app-chat-shell" hidden={settingsActive} inert={settingsActive}>
           {!sidebarCollapsed || sidebarExiting ? (
             <Sidebar
               className={cx(sidebarEntering && "is-entering", sidebarExiting && "is-exiting")}
@@ -201,7 +208,7 @@ export function AppShell() {
 
           {!workPanelMaximized && (
             <section ref={setToastAnchor} className="main-pane">
-              {page === "chat" ? (
+              {surfacePage === "chat" ? (
                 <ConversationTopbar
                   sidebarCollapsed={sidebarCollapsed}
                   onToggleSidebar={toggleSidebar}
@@ -227,7 +234,7 @@ export function AppShell() {
                   )}
                 </div>
               )}
-              <UpdateBanner />
+              {!settingsActive && <UpdateBanner />}
 
               {backendDown && (
                 <div
@@ -285,11 +292,11 @@ export function AppShell() {
               )}
 
               <Suspense fallback={<RoutePending />}>
-                {page === "scheduled" ? (
+                {surfacePage === "scheduled" ? (
                   <div className="route-surface route-page">
                     <ScheduledPage />
                   </div>
-                ) : page === "plugins" ? (
+                ) : surfacePage === "plugins" ? (
                   <div className="route-surface route-page">
                     <PluginsPage />
                   </div>
@@ -318,7 +325,7 @@ export function AppShell() {
               }
             >
               <WorkPanel
-                panelBlocked={searchOpen}
+                panelBlocked={searchOpen || settingsActive}
                 exiting={workPanelExiting}
                 onExitAnimationEnd={() =>
                   finishWorkPanelExit(workPanelExitGeneration.current)
@@ -349,13 +356,16 @@ export function AppShell() {
             </span>
           </TooltipButton>
         </div>
+        </PortalVisibilityProvider>
+        {settingsActive && <Suspense fallback={<RoutePending />}><SettingsPage /></Suspense>}
         <AppOverlayHost active={!showSplash} />
         <SearchDialog open={searchOpen} onClose={() => setSearchOpen(false)} />
         {delegationsOpen ? <DelegationHistoryDialog onClose={() => setDelegationsOpen(false)} /> : null}
-        <ToastHost anchorElement={toastAnchor} />
+        <ToastHost anchorElement={settingsActive ? null : toastAnchor} />
         <LiveVoiceStatusHost />
         <PluginRendererHost />
         <ExtensionPromptHost />
+        {settingsActive && <UpdateBanner />}
       </>
     );
   }
@@ -366,6 +376,7 @@ export function AppShell() {
       className={cx(
         "app-shell",
         !ready && "app-shell-boot",
+        ready && settingsActive && "settings-mode",
         sidebarCollapsed && "sidebar-collapsed",
         workPanelMaximized && "work-panel-maximized",
         showSplash && "is-booting",

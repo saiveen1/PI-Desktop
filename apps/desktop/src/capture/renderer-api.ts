@@ -99,11 +99,7 @@ export function installRendererApi(): () => void {
   ) as CaptureRigStubs;
 
   const surface: RendererApi = {
-    setPage: (page) => {
-      const store = useAppStore.getState();
-      if (page === "settings") store.openSettings();
-      else store.setPage(page);
-    },
+    setPage: (page) => useAppStore.getState().setPage(page),
     refreshProviders: () => useAppStore.getState().refreshProviders(),
     selectSession: (id) => useAppStore.getState().selectSession(id),
     setSettingsTab: (tab) => useAppStore.getState().setSettingsTab(tab),

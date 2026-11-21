@@ -68,6 +68,16 @@ Projects list. This candidate adds per-section disclosure and preferred
 height, with no changes to the inherited list contents or sorting. See the
 [sidebar component contract](../spec/04-ux/08-component-spec.md#3-sidebar).
 
+## Full-window Settings
+
+The personal edition restores the Settings route from `942ee9913` after
+upstream `fbcaffff7` converted it into a global modal, which is still the behavior
+at the integrated upstream `e89051fc7`. The personal increment is preserving
+route history and the hidden, mounted workspace while Settings has focus; the
+Settings destinations, embedded model setup in the startup guide, and ordinary
+nested dialogs are not new local capabilities. The [Settings contract](../spec/04-ux/06-settings-ia.md)
+and renderer rules prohibit an upstream merge from replacing the route again.
+
 ## Audit boundary
 
 This is the evidence map for the root bilingual README, not release notes or a

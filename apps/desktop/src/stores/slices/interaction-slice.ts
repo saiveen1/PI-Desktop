@@ -49,7 +49,6 @@ export function createInteractionSlice({
   AppState,
   | "setPage"
   | "openSettings"
-  | "closeSettings"
   | "setSettingsTab"
   | "setSettingsAnchor"
   | "canNavBack"
@@ -79,10 +78,10 @@ export function createInteractionSlice({
     setPage: (page, opts) => {
       runtime.beginNavigationIntent();
       const record = opts?.record !== false;
-      // Settings is a dialog over the page; a page navigation dismisses it,
-      // exactly as leaving the former full-window Settings route did.
       set((state) => {
-        if (!record) return { page, settingsOpen: false };
+        const leavingSettings = state.page === "settings" && page !== "settings";
+        const destination = leavingSettings ? { page, settingsAnchor: null } : { page };
+        if (!record) return destination;
         const entry = {
           page,
           sessionId: page === "chat" ? state.activeSessionId : undefined,
@@ -93,8 +92,7 @@ export function createInteractionSlice({
           last?.page === entry.page && last?.sessionId === entry.sessionId;
         const nextStack = same ? stack : [...stack, entry].slice(-50);
         return {
-          page,
-          settingsOpen: false,
+          ...destination,
           navStack: nextStack,
           navIndex: nextStack.length - 1,
         };
@@ -107,20 +105,16 @@ export function createInteractionSlice({
       // Resolving it here lands a retired id on its successor instead of
       // rendering an empty content pane.
       const settingsTab = resolveSettingsTab(requested);
+      if (get().page !== "settings") get().setPage("settings");
       set((state) => ({
-        settingsOpen: true,
         settingsTab,
         settingsTabNonce: state.settingsTabNonce + 1,
       }));
     },
     openSettings: (requested) => {
-      if (requested !== undefined) {
-        get().setSettingsTab(requested);
-        return;
-      }
-      set({ settingsOpen: true });
+      if (requested !== undefined) get().setSettingsTab(requested);
+      else if (get().page !== "settings") get().setPage("settings");
     },
-    closeSettings: () => set({ settingsOpen: false, settingsAnchor: null }),
     setSettingsAnchor: (settingsAnchor) => set({ settingsAnchor }),
     canNavBack: () => get().navIndex > 0,
     canNavForward: () => get().navIndex < get().navStack.length - 1,

@@ -1,20 +1,16 @@
 /**
- * Pure rules for the app-level modal overlays: the startup guide, the release
- * announcement and the Settings dialog. Only one is on screen at a time, in
- * the fixed priority guide > announcement > settings; a lower one waits until
- * every higher one is gone.
+ * Pure rules for the two startup overlays. The guide takes priority over
+ * the release announcement. Settings is a page, not part of this queue.
  */
 
-export type AppOverlay = "guide" | "announcement" | "settings";
+export type AppOverlay = "guide" | "announcement";
 
 export function resolveAppOverlay(pending: {
   guide: boolean;
   announcement: boolean;
-  settings: boolean;
 }): AppOverlay | null {
   if (pending.guide) return "guide";
   if (pending.announcement) return "announcement";
-  if (pending.settings) return "settings";
   return null;
 }
 

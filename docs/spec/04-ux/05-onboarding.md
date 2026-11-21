@@ -30,8 +30,8 @@ rules, `AppOverlayHost.tsx` owns presentation).
   *Skip* move on without a model; the footer shows whether one is ready.
 - **Plugin launcher step** is two columns. Left: the resolved
   `openPluginLauncher` binding as keycaps (user overrides respected), a status
-  line, *Open plugin launcher* and *Change shortcut* (ends the guide and opens
-  Settings → Shortcuts). Right: a static thumbnail of the launcher panel.
+  line, *Open plugin launcher* and *Change shortcut* (ends the guide and
+  navigates to the Settings → Shortcuts page). Right: a static thumbnail of the launcher panel.
   Keycaps start dimmed and turn active once the user opens the launcher — Main
   forwards `pluginLauncher/event/shown` to the main window, and a matching
   keydown that reaches the window counts too. The step can be skipped.
@@ -40,8 +40,8 @@ rules, `AppOverlayHost.tsx` owns presentation).
   `pi.desktop.startupGuide` `{ completedVersion }`. Bumping the version shows
   it again. A blocked store degrades to showing the guide.
 - **Replay**: Settings → About → *Startup guide* opens the guide for the
-  user's current state. A replay never writes the completion marker. While it
-  is up, Settings waits underneath and returns when the guide ends.
+  user's current state. A replay never writes the completion marker. The guide
+  overlays the Settings page; dismissing it leaves that route unchanged.
 - Not shown in screenshot capture (`window.__PI_CAPTURE__`) or after
   automation calls `window.__PI_DESKTOP__.skipStartupOverlays()` (the shared
   E2E renderer client does this on connect); suppression records nothing as
@@ -66,9 +66,9 @@ component.
 
 ## 5. Modal priority
 
-The startup guide, the release announcement and the Settings dialog share one
-host and only one is mounted: **guide > announcement > settings**. At launch the
-guide is decided first; when it ends, an enabled and not-yet-shown
-announcement follows. A Settings request made while either is open is kept
-and opens afterwards. The model configuration inside the guide is part of the
-guide, not a Settings request.
+The startup host mounts at most one overlay. The guide has priority; when it
+ends, an enabled, unseen announcement follows. Neither is a navigation entry.
+[Settings](06-settings-ia.md) is a page beneath the overlays, not a third
+overlay or a queued dialog. Navigating to Settings does not dismiss or cover
+an active startup overlay. The Models step embedded in the guide does not
+itself navigate to Settings.

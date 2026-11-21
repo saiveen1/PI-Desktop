@@ -1420,7 +1420,7 @@ Running turns and pending approvals continue to gate the controls.
 ### 7.3 Focus trap
 
 - Command palette: focus trapped within palette while open
-- Settings modals: focus trapped
+- Dialogs opened from Settings trap focus; the Settings page itself does not.
 - Escape always closes the trapped surface and returns focus
 
 ### 7.4 Focus ring rules

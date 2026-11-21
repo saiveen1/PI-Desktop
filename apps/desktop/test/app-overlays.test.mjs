@@ -2,25 +2,17 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { register } from "node:module";
 import test from "node:test";
+import { slotSsr } from "./helpers/slot-ssr.mjs";
 
 register(new URL("./helpers/ts-import-hooks.mjs", import.meta.url));
 const model = await import("../src/features/startup/app-overlay-model.ts");
-const { createInteractionSlice } = await import("../src/stores/slices/interaction-slice.ts");
 
 const read = (path) => readFile(new URL(path, import.meta.url), "utf8");
 
-test("only one app overlay shows, by priority guide > announcement > settings", () => {
-  const all = { guide: true, announcement: true, settings: true };
-  assert.equal(model.resolveAppOverlay(all), "guide");
-  assert.equal(model.resolveAppOverlay({ ...all, guide: false }), "announcement");
-  assert.equal(
-    model.resolveAppOverlay({ guide: false, announcement: false, settings: true }),
-    "settings",
-  );
-  assert.equal(
-    model.resolveAppOverlay({ guide: false, announcement: false, settings: false }),
-    null,
-  );
+test("startup guide takes priority over announcements; Settings is never an overlay", () => {
+  assert.equal(model.resolveAppOverlay({ guide: true, announcement: true }), "guide");
+  assert.equal(model.resolveAppOverlay({ guide: false, announcement: true }), "announcement");
+  assert.equal(model.resolveAppOverlay({ guide: false, announcement: false, settings: true }), null);
 });
 
 test("startup guide: new users configure a model, returning users learn the launcher", () => {
@@ -67,64 +59,48 @@ test("announcement locale fallback", () => {
   assert.deepEqual(model.announcementLocaleCandidates(undefined), ["en"]);
 });
 
-function harness() {
-  let state = {
-    page: "chat",
-    activeSessionId: "s1",
-    settingsOpen: false,
-    settingsTab: "appearance",
-    settingsAnchor: null,
-    settingsTabNonce: 0,
-    navStack: [{ page: "chat", sessionId: "s1" }],
-    navIndex: 0,
-  };
-  const actions = createInteractionSlice({
-    get: () => state,
-    set: (update) => {
-      state = { ...state, ...(typeof update === "function" ? update(state) : update) };
-    },
-    runtime: { beginNavigationIntent: () => 1 },
-    interactionRuntime: {},
-  });
-  state = { ...state, ...actions };
-  return { get: () => state };
-}
-
-test("Settings is a dialog over the current page, not a route", () => {
-  const h = harness();
-  h.get().openSettings();
-  assert.equal(h.get().settingsOpen, true);
-  assert.equal(h.get().page, "chat", "the page underneath stays");
-  assert.equal(h.get().navStack.length, 1, "opening Settings records no history");
-
-  h.get().setSettingsTab("about");
-  assert.equal(h.get().settingsTab, "about");
-  assert.equal(h.get().settingsTabNonce, 1);
-
-  h.get().setSettingsAnchor("updates.title");
-  h.get().closeSettings();
-  assert.equal(h.get().settingsOpen, false);
-  assert.equal(h.get().settingsAnchor, null, "a pending anchor does not outlive the dialog");
-
-  h.get().openSettings("shortcuts");
-  assert.equal(h.get().settingsOpen, true);
-  assert.equal(h.get().settingsTab, "shortcuts");
-  h.get().setPage("plugins");
-  assert.equal(h.get().settingsOpen, false, "navigating to a page dismisses Settings");
-  assert.equal(h.get().page, "plugins");
+test("Settings deep links navigate once and preserve Back/Forward route history", async (t) => {
+  const h = await slotSsr(t);
+  const { useAppStore } = await h.load("/src/stores/app-store.ts");
+  const state = useAppStore.getState;
+  state().setPage("plugins");
+  state().setSettingsTab("about");
+  assert.equal(state().page, "settings");
+  assert.equal(state().settingsTab, "about");
+  const index = state().navIndex;
+  const nonce = state().settingsTabNonce;
+  state().openSettings("shortcuts");
+  state().openSettings();
+  assert.equal(state().settingsTab, "shortcuts");
+  assert.equal(state().settingsTabNonce, nonce + 1);
+  assert.equal(state().navIndex, index, "switching tabs or reopening does not add a route");
+  state().navBack();
+  assert.equal(state().page, "plugins");
+  state().navForward();
+  assert.equal(state().page, "settings");
+  assert.equal(state().settingsTab, "shortcuts");
+  state().setSettingsAnchor("updates.title");
+  state().setPage("chat");
+  assert.equal(state().settingsAnchor, null, "Back to app clears a pending row anchor");
+  state().navBack();
+  state().setSettingsTab("appearance");
+  state().openSettings();
+  assert.equal(state().canNavForward(), true, "in-page actions preserve forward history");
+  state().navForward();
+  assert.equal(state().page, "chat");
+  state().openSettings();
+  assert.equal(state().page, "settings");
+  assert.equal(state().settingsTab, "appearance");
 });
 
-test("the shell mounts one overlay host and Settings no longer replaces the shell", async () => {
-  const [shell, host, runtime] = await Promise.all([
-    read("../src/features/app/AppShell.tsx"),
-    read("../src/features/startup/AppOverlayHost.tsx"),
-    read("../src/features/app/useAppShellRuntime.tsx"),
-  ]);
+test("the shell's overlay host owns startup dialogs, not Settings", async () => {
+  const shell = await read("../src/features/app/AppShell.tsx");
+  const host = await read("../src/features/startup/AppOverlayHost.tsx");
   assert.match(shell, /<AppOverlayHost active=\{!showSplash\} \/>/);
-  assert.doesNotMatch(shell, /page === "settings"/);
-  assert.doesNotMatch(runtime, /"settings"/);
-  assert.match(host, /resolveAppOverlay\(/);
-  assert.match(host, /<SettingsDialog onClose=\{closeSettings\} \/>/);
+  assert.match(host, /<StartupGuideDialog\b/);
+  assert.match(host, /<AnnouncementDialog\b/);
+  assert.doesNotMatch(host, /SettingsDialog|<SettingsPage\b|overlay === "settings"/);
+  assert.match(host, /if \(exit === "openShortcuts"\) (?:setSettingsTab|openSettings)\("shortcuts"\)/);
 });
 
 test("the startup guide embeds the shared Settings destination", async () => {

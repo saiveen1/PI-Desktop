@@ -6,7 +6,7 @@ import { settingsWriter } from "./save-settings";
 
 /**
  * Read and write app settings for any surface that hosts Settings content —
- * the Settings dialog, the startup guide, or another embedding. A missing
+ * the Settings page, the startup guide, or another embedding. A missing
  * snapshot (host restarted under the renderer) is re-read once on mount and
  * can be retried by the caller.
  */

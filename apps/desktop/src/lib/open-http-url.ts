@@ -57,11 +57,7 @@ export function planHttpUrlOpen(
  */
 export function openHttpUrl(url: string): void {
   const state = useAppStore.getState();
-  // The Settings dialog covers the dock just as a full page does.
-  const plan = planHttpUrlOpen(url, {
-    ...state,
-    page: state.settingsOpen ? "settings" : state.page,
-  });
+  const plan = planHttpUrlOpen(url, state);
   if (plan.action === "ignore") return;
   if (plan.action === "workpanel") {
     if (plan.returnToChat) {

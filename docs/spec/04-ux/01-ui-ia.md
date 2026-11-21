@@ -36,7 +36,7 @@ destination, chat as the home surface, tools and permissions inline.
   **Scheduled** (hidden while scheduled tasks are disabled) and **Plugin
   market** (opens the Extensions page on its Market tab; activating it again
   while Extensions is active performs one Back step). The footer pairs a
-  labelled **Settings** entry (opens the Settings dialog) on the left and the
+  labelled **Settings** entry (opens the full-window Settings page) on the left and the
   version/update chip on the right. The personal edition retains the footer's
   notification inbox. Every configurable sidebar module can be hidden from Settings →
   Appearance → Sidebar modules (`AppSettings.sidebarModules`; all shown by
@@ -457,13 +457,14 @@ set apart by tone and spacing, and hairlines are reserved for floating layers
 (menus, sheet, dialogs). MCP, Skills, and Subagents are not tabs or sections of
 Extensions.
 
-### 3.5 Settings (modal dialog)
+### 3.5 Settings (full-window page)
 
-Settings opens over the current destination without adding a history entry.
-The dialog has search and a grouped rail; Escape and its Close button return
-to the underlying surface. The Agent group contains independent Skills, MCP,
-and Subagents destinations alongside Instructions and Model configuration;
-selecting one changes the dialog destination, not the underlying page.
+Settings replaces the visible application shell with its own search, grouped
+rail and content pane. The application shell stays mounted but hidden and
+inert. **Back to app** navigates to chat; history Back/Forward traverses the
+actual routes. See [Settings IA](06-settings-ia.md) for deep links and nested
+dialogs. The Agent group contains independent Skills, MCP and Subagents
+destinations alongside Instructions and Model configuration.
 Appearance lives inside General; global AI behavior (permissions and context
 management) lives inside 全局 AI; keyboard shortcuts and global/project
 instructions have their own destinations; provider management lives inside
@@ -514,17 +515,15 @@ shared capability contract:
 | Notification inbox | sidebar footer bell | All/Unread/Needs action; retained successful and failed tasks plus read-only approval receipts; bulk read and confirmed history-only clear |
 | Global delegations | persistent conversation/home toolbar entry | all-project paginated execution history, source-aware details without navigation, explicit Open source and handoff to existing approval controls; not a session work-panel tab |
 | Session subagents | persistent text entry in the conversation topbar | current-session running/approval status and history; opens the session index directly in the work panel and reuses existing task detail tabs |
-| Settings dialog | sidebar footer Settings, `Mod+,`, deep links | modal over the current page; waits behind the startup guide and announcement ([06-settings-ia](06-settings-ia.md) §1) |
 | Startup guide / announcement | first launch (once) or Settings → About / first launch of a release with an enabled announcement (once) | [05-onboarding](05-onboarding.md) §3–§5 |
 | Toasts | events (plugin toast, backend restored, copy) | top-center of the live main-content safe area; viewport fallback; 4s default, 8s for errors |
 | Project switcher | empty-home underlined project name | sidebar open projects + search + clone git project + open project |
 
 ## 5. Navigation model
 
-- `page` state: `chat | scheduled | plugins`; `chat` is the
-  conversation-surface route, not an operating mode. Settings is a modal
-  dialog (`settingsOpen`), not a page; it records no history. The project
-  archive is the `projects` settings tab rather than a standalone page.
+- `page` state: `chat | scheduled | plugins | settings`; `chat` is the
+  conversation-surface route, not an operating mode. The project archive
+  is the `projects` Settings tab rather than a standalone page.
 - Destination history is linear; `Cmd/Ctrl+[` and `Cmd/Ctrl+]` traverse it
   without persistent back/forward chrome. While Extensions is active, the
   sidebar Plugin market row reuses one Back step (§2 shell regions); no separate

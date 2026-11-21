@@ -5,6 +5,17 @@ on conflict the rules here win.
 
 ---
 
+## Preserve the full-window Settings route
+
+During upstream merges, reject changes that replace the independent Settings
+page with a global modal. Preserve [Settings IA](../../../docs/spec/04-ux/06-settings-ia.md):
+the application shell stays mounted but hidden and inert; **Back to app** goes
+to chat, while history traverses actual destinations. Nested dialogs and
+startup overlays are not substitutes for this route. Retain the
+[shell accessibility tests](../test/app-shell-settings-accessibility.test.mjs)
+and the [sidebar/Settings layout journey](../../../scripts/e2e/sidebar-settings.mjs);
+do not weaken their assertions to match an upstream modal.
+
 ## Shared UI primitives are mandatory
 
 Every renderer component must use the shared primitives from

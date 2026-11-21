@@ -6,12 +6,16 @@ import { loadStyles } from "./helpers/styles.mjs";
 const settingsSource = await readSettingsSource();
 const globalStyles = await loadStyles();
 
-test("the Settings dialog owns no window drag region", () => {
-  // Settings is a modal over the shell; the shell keeps its own titlebar drag
-  // band, so the dialog must not add one that would swallow control clicks.
-  assert.doesNotMatch(settingsSource, /settings-titlebar/);
-  assert.doesNotMatch(settingsSource, /className="[^"]*\bdrag\b[^"]*"/);
-  assert.doesNotMatch(globalStyles, /\.settings-titlebar\b/);
+test("the Settings page provides a drag band without intercepting control clicks", () => {
+  assert.match(settingsSource, /className="settings-titlebar" aria-hidden="true"/);
+  const band = globalStyles.match(/\n\.settings-titlebar\s*\{([^}]*)\}/)?.[1] ?? "";
+  assert.match(band, /-webkit-app-region:\s*drag;/);
+  assert.match(band, /pointer-events:\s*none;/);
+  assert.match(band, /left:\s*var\(--ds-settings-nav-width\);/);
+  assert.match(band, /right:\s*0;/);
+  assert.match(settingsSource, /className="settings-nav-top drag"/);
+  assert.match(settingsSource, /className="settings-search-wrap no-drag"/);
+  assert.match(settingsSource, /className="settings-back no-drag"/);
 });
 
 test("the Settings rail keeps the shared width token", () => {

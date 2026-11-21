@@ -31,14 +31,14 @@ test("the sidebar footer is an action bar, not a fabricated identity", () => {
   }
 });
 
-test("footer keeps the Settings dialog, the personal recycle bin and inbox, and the version chip", () => {
+test("footer keeps the Settings route, the personal recycle bin and inbox, and the version chip", () => {
   assert.deepEqual(
     [...footerSource.matchAll(/data-nav="([^"]+)"/g)].map((match) => match[1]),
     ["settings", "build"],
   );
-  assert.match(footerSource, /className=\{cx\("footer-settings", settingsOpen && "active"\)\}/);
-  assert.match(footerSource, /aria-haspopup="dialog"/);
-  assert.match(footerSource, /aria-expanded=\{settingsOpen\}/);
+  const settingsButton = footerSource.match(/<button\b[^>]*?data-nav="settings"[\s\S]*?<\/button>/)?.[0] ?? "";
+  assert.match(settingsButton, /className="footer-settings"/);
+  assert.doesNotMatch(settingsButton, /aria-haspopup="dialog"|aria-expanded/);
   assert.match(footerSource, /openSettings\(\)/);
   assert.match(footerSource, /t\("nav\.settings"\)/);
   assert.match(footerSource, /className="footer-actions"/);

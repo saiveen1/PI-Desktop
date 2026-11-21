@@ -10,25 +10,22 @@ content, and distinguish it from workflow and permission changes.
 The composer selector links here; no extra sidebar category is introduced.
 See [session personas](../03-runtime/session-personas.md).
 
-## 1. Settings root (modal dialog)
+## 1. Settings root (full-window page)
 
-Settings is a **modal dialog** over the current page (chat, Scheduled or
-Extensions). It is not a route: opening it records no navigation history and
-the page underneath keeps its state.
+Settings is an independent `settings` route with its own rail and content pane.
+It replaces the visible application chrome; it is not a dialog.
 
-- Opened from the sidebar footer **Settings** entry, `Mod+,`, the native menu,
-  global search hits and in-app deep links (`setSettingsTab` / `openSettings`).
-  Closed by the dialog's close button, `Escape`, or a press on the backdrop.
-  `Escape` belongs to the innermost layer: a menu, shortcut recorder or nested
-  dialog that handles it keeps the dialog open. Navigating to a page
-  (`setPage`), selecting a session, creating a project, or **New task** closes
-  the dialog, as leaving the former full-window page did.
-- Settings is the lowest of the three app-level modals. It waits while the
-  startup guide or the release announcement is open and appears after them
-  (priority guide > announcement > settings, see `05-onboarding.md`).
-- The dialog is up to 1080 × 760px inside a 24px viewport margin (12px below
-  760px wide), portaled to the `#pi-desktop-overlays` host on the dialog layer
-  (z 40). Native plugin views beneath are hidden while it is open.
+- The sidebar footer **Settings** entry, `Mod+,`, the native menu, global search
+  and in-app deep links all navigate to this page. Opening Settings participates
+  in normal destination history; Back and Forward traverse it.
+- The application shell for chat, Scheduled and Extensions stays mounted but
+  hidden and inert. Chat-owned portals and native views from the hidden shell
+  must not appear over Settings. Shared search, toasts and extension prompts
+  remain available.
+- Settings itself has no backdrop, modal close button or Escape-to-close
+  behavior. Escape in a menu, shortcut recorder or nested dialog is handled
+  by that control without leaving the route. The [startup guide and release
+  announcement](05-onboarding.md) are separate overlays, not Settings pages.
 - Each destination body is `SettingsDestinationContent`, shared with other
   surfaces (the startup guide embeds the Models destination) so a row behaves
   identically wherever it appears. Settings reads/writes go through
@@ -45,19 +42,22 @@ the page underneath keeps its state.
   shows a compact loading/failure state with a retry action instead of an empty
   section.
 
-- Left settings rail only, **275px** (200px below 760px wide), using the same
-  `sidebar-surface` material as the main sidebar. Only a nested settings
-  content enter wrapper plays a route animation; the scrolling inner pane,
-  rail, and backing never fade or translate. That entrance is opacity-only.
-  Dialogs opened from Settings portal to the same overlay host and stack
-  above it. Menus, dropdowns, popovers and sheets that would portal to
-  `document.body` (`portalToBody`) instead mount on the dialog's layer host
-  (`.modal-layer-host`, one step above the dialog layer), so row "…" menus,
-  pickers and market sheets stay clickable inside the dialog. The startup
-  guide provides the same host for its embedded Models page.
-- Top of rail: the pill **Search settings…**. The rail has no footer action;
-  the dialog's close button sits at its top-right corner.
-- The dialog is not a window drag region.
+- The **275px** Settings rail shares the main sidebar's `sidebar-surface`
+  material, including optional background imagery. Its ancestors stay
+  transparent for macOS vibrancy; Windows/Linux use the opaque sidebar
+  surface. The content and titlebar stay opaque. Only the nested content
+  entrance animates (opacity only), never the rail, backing or scroll pane.
+- The 46px native drag band spans rail and content without painting over the
+  rail. Controls are non-draggable. The rail reserves traffic-light clearance
+  above **Search settings…**; **Back to app** is pinned at its foot, aligned
+  with the main sidebar footer as a 32px chevron-and-label action. The
+  directory scrolls independently so the action never covers a destination.
+- Returning restores the prior sidebar width and collapsed/expanded state
+  without an entrance animation or width ramp; actual toggles still animate.
+- Nested dialogs and sheets portal to the viewport-fixed `#pi-desktop-overlays`
+  host and cover the rail as well as the content. Menus and pickers opened
+  inside a dialog, including the guide's embedded Models step, stay above
+  their owning dialog and accept pointer and keyboard input.
 - Info (About) carries a **Startup guide** row that replays the startup guide
   (`05-onboarding.md` §3) without resetting its first-launch marker.
 - A compact navigation directory with short, parallel labels and icons, in this
@@ -1252,9 +1252,8 @@ system while preserving their different data ownership:
 
 ## 3. Navigation rules
 
-- The sidebar footer Settings entry / command palette open the Settings dialog
-  on its last destination (default Appearance, the first destination in the
-  directory)
+- The sidebar footer Settings entry and command palette open the page on its
+  last destination (default Appearance, the first in the directory)
 - Composer model menu and provider setup actions deep-link to the Providers
   card inside Models
 - Plugin management remains available from the app shell's independent
@@ -1262,8 +1261,8 @@ system while preserving their different data ownership:
   not duplicated in Settings
 - Project archive is indexed by Settings search and is not duplicated as a home
   sidebar destination or standalone global-search page
-- Closing the dialog (close button, Escape, backdrop) returns to the page
-  underneath unchanged
+- **Back to app** always navigates to chat, even when Settings was opened
+  from Scheduled or Extensions. History Back instead visits the prior route.
 - Developer-only destinations, where declared, join and leave the rail, page,
   and search as one unit. Cloud sync and Remote Hosts are Experimental but not
   developer-only, so both remain available in packaged builds and are not
@@ -1271,9 +1270,9 @@ system while preserving their different data ownership:
 
 ## 4. Acceptance
 
-1. Opening Settings shows a modal dialog over the current page; the app
-   sidebar and page stay mounted underneath and keep their state
-2. Rail shows the search pill at the top, no footer action, and exactly
+1. Opening Settings replaces the visible shell with a full-window page. The
+   same chat surface stays mounted but hidden and inert; its portals are hidden.
+2. Rail shows search at the top, **Back to app** pinned at the foot, and
    Appearance / 外观,
    Conversation / 对话, Shortcuts / 快捷键, Voice / 语音, Behavior / 行为,
    Models / 模型, Instructions / 指令, Skills / 技能, MCP, Subagents / 子智能体,

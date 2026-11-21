@@ -6,18 +6,16 @@ import { loadStyles } from "./helpers/styles.mjs";
 
 const idle = (collapsed = false, presented = true) => ({ collapsed, presented, phase: "idle" });
 
-test("Settings opens as a dialog over the mounted chat shell", async () => {
+test("Settings hides the workspace without removing its shell or global search", async () => {
   const [appShell, styles] = await Promise.all([
     readFile(new URL("../src/features/app/AppShell.tsx", import.meta.url), "utf8"),
     loadStyles(),
   ]);
-  assert.doesNotMatch(appShell, /PortalVisibilityProvider|settings-mode/);
-  assert.match(appShell, /<div className="app-chat-shell">/);
-  assert.match(appShell, /<ChatSurface visible=\{page === "chat"\} \/>/);
+  assert.match(appShell, /settingsActive && "settings-mode"/);
   assert.match(appShell, /<AppOverlayHost active=\{!showSplash\} \/>/);
-  assert.match(appShell, /<SearchDialog open=\{searchOpen\}/);
+  assert.match(appShell, /<\/PortalVisibilityProvider>[\s\S]*?<SearchDialog open=\{searchOpen\}/);
   assert.match(styles, /\.app-chat-shell\s*\{\s*display:\s*contents;/);
-  assert.match(styles, /\.settings-dialog\s*\{[^}]*width:\s*min\(100%, 1080px\);/);
+  assert.match(styles, /\.app-chat-shell\[hidden\]\s*\{\s*display:\s*none;/);
 });
 
 test("initial shell presentation and settings return never play sidebar entrance", () => {

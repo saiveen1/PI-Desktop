@@ -5,8 +5,8 @@ export const PortalVisibilityContext = createContext(true);
 
 /**
  * Where body-level layers (menus, popovers, sheets) mount. Outside a modal it
- * is `document.body`. Inside a modal on the overlay host (Settings, startup
- * guide) the modal supplies a host stacked above itself; a layer portaled to
+ * is `document.body`. Inside an overlay such as the startup guide, the modal
+ * supplies a host stacked above itself; a layer portaled to
  * `document.body` would otherwise paint under the modal and swallow no clicks.
  */
 export const PortalLayerContext = createContext<HTMLElement | null>(null);
