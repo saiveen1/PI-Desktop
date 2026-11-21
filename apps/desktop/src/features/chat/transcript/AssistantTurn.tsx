@@ -67,6 +67,7 @@ import { slotMessage } from "../../../plugins/renderer-slots/slot-message";
 type AssistantTurnProps = {
   entry: AssistantTurnEntry;
   isActive: boolean;
+  atPageBoundary?: boolean;
   delegationsLive?: boolean;
   runtimeActivity?: AgentActivity;
 };
@@ -75,7 +76,8 @@ function assistantTurnPropsEqual(
   previous: AssistantTurnProps,
   next: AssistantTurnProps,
 ) {
-  if (previous.isActive !== next.isActive || previous.delegationsLive !== next.delegationsLive || previous.runtimeActivity !== next.runtimeActivity) return false;
+  if (previous.isActive !== next.isActive || previous.atPageBoundary !== next.atPageBoundary ||
+      previous.delegationsLive !== next.delegationsLive || previous.runtimeActivity !== next.runtimeActivity) return false;
   if (previous.entry === next.entry) return true;
   if (
     previous.entry.id !== next.entry.id ||
@@ -145,12 +147,14 @@ export function TranscriptEntryView({
   entry,
   isRunning,
   isActive,
+  atPageBoundary,
   delegationsLive,
   runtimeActivity,
 }: {
   entry: TranscriptEntry;
   isRunning: boolean;
   isActive: boolean;
+  atPageBoundary?: boolean;
   delegationsLive?: boolean;
   runtimeActivity?: AgentActivity;
 }) {
@@ -159,6 +163,7 @@ export function TranscriptEntryView({
       <AssistantTurn
         entry={entry}
         isActive={isActive}
+        atPageBoundary={atPageBoundary}
         delegationsLive={delegationsLive}
         runtimeActivity={runtimeActivity}
       />
@@ -230,11 +235,13 @@ export const TranscriptTail = memo(function TranscriptTail({
   entry,
   isRunning,
   isActive,
+  atPageBoundary,
   runtimeActivity,
 }: {
   entry: TranscriptEntry;
   isRunning: boolean;
   isActive: boolean;
+  atPageBoundary?: boolean;
   runtimeActivity?: AgentActivity;
 }) {
   return (
@@ -242,12 +249,14 @@ export const TranscriptTail = memo(function TranscriptTail({
       entry={entry}
       isRunning={isRunning}
       isActive={isActive}
+      atPageBoundary={atPageBoundary}
       runtimeActivity={runtimeActivity}
     />
   );
 }, (previous, next) =>
   previous.isRunning === next.isRunning &&
   previous.isActive === next.isActive &&
+  previous.atPageBoundary === next.atPageBoundary &&
   previous.runtimeActivity === next.runtimeActivity &&
   transcriptEntryEqual(previous.entry, next.entry)
 );
@@ -280,6 +289,7 @@ const StandaloneRunRow = memo(function StandaloneRunRow({
 export const AssistantTurn = memo(function AssistantTurn({
   entry,
   isActive,
+  atPageBoundary,
   delegationsLive,
   runtimeActivity,
 }: AssistantTurnProps) {
@@ -296,7 +306,9 @@ export const AssistantTurn = memo(function AssistantTurn({
   const modelSource = metaMessage?.modelId ? metaMessage : latestUsageMessage;
   const modelId = modelSource?.modelId;
   const responseModelId = modelSource?.responseModelId;
-  const complete = !isActive && !summary.hasError && summary.hasContent && Boolean(actionMessage);
+  // A tool or assistant fragment can be settled while the turn continues on an unread page.
+  const partial = Boolean(atPageBoundary && metaMessage?.runDiagnostics?.endedAt === undefined);
+  const complete = !isActive && !partial && !summary.hasError && summary.hasContent && Boolean(actionMessage);
   const answerId = complete && summary.responses.at(-1)?.message === actionMessage ? actionMessage?.id : undefined;
   const editor = useTurnContextEditor(paneSessionId, answerId);
   // A live reply is joined only on menu/copy demand. Finished reply plugins
@@ -418,6 +430,7 @@ export const AssistantTurn = memo(function AssistantTurn({
             visibleSteps={cachedVisibleProcessSteps(section.parts, hideThinking, live)}
             isActive={live}
             failed={last && summary.hasError}
+            partial={last && partial}
             activity={live ? runtimeActivity : undefined}
           >
             {section.segments.map((segment) => {

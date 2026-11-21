@@ -493,18 +493,20 @@ function TranscriptBody({
               entry={tailEntry}
               isRunning={isRunning}
               isActive={transcriptRunning && tailEntry.kind === "assistant-turn"}
+              atPageBoundary={hasMoreAfter}
               runtimeActivity={specializedActivity}
             />
           ) : null}
           {hasMoreAfter && !automaticContinuation ? (
-            <button
-              type="button"
-              className="transcript-load-later"
-              disabled={navigationLoading}
-              onClick={() => void loadNewer()}
-            >
-              {t("chat.loadLaterMessages")}
-            </button>
+            <div className="transcript-later-actions">
+              <Button type="button" variant="ghost" size="sm" className="transcript-load-later"
+                disabled={navigationLoading} onClick={() => void loadNewer()}>
+                {t("chat.loadLaterMessages")}
+              </Button>
+              <Button type="button" variant="ghost" size="sm" onClick={returnToLatest}>
+                {t("chat.scrollToBottom")}
+              </Button>
+            </div>
           ) : null}
           {liveTail ? (
             <TurnOutcomeCard

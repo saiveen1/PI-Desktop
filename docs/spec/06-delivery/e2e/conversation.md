@@ -4340,6 +4340,13 @@ command, a delegate, and an explicit Stop. Accepted input is delivered once.
   fragments in one turn, an old target outside the latest page, and a match after
   100,000 characters. Verify a visible highlight and that layout settling does
   not pull the target away. Read upward and load later messages without gaps.
+  Position a bounded search page in the middle of a long tool-heavy turn. The
+  unfinished page must not claim a finished turn, show wall-clock-based run
+  times, or expose completed-turn actions. Load the next page containing the
+  recorded end; the final answer and recorded duration appear. Reopen the
+  historical page and use its adjacent **Jump to latest** action to reach the
+  same answer without reading intervening pages. The isolated browser fixture
+  `apps/desktop/test/transcript-history-demand.test.mjs` covers both actions.
   Use the latest-message control to resume the live transcript. Scroll within
   the active conversation, reopen search, and select its own result; locate the
   target inside the same pane. Edit, retry, branch, and delete an old message. Reopen search and check the retained query.

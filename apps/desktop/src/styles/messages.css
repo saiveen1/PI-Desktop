@@ -3594,13 +3594,11 @@
   outline-offset: 2px;
 }
 
-.transcript-load-later {
-  display: block;
+.transcript-later-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   margin: 16px auto;
-  padding: 8px 12px;
-  color: var(--ds-text-muted);
-  border-radius: var(--radius-md);
-  background: var(--ds-bg-elevated-opaque);
 }
 
 .transcript-navigation-loading {

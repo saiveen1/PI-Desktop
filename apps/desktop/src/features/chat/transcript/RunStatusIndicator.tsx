@@ -31,7 +31,11 @@ export function RunStatusIndicator({
   const hovered = useRef(false);
   const panelId = useId();
   const duration = (ms: number) => formatToolDuration(Math.floor(Math.max(0, ms) / 1000));
-  const elapsed = diagnostics ? duration(runElapsedMs(diagnostics, now)) : startedAt !== undefined ? duration(now - startedAt) : undefined;
+  // A historical snapshot without a terminal event cannot measure a whole run.
+  const referenceTime = diagnostics?.endedAt ?? (summary ? undefined : now);
+  const elapsed = referenceTime === undefined ? undefined : diagnostics
+    ? duration(runElapsedMs(diagnostics, referenceTime))
+    : startedAt !== undefined ? duration(referenceTime - startedAt) : undefined;
   const phaseKey = diagnostics?.phase === "thinking" ? "chat.thinking"
     : diagnostics?.phase === "generating" ? "chat.runDetails.generating"
     : diagnostics?.phase === "searching" ? "chat.runDetails.searching"
@@ -123,23 +127,26 @@ export function RunStatusIndicator({
     };
   }, [close, open]);
 
-  const age = (at: number | undefined) => {
-    const ms = diagnostics ? runEventAgeMs(at, diagnostics, now) : undefined;
+  const age = (at: number | undefined, run: AgentRunDiagnostics, reference: number) => {
+    const ms = runEventAgeMs(at, run, reference);
     return ms === undefined ? t("chat.runDetails.notObserved") : t("chat.runDetails.ago", { time: duration(ms) });
   };
   const number = new Intl.NumberFormat(i18n.language);
   const rows: Array<[string, string]> = [];
   if (diagnostics) {
-    rows.push([t("chat.runDetails.total"), elapsed ?? ""]);
+    if (elapsed !== undefined) rows.push([t("chat.runDetails.total"), elapsed]);
     if (!summary) rows.push([t("chat.runDetails.stage"), visibleLabel]);
-    if (activity) rows.push([t("chat.runDetails.stageTime"), duration((diagnostics.endedAt ?? now) - activity.since)]);
-    if (diagnostics.requestStartedAt !== undefined) rows.push([t("chat.runDetails.requestTime"), duration((diagnostics.endedAt ?? now) - diagnostics.requestStartedAt)]);
+    if (referenceTime !== undefined && activity) rows.push([t("chat.runDetails.stageTime"), duration(referenceTime - activity.since)]);
+    if (referenceTime !== undefined && diagnostics.requestStartedAt !== undefined)
+      rows.push([t("chat.runDetails.requestTime"), duration(referenceTime - diagnostics.requestStartedAt)]);
     rows.push([t("chat.runDetails.requests"), number.format(diagnostics.requestCount)]);
     rows.push([t("chat.runDetails.attempt"), number.format(diagnostics.requestAttempt)]);
     rows.push([t("chat.runDetails.retries"), t("chat.runDetails.retrySplit", { total: diagnostics.retryCount, rate: diagnostics.rateLimitRetries, transient: diagnostics.transientRetries })]);
     rows.push([t("chat.runDetails.backoff"), duration(diagnostics.retryWaitMs)]);
-    rows.push([t("chat.runDetails.modelUpdate"), age(diagnostics.lastEventAt)]);
-    rows.push([t("chat.runDetails.answerUpdate"), age(diagnostics.lastTextAt)]);
+    if (referenceTime !== undefined) {
+      rows.push([t("chat.runDetails.modelUpdate"), age(diagnostics.lastEventAt, diagnostics, referenceTime)]);
+      rows.push([t("chat.runDetails.answerUpdate"), age(diagnostics.lastTextAt, diagnostics, referenceTime)]);
+    }
     if (diagnostics.inputTokens !== undefined) rows.push([t("chat.runDetails.context"), t("chat.runDetails.estimated", { tokens: number.format(diagnostics.inputTokens) })]);
     if (diagnostics.contextWindow !== undefined) rows.push([t("chat.runDetails.window"), number.format(diagnostics.contextWindow)]);
     if (diagnostics.termination) {

@@ -60,6 +60,7 @@ export function TurnProcess({
   visibleSteps,
   isActive,
   failed,
+  partial = false,
   activity,
   children,
 }: {
@@ -71,6 +72,8 @@ export function TurnProcess({
   isActive: boolean;
   /** The turn recorded a failure of its own, so the header must not claim success. */
   failed: boolean;
+  /** The loaded page ends before a confirmed outcome. */
+  partial?: boolean;
   /** Live runtime stage, when the runtime reports one. */
   activity?: AgentActivity;
   children: ReactNode;
@@ -118,7 +121,7 @@ export function TurnProcess({
   // long, so echoing the current one would push that metadata off the row.
   // `startedAt` is absent for history that recorded no timing, and "0s" would be
   // a lie there, so the duration is dropped instead.
-  const hasTiming = startedAt !== undefined && seconds > 0;
+  const hasTiming = !partial && startedAt !== undefined && seconds > 0;
   const phase = turnProcessPhase({ parts: turnParts, isActive, failed, activity });
   // The header's label is the status alone. Duration and tool count are separate
   // values so each can be omitted independently, and the caret can follow the
@@ -127,7 +130,7 @@ export function TurnProcess({
     if (phase.kind === "failed") return t("chat.processFailed");
     if (phase.kind === "stopped") return t("chat.processStopped");
     if (phase.kind === "unsettled") return t("chat.processUnsettled");
-    if (phase.kind === "completed") return t("chat.processCompleted");
+    if (phase.kind === "completed") return t(partial ? "chat.processUnsettled" : "chat.processCompleted");
     if (activity?.phase === "waiting-model" && activity.slow) return t("errors.PROVIDER_STREAM_SLOW");
     // Live: only stages with their own settled wording get their own label. The
     // rest describe an instant at the start of a request, and naming them would

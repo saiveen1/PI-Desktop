@@ -207,6 +207,15 @@ test('transcript history demand and turn context editing', { timeout: 30000, ski
       assert.deepEqual(open.calls, ['raw-page']);
       assert.equal(open.promptVisible, false);
     });
+    await t.test('a bounded search page never presents a partial turn as finished', async () => {
+      const expected = { answer: 'The persisted final answer.', phase: 'Finished', elapsed: '12s' };
+      for (const [action, calls] of [['later', 2], ['latest', 1]]) {
+        assert.deepEqual(await probe(`openBoundedTurn("bounded-${action}")`), {
+          phase: 'Outcome unknown', elapsed: null, total: false, actions: false, calls: 1,
+        });
+        assert.deepEqual(await probe(`finishBoundedTurn("${action}")`), { ...expected, calls });
+      }
+    });
     await t.test('Edit context previews and saves only the latest turn’s model overlays', async () => {
       const result = await evaluate('exerciseTurnContext()');
       assert.equal(result.actionCount, 1);

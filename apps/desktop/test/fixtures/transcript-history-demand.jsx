@@ -169,6 +169,54 @@ window.historyDemand = {
     await settle();
     return { rows: scroller().querySelectorAll('.message-row').length };
   },
+  async openBoundedTurn(name) {
+    const progress = { ...message('progress'), role: 'assistant', turnId: 'bounded-turn', modelId: 'test-model' };
+    const startedAt = Date.parse(progress.createdAt);
+    const runDiagnostics = { turnId: progress.turnId, startedAt, lastEventAt: startedAt + 2000,
+      requestStartedAt: startedAt + 1000, requestCount: 1, attemptCount: 1, requestAttempt: 1,
+      retryCount: 0, rateLimitRetries: 0, transientRetries: 0, retryWaitMs: 0 };
+    const answer = { ...progress, id: 'final-answer', content: 'The persisted final answer.',
+      createdAt: new Date(startedAt + 12000).toISOString(), runDiagnostics: { ...runDiagnostics, endedAt: startedAt + 12000 } };
+    const rows = [message('prompt'), { ...progress, runDiagnostics }, ...Array.from({ length: 63 }, (_, i) => ({
+      ...message(`tool-${i}`), role: 'tool', turnId: progress.turnId, toolCallId: `tool-${i}`, toolName: 'Read', toolStatus: 'success',
+    })), answer];
+    const tail = rows.slice(-10);
+    calls = 0;
+    window.piDesktop = { invoke: async (channel, options) => {
+      if (!channel.endsWith('/session/get') || options.id !== name) throw Error(`Unexpected fixture call: ${channel}`);
+      ++calls;
+      const end = options.messageAround ? 60 : Math.min(options.messageBefore, rows.length);
+      const start = Math.max(0, end - options.messageLimit);
+      return { ok: true, data: { session: { id: name, source: 'desktop', messages: rows.slice(start, end),
+        messageStart: start, messageEnd: end, hasMoreBefore: start > 0, hasMoreAfter: end < rows.length } } };
+    } };
+    useAppStore.setState({ activeSessionId: name, messages: tail, retainedTranscripts: { [name]: tail },
+      retainedSessionIds: [name], transcriptViews: {}, sessionHistory: { [name]: { messageStart: rows.length - tail.length, hasMoreBefore: true } },
+      sessions: [{ id: name, source: 'desktop' }] });
+    flushSync(() => root.render(<I18nextProvider i18n={i18n}><SessionPane key={name} sessionId={name} visible /></I18nextProvider>));
+    await useAppStore.getState().navigateTranscript({ sessionId: name, messageId: 'prompt', query: 'prompt' });
+    await until(() => scroller()?.querySelector('.transcript-load-later'), 'bounded search page did not open');
+    const details = scroller().querySelector('[data-testid="run-status-summary"] button');
+    details.click();
+    await until(() => document.querySelector('.run-status-popover'), 'run diagnostics did not open');
+    const partial = { phase: scroller().querySelector('.turn-process .tool-activity-label').textContent,
+      elapsed: details.querySelector('.working-elapsed')?.textContent ?? null,
+      total: [...document.querySelectorAll('.run-status-popover dt')].some(row => row.textContent === 'Whole turn'),
+      actions: !!scroller().querySelector('.assistant-turn .message-actions'), calls };
+    details.click();
+    return partial;
+  },
+  async finishBoundedTurn(action) {
+    const button = action === 'later' ? scroller().querySelector('.transcript-load-later')
+      : [...scroller().querySelectorAll('button')].find(button => button.textContent.trim() === i18n.t('chat.scrollToBottom'));
+    if (!button) throw Error(`No ${action} action at the page boundary`);
+    button.click();
+    const getAnswer = () => scroller().querySelector('.message-bubble[data-message-id="final-answer"]');
+    await until(() => getAnswer() && !scroller().querySelector('.transcript-load-later'), `settled answer did not render after ${action}`);
+    return { answer: getAnswer().textContent, calls,
+      phase: scroller().querySelector('.turn-process .tool-activity-label')?.textContent,
+      elapsed: scroller().querySelector('[data-testid="run-status-summary"] .working-elapsed')?.textContent };
+  },
   async foldedHistoryResult() {
     await until(() => foldedReads.length, 'no history request');
     await settle();

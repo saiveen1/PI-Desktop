@@ -2053,9 +2053,14 @@ with reset, explaining last-reply privacy and additional main-model costs.
   their stable ID. The selected message keeps complete text beyond the usual
   display cap. Render the same transcript, Markdown, message actions, and
   composer; do not open a separate reader. Preserve the live cache separately.
-  Upward paging and Load later messages extend the reading window. The existing
-  latest-message control and a new turn return to live output. Actions on an
-  old message prepare canonical input before editing, retrying, or branching.
+  Upward paging and **Load later messages** extend the reading window.
+  **Jump to latest** is available beside manual forward paging and returns
+  directly to the live tail without walking the intervening pages. A new turn
+  also returns to live output. If the page ends on a turn with no recorded
+  end, do not label it finished or offer completed-turn actions. Historical run
+  diagnostics without a recorded end omit elapsed and relative times; recorded
+  counts and retry evidence stay available. Actions on other historical messages
+  still prepare canonical input before editing, retrying, or branching.
 - Ordinary history and search use one retained-session reading view, shared
   with subagent details. A nested answer reveals its owning Task and opens the
   existing details dock at the answer, even when the parent is outside the page.
