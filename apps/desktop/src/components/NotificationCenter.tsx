@@ -124,7 +124,7 @@ export function NotificationCenter({ onBeforeOpen }: { onBeforeOpen?: () => void
   const empty = pendingNotifications.length === 0 && (filter === "pending" || rows.length === 0);
 
   return <div className="notification-center" ref={rootRef}>
-    <TooltipButton ref={triggerRef} type="button" className={`footer-notification notification-trigger ${open ? "active" : ""}`}
+    <TooltipButton ref={triggerRef} type="button" className={`footer-icon-action notification-trigger ${open ? "active" : ""}`}
       tooltip={unreadLabel} ariaLabel={unreadLabel} aria-haspopup="dialog" aria-controls="notification-popover" aria-expanded={open}
       onClick={() => { if (open) closePopover(); else { onBeforeOpen?.(); setOpen(true); } }}>
       <IconBell size={14} aria-hidden />

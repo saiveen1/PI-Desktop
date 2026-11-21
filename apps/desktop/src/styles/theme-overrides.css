@@ -84,7 +84,13 @@
   background: var(--ds-tool-row-bg);
 }
 
-.footer-notification {
+.footer-actions {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.footer-icon-action {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -97,12 +103,13 @@
     color var(--motion-duration-fast) var(--motion-ease-out);
 }
 
-.footer-notification:hover {
+.footer-icon-action:hover:not(:disabled),
+.footer-icon-action:focus-visible {
   background: var(--ds-bg-hover);
   color: var(--ds-text-primary);
 }
 
-.footer-notification.active {
+.footer-icon-action.active {
   background: var(--ds-bg-active);
   color: var(--ds-text-primary);
 }

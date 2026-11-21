@@ -1217,8 +1217,8 @@
 
 ## US-UI-03 Sidebar destinations
 - Expect the expanded home sidebar to show, top to bottom: New task,
-  Scheduled, Plugin market, then Sessions and Projects. The footer holds only
-  Settings and the version chip; there is no notification entry.
+  Scheduled, Plugin market, then Sessions and Projects. The personal footer
+  retains Settings, Recycle bin, the notification inbox, and the version chip.
 - Click Plugin market and expect the Extensions page to replace the main pane
   on its Market tab, with the Installed tab and enable/disable controls still
   available.
@@ -1297,10 +1297,14 @@
 - Window restores ≥1000×700 (target 1200×800) if Stage Manager collapses it.
 
 ## US-UI-16 Sidebar footer utility layout
-- On the light/dark home shell, the sidebar footer is a transparent utility
-  band with no separator. A labelled Settings entry sits on the left and the
-  build/version chip is right-aligned; nothing else is in the footer.
-- Clicking Settings opens the Settings dialog over the current page.
+- At the default and minimum expanded sidebar widths, with the pointer outside
+  the footer, expect labelled Settings, Recycle bin, the notification bell, and
+  the right-aligned build/version chip to stay on one row in both themes.
+  Recycle bin and notifications remain visible and keep their 32px targets;
+  a long version label may truncate instead.
+- Tab to Recycle bin and press Enter; expect the existing dialog to open.
+  Escape closes it and restores focus. The notification bell still opens its
+  own inbox; clicking Settings opens Settings over the current page.
 - Clicking the build/version chip checks for updates when current, or opens
   Settings → Info when an actionable update is available.
 - Traffic lights sit at Codex `{x:16,y:16}` with a 46px toolbar; the expanded

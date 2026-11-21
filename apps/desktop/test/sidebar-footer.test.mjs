@@ -51,6 +51,19 @@ test("footer keeps the Settings dialog, the personal recycle bin and inbox, and 
   assert.doesNotMatch(sidebarSource, /data-nav="theme"|openLogs/);
 });
 
+test("recycle bin and notifications stay visible in one footer row without hover", () => {
+  const recycleTrigger = sidebarSource.match(/<TooltipButton[^>]*data-nav="recycle-bin"[^>]*>/)?.[0] ?? "";
+  assert.match(recycleTrigger, /className="footer-icon-action"/);
+  const actions = globalStyles.match(/\.footer-actions\s*\{[^}]+\}/)?.[0] ?? "";
+  assert.match(actions, /display:\s*flex/);
+  assert.match(actions, /align-items:\s*center/);
+  assert.match(actions, /flex:\s*0 0 auto/);
+  const action = globalStyles.match(/\.footer-icon-action\s*\{[^}]+\}/)?.[0] ?? "";
+  assert.match(action, /width:\s*32px/);
+  assert.match(action, /height:\s*32px/);
+  assert.doesNotMatch(action, /opacity:\s*0\b|visibility:\s*hidden/);
+});
+
 test("footer sits on the sidebar content grid without a hairline", () => {
   const block = globalStyles.match(/\.sidebar-footer\s*\{[^}]+\}/)?.[0] ?? "";
   // Zero side padding keeps the chip text and trailing icon aligned with the

@@ -509,11 +509,11 @@ Light theme: minimal shadows only where layering is insufficient.
 | `elevation-2` | bg-tertiary | bg-tertiary + `shadow-md` | Hover, dropdowns |
 | `elevation-3` | bg-tertiary + border-accent | bg-white + `shadow-lg` | Dialogs, overlays |
 
-Sidebar footer: a transparent utility band with no separator. The Settings,
-Plugins and notification icon buttons stay grouped on the left. The
-build/version chip is right-aligned and remains the update check/release entry
-point. Hover and active states use semantic sidebar surfaces; neither side adds
-a persistent card fill.
+Sidebar footer: a transparent utility band with no separator. Labelled Settings
+and the 32px Recycle bin and notification buttons share one row. Both icon
+buttons remain visible without hover. The right-aligned build/version chip can
+truncate its label before the icon buttons shrink. Hover and active states use
+semantic sidebar surfaces; neither side adds a persistent card fill.
 
 Every scroll container in the renderer uses one quiet scrollbar: 6px,
 trackless, with a thumb that is transparent at rest. The thumb appears only

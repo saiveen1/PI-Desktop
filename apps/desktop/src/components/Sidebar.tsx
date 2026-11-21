@@ -2675,7 +2675,7 @@ export function Sidebar({
 
         <SidebarFooter onBeforeSettings={() => closeMenus(false)} actions={
           <>
-            <TooltipButton className="sidebar-toolbar-button" data-nav="recycle-bin"
+            <TooltipButton className="footer-icon-action" data-nav="recycle-bin"
               tooltip={t("sessionOrganization.trashTitle")} ariaLabel={t("sessionOrganization.trashTitle")}
               disabled={organizationBusy} onClick={() => { closeMenus(); setTrashOpen(true); }}>
               <IconTrash size={14} aria-hidden />
