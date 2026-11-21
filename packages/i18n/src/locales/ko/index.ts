@@ -522,7 +522,6 @@ export const ko = {
     loadingEarlierMessages: "이전 메시지 불러오는 중…",
     loadLaterMessages: "이후 메시지 불러오기",
     showEarlierMessages: "이전 메시지 표시",
-    loadEarlierToolDetails: "이전 도구 세부 정보 불러오기",
     copy: "복사",
     copied: "복사됨",
     copyFailed: "클립보드에 복사하지 못했습니다",

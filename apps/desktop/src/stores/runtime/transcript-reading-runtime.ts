@@ -1,4 +1,6 @@
 import type { SessionDetail } from "@pi-desktop/shared";
+import { buildTranscriptEntries } from "../../lib/assistant-turns";
+import { getAssistantTurnSummary, messageContentFacts } from "../../lib/transcript-summary";
 import type { SessionHistoryReadOptions } from "../../lib/api";
 import { isRemoteSession } from "../../lib/remote-session-safety";
 import {
@@ -196,28 +198,50 @@ export function createTranscriptReadingRuntime({ get, set }: StoreAccess, read: 
         return;
       if (options?.signal?.aborted) return;
       const limit = view.focus ? TRANSCRIPT_SEARCH_PAGE_SIZE : TRANSCRIPT_PAGE_SIZE;
-      const pending: TranscriptView = { ...view, loading: direction };
+      const pending: TranscriptView = { ...view, loading: options?.revealPrevious ? "target" : direction };
       const restorePrevious = () => {
         if (get().transcriptViews[sessionId] !== pending) return;
         if (previous) publish(sessionId, previous);
         else clearTranscriptView(sessionId);
       };
       publish(sessionId, pending);
+      options?.signal?.addEventListener("abort", restorePrevious, { once: true });
       try {
-        if (direction === "before" && options?.previousPrompt && !remote && !sessionId.startsWith("native-pi:") &&
-          (!view.focus || view.focus.kind === "previous-prompt") && get().activeSessionId === sessionId && !get().runningSessions[sessionId]) {
-          const { session } = await read(sessionId, { messageBefore: view.messageStart,
-            messageLimit: TRANSCRIPT_PAGE_SIZE, contentLimit: TRANSCRIPT_CONTENT_LIMIT, previousUserMessage: true });
-          if (get().transcriptViews[sessionId] !== pending) return;
-          if (options.signal?.aborted || get().activeSessionId !== sessionId || get().runningSessions[sessionId]) {
+        if (direction === "before" && options?.revealPrevious && !remote && !sessionId.startsWith("native-pi:") &&
+          !view.focus && !view.hasMoreAfter && get().activeSessionId === sessionId && !get().runningSessions[sessionId]) {
+          const ownsRead = () => {
+            if (get().transcriptViews[sessionId] !== pending) return false;
+            if (get().activeSessionId === sessionId && !get().runningSessions[sessionId] && !options.signal?.aborted) return true;
             restorePrevious();
-            return;
-          }
-          const prompt = session?.messages.at(-1);
-          if (session && prompt?.role === "user" && !prompt.parentToolCallId && !prompt.nestedParentToolCallId && session.hasMoreAfter &&
-            session.messageEnd !== undefined && session.messageEnd <= view.messageStart) {
-            publish(sessionId, transcriptViewFromSession(session, { sessionId, messageId: prompt.id, query: "",
-              kind: "previous-prompt", requestId: ++nextRequestId }));
+            return false;
+          };
+          const { session: boundary } = await read(sessionId, { messageBefore: view.messageStart,
+            messageLimit: limit, contentLimit: TRANSCRIPT_CONTENT_LIMIT, previousUserMessage: true });
+          if (!ownsRead()) return;
+          const prompt = boundary?.messages.at(-1);
+          const end = boundary?.messageEnd;
+          if (boundary && prompt?.role === "user" && !prompt.parentToolCallId && !prompt.nestedParentToolCallId &&
+            end !== undefined && end > 0 && end <= view.messageStart) {
+            const pages = [];
+            // Read the gap in bounded pages, then publish it once, in order. The
+            // folded work stays expandable and the live answer never disappears.
+            for (let cursor = view.messageStart; cursor > end;) {
+              const { session: page } = await read(sessionId, { messageBefore: cursor,
+                messageLimit: Math.min(limit, cursor - end), contentLimit: TRANSCRIPT_CONTENT_LIMIT });
+              if (!ownsRead()) return;
+              if (!page || page.messageEnd !== cursor || page.messageStart === undefined ||
+                page.messageStart < end || page.messageStart >= cursor) throw new Error("Conversation history is no longer contiguous.");
+              pages.push(page.messages);
+              cursor = page.messageStart;
+            }
+            const earlier = buildTranscriptEntries(boundary.messages.slice(0, -1)).entries.findLast((entry) =>
+              entry.kind === "assistant-turn" || (entry.kind === "message" && entry.message.role === "user"));
+            const reply = earlier?.kind === "assistant-turn" ? getAssistantTurnSummary(earlier).responses.findLast(({ message }) =>
+              !message.error && messageContentFacts(message).hasContent)?.message : undefined;
+            publish(sessionId, extendTranscriptView(pending, {
+              ...boundary, messages: [...boundary.messages, ...pages.reverse().flat()], messageEnd: view.messageStart,
+            }, "before"));
+            options.revealPrevious(reply?.id ?? prompt.id);
             return;
           }
         }
@@ -246,6 +270,8 @@ export function createTranscriptReadingRuntime({ get, set }: StoreAccess, read: 
           return;
         }
         reportError(sessionId, pending, error);
+      } finally {
+        options?.signal?.removeEventListener("abort", restorePrevious);
       }
     },
   };

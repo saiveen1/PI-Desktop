@@ -513,7 +513,6 @@ export const de = {
     "loadingEarlierMessages": "Frühere Nachrichten laden…",
     loadLaterMessages: "Spätere Nachrichten laden",
     "showEarlierMessages": "Frühere Nachrichten anzeigen",
-    "loadEarlierToolDetails": "Frühere Werkzeugdetails laden",
     "copy": "Kopieren",
     "copied": "Kopiert",
     "copyFailed": "Kopieren in die Zwischenablage fehlgeschlagen",

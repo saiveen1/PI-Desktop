@@ -522,7 +522,6 @@ export const tr = {
     loadingEarlierMessages: "Önceki iletiler yükleniyor…",
     loadLaterMessages: "Sonraki mesajları yükle",
     showEarlierMessages: "Önceki iletileri göster",
-    loadEarlierToolDetails: "Önceki araç ayrıntılarını yükle",
     copy: "Kopyala",
     copied: "Kopyalandı",
     copyFailed: "Panoya kopyalanamadı",

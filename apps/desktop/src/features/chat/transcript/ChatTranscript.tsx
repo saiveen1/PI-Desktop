@@ -186,8 +186,6 @@ function TranscriptBody({
     veilPhase,
     handleScroll,
     revealEarlierHistory,
-    canLoadToolHistory,
-    loadToolHistory,
     releaseFollow,
     jumpToLatest,
     loadNewer,
@@ -437,7 +435,7 @@ function TranscriptBody({
   };
 
   return (
-    <TranscriptSearchContext.Provider value={searchTarget?.kind === "previous-prompt" ? null : searchTarget}>
+    <TranscriptSearchContext.Provider value={searchTarget}>
     <DisclosureAnchorContext.Provider value={disclosureAnchorNotifier}>
     <SlotSessionProvider sessionId={sessionId ?? ""}>
     <div
@@ -477,10 +475,6 @@ function TranscriptBody({
                 onClick={revealEarlierHistory}>
                 {loadingOlder ? t("chat.loadingEarlierMessages") : t("chat.showEarlierMessages")}
               </Button>
-            ) : null}
-            {canLoadToolHistory ? (
-              <Button type="button" variant="ghost" size="sm" disabled={historyPending || navigationLoading}
-                onClick={loadToolHistory}>{t("chat.loadEarlierToolDetails")}</Button>
             ) : null}
           </div>
           {hydrationBounded ? (

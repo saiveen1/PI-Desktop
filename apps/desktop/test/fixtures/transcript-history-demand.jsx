@@ -146,16 +146,23 @@ window.historyDemand = {
     return { before, wheelTop, finalTop: el.scrollTop, belowViewport, heightDelta: el.scrollHeight - initialHeight };
   },
   async openFoldedHistory(name = 'folded-history') {
-    const prompt = message('earlier-user');
-    const rows = [message('even-earlier'), prompt, ...Array.from({ length: 600 }, (_, i) => ({
-      ...message(`folded-tool-${i}`), role: 'tool', turnId: 'large-turn', toolCallId: `call-${i}`, toolName: 'Read', toolStatus: 'success',
-    })), { ...message('folded-answer'), role: 'assistant', turnId: 'large-turn' }];
+    const turn = (prompt, answer, count) => [message(prompt),
+      ...Array.from({ length: count }, (_, i) => ({
+        ...message(`${prompt}-tool-${i}`), role: 'tool', turnId: prompt,
+        toolCallId: `${prompt}-call-${i}`, toolName: 'Read', toolStatus: 'success',
+      })), { ...message(answer), role: 'assistant', turnId: prompt }];
+    const rows = name === 'single-reply' ? turn('earlier-user', 'folded-answer', 664)
+      : [...(name === 'previous-reply' ? turn('previous-user', 'previous-answer', 2) : []),
+        ...turn('earlier-user', 'earlier-answer', 795), ...turn('follow-up', 'follow-up-answer', 9),
+        ...turn('another-prompt', 'another-answer', 64), ...turn('latest-prompt', 'folded-answer', 7)];
     const start = rows.length - 100;
     const tail = rows.slice(start);
     foldedReads = [];
     window.piDesktop = { invoke: async (channel, options) => {
       if (!channel.endsWith('/session/get') || options.id !== name) throw Error(`Unexpected fixture call: ${channel}`);
-      const before = options.previousUserMessage ? 2 : options.messageBefore;
+      const before = options.previousUserMessage
+        ? rows.findLastIndex((row, index) => row.role === 'user' && index < options.messageBefore) + 1
+        : Math.min(options.messageBefore ?? rows.length, rows.length);
       foldedReads.push(options.previousUserMessage ? 'previous-prompt' : 'raw-page');
       const pageStart = Math.max(0, before - options.messageLimit);
       return { ok: true, data: { session: { id: name, source: 'desktop', messages: rows.slice(pageStart, before),
@@ -167,7 +174,7 @@ window.historyDemand = {
     flushSync(() => root.render(<I18nextProvider i18n={i18n}><SessionPane key={name} sessionId={name} visible /></I18nextProvider>));
     await until(() => scroller()?.querySelector('.turn-process > button[aria-expanded="false"]'), 'tool activity did not fold');
     await settle();
-    return { rows: scroller().querySelectorAll('.message-row').length };
+    return { calls: [...foldedReads], latestAnswer: !!scroller().querySelector('[data-message-id="folded-answer"]') };
   },
   async openBoundedTurn(name) {
     const progress = { ...message('progress'), role: 'assistant', turnId: 'bounded-turn', modelId: 'test-model' };
@@ -217,15 +224,18 @@ window.historyDemand = {
       phase: scroller().querySelector('.turn-process .tool-activity-label')?.textContent,
       elapsed: scroller().querySelector('[data-testid="run-status-summary"] .working-elapsed')?.textContent };
   },
-  async foldedHistoryResult() {
-    await until(() => foldedReads.length, 'no history request');
+  async foldedHistoryResult(expected = 1, target = 'earlier-user') {
+    await until(() => foldedReads.length >= expected, `history read ${expected} did not start`);
     await settle();
     const el = scroller();
-    const rect = el.querySelector('[data-message-id="earlier-user"]')?.getBoundingClientRect();
+    const rect = el.querySelector(`[data-message-id="${target}"]`)?.getBoundingClientRect();
     const bounds = el.getBoundingClientRect();
     const view = useAppStore.getState().transcriptViews[useAppStore.getState().activeSessionId];
     return { calls: foldedReads, promptVisible: !!rect && rect.bottom > bounds.top && rect.top < bounds.bottom,
-      rows: view?.messages.length };
+      rows: view?.messages.length, latestAnswer: !!el.querySelector('[data-message-id="folded-answer"]'),
+      later: !!el.querySelector('.transcript-load-later'), top: el.scrollTop, targetTop: rect ? rect.top - bounds.top : null,
+      rendered: [...el.querySelectorAll('.message-row [data-message-id], .message-row[data-message-id]')].slice(0, 12).map(row => row.dataset.messageId),
+      head: view?.messages.slice(0, 6).map(row => `${row.id}:${row.turnId ?? ''}`) };
   },
 };
 

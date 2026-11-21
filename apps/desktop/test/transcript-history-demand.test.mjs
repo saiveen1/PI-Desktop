@@ -181,31 +181,61 @@ test('transcript history demand and turn context editing', { timeout: 30000, ski
       await wheel(-80);
       assert.ok((await probe('state()')).top < after.finalTop, 'native scrolling still works inside the open reasoning');
     });
-    await t.test('one upward gesture crosses a folded tool-only range without accumulating it', async () => {
-      const before = await probe('openFoldedHistory()');
-      assert.equal(before.rows, 1);
-      const point = await probe('wheelPoint()');
-      await send('Input.dispatchMouseEvent', { type: 'mouseWheel', ...point, deltaX: 0, deltaY: -1000 });
-      const jumped = await probe('foldedHistoryResult()');
-      assert.deepEqual(jumped.calls, ['previous-prompt']);
-      assert.ok(jumped.promptVisible);
-      assert.ok(jumped.rows < 10);
-      await probe('jumpLatest()');
-      assert.deepEqual((await probe('foldedHistoryResult()')).calls, ['previous-prompt']);
-      await probe('openFoldedHistory("raw-tool-history")');
-      await evaluate(`document.querySelectorAll('.transcript-history-loading button')[1].click()`);
-      const details = await probe('foldedHistoryResult()');
-      assert.deepEqual(details.calls, ['raw-page']);
-      assert.equal(details.rows, 200);
-      assert.equal(details.promptVisible, false);
+    await t.test('ordinary upward navigation keeps the latest rows in a folded long conversation', async () => {
+      for (const action of ['top', 'minimap']) {
+        const before = await probe(`openFoldedHistory("folded-${action}")`);
+        assert.equal(before.calls.length, 0, 'opening does not load history');
+        assert.equal(before.latestAnswer, true, 'opening shows the latest answer');
+        await probe(`click("${action}")`);
+        const page = await probe('foldedHistoryResult()');
+        assert.deepEqual(page.calls, ['raw-page'], `ordinary ${action} must not jump to the first prompt`);
+        assert.equal(page.rows, 200);
+        assert.equal(page.latestAnswer, true);
+        assert.equal(page.later, false);
+        if (action === 'top') {
+          for (let pages = 2; pages <= 8; pages++) {
+            await probe('click("top")');
+            const older = await probe(`foldedHistoryResult(${pages})`);
+            assert.deepEqual(older.calls, Array(pages).fill('raw-page'));
+            assert.equal(older.rows, Math.min(883, 100 * (pages + 1)));
+            assert.equal(older.latestAnswer, true);
+            assert.equal(older.later, false);
+          }
+          await probe('jumpLatest()');
+          const latest = await probe('foldedHistoryResult(8)');
+          assert.equal(latest.latestAnswer, true);
+          assert.equal(latest.calls.length, 8, 'latest does not refill released history');
+        }
+      }
       await probe('openFoldedHistory("open-tool-history")');
       await evaluate(`document.querySelector('.turn-process > button').click()`);
       await probe('state()');
-      const openPoint = await probe('wheelPoint()');
-      await send('Input.dispatchMouseEvent', { type: 'mouseWheel', ...openPoint, deltaX: 0, deltaY: -10000 });
+      const point = await probe('wheelPoint()');
+      await send('Input.dispatchMouseEvent', { type: 'mouseWheel', ...point, deltaX: 0, deltaY: -10000 });
       const open = await probe('foldedHistoryResult()');
       assert.deepEqual(open.calls, ['raw-page']);
-      assert.equal(open.promptVisible, false);
+      assert.equal(open.latestAnswer, true);
+    });
+    await t.test('one upward wheel reveals the preceding readable boundary without replacing the latest answer', async () => {
+      for (const [name, target, pages] of [['single-reply', 'earlier-user', 7], ['previous-reply', 'previous-answer', 9]]) {
+        const before = await probe(`openFoldedHistory("${name}")`);
+        assert.deepEqual(before, { calls: [], latestAnswer: true });
+        const point = await probe('wheelPoint()');
+        await send('Input.dispatchMouseEvent', { type: 'mouseWheel', ...point, deltaX: 0, deltaY: -10000 });
+        const landed = await probe(`foldedHistoryResult(1, "${target}")`);
+        assert.equal(landed.promptVisible, true, `${name} did not land on ${target}: ${JSON.stringify(landed)}`);
+        assert.equal(landed.latestAnswer, true);
+        assert.equal(landed.later, false);
+        assert.deepEqual(landed.calls, ['previous-prompt', ...Array(pages - 1).fill('raw-page')]);
+        const top = await probe('wheelPoint()');
+        await send('Input.dispatchMouseEvent', { type: 'mouseWheel', ...top, deltaX: 0, deltaY: -10000 });
+        assert.equal((await probe('state()')).top, 0);
+        assert.equal((await probe('foldedHistoryResult()')).calls.length, pages, 'the oldest boundary does not read again');
+        await probe('jumpLatest()');
+        const latest = await probe('foldedHistoryResult()');
+        assert.equal(latest.latestAnswer, true);
+        assert.equal(latest.calls.length, pages, 'jumping to latest needs no intervening read');
+      }
     });
     await t.test('a bounded search page never presents a partial turn as finished', async () => {
       const expected = { answer: 'The persisted final answer.', phase: 'Finished', elapsed: '12s' };

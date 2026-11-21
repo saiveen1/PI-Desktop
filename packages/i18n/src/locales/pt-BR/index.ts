@@ -512,7 +512,6 @@ export const ptBR = {
     loadingEarlierMessages: "Carregando mensagens anteriores…",
     loadLaterMessages: "Carregar mensagens posteriores",
     showEarlierMessages: "Mostrar mensagens anteriores",
-    loadEarlierToolDetails: "Carregar detalhes anteriores das ferramentas",
     copy: "Copiar",
     copied: "Copiado",
     copyFailed: "Não foi possível copiar para a área de transferência",

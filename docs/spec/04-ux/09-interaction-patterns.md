@@ -1755,16 +1755,17 @@ Project drag/drop follows these patterns:
   transaction coalesces that demand into at most one continuation after a
   successful settle, and only if the viewport remains near the edge. Reversing
   direction, navigation, hiding the pane, or a failed/empty read cancels it.
-- At the oldest loaded edge of a settled local Desktop session, a page-sized
-  range starting in folded tool activity may not add visible height when
-  prepended. After cached rows are reachable, upward boundary input and the
-  earlier-history controls seek the preceding top-level user message in one
-  bounded read. The result replaces the reading range, without merging across
-  the skipped physical span or changing the live cache. **Load earlier tool
-  details** still reads one ordinary page; **Load later messages** can traverse
-  the gap explicitly and **Scroll to bottom** returns to the original live tail.
-  Open activity, active turns, search, and remote/native sessions keep ordinary
-  paging. A missing target falls back to an ordinary older page.
+- At the oldest loaded edge of a settled local Desktop session, the next
+  upward gesture over a folded tool-heavy turn reveals the previous readable
+  reply, or the current turn's prompt when there is no previous reply. One
+  gesture owns the prompt lookup and all contiguous bounded pages needed to
+  reach it. Append no disjoint ranges: keep the current reply and expandable
+  activity, and align to the destination only after its pages have joined.
+  At the true start, do not read again. Inside prose or expanded activity,
+  during a run, or in search/restored, remote, or native sessions, retain
+  ordinary scrolling and paging. **Show earlier messages** and minimap
+  continuation still read one adjacent page. Failure, reversal, pane change,
+  or returning to latest may not move the reader to an obsolete destination.
 - Assistant prose may release its Markdown renderer outside a five-screen
   retention buffer and restore it inside a three-screen entry buffer, keeping
   measured-height message/prose shells. Measurements must match the current

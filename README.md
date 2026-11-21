@@ -139,9 +139,10 @@ This edition strengthens the existing framework rather than replacing it.
 - **Adjust the sidebar lists independently.** Fold Pinned, Recent, or Projects
   by clicking its heading, or drag its bottom edge to set its height. Each
   section remembers its own layout when the app reopens.
-- **Earlier prompts in tool-heavy chats.** When the oldest loaded range starts
-  inside a folded tool run, go directly to the preceding prompt without loading
-  all intervening tool records. Older tool details remain available on demand.
+- **Read past folded work in long chats.** At the top of a folded run, one
+  upward gesture reaches the preceding reply, or the prompt that started the
+  run if there is no preceding reply. Current answers and expandable details
+  stay in the conversation.
 
 - **Edit an answer's model context.** In an idle local conversation, edit or
   exclude intermediate prose, thinking, tool arguments/results and the final

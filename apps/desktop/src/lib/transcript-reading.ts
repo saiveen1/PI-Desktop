@@ -11,11 +11,11 @@ export type TranscriptSearchTarget = {
   sessionId: string;
   messageId: string;
   query: string;
-  kind?: "previous-prompt";
+  kind?: "history-boundary";
   requestId: number;
 };
 
-export type TranscriptEarlierRead = { previousPrompt?: boolean; signal?: AbortSignal };
+export type TranscriptEarlierRead = { revealPrevious?: (messageId: string) => void; signal?: AbortSignal };
 
 /** One renderer reading range, shared by ordinary history and search navigation. */
 export type TranscriptView = {

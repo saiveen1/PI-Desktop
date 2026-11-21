@@ -513,7 +513,6 @@ export const fr = {
     "loadingEarlierMessages": "Chargement des messages précédents…",
     loadLaterMessages: "Charger les messages suivants",
     "showEarlierMessages": "Afficher les messages précédents",
-    "loadEarlierToolDetails": "Charger les détails précédents des outils",
     "copy": "Copier",
     "copied": "Copié",
     "copyFailed": "Impossible de copier dans le presse-papiers",

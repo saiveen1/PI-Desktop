@@ -265,27 +265,26 @@ test("latest releases a deep reading cache and older history remains reachable b
   assert.equal(r.visible().length, 101);
 });
 
-test("a folded range jump replaces renderer history without merging across the skipped physical range", async () => {
+test("one boundary read retains the tail and reveals the previous completed answer", async () => {
   const live = [message("latest")];
-  const calls = [];
+  const prompt = message("earlier-user");
+  const answer = message("previous-answer", "Previous answer", { role: "assistant" });
+  const calls = [], revealed = [];
   const r = reader(async (_id, options) => {
     calls.push(options);
-    return options.previousUserMessage
-      ? page([message("earlier-user")], { messageStart: 1, messageEnd: 2, hasMoreAfter: true })
-      : page([message("later-tool", "detail", { role: "tool" })], { messageStart: 2, messageEnd: 62 });
+    if (options.previousUserMessage) return page([answer, prompt], { messageStart: 0, messageEnd: 2, hasMoreBefore: false });
+    return options.messageBefore === 120
+      ? page([message("last-tool", "detail", { role: "tool" })], { messageStart: 20, messageEnd: 120 })
+      : page([message("first-tool", "detail", { role: "tool" })], { messageStart: 2, messageEnd: 20 });
   }, { messages: live });
-  await r.loadTranscriptPage("s", "before", { previousPrompt: true });
-  assert.equal(calls[0].messageBefore, 120);
-  assert.equal(calls[0].messageLimit, 100);
-  assert.equal(r.view().focus.kind, "previous-prompt");
-  assert.deepEqual(r.visible().map(row => row.id), ["earlier-user"]);
+  await r.loadTranscriptPage("s", "before", { revealPrevious: id => revealed.push(id) });
+  assert.deepEqual(calls.map(({ messageBefore, messageLimit }) => [messageBefore, messageLimit]), [[120, 100], [120, 100], [20, 18]]);
+  assert.deepEqual(revealed, ["previous-answer"]);
+  assert.equal(r.view().focus, null);
+  assert.equal(r.view().hasMoreBefore, false);
+  assert.equal(r.view().hasMoreAfter, false);
+  assert.deepEqual(r.visible().map(row => row.id), ["previous-answer", "earlier-user", "first-tool", "last-tool", "latest"]);
   assert.equal(r.get().messages, live);
-  await r.loadTranscriptPage("s", "after");
-  assert.deepEqual(r.visible().map(row => row.id), ["earlier-user", "later-tool"]);
-  assert.equal(calls[1].messageBefore, 62);
-  r.returnToLatestTranscript("s");
-  assert.equal(r.view(), undefined);
-  assert.equal(r.visible(), live);
 });
 
 test("no previous prompt falls back to one page; cancelling a jump never publishes its result", async () => {
@@ -296,17 +295,53 @@ test("no previous prompt falls back to one page; cancelling a jump never publish
     if (options.previousUserMessage) return calls === 1 ? { session: null } : jump.promise;
     return page([message("ordinary-row")], { messageStart: 98, messageEnd: 120 });
   });
-  await r.loadTranscriptPage("s", "before", { previousPrompt: true });
+  const revealPrevious = () => assert.fail("no readable boundary to reveal");
+  await r.loadTranscriptPage("s", "before", { revealPrevious });
   assert.equal(calls, 2);
   assert.equal(r.view().focus, null);
   const controller = new AbortController();
-  const pending = r.loadTranscriptPage("s", "before", { previousPrompt: true, signal: controller.signal });
+  const pending = r.loadTranscriptPage("s", "before", { revealPrevious, signal: controller.signal });
   controller.abort();
   jump.resolve(page([message("discarded-prompt")], { messageStart: 0, messageEnd: 1 }));
   await pending;
   assert.equal(calls, 3);
   assert.deepEqual(r.visible().map(row => row.id), ["ordinary-row", "tail"]);
   assert.equal(r.view().loading, null);
+});
+
+test("an interrupted or noncontiguous boundary read cannot move the reader", async () => {
+  for (const interrupt of ["abort", "latest", "switch", "new-run", "error", "gap"]) {
+    const began = deferred();
+    const landing = deferred();
+    const prompt = message("earlier-user");
+    const live = [message("latest")];
+    const controller = new AbortController();
+    const r = reader((_id, options) => {
+      if (options.previousUserMessage) return Promise.resolve(page([prompt], { messageStart: 0, messageEnd: 1 }));
+      began.resolve();
+      return landing.promise;
+    }, { messages: live });
+    const pending = r.loadTranscriptPage("s", "before", { revealPrevious: () => assert.fail(interrupt), signal: controller.signal });
+    await began.promise;
+    assert.equal(r.view().focus, null, interrupt);
+    assert.deepEqual(r.visible(), live, interrupt);
+    if (interrupt === "abort") {
+      controller.abort();
+      assert.equal(r.view(), undefined, "abort releases loading even before IO settles");
+    }
+    if (interrupt === "latest") r.prepareReturnToLatestTranscript("s")();
+    if (interrupt === "switch") r.set({ activeSessionId: "other" });
+    if (interrupt === "new-run") r.set({ runningSessions: { s: true } });
+    if (interrupt === "error") landing.reject(Error("History read failed"));
+    else landing.resolve(page([message("older-tool", "detail", { role: "tool" })], {
+      messageStart: interrupt === "gap" ? 120 : 20, messageEnd: 120,
+    }));
+    await pending;
+    assert.deepEqual(r.visible(), live, interrupt);
+    assert.equal(r.view()?.focus ?? null, null, interrupt);
+    assert.deepEqual(r.errors, interrupt === "error" ? ["History read failed"]
+      : interrupt === "gap" ? ["Conversation history is no longer contiguous."] : []);
+  }
 });
 
 test("search supersedes an ordinary page and return-to-latest cancels historical paging", async () => {

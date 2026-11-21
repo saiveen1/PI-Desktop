@@ -112,6 +112,12 @@ export function useTranscriptScroll({
   // listener; the projection it describes is only known later in this render.
   const historyLengthRef = useRef(0);
   const foldedBoundaryRef = useRef(false);
+  const boundaryRequest = useRef(0);
+  const [boundaryTarget, setBoundaryTarget] = useState<TranscriptSearchTarget | null>(null);
+  const clearBoundaryTarget = useCallback(() => setBoundaryTarget(null), []);
+  useLayoutEffect(() => {
+    if (!paneVisible || isRunning || searchTarget) clearBoundaryTarget();
+  }, [clearBoundaryTarget, isRunning, paneVisible, searchTarget]);
   const promptReadRef = useRef<AbortController | null>(null);
   const cancelPromptRead = useCallback(() => { promptReadRef.current?.abort(); }, []);
   useLayoutEffect(() => cancelPromptRead, [cancelPromptRead, paneVisible]);
@@ -210,7 +216,7 @@ export function useTranscriptScroll({
   } = useTranscriptHistoryPaging({
     scrollRef, contentRef, visible: paneVisible, sourceHead: messages[0]?.id, onStart: startHistoryReading,
     canRetain: (paging) => paneVisible && !pinnedRef.current && (paging || (!latestNavigation.isActive() &&
-      !readingPositionPendingRef.current && !isDisclosureAnchorHeld() && !searchTarget)),
+      !readingPositionPendingRef.current && !isDisclosureAnchorHeld() && !searchTarget && !boundaryTarget)),
     onPosition: recordScrollPosition,
     onSettled: (resumeEarlier) => {
       rememberReadingPosition();
@@ -219,14 +225,16 @@ export function useTranscriptScroll({
   });
   const releaseNavigationFollow = useCallback(() => {
     cancelPromptRead();
+    clearBoundaryTarget();
     cancelHistoryPaging();
     releaseFollow();
-  }, [cancelPromptRead, cancelHistoryPaging, releaseFollow]);
+  }, [cancelPromptRead, cancelHistoryPaging, clearBoundaryTarget, releaseFollow]);
   const notifyDisclosure = useCallback<typeof disclosureAnchorNotifier>((title) => {
     cancelPromptRead();
+    clearBoundaryTarget();
     cancelHistoryPaging();
     disclosureAnchorNotifier(title);
-  }, [cancelPromptRead, cancelHistoryPaging, disclosureAnchorNotifier]);
+  }, [cancelPromptRead, cancelHistoryPaging, clearBoundaryTarget, disclosureAnchorNotifier]);
 
   useLayoutEffect(() => {
     if (!navigationLoading || !latestNavigation.isActive()) return;
@@ -235,7 +243,7 @@ export function useTranscriptScroll({
     rememberReadingPosition();
   }, [latestNavigation, leaveFollow, navigationLoading, rememberReadingPosition]);
 
-  const reachTop = useCallback((atBoundary = false, raw = false) => {
+  const reachTop = useCallback((atBoundary = false, fromScroll = false) => {
     if (!paneVisible) return;
     if (isHistoryPaging()) {
       if (atBoundary) setEarlierIntent(true);
@@ -247,24 +255,25 @@ export function useTranscriptScroll({
       return;
     }
     if (!hasMoreBefore || !onLoadOlder) return;
-    const oldestTurn = foldedBoundaryRef.current && contentRef.current?.querySelector(".assistant-turn");
+    const oldestTurn = fromScroll && foldedBoundaryRef.current && contentRef.current?.querySelector(".assistant-turn");
     const folded = oldestTurn && oldestTurn.querySelector('.turn-process > button[aria-expanded="false"]') &&
       !oldestTurn.querySelector('.turn-process > button[aria-expanded="true"]');
-    const jump = Boolean(atBoundary && !raw && folded);
-    // At a folded boundary do not prefetch an invisible payload on approach.
-    if (folded && !atBoundary && !raw) return;
+    // Don't start raw prefetch before the same gesture can reach the folded edge.
+    if (folded && !atBoundary) return;
     preserveHistory(() => {
       // Make the incoming rows reachable in the same action. Failed or empty
       // reads cannot grow the budget repeatedly against the same source.
       setWindowSize(Math.max(windowSize, historyLengthRef.current + TRANSCRIPT_WINDOW_STEP));
-      if (!jump) return onLoadOlder();
+      if (!folded || !sessionId) return onLoadOlder();
       const request = new AbortController();
       promptReadRef.current = request;
-      return onLoadOlder({ previousPrompt: true, signal: request.signal }).finally(() => {
+      return onLoadOlder({ signal: request.signal, revealPrevious: (messageId) => {
+        setBoundaryTarget({ sessionId, messageId, query: "", kind: "history-boundary", requestId: --boundaryRequest.current });
+      } }).finally(() => {
         if (promptReadRef.current === request) promptReadRef.current = null;
       });
     }, windowSize, true);
-  }, [hasMoreBefore, isHistoryPaging, onLoadOlder, paneVisible, preserveHistory, searchTarget, setEarlierIntent, windowSize]);
+  }, [hasMoreBefore, isHistoryPaging, onLoadOlder, paneVisible, preserveHistory, searchTarget, sessionId, setEarlierIntent, windowSize]);
   useLayoutEffect(() => {
     resumeEarlierRef.current = () => {
       const scroller = scrollRef.current;
@@ -292,6 +301,7 @@ export function useTranscriptScroll({
         contentRef.current,
       );
       if (!isScrollGestureInput(event.type as ScrollInputType, input)) return;
+      clearBoundaryTarget();
       seekingEarlierRef.current = false;
       if (latestNavigation.isActive()) {
         latestNavigation.cancel(); leaveFollow(); rememberReadingPosition();
@@ -315,10 +325,10 @@ export function useTranscriptScroll({
         : event instanceof KeyboardEvent ? ["ArrowUp", "PageUp", "Home"].includes(event.key) || (event.key === " " && event.shiftKey)
         : undefined;
       if (upward === false) setEarlierIntent(false);
-      if (upward && el.scrollTop <= 1 && transcriptHasLayout(el)) reachTop(true);
+      if (upward && el.scrollTop <= 1 && transcriptHasLayout(el)) reachTop(true, true);
       if (upward === false) cancelPromptRead();
     },
-    [cancelReadingPosition, latestNavigation, leaveFollow, reachTop, releaseDisclosureAnchor, rememberReadingPosition, restoreHistoryAnchor, retryHistoryPaging, setEarlierIntent],
+    [cancelReadingPosition, clearBoundaryTarget, latestNavigation, leaveFollow, reachTop, releaseDisclosureAnchor, rememberReadingPosition, restoreHistoryAnchor, retryHistoryPaging, setEarlierIntent],
   );
 
   useEffect(() => {
@@ -487,7 +497,7 @@ export function useTranscriptScroll({
       reachTop(true);
     } else if (paneVisibleRef.current && gesturing && upwardSpeed > 0 &&
       isHistoryPrefetchPosition(el, false, { upwardSpeed, latencyMs: historyReadLatency() })) {
-      reachTop(el.scrollTop <= 1);
+      reachTop(el.scrollTop <= 1, true);
     }
     if (readingWindow) {
       pinnedRef.current = false;
@@ -620,7 +630,7 @@ export function useTranscriptScroll({
   );
   const deferredProjection = useDeferredValue(projection);
   const renderedProjection =
-    readingWindow || historyPending || firstCommit || paneRevealed ? projection : deferredProjection;
+    readingWindow || historyPending || boundaryTarget || firstCommit || paneRevealed ? projection : deferredProjection;
   const { entries, visible, history: allHistoryEntries } = renderedProjection;
   const tailEntry = entries.at(-1);
   // Published for `reachTop`, which is declared above this projection but only
@@ -689,9 +699,13 @@ export function useTranscriptScroll({
   );
   const veilCovering = veilPhase === "covering";
 
+  const boundaryIndex = useMemo(() => boundaryTarget ? allHistoryEntries.findIndex((entry) =>
+    transcriptEntryMessages([entry]).some((message) => message.id === boundaryTarget.messageId)) : -1,
+  [allHistoryEntries, boundaryTarget]);
+  const boundaryBudget = boundaryIndex < 0 ? 0 : allHistoryEntries.length - boundaryIndex;
   const transcriptWindow = reduceTranscriptWindow({
     historyLength: allHistoryEntries.length,
-    windowSize: searchTarget ? allHistoryEntries.length : windowSize,
+    windowSize: searchTarget ? allHistoryEntries.length : Math.max(windowSize, boundaryBudget),
     initialCommit: hydrationBounded,
   });
   // Memoized so unrelated re-renders (jump pill, loading row) hand
@@ -707,6 +721,7 @@ export function useTranscriptScroll({
 
   const releaseSearchFollow = useCallback((fresh: boolean) => {
     seekingEarlierRef.current = false;
+    if (fresh) lastScrollGestureAtRef.current = -Infinity;
     latestNavigation.cancel();
     stopSmoothScroll(scrollRef.current);
     cancelReadingPosition();
@@ -717,7 +732,7 @@ export function useTranscriptScroll({
     setShowJump(true);
   }, [cancelFollowScroll, cancelHistoryPaging, cancelReadingPosition, latestNavigation, releaseDisclosureAnchor]);
   useTranscriptSearchFocus({
-    target: searchTarget,
+    target: searchTarget ?? boundaryTarget,
     suspended: latestNavigation.isActive(),
     source: searchTarget
       ? messages.find((message) => message.id === searchTarget.messageId)?.content ?? ""
@@ -728,7 +743,12 @@ export function useTranscriptScroll({
     contentVersion: historyEntries,
     onNavigate: releaseSearchFollow,
     onPosition: recordScrollPosition,
+    onAlignmentEnd: searchTarget ? undefined : clearBoundaryTarget,
   });
+  useLayoutEffect(() => {
+    if (!boundaryTarget || !paneVisible) return;
+    setWindowSize((size) => Math.max(size, boundaryBudget));
+  }, [boundaryBudget, boundaryTarget, paneVisible]);
 
   // Runs in the same layout phase the expansion commits in, before the browser
   // paints it, so mounting the remaining history cannot move the rows the user
@@ -795,12 +815,10 @@ export function useTranscriptScroll({
     [historyEntries, tailEntry, transcriptWindow.bounded, visible],
   );
   const hasEarlierHistory = transcriptWindow.hiddenAbove > 0 || hasMoreBefore;
-  const canLoadToolHistory = Boolean(onLoadOlder && hasMoreBefore && !transcriptWindow.hiddenAbove && !isRunning &&
-    (!searchTarget || searchTarget.kind === "previous-prompt") && sessionId && !sessionId.startsWith("native-pi:") && !sessionId.startsWith("remote:") &&
-    entries[0]?.kind === "assistant-turn" && messages.length >= TRANSCRIPT_PAGE_SIZE &&
-    entries[0].parts.some((part) => part.kind === "activity" && part.items.some((item) => item.kind === "tool")));
-  foldedBoundaryRef.current = canLoadToolHistory;
-
+  foldedBoundaryRef.current = hasMoreBefore && !transcriptWindow.hiddenAbove && !isRunning && !readingWindow &&
+    !searchTarget && Boolean(sessionId && !sessionId.startsWith("native-pi:") && !sessionId.startsWith("remote:") &&
+      entries[0]?.kind === "assistant-turn" && entries[0].parts.some((part) =>
+        part.kind === "activity" && part.items.some((item) => item.kind === "tool")));
 
   const revealEarlierHistory = useCallback(() => {
     const el = scrollRef.current;
@@ -823,12 +841,12 @@ export function useTranscriptScroll({
     });
   }, [reachTop, releaseDisclosureAnchor, releaseFollow, retryHistoryPaging]);
 
-  const loadToolHistory = useCallback(() => { retryHistoryPaging(); reachTop(false, true); }, [reachTop, retryHistoryPaging]);
-
   const jumpToLatest = useCallback((arrive?: () => void) => {
     // Retire the gesture and all competing owners before yielding any frames.
     seekingEarlierRef.current = false;
     lastScrollGestureAtRef.current = -Infinity;
+    cancelPromptRead();
+    clearBoundaryTarget();
     cancelReadingPosition();
     cancelHistoryPaging();
     cancelFollowScroll();
@@ -842,7 +860,7 @@ export function useTranscriptScroll({
       setWindowSize(TRANSCRIPT_WINDOW_MIN);
       scrollToBottom();
     });
-  }, [cancelFollowScroll, cancelHistoryPaging, cancelReadingPosition, latestNavigation, releaseDisclosureAnchor, rememberReadingPosition, scrollToBottom]);
+  }, [cancelFollowScroll, cancelHistoryPaging, cancelPromptRead, cancelReadingPosition, clearBoundaryTarget, latestNavigation, releaseDisclosureAnchor, rememberReadingPosition, scrollToBottom]);
 
   useLayoutEffect(() => {
     if (paneVisible && pinnedRef.current && windowSize === TRANSCRIPT_WINDOW_MIN) scrollToBottom();
@@ -864,8 +882,6 @@ export function useTranscriptScroll({
     veilPhase,
     handleScroll,
     revealEarlierHistory,
-    canLoadToolHistory,
-    loadToolHistory,
     loadNewer,
     scrollToBottom,
     jumpToLatest,

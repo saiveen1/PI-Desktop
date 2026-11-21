@@ -513,7 +513,6 @@ export const es = {
     "loadingEarlierMessages": "Cargando mensajes anteriores…",
     loadLaterMessages: "Cargar mensajes posteriores",
     "showEarlierMessages": "Mostrar mensajes anteriores",
-    "loadEarlierToolDetails": "Cargar detalles anteriores de herramientas",
     "copy": "Copiar",
     "copied": "Copiado",
     "copyFailed": "No se pudo copiar al portapapeles",

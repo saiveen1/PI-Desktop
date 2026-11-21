@@ -49,11 +49,13 @@ Compared with locally recorded upstream `95df2e0f9`, this candidate extends
 inherited transcript paging with one owned continuation for blocked upward input
 and releases the expanded render budget when returning to latest. It keeps small
 reading caches but drops oversized prefixes at the canonical tail without
-changing the transcript on disk. The folded-tool follow-up reuses the physical
-layout and bounded reader to seek the preceding top-level prompt without
-reading the skipped tool records; the `previousUserMessage` option is absent
-in `95df2e0f9`. The existing opt-in process capture originated
-in local commit `d7a502af5`; this follow-up adds automatic incident-only logging
+changing the transcript on disk. Local `fa089d87a` added the physical-index
+`previousUserMessage` lookup, absent from `95df2e0f9`. The current folded-edge
+gesture uses that lookup to find the readable boundary, joins contiguous
+bounded pages, and repositions without replacing the visible answer. The
+shortcut is absent from the transcript scroll hook at upstream `e89051fc7`.
+The existing opt-in process capture originated in local commit `d7a502af5`;
+this follow-up adds automatic incident-only logging
 and makes the existing logs folder reachable from its panel. See the
 [scrolling contract](../spec/04-ux/09-interaction-patterns.md#91-transcript-scrolling)
 and the [performance decision](../adr/developer-performance-capture.md).

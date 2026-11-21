@@ -16,6 +16,7 @@ export function useTranscriptSearchFocus({
   contentVersion,
   onNavigate,
   onPosition,
+  onAlignmentEnd,
 }: {
   target: TranscriptSearchTarget | null;
   source: string;
@@ -26,6 +27,7 @@ export function useTranscriptSearchFocus({
   contentVersion: unknown;
   onNavigate: (fresh: boolean) => void;
   onPosition?: (scrollTop: number) => void;
+  onAlignmentEnd?: () => void;
 }) {
   const position = useRef({ requestId: 0, alignUntil: 0 });
   useLayoutEffect(() => {
@@ -46,8 +48,9 @@ export function useTranscriptSearchFocus({
       position,
       onNavigate,
       onPosition,
+      onAlignmentEnd,
     });
-  }, [contentRef, contentVersion, onNavigate, onPosition, scrollRef, source, suspended, target, visible]);
+  }, [contentRef, contentVersion, onAlignmentEnd, onNavigate, onPosition, scrollRef, source, suspended, target, visible]);
 }
 
 type SearchPosition = { current: { requestId: number; alignUntil: number } };
@@ -61,6 +64,7 @@ export function installTranscriptSearchFocus({
   position,
   onNavigate,
   onPosition,
+  onAlignmentEnd,
 }: {
   target: TranscriptSearchTarget;
   source: string;
@@ -69,6 +73,7 @@ export function installTranscriptSearchFocus({
   position: SearchPosition;
   onNavigate: (fresh: boolean) => void;
   onPosition?: (scrollTop: number) => void;
+  onAlignmentEnd?: () => void;
 }) {
   const message = content.querySelector<HTMLElement>(
     `[data-message-id="${CSS.escape(target.messageId)}"]`,
@@ -79,36 +84,28 @@ export function installTranscriptSearchFocus({
   const fresh = position.current.requestId !== target.requestId;
   if (fresh)
     position.current = { requestId: target.requestId, alignUntil: performance.now() + 1500 };
-  onNavigate(fresh);
-  if (target.kind === "previous-prompt") {
-    row.classList.remove("transcript-search-target");
-    if (fresh) {
-      const offset = message.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
-      scroller.scrollTop += offset - Math.min(160, scroller.clientHeight / 3);
-      onPosition?.(scroller.scrollTop);
-    }
-    return;
-  }
+  const boundary = target.kind === "history-boundary";
+  if (!boundary || fresh) onNavigate(fresh);
 
-  let match = locateTranscriptSearch(message, target.query, source);
+  let match = boundary ? undefined : locateTranscriptSearch(message, target.query, source);
   let highlight: Highlight | undefined;
   const paint = () => {
-    match.sourceElement?.classList.add("transcript-search-source-match");
-    if (typeof Highlight !== "undefined" && CSS.highlights && match.ranges.length) {
+    match?.sourceElement?.classList.add("transcript-search-source-match");
+    if (match && typeof Highlight !== "undefined" && CSS.highlights && match.ranges.length) {
       highlight = new Highlight(...match.ranges);
       CSS.highlights.set("transcript-search", highlight);
     }
   };
   const unpaint = () => {
-    match.sourceElement?.classList.remove("transcript-search-source-match");
+    match?.sourceElement?.classList.remove("transcript-search-source-match");
     if (highlight && CSS.highlights?.get("transcript-search") === highlight)
       CSS.highlights.delete("transcript-search");
   };
   const align = () => {
     if (performance.now() >= position.current.alignUntil) return;
     const rect =
-      match.ranges[0]?.getBoundingClientRect() ??
-      (match.sourceElement ?? message).getBoundingClientRect();
+      match?.ranges[0]?.getBoundingClientRect() ??
+      (match?.sourceElement ?? message).getBoundingClientRect();
     const viewport = scroller.getBoundingClientRect();
     scroller.scrollTop += rect.top - viewport.top - Math.min(160, scroller.clientHeight / 3);
     onPosition?.(scroller.scrollTop);
@@ -118,9 +115,12 @@ export function installTranscriptSearchFocus({
   // Geometry changes reuse the match. Only a text mutation rebuilds ranges.
   const resize = new ResizeObserver(align);
   resize.observe(content);
+  // The same native wheel can finish scrolling after a boundary page commits.
+  if (boundary) scroller.addEventListener("scroll", align, { passive: true });
   const stopAlignment = () => {
     position.current.alignUntil = 0;
     resize.disconnect();
+    if (boundary) scroller.removeEventListener("scroll", align);
     for (const event of GESTURES) scroller.removeEventListener(event, gesture);
   };
   const gesture = (event: Event) => {
@@ -128,21 +128,22 @@ export function installTranscriptSearchFocus({
   };
   for (const event of GESTURES) scroller.addEventListener(event, gesture, { passive: true });
   const timer = window.setTimeout(
-    stopAlignment,
+    () => { stopAlignment(); onAlignmentEnd?.(); },
     Math.max(0, position.current.alignUntil - performance.now()),
   );
-  const mutation = new MutationObserver(() => {
+  const mutation = boundary ? undefined : new MutationObserver(() => {
     unpaint();
     match = locateTranscriptSearch(message, target.query, source);
     paint();
     align();
   });
-  mutation.observe(message, { childList: true, subtree: true, characterData: true });
+  mutation?.observe(message, { childList: true, subtree: true, characterData: true });
   return () => {
     window.clearTimeout(timer);
     resize.disconnect();
+    if (boundary) scroller.removeEventListener("scroll", align);
     for (const event of GESTURES) scroller.removeEventListener(event, gesture);
-    mutation.disconnect();
+    mutation?.disconnect();
     row.classList.remove("transcript-search-target");
     unpaint();
   };
