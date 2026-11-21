@@ -17,6 +17,9 @@ import "../../src/styles/ui-kit.css";
 import "../../src/styles/sessions.css";
 import "../../src/styles/sidebar-threads.css";
 
+import "../../src/styles/chrome.css";
+import "../../src/styles/theme-overrides.css";
+
 function flatten(value, prefix = "", result = {}) {
   for (const [key, child] of Object.entries(value)) {
     const path = prefix ? prefix + "." + key : key;
@@ -163,6 +166,93 @@ async function openTrash() {
   click(document.querySelector('[data-nav="recycle-bin"]'));
   await waitFor(() => dialog()?.getAttribute("aria-busy") === "false", "recycle bin loaded");
 }
+const sidebarSection = id => document.querySelector(`[data-sidebar-session-section="${id}"]`);
+const sectionToggle = id => sidebarSection(id)?.querySelector(".sidebar-section-toggle");
+const sectionHandle = id => sidebarSection(id)?.querySelector('[role="separator"]');
+const sectionBody = id => document.getElementById(sectionToggle(id)?.getAttribute("aria-controls"));
+const sectionHeight = id => sectionBody(id).getBoundingClientRect().height;
+const sectionIds = ["pinned", "temporary", "projects"];
+
+window.sidebarSectionDragStart = async () => {
+  document.getElementById("root").style.height = "740px";
+  await waitFor(() => row("alpha"), "synthetic sidebar rendered");
+  const handle = sectionHandle("projects");
+  check(handle, "Projects has no resize handle");
+  const { x, y, width, height } = handle.getBoundingClientRect();
+  return { x: Math.round(x + width / 2), y: Math.round(y + height / 2), height: sectionHeight("projects") };
+};
+
+window.sidebarSectionPreviewProbe = async (expected, resizing) => {
+  await waitFor(() => sectionHandle("projects").hasAttribute("data-resizing") === resizing, "drag preview state");
+  check(Math.abs(sectionHeight("projects") - expected) <= 1, "wrong project preview height");
+  check(!localStorage.getItem("pi.desktop.sidebarSectionLayout"), "drag preview or cancellation wrote preferences");
+};
+
+window.sidebarSectionLayoutProbe = async (projectStart) => {
+  const shell = document.getElementById("root");
+  const near = (actual, expected, label) => check(Math.abs(actual - expected) <= 1, `${label}: ${actual} vs ${expected}`);
+  near(sectionHeight("projects"), projectStart - 56, "mouse drag resized Projects");
+  const projectsHeight = sectionHeight("projects");
+  const key = (id, value) => {
+    const handle = sectionHandle(id);
+    handle.focus();
+    check(document.activeElement === handle, `${id} handle cannot receive keyboard focus`);
+    flushSync(() => handle.dispatchEvent(new KeyboardEvent("keydown", { key: value, bubbles: true, cancelable: true })));
+  };
+  for (const id of ["pinned", "temporary"]) {
+    const start = sectionHeight(id);
+    key(id, id === "pinned" ? "ArrowDown" : "ArrowUp");
+    check(id === "pinned" ? sectionHeight(id) > start : sectionHeight(id) < start, `${id} did not resize independently`);
+    near(sectionHeight("projects"), projectsHeight, `resizing ${id} changed Projects`);
+  }
+  const heights = sectionIds.map(sectionHeight);
+  const before = calls.length;
+  for (const [index, id] of sectionIds.entries()) {
+    click(sectionToggle(id));
+    check(sectionToggle(id).getAttribute("aria-expanded") === "false", `${id} did not fold`);
+    check(sectionBody(id).hidden && !sectionHandle(id), `${id} kept a body or handle visible`);
+    check(sectionIds.filter(other => other !== id).every(other => sectionToggle(other).getAttribute("aria-expanded") === "true"), `${id} folded a sibling`);
+    click(sectionToggle(id));
+    near(sectionHeight(id), heights[index], `${id} did not restore its height on reopening`);
+  }
+  click(document.querySelector('[data-action="select-sessions"]'));
+  click(checkbox("Select visible", toolbar()));
+  check(chosen().includes("alpha"), "pinned session was not selected while visible");
+  click(sectionToggle("pinned"));
+  check(!chosen().includes("alpha") && !row("alpha"), "folded pin was visible or selected");
+  await done();
+  const renderSidebar = () => <Sidebar onToggleSidebar={() => {}} sidebarToggleShortcut="" sidebarWidth={300}
+    onWidthChange={() => {}} onWidthCommit={() => {}} onResizeCollapse={() => {}} />;
+  flushSync(() => root.render(null));
+  flushSync(() => root.render(renderSidebar()));
+  check(sectionBody("pinned").hidden, "fold state did not survive a remount");
+  click(sectionToggle("pinned"));
+  sectionIds.forEach((id, index) => near(sectionHeight(id), heights[index], `${id} lost its saved height`));
+  shell.style.height = "400px";
+  await frame();
+  check(sectionIds.some((id, index) => sectionHeight(id) < heights[index]), "short window did not compress the lists");
+  const footer = document.querySelector(".sidebar-footer").getBoundingClientRect();
+  check(sectionIds.every(id => sectionHandle(id).getBoundingClientRect().bottom <= footer.top + 1), "short window clipped a handle or overlapped the footer");
+  check(sectionBody("projects").scrollHeight > sectionBody("projects").clientHeight, "Projects lost independent scrolling");
+  const compressedRecent = sectionHeight("temporary");
+  key("temporary", "ArrowDown");
+  check(sectionHeight("temporary") >= compressedRecent, "increasing a compressed section made it shorter");
+  key("temporary", "ArrowUp");
+  shell.style.height = "740px";
+  await frame();
+  sectionIds.forEach((id, index) => near(sectionHeight(id), heights[index], `${id} saved a compressed height`));
+  const reset = id => flushSync(() => sectionHandle(id).dispatchEvent(new MouseEvent("dblclick", { bubbles: true })));
+  reset("projects");
+  check(sectionHeight("projects") > projectsHeight, "reset did not restore automatic project height");
+  near(sectionHeight("temporary"), heights[1], "reset changed another section's height");
+  reset("temporary");
+  const autoRecent = sectionHeight("temporary");
+  click(sectionToggle("projects"));
+  check(sectionHeight("temporary") > autoRecent, "automatic Recent did not take freed project space");
+  check(calls.length === before, "layout interaction invoked a session mutation");
+  return { passed: true };
+};
+
 window.sidebarLabelGroupingProbe = async () => {
   await waitFor(() => row("project-00"), "project grouping sidebar rendered");
   const original = useAppStore.getState();

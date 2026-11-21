@@ -18,6 +18,20 @@
 - Automated path: `node scripts/e2e-sidebar-recovery.mjs`, plus the sidebar backup,
   recovery, bootstrap and offline relocation regression tests.
 
+## E2E-SIDEBAR-independent-section-layout
+
+- **Preconditions:** Expanded sidebar with pins, recent conversations, and retained projects in an isolated profile.
+- **Steps:** Drag a section's bottom handle; use Up/Down on the other handles.
+  Fold and reopen each title. Select visible sessions with Pinned folded,
+  remount the sidebar, then shrink and restore the available window height.
+- **Expected:** Each section retains its own preferred height and fold state;
+  hidden rows are not selected. Short windows compress list viewports without
+  overwriting choices or obscuring the footer. Expanded lists scroll independently.
+- **Specs:** [Sidebar](../../04-ux/08-component-spec.md#3-sidebar),
+  [Sidebar scrolling](../../04-ux/09-interaction-patterns.md#92-sidebar-scrolling).
+- **Acceptance:** Quality. **Milestone:** Desktop shell maintenance.
+- **Status:** Isolated production renderer coverage in `session-organization-user-path.test.mjs`.
+
 ## E2E-TASK-DOCK-tab-content-isolation
 
 - **Preconditions:** Isolated Electron renderer with synthetic todos and a running
@@ -3541,8 +3555,8 @@ PowerShell-launched fixture; activation must not restore the native outline.
   on the frame it reached and settles back on the open height without
   overshooting, and the empty group folds its empty state the same way. Under
   reduced motion both endpoints are kept and the travel is dropped. The pinned
-  list holds eight rows inside `min(233px, 30vh)` and scrolls to its remaining
-  rows, and the standalone list keeps its flex column and 146px budget. The group
+  list scrolls inside its automatic `min(233px, 30vh)` cap (up to eight rows),
+  and Recent keeps its flex column and automatic 291px cap. The group
   indent, ordering, and workspace state are unchanged. The five seeded project
   sessions remain in one flat list with no time headings and each has its own
   date label.

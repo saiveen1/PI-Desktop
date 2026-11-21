@@ -327,6 +327,7 @@ export const tr = {
     collapseSidebar: "Kenar çubuğunu daralt",
     expandSidebar: "Kenar çubuğunu genişlet",
     resizeSidebar: "Kenar çubuğu genişliğini ayarla",
+    resizeSidebarSection: "{{section}} bölümünün yüksekliğini ayarla",
     sidebarWidth: "Kenar çubuğu genişliği: {{width}} piksel",
     resizeChatWidth: "Sohbet genişliğini ayarla",
     chatWidth: "Sohbet genişliği: {{width}} piksel",

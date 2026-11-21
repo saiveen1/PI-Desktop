@@ -92,9 +92,13 @@ import type {
   ProjectMeta,
   ProjectSort,
   SessionSort,
+  SidebarSectionId,
+  SidebarSectionPreference,
 } from "../lib/sidebar-preferences";
 import {
   clampSidebarWidth,
+  loadSidebarSectionLayout,
+  saveSidebarSectionLayout,
   SIDEBAR_WIDTH_MAX,
   SIDEBAR_WIDTH_MIN,
 } from "../lib/sidebar-preferences";
@@ -106,6 +110,7 @@ import {
 import { BrandLogo } from "./BrandLogo";
 import { NotificationCenter } from "./NotificationCenter";
 import { SidebarFooter, SidebarPrimaryNav } from "./SidebarNavigation";
+import { SidebarSection } from "./SidebarSection";
 import {
   WorktreeBadge,
   WorktreeDialogs,
@@ -320,6 +325,14 @@ export function Sidebar({
   const showProjectsSection = moduleVisible("projects");
   const showNewProject = moduleVisible("newProject");
   const showProjectNewTask = moduleVisible("projectNewTask");
+  const [sectionLayout, setSectionLayout] = useState(loadSidebarSectionLayout);
+  const recentExpanded = showSessionsSection && !sectionLayout.recent?.collapsed;
+  const projectsExpanded = showProjectsSection && !sectionLayout.projects?.collapsed;
+  const updateSectionLayout = (id: SidebarSectionId, preference: SidebarSectionPreference) => {
+    const next = { ...sectionLayout, [id]: preference };
+    setSectionLayout(next);
+    saveSidebarSectionLayout(next);
+  };
   const prefetchSession = useAppStore((s) => s.prefetchSession);
   const selectSession = useAppStore((s) => s.selectSession);
   const newSession = useAppStore((s) => s.newSession);
@@ -562,6 +575,11 @@ export function Sidebar({
     setMenuPosition(null);
     if (restoreFocus && trigger) requestAnimationFrame(() => trigger.focus());
   }, []);
+
+  const onSectionInteract = () => {
+    closeMenus(false);
+    hideSessionHoverCard();
+  };
 
   const placeMenu = useCallback((event: ReactMouseEvent<HTMLButtonElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -1102,20 +1120,20 @@ export function Sidebar({
     return groups;
   }, [hasTemporaryGroups, temporarySessionHistory, projectEntries, pinnedSessionIds, expandedSessionGroups, remoteProjectGroups, sessionLabels, sessionMeta, sessionOrganization, sidebarProjectGroups, runningSessions]);
   const flatSessionOrder = useMemo(() => {
-    const ids = pinnedSessions.map(session => session.id);
+    const ids = sectionLayout.pinned?.collapsed ? [] : pinnedSessions.map(session => session.id);
     const add = (scope: string) => ids.push(...visibleGroupedSessionIds(sessionGroupsByScope.get(scope) ?? [], scope, toggledSessionGroups));
-    if (showSessionsSection) {
+    if (recentExpanded) {
       ids.push(...visibleRecentSessions.map((session) => session.id));
       add("temporary");
     }
-    if (showProjectsSection) {
+    if (projectsExpanded) {
       for (const entry of projectEntries) {
         if (!(entry.meta.collapsed ?? projectCollapsed[entry.key] ?? false)) add(projectOrganizationScope(entry.path, sidebarProjectGroups));
       }
       for (const group of remoteProjectGroups) if (!projectCollapsed[remoteProjectCollapseKey(group.project.key)]) add(`remote:${group.project.key}`);
     }
     return [...new Set(ids)];
-  }, [pinnedSessions, showSessionsSection, visibleRecentSessions, showProjectsSection, sessionGroupsByScope, toggledSessionGroups, projectEntries, projectCollapsed, remoteProjectGroups, sidebarProjectGroups]);
+  }, [pinnedSessions, sectionLayout.pinned?.collapsed, recentExpanded, visibleRecentSessions, projectsExpanded, sessionGroupsByScope, toggledSessionGroups, projectEntries, projectCollapsed, remoteProjectGroups, sidebarProjectGroups]);
   const selection = useSessionSelection(flatSessionOrder);
   const { selectedIds } = selection;
   const selectedSessions = sessions.filter((session) => selectedIds.has(session.id));
@@ -2476,48 +2494,33 @@ export function Sidebar({
           onUnarchive={hasArchivedSelection ? () => void runSessionAction("unarchive") : undefined}
           onTrash={() => void runSessionAction("trash")} />}
         <SidebarPrimaryNav onNewTask={onNewTask} onBeforeNavigate={() => closeMenus(false)} />
-
-        {pinnedSessions.length > 0 ? (
-          <section
-            className="sidebar-pinned-sessions"
-            aria-labelledby="sidebar-pinned-label"
-            data-sidebar-session-section="pinned"
-          >
-            <div className="sidebar-list-toolbar sidebar-list-toolbar-secondary">
-              <span id="sidebar-pinned-label" className="sidebar-list-label">
-                {t("nav.pinnedSessions")}
-              </span>
-              {summarizeGroup && <GroupRunStatus summary={summarizeGroup(pinnedSessions)} />}
-            </div>
-            <div className="sidebar-session-group-body pinned" onScroll={() => closeMenus(false)}>
+        <div className="sidebar-sections">
+          {pinnedSessions.length > 0 ? (
+            <SidebarSection id="pinned" label={t("nav.pinnedSessions")} count={pinnedSessions.length}
+              preference={sectionLayout.pinned} fill={!projectsExpanded && !recentExpanded}
+              onChange={updateSectionLayout} onInteract={onSectionInteract}
+              actions={summarizeGroup && <GroupRunStatus summary={summarizeGroup(pinnedSessions)} />}
+              body={{ className: "sidebar-session-group-body pinned", onScroll: () => closeMenus(false) }}>
               {renderSessionRows(pinnedSessions, { global: true })}
-            </div>
-          </section>
-        ) : null}
-
-        {showSessionsSection ? (
-          <section
-            className={cx("sidebar-standalone-sessions", !showProjectsSection && "is-fill")}
-            aria-labelledby="sidebar-standalone-sessions-label"
-            data-sidebar-session-section="temporary"
-          >
-            <div
-              className="sidebar-list-toolbar sidebar-list-toolbar-secondary"
-              data-sidebar-section="sessions"
-              onContextMenu={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                openSectionMenu("sessions", event.clientX, event.clientY);
+            </SidebarSection>
+          ) : null}
+          {showSessionsSection ? (
+            <SidebarSection id="recent" label={t("nav.recentSessions")}
+              count={recentSessions.length + (hasTemporaryGroups ? temporarySessionHistory.length : 0)}
+              preference={sectionLayout.recent} fill={!projectsExpanded}
+              onChange={updateSectionLayout} onInteract={onSectionInteract}
+              toolbar={{
+                "data-sidebar-section": "sessions",
+                onContextMenu: (event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  openSectionMenu("sessions", event.clientX, event.clientY);
+                },
+                onPointerDown: (event) => {
+                  if (event.button === 2) event.preventDefault();
+                },
               }}
-              onPointerDown={(event) => {
-                // Keep native drag/text selection from eating the secondary click path.
-                if (event.button === 2) event.preventDefault();
-              }}
-            >
-              <span id="sidebar-standalone-sessions-label" className="sidebar-list-label">
-                {t("nav.recentSessions")}
-              </span>
-              <div className="sidebar-toolbar-actions">
+              actions={<div className="sidebar-toolbar-actions">
                 <TooltipButton className="sidebar-toolbar-button" data-action="select-sessions"
                   tooltip={t("sessionOrganization.select")} ariaLabel={t("sessionOrganization.select")}
                   aria-pressed={selection.active} disabled={organizationBusy}
@@ -2563,20 +2566,19 @@ export function Sidebar({
                     <IconNewSession size={14} />
                   </TooltipButton>
                 ) : null}
-              </div>
-            </div>
-            <div
-              className="sidebar-session-group-body standalone"
-              onScroll={() => {
-                if (sessionMenu || projectMenu || sectionMenu || sortOpen) closeMenus(false);
-              }}
-              onContextMenu={(event) => {
-                if ((event.target as Element).closest?.("[data-sidebar-session-row]")) return;
-                event.preventDefault();
-                event.stopPropagation();
-                openSectionMenu("sessions", event.clientX, event.clientY);
-              }}
-            >
+              </div>}
+              body={{
+                className: "sidebar-session-group-body standalone",
+                onScroll: () => {
+                  if (sessionMenu || projectMenu || sectionMenu || sortOpen) closeMenus(false);
+                },
+                onContextMenu: (event) => {
+                  if ((event.target as Element).closest?.("[data-sidebar-session-row]")) return;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  openSectionMenu("sessions", event.clientX, event.clientY);
+                },
+              }}>
               {visibleRecentSessions.length > 0 ? (
                 <>
                   {renderSessionRows(visibleRecentSessions, { global: true, showLastReplyDate })}
@@ -2597,26 +2599,24 @@ export function Sidebar({
               {renderGroupedSessionRows("temporary", { temporary: true, showLastReplyDate }, showNewSession
                 ? id => void createGroupedTask("temporary", { projectPath: null }, id)
                 : undefined)}
-            </div>
-          </section>
-        ) : null}
-
-        {showProjectsSection ? (
-          <>
-            <div
-              className="sidebar-list-toolbar"
-              data-sidebar-section="projects"
-              onContextMenu={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                openSectionMenu("projects", event.clientX, event.clientY);
+            </SidebarSection>
+          ) : null}
+          {showProjectsSection ? (
+            <SidebarSection id="projects" label={t("nav.projects")} count={projectEntries.length + remoteProjectGroups.length}
+              preference={sectionLayout.projects} fill
+              onChange={updateSectionLayout} onInteract={onSectionInteract}
+              toolbar={{
+                "data-sidebar-section": "projects",
+                onContextMenu: (event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  openSectionMenu("projects", event.clientX, event.clientY);
+                },
+                onPointerDown: (event) => {
+                  if (event.button === 2) event.preventDefault();
+                },
               }}
-              onPointerDown={(event) => {
-                if (event.button === 2) event.preventDefault();
-              }}
-            >
-              <span className="sidebar-list-label">{t("nav.projects")}</span>
-              {showNewProject ? (
+              actions={showNewProject ? (
                 <TooltipButton
                   type="button"
                   className="sidebar-toolbar-button"
@@ -2628,32 +2628,24 @@ export function Sidebar({
                   <IconNewProject size={14} />
                 </TooltipButton>
               ) : null}
-            </div>
-
-            <div
-              className={`sidebar-session-groups min-h-0 flex-1 overflow-auto px-0.5 ${projectsDropActive ? "is-drop-target" : ""}`}
-              onScroll={() => {
-                if (sessionMenu || projectMenu || sectionMenu || sortOpen) closeMenus(false);
-              }}
-              onContextMenu={(event) => {
-                if (
-                  (event.target as Element).closest?.(
-                    "[data-sidebar-session-row], [data-sidebar-project-group]",
-                  )
-                ) {
-                  return;
-                }
-                event.preventDefault();
-                event.stopPropagation();
-                openSectionMenu("projects", event.clientX, event.clientY);
-              }}
-              onDragEnter={(event) => {
-                if (hasComposerFileDrag(event.dataTransfer)) event.preventDefault();
-              }}
-              onDragOver={onProjectsAreaDragOver}
-              onDragLeave={onProjectsAreaDragLeave}
-              onDrop={onProjectsAreaDrop}
-            >
+              body={{
+                className: cx("sidebar-session-groups", projectsDropActive && "is-drop-target"),
+                onScroll: () => {
+                  if (sessionMenu || projectMenu || sectionMenu || sortOpen) closeMenus(false);
+                },
+                onContextMenu: (event) => {
+                  if ((event.target as Element).closest?.("[data-sidebar-session-row], [data-sidebar-project-group]")) return;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  openSectionMenu("projects", event.clientX, event.clientY);
+                },
+                onDragEnter: (event) => {
+                  if (hasComposerFileDrag(event.dataTransfer)) event.preventDefault();
+                },
+                onDragOver: onProjectsAreaDragOver,
+                onDragLeave: onProjectsAreaDragLeave,
+                onDrop: onProjectsAreaDrop,
+              }}>
               {projectEntries.length > 0 ? projectEntries.map(renderProjectGroup) : (
                 <section className="sidebar-session-group" aria-labelledby="sidebar-project-group-label">
                   <div className="sidebar-session-group-header">
@@ -2669,9 +2661,9 @@ export function Sidebar({
                 catalogGroups={key => catalogGroups(`remote:${key}`)}
                 onCreate={showProjectNewTask ? (project, groupId) => createGroupedTask(`remote:${project.key}`, { remoteProject: project }, groupId) : undefined}
                 renderSessions={(key, create) => renderGroupedSessionRows(`remote:${key}`, { temporary: false, showLastReplyDate }, showProjectNewTask ? create : undefined)} />
-            </div>
-          </>
-        ) : null}
+            </SidebarSection>
+          ) : null}
+        </div>
 
         <SidebarFooter onBeforeSettings={() => closeMenus(false)} actions={
           <>

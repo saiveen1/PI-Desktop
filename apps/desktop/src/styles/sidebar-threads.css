@@ -106,11 +106,6 @@
 
 .sidebar-session-groups {
   display: flex;
-  min-height: 0;
-  /* Basis 0, not auto: with a content-derived basis the scroller's resolved
-     height is re-solved from its own content, so collapsing the first project
-     nudges the whole list up a few pixels before it settles back. */
-  flex: 1 1 0;
   flex-direction: column;
   /* Baseline of the group ladder: adjacent rows and group headers sit 1px
      apart. The extra air around an expanded group belongs to the group itself
@@ -120,7 +115,7 @@
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior-y: contain;
-  padding-top: 2px;
+  padding: 2px 2px 0;
 }
 
 .sidebar-session-group {
@@ -299,34 +294,116 @@
   color: var(--ds-text-secondary);
 }
 
-.sidebar-session-group-body.standalone {
-  /* Ten compact 28px rows plus the nine 1px gaps between them, and the 2px
-     label inset, before the Recent list starts scrolling internally. */
-  max-height: 291px;
+.sidebar-sections {
+  display: flex;
   min-height: 0;
+  flex: 1 1 0;
+  flex-direction: column;
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior-y: contain;
-  /* 2px below the section label, matching every label-to-content pair. */
-  padding: 2px 2px 0;
 }
 
-.sidebar-standalone-sessions {
-  min-width: 0;
-  flex: 0 0 auto;
-}
-
-/* Projects hidden in Settings: the session list takes the freed height. */
-.sidebar-standalone-sessions.is-fill {
+.sidebar-section {
+  --sidebar-section-min-height: 70px; /* 30px title, 32px viewport, 8px handle. */
   display: flex;
-  min-height: 0;
-  flex: 1 1 auto;
+  min-height: var(--sidebar-section-min-height);
+  flex: 0 1 auto;
   flex-direction: column;
 }
 
-.sidebar-standalone-sessions.is-fill .sidebar-session-group-body.standalone {
-  max-height: none;
+.sidebar-section[data-fill] {
+  flex: 1 1 var(--sidebar-section-min-height);
+}
+
+.sidebar-section[data-collapsed] {
+  min-height: 0;
+  flex: none;
+}
+
+.sidebar-section > .sidebar-list-toolbar {
+  height: 30px;
+  flex: none;
+}
+
+.sidebar-section .sidebar-section-toggle {
+  display: flex;
+  min-width: 0;
+  height: 22px;
   flex: 1 1 auto;
+  justify-content: flex-start;
+  gap: 4px;
+  padding: 0 3px;
+}
+
+.sidebar-section-toggle > svg,
+.sidebar-section-count {
+  flex: none;
+}
+
+.sidebar-section-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-section-count {
+  font-size: var(--text-xs);
+  letter-spacing: var(--tracking-normal);
+  font-variant-numeric: tabular-nums;
+}
+
+.sidebar-section-scroll {
+  height: var(--sidebar-section-height, auto);
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+}
+
+.sidebar-section-scroll[hidden] {
+  display: none;
+}
+
+.sidebar-section-scroll.standalone {
+  max-height: var(--sidebar-section-height, 291px);
+  padding: 2px 2px 0;
+}
+
+.sidebar-section-scroll.pinned {
+  max-height: var(--sidebar-section-height, min(233px, 30vh));
+  padding: 2px 2px 0;
+}
+
+.sidebar-section[data-fill] > .sidebar-section-scroll {
+  max-height: none;
+}
+
+.sidebar-section-handle {
+  display: grid;
+  height: 8px;
+  flex: none;
+  place-items: center;
+  cursor: row-resize;
+  touch-action: none;
+  user-select: none;
+}
+
+.sidebar-section-handle::before {
+  width: 28px;
+  height: 2px;
+  border-radius: var(--radius-2xs);
+  background: var(--ds-border-strong);
+  content: "";
+}
+
+.sidebar-section-handle:is(:hover, :focus-visible, [data-resizing])::before {
+  background: var(--ds-accent);
+}
+
+.sidebar-section-handle:focus-visible {
+  outline-offset: -2px;
 }
 
 .sidebar-session-empty {
@@ -334,22 +411,6 @@
   color: var(--ds-text-muted);
   font-size: var(--text-md); /* empty-state copy tracks group titles */
   line-height: var(--leading-compact);
-}
-
-.sidebar-pinned-sessions {
-  min-width: 0;
-  flex: 0 0 auto;
-}
-
-.sidebar-session-group-body.pinned {
-  /* Eight compact 28px rows plus their seven 1px gaps, and the 2px label
-     inset. */
-  max-height: min(233px, 30vh);
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior-y: contain;
-  /* 2px below the section label, matching every label-to-content pair. */
-  padding: 2px 2px 0;
 }
 
 .sidebar-pinned-sessions .thread-item-title {

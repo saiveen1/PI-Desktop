@@ -134,10 +134,10 @@ test("destination history is available through shortcuts without titlebar button
 
 test("sidebar shows a bounded Recent session list before retained projects", () => {
   const newProjectAction = sidebarSource.match(
-    /<div[\s\S]*?className="sidebar-list-toolbar"[\s\S]*?data-action="new-project"[\s\S]*?<\/div>/,
+    /<SidebarSection id="projects"[\s\S]*?<\/SidebarSection>/,
   )?.[0] ?? "";
   const standaloneSessions = sidebarSource.match(
-    /data-sidebar-session-section="temporary"[\s\S]*?<\/section>/,
+    /<SidebarSection id="recent"[\s\S]*?<\/SidebarSection>/,
   )?.[0] ?? "";
 
   assert.match(newProjectAction, /t\("nav\.projects"\)/);
@@ -150,15 +150,11 @@ test("sidebar shows a bounded Recent session list before retained projects", () 
   assert.match(standaloneSessions, /renderSessionRows\(visibleRecentSessions, \{ global: true, showLastReplyDate \}\)/);
   assert.match(standaloneSessions, /data-action="recent-sessions-load-more"/);
   assert.ok(
-    sidebarSource.indexOf('data-sidebar-session-section="temporary"') <
+    sidebarSource.indexOf('<SidebarSection id="recent"') <
       sidebarSource.indexOf('data-action="new-project"'),
   );
-  assert.match(
-    globalStyles,
-    // `[^}]*`, not `[\s\S]*?`: the assertion must read this block, not a
-    // `max-height` in some later partial of the concatenated stylesheet.
-    /\.sidebar-session-group-body\.standalone\s*\{[^}]*max-height:\s*291px;[^}]*overflow-x:\s*hidden;[^}]*overflow-y:\s*auto;/,
-  );
+  assert.match(globalStyles, /\.sidebar-section-scroll\.standalone\s*\{[^}]*max-height:\s*var\(--sidebar-section-height, 291px\);/);
+  assert.match(globalStyles, /\.sidebar-section-scroll\s*\{[^}]*overflow-x:\s*hidden;[^}]*overflow-y:\s*auto;/);
   assert.doesNotMatch(sidebarSource, /data-sidebar-project-group="temporary"/);
 });
 
@@ -189,8 +185,8 @@ test("pinned project rows replace the folder glyph with a filled star", () => {
 });
 
 test("sidebar section toolbars open create actions from context menus", () => {
-  assert.match(sidebarSource, /data-sidebar-section=\"sessions\"/);
-  assert.match(sidebarSource, /data-sidebar-section=\"projects\"/);
+  assert.match(sidebarSource, /"data-sidebar-section": "sessions"/);
+  assert.match(sidebarSource, /"data-sidebar-section": "projects"/);
   assert.match(sidebarSource, /openSectionMenu\(\"sessions\"/);
   assert.match(sidebarSource, /openSectionMenu\(\"projects\"/);
   assert.match(sidebarSource, /className="sidebar-section-menu"/);

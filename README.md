@@ -136,6 +136,9 @@ This edition strengthens the existing framework rather than replacing it.
 
 ### Conversation organization and notifications
 
+- **Adjust the sidebar lists independently.** Fold Pinned, Recent, or Projects
+  by clicking its heading, or drag its bottom edge to set its height. Each
+  section remembers its own layout when the app reopens.
 - **Earlier prompts in tool-heavy chats.** When the oldest loaded range starts
   inside a folded tool run, go directly to the preceding prompt without loading
   all intervening tool records. Older tool details remain available on demand.

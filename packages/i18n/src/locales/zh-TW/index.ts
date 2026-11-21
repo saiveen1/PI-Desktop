@@ -322,6 +322,7 @@ export const zhTW = {
     collapseSidebar: "收起側邊欄",
     expandSidebar: "展開側邊欄",
     resizeSidebar: "調整側邊欄寬度",
+    resizeSidebarSection: "調整「{{section}}」區塊高度",
     sidebarWidth: "側邊欄寬度：{{width}} 畫素",
     resizeChatWidth: "調整對話寬度",
     chatWidth: "對話寬度：{{width}} 畫素",

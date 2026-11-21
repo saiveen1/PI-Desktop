@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   clampSidebarWidth,
   loadSidebarPreferences,
+  loadSidebarSectionLayout,
   loadSidebarWidth,
   projectIsArchived,
   projectIsCollapsed,
@@ -417,6 +418,29 @@ test("clamps and persists the expanded sidebar width", () => {
   } finally {
     globalThis.localStorage = previousStorage;
   }
+});
+
+test("sidebar section preferences default safely and only read known versioned fields", (t) => {
+  let value = null;
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true, value: { getItem: (key) => key === "pi.desktop.sidebarSectionLayout" ? value : null },
+  });
+  t.after(() => {
+    if (previous) Object.defineProperty(globalThis, "localStorage", previous);
+    else delete globalThis.localStorage;
+  });
+  assert.deepEqual(loadSidebarSectionLayout(), {});
+  value = JSON.stringify({ version: 2, sections: { recent: { collapsed: true } } });
+  assert.deepEqual(loadSidebarSectionLayout(), {});
+  value = JSON.stringify({ version: 1, sections: {
+    pinned: { collapsed: true, height: "invalid" }, recent: { collapsed: "true", height: -1 },
+    projects: { height: 100_000 }, unknown: { height: 42 },
+  } });
+  assert.deepEqual(loadSidebarSectionLayout(), {
+    pinned: { collapsed: true, height: undefined }, recent: { collapsed: false, height: 32 },
+    projects: { collapsed: false, height: 4096 },
+  });
 });
 
 test("manual title metadata survives a renderer restart", () => {

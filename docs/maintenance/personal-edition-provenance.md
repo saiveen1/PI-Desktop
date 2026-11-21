@@ -58,6 +58,14 @@ and makes the existing logs folder reachable from its panel. See the
 [scrolling contract](../spec/04-ux/09-interaction-patterns.md#91-transcript-scrolling)
 and the [performance decision](../adr/developer-performance-capture.md).
 
+## Independent sidebar sections
+
+The merge's upstream parent `023ed86884b20104015fde256143fdf1fd5fc556`
+provides the three lists, fixed Pinned and Recent height caps, and a flexible
+Projects list. This candidate adds per-section disclosure and preferred
+height, with no changes to the inherited list contents or sorting. See the
+[sidebar component contract](../spec/04-ux/08-component-spec.md#3-sidebar).
+
 ## Audit boundary
 
 This is the evidence map for the root bilingual README, not release notes or a

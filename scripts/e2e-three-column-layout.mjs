@@ -1739,23 +1739,23 @@ async function main() {
       return {
         standalone: measure(document.querySelector(".sidebar-session-group-body.standalone")),
         pinned,
-        // The renderer's budgets are min(233px, 30vh) and a flat 146px.
+        // Automatic caps can be compressed by the available sidebar height.
         pinnedBudget: Math.min(233, window.innerHeight * 0.3),
       };
     })()`);
     check(
       listBudgets.standalone?.display === "flex" &&
-        listBudgets.standalone?.maxHeight === 146,
-      "the standalone list keeps its flex column and 146px budget",
+        listBudgets.standalone?.maxHeight === 291,
+      "the Recent list keeps its flex column and automatic 291px cap",
       JSON.stringify(listBudgets.standalone),
     );
     check(
       listBudgets.pinned?.display === "flex" &&
         listBudgets.pinned.rows === sidebarSeed.pinnedSessionIds.length &&
-        Math.abs(listBudgets.pinned.clientHeight - listBudgets.pinnedBudget) <= 1 &&
+        listBudgets.pinned.clientHeight <= listBudgets.pinnedBudget + 1 &&
         listBudgets.pinned.scrollHeight > listBudgets.pinned.clientHeight &&
-        listBudgets.pinned.rowsInside === 8,
-      "the seeded pinned list holds eight rows inside its 233px budget and scrolls the rest",
+        listBudgets.pinned.rowsInside >= 1 && listBudgets.pinned.rowsInside <= 8,
+      "the seeded pinned list stays inside its automatic cap and scrolls the rest",
       JSON.stringify({ pinned: listBudgets.pinned, budget: listBudgets.pinnedBudget }),
     );
     const pinnedScrolled = await cdp.evaluate(`(() => {

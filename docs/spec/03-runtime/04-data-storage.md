@@ -680,6 +680,14 @@ atomic `sidebar-preferences.json` backup in the selected app data root;
 renderer localStorage key `pi.desktop.sidebarPreferences` supplies first paint.
 See [sidebar layout recovery](../../adr/sidebar-layout-recovery.md).
 
+Section fold and height choices are renderer-only geometry preferences, separate
+from organization and its backup. `pi.desktop.sidebarSectionLayout` stores a
+version 1 record with optional `collapsed` and `height` values under each of
+`sections.pinned`, `sections.recent`, and `sections.projects`. The preferred
+height is in CSS pixels (32–4096); viewport compression is never persisted.
+Older profiles without the record, or unsupported versions, load expanded with
+automatic heights. No migration of existing preferences or host state is needed.
+
 ```ts
 type SidebarPreferences = {
   sessionMeta: Record<string, {

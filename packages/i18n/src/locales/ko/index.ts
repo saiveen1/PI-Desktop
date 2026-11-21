@@ -327,6 +327,7 @@ export const ko = {
     collapseSidebar: "사이드바 접기",
     expandSidebar: "사이드바 펼치기",
     resizeSidebar: "사이드바 크기 조절",
+    resizeSidebarSection: "{{section}} 영역 높이 조절",
     sidebarWidth: "사이드바 너비: {{width}}픽셀",
     resizeChatWidth: "대화 너비 조절",
     chatWidth: "대화 너비: {{width}}픽셀",

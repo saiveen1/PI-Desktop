@@ -32,7 +32,7 @@ async function waitForExitFile(directory, budgetMs) {
   });
 }
 
-async function runSessionFixture(labelsOnly) {
+async function runSessionFixture(probe) {
   const temp = await mkdtemp(join(process.env.PI_SCRATCH_DIR || tmpdir(), "session-organization-"));
   let child;
   let wmiPid;
@@ -67,12 +67,36 @@ app.whenReady().then(async () => {
   win.webContents.on("console-message", (_event, ...args) => console.log("RENDERER", ...args));
   try {
     await win.loadFile(path.join(__dirname, "index.html"));
-    if (${labelsOnly}) {
-      const grouping = await win.webContents.executeJavaScript("window.sidebarLabelGroupingProbe().catch(error => { console.error(error.stack); throw error; })");
-      console.log("LABEL_GROUPING_PROBE " + JSON.stringify(grouping));
+    if (${JSON.stringify(probe)} === "sections") {
+      const { x, y, height } = await win.webContents.executeJavaScript("window.sidebarSectionDragStart()");
+      win.webContents.debugger.attach();
+      const mouse = (type, position, buttons) => win.webContents.debugger.sendCommand("Input.dispatchMouseEvent", {
+        type, x, y: position, buttons, button: type === "mouseMoved" && !buttons ? "none" : "left", clickCount: 1,
+      });
+      const evaluate = (expression) => win.webContents.executeJavaScript(expression);
+      const point = await evaluate("document.elementFromPoint(" + x + "," + y + ").className");
+      if (!point.includes("sidebar-section-handle")) throw new Error("Resize handle is not hit-testable: " + point);
+      await mouse("mouseMoved", y, 0);
+      await mouse("mousePressed", y, 1);
+      if (!await evaluate("document.activeElement.matches('.sidebar-section-handle')")) throw new Error("Mouse press did not focus the handle");
+      await mouse("mouseMoved", y - 28, 1);
+      await evaluate("window.sidebarSectionPreviewProbe(" + (height - 28) + ", true)");
+      const escape = (type) => win.webContents.debugger.sendCommand("Input.dispatchKeyEvent", {
+        type, key: "Escape", code: "Escape", windowsVirtualKeyCode: 27,
+      });
+      await escape("keyDown");
+      await escape("keyUp");
+      await mouse("mouseReleased", y - 28, 0);
+      await evaluate("window.sidebarSectionPreviewProbe(" + height + ", false)");
+      await mouse("mousePressed", y, 1);
+      await mouse("mouseMoved", y - 56, 1);
+      await evaluate("window.sidebarSectionPreviewProbe(" + (height - 56) + ", true)");
+      await mouse("mouseReleased", y - 56, 0);
+      const result = await evaluate("window.sidebarSectionLayoutProbe(" + height + ")");
+      console.log("SECTIONS_PROBE " + JSON.stringify(result));
     } else {
-      const result = await win.webContents.executeJavaScript("window.organizationProbe().catch(error => { console.error(error.stack); throw error; })");
-      console.log("ORGANIZATION_PROBE " + JSON.stringify(result));
+      const result = await win.webContents.executeJavaScript("window[" + ${JSON.stringify(JSON.stringify(probe))} + "]()");
+      console.log("SESSION_PROBE " + JSON.stringify(result));
     }
     app.exit(0);
   } catch (error) { console.error(error?.stack ?? error); app.exit(1); }
@@ -89,7 +113,7 @@ app.whenReady().then(async () => {
       wmiPid = Number(execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", ps], { encoding: "utf8" }).trim());
       assert.ok(wmiPid > 0, "WMI must return the owned fixture PID");
       console.log("SESSION_FIXTURE_WMI " + JSON.stringify({ pid: wmiPid, directory: temp }));
-      try { code = await waitForExitFile(temp, labelsOnly ? 10_000 : 25_000); }
+      try { code = await waitForExitFile(temp, probe === "organizationProbe" ? 25_000 : 10_000); }
       finally { output = await readFile(join(temp, "browser.log"), "utf8").catch(() => "No browser log produced"); console.log(output.slice(-12000)); }
     } else {
       const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE; delete env.PI_DESKTOP_DATA_DIR;
@@ -97,21 +121,20 @@ app.whenReady().then(async () => {
       for (const stream of [child.stdout, child.stderr]) {
         stream.setEncoding("utf8"); stream.on("data", chunk => { output += chunk; process.stdout.write(chunk); });
       }
-      const timer = setTimeout(() => child.kill(), labelsOnly ? 10_000 : 25_000);
+      const timer = setTimeout(() => child.kill(), probe === "organizationProbe" ? 25_000 : 10_000);
       try { code = await new Promise((resolve, reject) => { child.once("error", reject); child.once("close", resolve); }); }
       finally { clearTimeout(timer); }
     }
     completed = true;
     assert.equal(code, 0, output.slice(-8000));
-    if (labelsOnly) {
-      const grouping = output.split(/\r?\n/).find(line => line.startsWith("LABEL_GROUPING_PROBE "));
-      assert.ok(grouping, output.slice(-8000));
-      assert.deepEqual(JSON.parse(grouping.slice("LABEL_GROUPING_PROBE ".length)), { passed: true, uniqueRows: 1, uniqueSelected: 16, layouts: 6, pagination: true });
-    } else {
-      const line = output.split(/\r?\n/).find(item => item.startsWith("ORGANIZATION_PROBE "));
-      assert.ok(line, output.slice(-8000));
-      assert.deepEqual(JSON.parse(line.slice("ORGANIZATION_PROBE ".length)), { passed: true, locales: 9, permanentDeletes: 3 });
-    }
+    const prefix = probe === "sections" ? "SECTIONS_PROBE " : "SESSION_PROBE ";
+    const result = output.split(/\r?\n/).find(line => line.startsWith(prefix));
+    assert.ok(result, output.slice(-8000));
+    assert.deepEqual(JSON.parse(result.slice(prefix.length)), {
+      sections: { passed: true },
+      sidebarLabelGroupingProbe: { passed: true, uniqueRows: 1, uniqueSelected: 16, layouts: 6, pagination: true },
+      organizationProbe: { passed: true, locales: 9, permanentDeletes: 3 },
+    }[probe]);
   } finally {
     if (child && child.exitCode === null && child.signalCode === null) child.kill();
     if (wmiPid && !completed) {
@@ -129,5 +152,6 @@ const options = {
   timeout: 30_000,
   skip: process.platform === "linux" && !process.env.DISPLAY ? "Isolated Electron fixture requires a display" : false,
 };
-test("session organization user path: multiselect archive, trash, restore and confirmed permanent deletion", options, () => runSessionFixture(false));
-test("sidebar project grouping user path: descriptive labels, scoped folding, unique selection and narrow layouts", options, () => runSessionFixture(true));
+test("session organization user path: multiselect archive, trash, restore and confirmed permanent deletion", options, () => runSessionFixture("organizationProbe"));
+test("sidebar project grouping user path: descriptive labels, scoped folding, unique selection and narrow layouts", options, () => runSessionFixture("sidebarLabelGroupingProbe"));
+test("sidebar sections independently fold, resize and remember their heights in a constrained layout", options, () => runSessionFixture("sections"));

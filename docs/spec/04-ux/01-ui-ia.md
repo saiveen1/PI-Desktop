@@ -210,16 +210,12 @@ destination, chat as the home surface, tools and permissions inline.
 
 ### 3.2 Sidebar project groups
 
-- **Sections**: the compact `Sessions` heading precedes `Projects` and owns
-  path-less conversation creation plus the existing sort/archive-view menu. Its
-  toolbar places sorting before new-session creation. Both headings keep quiet
-  glyph actions and also accept a right-click create menu on the heading or empty
-  list chrome so section creation stays discoverable
-  without extra chrome. Its list shows at most five compact rows (146px) before
-  scrolling internally, so standalone work stays visible without displacing
-  project navigation. The following `Projects` heading exposes the
-  folder-picker action; retained project groups use the remaining height and
-  scroll independently.
+- **Sections**: global `Pinned` (when nonempty), `Recent`, then `Projects`.
+  Their lists fold, resize, and scroll independently. `Recent` owns path-less
+  conversation creation and the sort/archive-view menu, with sorting before
+  creation. `Projects` owns the folder picker. Both toolbars keep quiet glyph
+  actions and accept a right-click create menu on the header or empty list chrome.
+  See [Sidebar](08-component-spec.md#3-sidebar) for layout and persistence.
 - **Identity**: each project group is keyed by a host-owned logical group id;
   each root path remains canonical and is never inferred from an ambiguous
   folder basename. Legacy single-folder projects are compatibility groups.

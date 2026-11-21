@@ -317,6 +317,36 @@ export function saveSidebarWidth(value: number): void {
   write(SIDEBAR_WIDTH_KEY, clampSidebarWidth(value));
 }
 
+const SIDEBAR_SECTION_LAYOUT_KEY = "pi.desktop.sidebarSectionLayout";
+const sectionIds = ["pinned", "recent", "projects"] as const;
+export type SidebarSectionId = typeof sectionIds[number];
+export type SidebarSectionPreference = { collapsed?: boolean; height?: number };
+type SidebarSectionLayout = Partial<Record<SidebarSectionId, SidebarSectionPreference>>;
+export const SIDEBAR_SECTION_HEIGHT_MIN = 32;
+export const SIDEBAR_SECTION_HEIGHT_MAX = 4096;
+
+export function clampSidebarSectionHeight(height: number): number {
+  return Math.round(Math.max(SIDEBAR_SECTION_HEIGHT_MIN, Math.min(SIDEBAR_SECTION_HEIGHT_MAX, height)));
+}
+
+export function loadSidebarSectionLayout(): SidebarSectionLayout {
+  const saved = read(SIDEBAR_SECTION_LAYOUT_KEY);
+  if (!object(saved) || saved.version !== 1 || !object(saved.sections)) return {};
+  const layout: SidebarSectionLayout = {};
+  for (const id of sectionIds) {
+    const raw = saved.sections[id];
+    if (!object(raw)) continue;
+    const height = typeof raw.height === "number" && Number.isFinite(raw.height)
+      ? clampSidebarSectionHeight(raw.height) : undefined;
+    if (raw.collapsed === true || height !== undefined) layout[id] = { collapsed: raw.collapsed === true, height };
+  }
+  return layout;
+}
+
+export function saveSidebarSectionLayout(sections: SidebarSectionLayout): void {
+  write(SIDEBAR_SECTION_LAYOUT_KEY, { version: 1, sections });
+}
+
 export function projectIsPinned(path: string, meta: Record<string, ProjectMeta>): boolean {
   const key = normalizeProjectPath(path);
   return !!key && meta[key]?.pinned === true;

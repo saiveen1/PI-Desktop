@@ -318,6 +318,7 @@ export const fr = {
     "collapseSidebar": "Réduire la barre latérale",
     "expandSidebar": "Développer la barre latérale",
     "resizeSidebar": "Redimensionner la barre latérale",
+    "resizeSidebarSection": "Ajuster la hauteur de la section {{section}}",
     "sidebarWidth": "Largeur de la barre latérale : {{width}} pixels",
     "resizeChatWidth": "Redimensionner la conversation",
     "chatWidth": "Largeur de la conversation : {{width}} pixels",

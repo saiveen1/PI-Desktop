@@ -365,6 +365,7 @@ E2E-196b, E2E-196c, and E2E-200 (Quality, M6+).
 
 ### Personal-edition traceability
 
+| Quality — Independent sidebar section layout | [E2E-SIDEBAR-independent-section-layout](e2e/ui-shell.md#e2e-sidebar-independent-section-layout) |
 | B / C / Quality — Runtime-confirmed main-model identity | E2E-RUNTIME-main-model-identity |
 | C / Data safety / Quality — Bounded repetitive output | E2E-UI-bounded-repetitive-output, E2E-RUNTIME-repetitive-model-output |
 | A / Data safety / Quality — Session multiselect and reversible deletion | E2E-SESSION-recycle-bin-and-multiselect |

@@ -317,6 +317,7 @@ export const ptBR = {
     collapseSidebar: "Recolher barra lateral",
     expandSidebar: "Expandir barra lateral",
     resizeSidebar: "Redimensionar barra lateral",
+    resizeSidebarSection: "Ajustar a altura da seção {{section}}",
     sidebarWidth: "Largura da barra lateral: {{width}} pixels",
     resizeChatWidth: "Redimensionar largura da conversa",
     chatWidth: "Largura da conversa: {{width}} pixels",

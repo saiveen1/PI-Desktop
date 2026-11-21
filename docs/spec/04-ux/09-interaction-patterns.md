@@ -1986,14 +1986,16 @@ Project drag/drop follows these patterns:
 
 ### 9.2 Sidebar scrolling
 
-- The Recent sessions body is capped at ten compact rows and scrolls
-  internally once Load more has added rows beyond that height.
-- Retained project groups occupy the remaining sidebar height and scroll in a
-  separate region. Both regions stay independent from the footer and primary
-  navigation.
-- No horizontal scroll in sidebar
+- Pinned, Recent, and Projects each scroll internally when expanded. Recent
+  defaults to a ten-row viewport without a custom height. Projects defaults
+  to filling the remaining space; when it is hidden or folded, Recent fills
+  that space if it has no custom height.
+- Narrow height budgets temporarily compress expanded list viewports without
+  changing preferences. If even the minimum expanded heights do not fit, the
+  section stack can scroll while primary navigation and the footer stay fixed.
+- No horizontal scroll in the sidebar.
 - Scroll indicators use the platform's subtle overlay treatment without
-  changing either region's width. The 6px thumb is transparent at rest and
+  changing the lists' width. The 6px thumb is transparent at rest and
   appears when the owning list is hovered or focused; dragging keeps it
   visible until the interaction ends.
 

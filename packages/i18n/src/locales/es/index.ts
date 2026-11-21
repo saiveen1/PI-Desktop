@@ -318,6 +318,7 @@ export const es = {
     "collapseSidebar": "Contraer barra lateral",
     "expandSidebar": "Expandir barra lateral",
     "resizeSidebar": "Cambiar tamaño de barra lateral",
+    "resizeSidebarSection": "Ajustar la altura de la sección {{section}}",
     "sidebarWidth": "Ancho de barra lateral: {{width}} píxeles",
     "resizeChatWidth": "Cambiar ancho de la conversación",
     "chatWidth": "Ancho de la conversación: {{width}} píxeles",

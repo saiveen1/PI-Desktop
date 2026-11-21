@@ -494,6 +494,16 @@ Plugins and Scheduled destinations beside Settings. Scheduled uses a clock
 action with a localized accessible name and active state. Projects is managed
 through Settings → Project archive.
 
+Each visible section (Pinned, Recent, Projects) has a title button with a
+chevron and full section count. Activating the title folds or unfolds only its
+list, leaving its header and actions reachable. Folded rows are excluded from
+visible-session selection. Each expanded list has its own bottom resize handle:
+drag it or focus it and press Up/Down to change that list's preferred height.
+Escape cancels an active drag; double-click restores that section's automatic
+height. Fold and height preferences survive reloads; temporary compression for
+short windows does not change them. Section folds do not change module
+visibility, pins, or the individual project and conversation group folds.
+
 Section-level create and sort controls stay visually quiet at rest and reveal
 when the owning Sessions or Projects toolbar is hovered or keyboard-focused.
 Project-group `+` and overflow controls follow the same hover/focus treatment;
@@ -727,8 +737,9 @@ visually distinct from list content.
   Projects, independent of project session dates, project collapse, retained
   tabs, and each conversation group's ten-row history limit. Each pin shows its project
   display name (full path on hover), or Temporary space for a path-less conversation.
-  The section is omitted when empty and scrolls within `min(233px, 30vh)` when
-  needed. Its rows reuse normal selection, status, hover, and overflow actions.
+  The section is omitted when empty. Its default height is capped at
+  `min(233px, 30vh)` while another list is expanded; a custom height can change
+  the scroll viewport. Its rows reuse normal selection, status, hover, and overflow actions.
 - Pinning moves the existing row into that section; unpinning returns it to
   normal project or temporary history, subject to existing folding and closed
   tab visibility. Keyboard focus follows the relocated row's overflow control,
@@ -1851,11 +1862,11 @@ near-zero duration. A folded group keeps its rows mounted, `aria-hidden`, and
   `updatedAt` first. A project conversation therefore appears both in Recent
   and in its project group, so it stays visible while that project is folded;
   a temporary conversation appears only in Recent. Recent opens with seven
-  rows; a trailing Load more button appends ten more per click. Its body is a
-  291px window over ten compact 28px rows, their 1px row gaps, and the 2px
-  label inset; it scrolls internally when more rows are loaded. The Projects list uses the remaining
-  sidebar height and scrolls independently; neither region scrolls the footer
-  or primary navigation. Both list scrollbars use the same global 6px,
+  rows; a trailing Load more button appends ten more per click. Its default
+  cap is 291px (ten compact rows, their gaps, and the label inset); it scrolls
+  internally when more rows are loaded. Projects defaults to filling the
+  remaining height. Both can be resized as described in §3.1. List scrollbars
+  use the same global 6px,
   trackless, transparent-at-rest rule as the conversation and work-panel
   scrollbars; the semantic-ink thumb appears when its list is hovered, focused,
   or scrolling and remains visible while dragging, so the independent regions

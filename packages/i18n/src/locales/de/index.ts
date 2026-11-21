@@ -318,6 +318,7 @@ export const de = {
     "collapseSidebar": "Seitenleiste einklappen",
     "expandSidebar": "Seitenleiste erweitern",
     "resizeSidebar": "Größe der Seitenleiste ändern",
+    "resizeSidebarSection": "Höhe des Bereichs „{{section}}“ ändern",
     "sidebarWidth": "Breite der Seitenleiste: {{width}} Pixel",
     "resizeChatWidth": "Gesprächsbreite ändern",
     "chatWidth": "Gesprächsbreite: {{width}} Pixel",

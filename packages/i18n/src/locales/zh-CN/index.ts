@@ -322,6 +322,7 @@ export const zhCN = {
     collapseSidebar: "收起侧边栏",
     expandSidebar: "展开侧边栏",
     resizeSidebar: "调整侧边栏宽度",
+    resizeSidebarSection: "调整「{{section}}」区块高度",
     sidebarWidth: "侧边栏宽度：{{width}} 像素",
     resizeChatWidth: "调整对话宽度",
     chatWidth: "对话宽度：{{width}} 像素",

@@ -327,6 +327,7 @@ export const en = {
     collapseSidebar: "Collapse sidebar",
     expandSidebar: "Expand sidebar",
     resizeSidebar: "Resize sidebar",
+    resizeSidebarSection: "Resize {{section}} section",
     sidebarWidth: "Sidebar width: {{width}} pixels",
     resizeChatWidth: "Resize conversation width",
     chatWidth: "Conversation width: {{width}} pixels",
