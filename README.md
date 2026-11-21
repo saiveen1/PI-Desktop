@@ -84,9 +84,10 @@ This edition strengthens the existing framework rather than replacing it.
   active request model and provider IDs, including after model changes, so it
   can answer identity questions and fill requested `AI-Model` trailers without
   guessing. This identifies the configured request, not undisclosed gateway routing.
-- **Conversation personas.** Manage reusable identity/tone/style templates in
-  Instructions settings and select one beside the composer mode picker. Selection
-  snapshots replace the default identity opening without changing modes or
+- **Conversation personas.** Instructions settings shows the read-only built-in
+  identity opening and lists reusable identity/tone/style templates for direct
+  editing. Select a persona beside the composer mode picker. Selection snapshots
+  replace the default identity opening without changing modes or
   permissions. Optional child inheritance is off by default; resumed child chains
   retain their original persona even after the parent selection changes. Template
   edits require reapplying a selection. This is prompt guidance, not guaranteed

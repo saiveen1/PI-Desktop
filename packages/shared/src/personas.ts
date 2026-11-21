@@ -1,3 +1,7 @@
+/** The built-in identity opening, before other instructions are composed. */
+export const DEFAULT_RUNTIME_SYSTEM_PROMPT =
+  "You are PI-Desktop, a coding agent. Answer in the user's language. Be concise, direct, and actionable.";
+
 /** Persona templates are preferences, never permission or execution grants. */
 export const PERSONA_LIMITS = { count: 32, id: 64, name: 128, promptBytes: 32_768 } as const;
 

@@ -3,9 +3,12 @@
 ### Conversation personas
 
 Instructions contains a separate persona-template editor before the global
-instruction editor, using shared settings primitives. This order reflects the
-first application-composed identity block. Create/edit/delete templates without
-mutating session snapshots. Explain that block, recommend persona-oriented
+instruction editor, using shared settings primitives. It shows the exact built-in
+identity opening as copyable, read-only text even with no custom templates. This
+is the built-in fallback, not a preview of the full composed system prompt or a
+SYSTEM.md override. Custom templates are listed with a direct Edit action that
+opens the editor below the row. Create/edit/delete templates without mutating
+session snapshots. Explain the identity block, recommend persona-oriented
 content, and distinguish it from workflow and permission changes.
 The composer selector links here; no extra sidebar category is introduced.
 See [session personas](../03-runtime/session-personas.md).

@@ -14,6 +14,11 @@ components and `packages/agent-runtime/src/persona-prompt.ts`. See the
 [persona contract](../spec/03-runtime/session-personas.md) for limits. This records
 current-source functionality, not a published release or real-provider guarantee.
 
+The settings follow-up extends local `59a9c26b0` on base `3b300ac45`.
+Compared with locally recorded upstream `e89051fc7`, which has no persona editor,
+this change lists saved templates for direct editing and displays the built-in
+identity opening verbatim from the same source as the runtime fallback.
+
 ## Floating chat image previews
 
 Locally recorded upstream `95df2e0f9` already opens generated images in a

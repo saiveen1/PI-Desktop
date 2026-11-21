@@ -108,6 +108,9 @@ management entry. Default has independent hover/focus help: it injects no sessio
 persona and keeps the existing mode, global/project instructions and SYSTEM.md
 configuration effective. Opening help must not select or clear a persona.
 Settings > Instructions places persona management before global instructions.
+It shows the built-in fallback identity opening verbatim, read-only and separate
+from the editable catalog. This does not resolve per-session SYSTEM.md overrides
+or show the rest of the prompt. Saved templates are visible without opening a menu.
 The welcome surface is not the only place to configure it.
 
 A draft carries selection into first-session creation. Idle existing conversations

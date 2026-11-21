@@ -126,4 +126,5 @@ test("Instructions settings presents personas before global instructions", async
   const global = html.indexOf("Global instructions");
   assert.ok(persona >= 0 && global >= 0, "both settings sections are rendered");
   assert.ok(persona < global, "the first instruction entry is presented first");
+  assert.match(html, /<textarea\b[^>]*\breadonly=""[^>]*>You are PI-Desktop, a coding agent\./i);
 });

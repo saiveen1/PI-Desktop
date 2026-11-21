@@ -42,7 +42,7 @@ function component(path, name, dependencies) {
     useCallback: (callback) => callback,
   };
   react.useRef = react.useRef.bind(react);
-  const primitives = Object.fromEntries(["Button", "Input", "Textarea", "Field", "SettingsCard", "SettingsMenuSelect",
+  const primitives = Object.fromEntries(["Button", "Input", "Textarea", "Field", "SettingsCard", "SettingsRow", "SettingsMenuSelect",
     "TooltipButton", "HelpIcon", "AnchoredMenu", "SettingsToggle", "IconChevronDown", "IconCheck"].map((name) => [name, name]));
   new Function("require", "exports", "module", code)((id) => {
     if (id === "react") return react;
@@ -131,10 +131,26 @@ function fixture(t) {
 function choose(tree, label) { button(tree, label).props.onClick(); }
 function trigger(tree) { return tree.props.trigger(null).props; }
 
+const editablePrompt = (tree) => find(tree, "Textarea", (node) => !node.props.readOnly);
+const editButton = (tree, name) => find(tree, "Button", (node) => node.props["aria-label"] === `personas.editTemplate:${name}`);
+
+test("Instructions shows the uneditable built-in identity even with no custom templates", (t) => {
+  const f = fixture(t);
+  const card = f.settingsCard();
+  const opening = find(card, "Textarea", (node) => node.props.readOnly);
+  assert.ok(opening, "the built-in opening is visible without opening a menu");
+  assert.equal(opening.props.value, "You are PI-Desktop, a coding agent. Answer in the user's language. Be concise, direct, and actionable.");
+  assert.equal(opening.props.onChange, undefined);
+  assert.equal(editablePrompt(card), undefined);
+  assert.equal(button(card, "personas.delete"), undefined);
+  assert.equal(button(card, "common.save"), undefined);
+  assert.equal(f.get().settings.personas, undefined, "the built-in opening is not stored as a template");
+});
+
 async function createTemplate(f, name, prompt) {
   choose(f.settingsCard(), "personas.add");
   typeInto(find(f.settingsCard(), "Input"), name);
-  typeInto(find(f.settingsCard(), "Textarea"), prompt);
+  typeInto(editablePrompt(f.settingsCard()), prompt);
   await button(f.settingsCard(), "common.save").props.onClick();
   assert.equal(f.get().settings.personas.length, 1);
   return f.get().settings.personas[0];
@@ -154,7 +170,10 @@ test("settings CRUD and composer selection preserve the committed snapshot until
   const original = f.get().sessions[0].persona;
   assert.equal(original.inheritToSubagents, false);
 
-  find(f.settingsCard(), "SettingsMenuSelect").props.onChange(template.id);
+  const savedEdit = editButton(f.settingsCard(), "Reviewer");
+  assert.ok(savedEdit, "the saved template can be edited directly without a menu");
+  savedEdit.props.onClick();
+  assert.equal(editablePrompt(f.settingsCard()).props.value, template.prompt);
   typeInto(find(f.settingsCard(), "Input"), "A much longer reviewer name that must stay readable in the popover");
   await button(f.settingsCard(), "common.save").props.onClick();
   assert.equal(f.get().sessions[0].persona, original);
@@ -164,11 +183,12 @@ test("settings CRUD and composer selection preserve the committed snapshot until
   assert.notEqual(f.get().sessions[0].persona.revision, original.revision);
   assert.match(trigger(f.menu()).ariaLabel, /much longer reviewer/);
 
-  find(f.settingsCard(), "SettingsMenuSelect").props.onChange(template.id);
+  editButton(f.settingsCard(), modifiedName).props.onClick();
   choose(f.settingsCard(), "personas.delete");
   assert.equal(f.get().settings.personas.length, 1);
   await button(f.settingsCard(), "personas.confirmDelete").props.onClick();
   assert.deepEqual(f.get().settings.personas, []);
+  assert.equal(editButton(f.settingsCard(), modifiedName), undefined);
   assert.match(text(f.menu()), /personas.retained:A much longer reviewer/);
   const snapshot = f.get().sessions[0].persona;
   find(f.menu(), "SettingsToggle").props.onChange();

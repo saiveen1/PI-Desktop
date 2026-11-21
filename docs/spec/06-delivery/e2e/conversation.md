@@ -7,10 +7,14 @@ Use isolated synthetic data and a stubbed model transport for automated checks.
 
 1. Start from an old profile with no persona fields. The default/file-based
    identity, modes and permissions are unchanged after the schema-35 upgrade.
-2. Create/edit/delete a template in Settings > Instructions, where persona
-   management precedes global instructions. Reject duplicate IDs, empty
-   names/prompts and oversized UTF-8 content without replacing saved settings.
-   Omitting the catalog in another settings patch preserves it.
+2. Open Settings > Instructions. Even with an empty custom catalog, persona
+   management shows the verbatim built-in opening before global instructions.
+   Verify that it can be copied but not edited, deleted, or saved as a template.
+   Create a custom template and confirm it is immediately visible in the list.
+   Use its row's Edit action to change and then delete it without opening a menu.
+   Reject duplicate IDs, empty names/prompts and oversized UTF-8 content without
+   replacing saved settings. Omitting the catalog in another settings patch
+   preserves it.
 3. Select from the composer immediately before mode. First main request starts with the
    selected persona, replaces the prior identity opening, and retains runtime,
    project and mode instructions. Clear/reselect in an idle existing session;
@@ -39,8 +43,8 @@ Use isolated synthetic data and a stubbed model transport for automated checks.
     persona. Selecting Default still clears only the session persona.
 
 Automated evidence: shared persona validation, Host persona migration/RPC tests,
-`session-persona-user-path.test.ts`, `session-persona-main-ipc.test.mjs` and the
-persona renderer fixtures. Live-provider adherence and installed-profile upgrade
+the runtime `session-persona-user-path.test.ts`, and the desktop
+`session-personas-user-path.test.mjs` and `session-persona-main-ipc.test.mjs` fixtures. Live-provider adherence and installed-profile upgrade
 are separate manual acceptance, not implied by the isolated checks.
 
 ## E2E-stop-navigation-running-state
