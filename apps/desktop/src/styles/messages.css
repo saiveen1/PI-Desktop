@@ -1955,6 +1955,7 @@
   border-block: 1px solid var(--ds-border-subtle);
 }
 .turn-context-list { margin: 0; padding: 0; list-style: none; }
+.turn-context-process { margin-block: 8px 4px; max-inline-size: 100%; white-space: normal; text-align: start; }
 .turn-context-block { display: grid; gap: 5px; min-inline-size: 0; }
 .turn-context-block + .turn-context-block {
   margin-block-start: 8px;
@@ -1965,8 +1966,9 @@
 .turn-context-json, .turn-context-block pre { font-family: var(--font-mono); }
 .turn-context-original { display: flex; flex-wrap: wrap; align-items: start; gap: 0 8px; }
 .turn-context-original details { flex: 1 1 8rem; min-inline-size: 0; }
-.turn-context-original summary { padding-block: 4px; cursor: pointer; color: var(--ds-text-secondary); }
-.turn-context-block pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
+.turn-context-original summary, .turn-answer-original > summary { padding-block: 4px; cursor: pointer; color: var(--ds-text-secondary); }
+.turn-answer-original > summary { font-size: var(--text-xs); }
+.turn-context-block pre, .turn-answer-original pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
 .turn-context-footer .turn-context-toolbar { justify-content: flex-end; }
 .turn-context-error { color: var(--ds-error); overflow-wrap: anywhere; }
 .turn-context-notice { margin-block: 4px 0; }

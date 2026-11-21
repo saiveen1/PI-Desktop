@@ -2287,8 +2287,9 @@ Single message render — either user (plaintext) or assistant (markdown streami
   Delete on user turns. A streaming assistant turn omits its Copy action until
   the response settles. The last completed text reply in an idle, editable local
   Desktop conversation offers **Edit context** for its entire current turn.
-  An ordered editor exposes thinking, intermediate prose, paired tool arguments
-  and result text, then the final answer. Each block has inclusion, editing and
+  Opening the editor focuses the final-answer field. Thinking, intermediate
+  prose and tools are available under one initially collapsed process section.
+  Preview follows replay order. Each block has inclusion, editing and
   original/reset controls; tools are included/excluded as complete call/result
   pairs. Default preserves existing context. Shortcuts exclude all thinking or
   retain only the final answer; a count summary and preview show the proposed
@@ -2296,8 +2297,10 @@ Single message render — either user (plaintext) or assistant (markdown streami
   explicitly excluding it is allowed. Recognized media bytes in tool results
   appear as placeholders, not inline binary text; editing result text replaces
   model-visible media, never the original execution record.
-  Original execution records stay visible, with a context-edited notice rather
-  than substituted tool receipts. Restore removes overrides without executing
+  After Save, the answer bubble renders the saved final text by default, also
+  on reload. A disclosure shows the original; exclusion is explicitly labeled
+  as not sent to the model. Tool receipts always show actual results, not
+  replacements from the editor. Restore removes overrides without executing
   anything. Save/cancel, errors, stale reads and narrow layouts remain guarded;
   older turns require Fork first. See [whole-turn editor](../../adr/whole-turn-context-editing.md).
   Neither action retries the prompt. Assistant rows never offer Delete. Chips

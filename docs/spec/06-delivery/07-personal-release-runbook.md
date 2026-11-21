@@ -175,9 +175,11 @@ beta also publishes a prerelease after its build succeeds. Manual dispatch with
 an empty `release_version` builds without publishing. Ordinary builds accept a
 stable or beta current version; publication remains beta-only. The Windows job
 installs locked dependencies and calls the same `pnpm dist:personal` entry, with
-offline release/policy regression, Desktop typecheck and lint. It never installs or
-launches Desktop. No signing credential or personal access token is required for
-this unsigned personal lane.
+offline release/policy regression, Desktop typecheck and lint. Before uploading
+the installer it runs `pnpm check:personal-merge` on the built source. Failed
+or missing protected behavior blocks delivery. This uses isolated fixtures,
+never installs or launches Desktop, and requires no signing credential or
+personal access token for the unsigned personal lane.
 
 Successful delivery uploads exactly the installer, its SHA-256, change notes and
 build-info sidecars as `personal-windows-<run-id>-<attempt>`, retained for 30 days.

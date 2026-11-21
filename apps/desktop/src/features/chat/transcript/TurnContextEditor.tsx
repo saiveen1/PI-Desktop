@@ -1,7 +1,8 @@
 import type { TurnContextMessage, TurnContextSnapshot } from "@pi-desktop/shared";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button, Checkbox, Field, Textarea } from "../../../components/ui";
+import { IconChevronDown, IconChevronRight } from "../../../components/icons";
 import { api } from "../../../lib/api";
 import { useAppStore } from "../../../stores/app-store";
 import { getEditableAssistantReply } from "../../../stores/runtime/transcript-action";
@@ -76,20 +77,22 @@ export function TurnContextEditor({ snapshot, editable, signal, cancel }: {
 }) {
   const { t } = useTranslation();
   const titleId = useId();
-  const title = useRef<HTMLHeadingElement>(null);
   const scroll = useRef<HTMLDivElement>(null);
   const [rows, setRows] = useState(() => createContextRows(snapshot.messages));
   const [preview, setPreview] = useState(false);
+  const [processOpen, setProcessOpen] = useState(false);
   const [restoreAll, setRestoreAll] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<ReturnType<typeof contextError> | null>(null);
   const inFlight = useRef(false);
-  useEffect(() => { title.current?.focus(); }, []);
+  useLayoutEffect(() => { scroll.current?.querySelector<HTMLTextAreaElement>('[data-context-kind="final"] textarea')?.focus(); }, []);
 
   const blockList = rows.flatMap(({ source, blocks, originals }, rowIndex) => blocks.map((block, index) => ({
     source, block, original: originals[index], rowIndex, index, key: `${source.messageId}:${block.kind}`,
   })));
   const included = blockList.filter(({ source, block }) => isIncludedContextBlock(source, block));
+  const final = blockList.find(({ block }) => block.kind === "final");
+  const process = blockList.filter(({ block }) => block.kind !== "final");
   const { edits, restore, invalid } = proposeContextEdits(rows, restoreAll);
   const canSave = editable && !saving && !invalid && (edits.length > 0 || restore);
   const save = async () => {
@@ -125,6 +128,40 @@ export function TurnContextEditor({ snapshot, editable, signal, cancel }: {
     })));
   };
 
+  const renderBlock = ({ source, block, original, rowIndex, index, key }: (typeof blockList)[number]) => {
+    const label = block.kind === "tool" ? source.toolName || t("turnContext.tool") : t(`turnContext.${block.kind}`);
+    const argsInvalid = block.kind === "tool" && !parseContextArgs(block.args);
+    const argsErrorId = `${titleId}-${rowIndex}-args-error`;
+    return <li key={key} className="turn-context-block" data-context-kind={block.kind}>
+      <div className="turn-context-row">
+        <h4>{label}</h4>
+        {!preview && <Checkbox label={t("turnContext.include")} aria-label={t("turnContext.includeBlock", { label })}
+          checked={!block.excluded} disabled={saving} onChange={(event) => change(rowIndex, index, { ...block, excluded: !event.currentTarget.checked })} />}
+      </div>
+      {preview ? <ContextValues source={source} block={block} /> : <>
+        {block.kind === "tool" && <Field label={t("turnContext.args")}>
+          <Textarea className="turn-context-json" rows={3} value={block.args} readOnly={saving}
+            aria-invalid={argsInvalid || undefined} aria-describedby={argsInvalid ? argsErrorId : undefined}
+            onChange={(event) => change(rowIndex, index, { ...block, args: event.currentTarget.value })} />
+        </Field>}
+        {argsInvalid && <p className="turn-context-error" id={argsErrorId} role="alert">{t("turnContext.invalidArgs")}</p>}
+        {block.kind === "final" && !block.excluded && !block.value.trim() && <p className="turn-context-error" id={`${titleId}-final-error`} role="alert">{t("turnContext.emptyText")}</p>}
+        <Textarea rows={block.kind === "final" ? 5 : 3} className="selectable" aria-label={block.kind === "tool" ? t("turnContext.result") : label}
+          aria-invalid={block.kind === "final" && !block.excluded && !block.value.trim() || undefined}
+          aria-describedby={block.kind === "final" && !block.excluded && !block.value.trim() ? `${titleId}-final-error` : undefined}
+          placeholder={hasOpaqueThinking(source, block) ? t("turnContext.opaque") : undefined}
+          value={block.value} readOnly={saving} onChange={(event) => change(rowIndex, index, { ...block, value: event.currentTarget.value })} />
+        <div className="turn-context-original">
+          <details>
+            <summary>{t("turnContext.original")}</summary>
+            <ContextValues source={source} block={original} />
+          </details>
+          <Button type="button" size="sm" variant="ghost" disabled={saving} onClick={() => change(rowIndex, index, original)}>{t("turnContext.restoreBlock")}</Button>
+        </div>
+      </>}
+    </li>;
+  };
+
   return <form className="turn-context-editor" aria-labelledby={titleId} aria-busy={saving || undefined}
     onSubmit={(event) => { event.preventDefault(); void save(); }}
     onKeyDown={(event) => {
@@ -134,7 +171,7 @@ export function TurnContextEditor({ snapshot, editable, signal, cancel }: {
       }
     }}>
     <header className="turn-context-header">
-      <h3 id={titleId} ref={title} tabIndex={-1}>{t("turnContext.edit")}</h3>
+      <h3 id={titleId}>{t("turnContext.edit")}</h3>
       <p>{t("turnContext.description")}</p>
       <p>{t("turnContext.warning")}</p>
       <div className="turn-context-toolbar">
@@ -152,41 +189,15 @@ export function TurnContextEditor({ snapshot, editable, signal, cancel }: {
     </header>
     <div className="turn-context-scroll" ref={scroll}>
       {preview && !included.length && <p>{t("turnContext.emptyPreview")}</p>}
-      <ol className="turn-context-list">
-        {(preview ? included : blockList).map(({ source, block, original, rowIndex, index, key }) => {
-          const label = block.kind === "tool" ? source.toolName || t("turnContext.tool") : t(`turnContext.${block.kind}`);
-          const argsInvalid = block.kind === "tool" && !parseContextArgs(block.args);
-          const argsErrorId = `${titleId}-${rowIndex}-args-error`;
-          return <li key={key} className="turn-context-block" data-context-kind={block.kind}>
-            <div className="turn-context-row">
-              <h4>{label}</h4>
-              {!preview && <Checkbox label={t("turnContext.include")} aria-label={t("turnContext.includeBlock", { label })}
-                checked={!block.excluded} disabled={saving} onChange={(event) => change(rowIndex, index, { ...block, excluded: !event.currentTarget.checked })} />}
-            </div>
-            {preview ? <ContextValues source={source} block={block} /> : <>
-              {block.kind === "tool" && <Field label={t("turnContext.args")}>
-                <Textarea className="turn-context-json" rows={3} value={block.args} readOnly={saving}
-                  aria-invalid={argsInvalid || undefined} aria-describedby={argsInvalid ? argsErrorId : undefined}
-                  onChange={(event) => change(rowIndex, index, { ...block, args: event.currentTarget.value })} />
-              </Field>}
-              {argsInvalid && <p className="turn-context-error" id={argsErrorId} role="alert">{t("turnContext.invalidArgs")}</p>}
-              {block.kind === "final" && !block.excluded && !block.value.trim() && <p className="turn-context-error" id={`${titleId}-final-error`} role="alert">{t("turnContext.emptyText")}</p>}
-              <Textarea rows={3} className="selectable" aria-label={block.kind === "tool" ? t("turnContext.result") : label}
-                aria-invalid={block.kind === "final" && !block.excluded && !block.value.trim() || undefined}
-                aria-describedby={block.kind === "final" && !block.excluded && !block.value.trim() ? `${titleId}-final-error` : undefined}
-                placeholder={hasOpaqueThinking(source, block) ? t("turnContext.opaque") : undefined}
-                value={block.value} readOnly={saving} onChange={(event) => change(rowIndex, index, { ...block, value: event.currentTarget.value })} />
-              <div className="turn-context-original">
-                <details>
-                  <summary>{t("turnContext.original")}</summary>
-                  <ContextValues source={source} block={original} />
-                </details>
-                <Button type="button" size="sm" variant="ghost" disabled={saving} onClick={() => change(rowIndex, index, original)}>{t("turnContext.restoreBlock")}</Button>
-              </div>
-            </>}
-          </li>;
-        })}
-      </ol>
+      <ol className="turn-context-list">{preview ? included.map(renderBlock) : final && renderBlock(final)}</ol>
+      {!preview && process.length > 0 && <>
+        <Button type="button" size="sm" variant="ghost" className="turn-context-process" aria-expanded={processOpen}
+          aria-controls={`${titleId}-process`} onClick={() => setProcessOpen(!processOpen)}>
+          {processOpen ? <IconChevronDown size={13} /> : <IconChevronRight size={13} />}
+          {t("turnContext.process", { count: process.length })}
+        </Button>
+        <ol id={`${titleId}-process`} hidden={!processOpen} className="turn-context-list">{processOpen && process.map(renderBlock)}</ol>
+      </>}
     </div>
     <footer className="turn-context-footer">
       {error && <p className="turn-context-error" role="alert">{t(error)}</p>}

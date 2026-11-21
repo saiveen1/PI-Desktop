@@ -1349,7 +1349,7 @@ transient and never restored into durable UI messages or transcript records.
   contribute neither a call nor its result. Changed text, thinking and arguments
   lose only their invalidated signatures. User-edited thinking is sent as labeled
   ordinary assistant text, never forged provider-signed reasoning. Original
-  transcript display remains unchanged; affected checkpoints are invalidated.
+  transcript records remain unchanged; affected checkpoints are invalidated.
   Legacy final-only edits still rebuild from their replaced transcript text.
 - `UiMessage.excludeThinkingFromContext === true` leaves the stored/displayed
   reasoning intact but omits its thinking content from restored model messages.

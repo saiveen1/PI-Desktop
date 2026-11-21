@@ -26,16 +26,19 @@ removing call/result halves separately would produce invalid model requests.
   as well; an untouched result retains its original structured content. Editor
   snapshots replace recognized image/audio payloads and base64 media data URLs
   with explicit placeholders; ordinary business data and prose are not clipped.
-- The editor lists thinking, intermediate text, tool pairs and the final answer.
+- The editor opens on the final answer. Thinking, intermediate text and tool
+  pairs are available in a collapsed process section; preview keeps replay order.
   Every block can be edited or excluded; tool calls/results form one include
   unit. The final answer may be explicitly excluded; if included, its effective
   text must be nonblank. Actions to exclude all thinking or retain only the
   final answer modify the draft, not storage.
   A preview and count summary show the proposed current-turn context. Original
   values remain inspectable; row reset and whole-turn reset restore originals.
-- Original transcript display remains an execution record with an explicit
-  edited/excluded-context notice. It is not silently replaced with fabricated
-  tool results. Context preview is the authoritative presentation of overlays.
+- After a confirmed edit, the chat bubble shows the saved final-answer text by
+  default, including after reload. The original remains available on demand.
+  Explicit exclusion is labeled as not sent to the model, not silently hidden
+  or mistaken for deletion. Tool rows always show actual execution receipts;
+  edited tool inputs and outputs belong only in the context editor/preview.
 - Main reuses the session-operation lock, strict persistence drain, rewrite fence
   and acknowledged runtime disposal before saving. Host atomically splices all
   overlays and invalidates compactions covering the earliest change and their

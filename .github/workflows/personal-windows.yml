@@ -85,6 +85,9 @@ jobs:
           pnpm --filter @pi-desktop/desktop typecheck
           pnpm lint
 
+      - name: Verify protected personal behaviors
+        run: pnpm check:personal-merge
+
       - name: Verify and stage delivery files
         run: node scripts/personal-ci.mjs stage
 

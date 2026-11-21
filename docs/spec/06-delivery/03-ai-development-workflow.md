@@ -93,6 +93,28 @@ Branches and worktrees are optional, not prerequisites for development.
   and preserve unknown ignored content. Worktree and branch deletion require
   their own authorization; do not delete another task's work.
 
+### Upstream merge gate (personal edition)
+
+1. **Before integration**, record the personal and upstream revisions, their merge
+   base, and the intentional local differences in the affected user paths. Start
+   with the [provenance map](../../maintenance/personal-edition-provenance.md),
+   then compare both sides' code, tests and specs since that base. For each
+   overlap record the observable guarantee, upstream evidence, decision (retain,
+   replace with equivalent behavior, or retire), and the test that proves it.
+2. **Before accepting the candidate**, compare `check:personal-merge`, its
+   registered cases, assertions and fixtures with the pre-merge personal revision.
+   Protect behavior, not file contents. A rename or equivalent replacement must
+   exercise the same user path and failure mode; demonstrate that it fails when
+   the guarantee is lost. Record the evidence and obtain user approval before
+   replacing protected coverage or retiring/changing an intentional guarantee.
+3. Run **`pnpm check:personal-merge`** from the combined candidate, even after a
+   conflict-free merge. It runs the whole-turn editor's isolated Chromium fixture
+   and the full-window Settings route tests; a skipped protected case (including
+   missing Chromium), missing protected test, or failure blocks acceptance. Record candidate revision
+   plus uncommitted changes, command, and results. Re-run after relevant changes.
+   These sentinels do not replace targeted tests for other overlaps or incoming
+   changes. The command does not fetch, merge, install, or launch Desktop.
+
 ### Windows local source launcher
 
 `start-local.cmd` delegates to `scripts/start-local.ps1`. The local-only

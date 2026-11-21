@@ -9,7 +9,7 @@ export async function exerciseTurnContext({ root, i18n, message, frame, until })
   const answer = { ...message('answer'), role: 'assistant', content: 'Original final answer', thinking: 'Final thinking' };
   const middle = { ...message('middle'), role: 'assistant', content: 'Original intermediate text', thinking: 'Middle thinking' };
   const tool = { ...message('tool'), role: 'tool', content: 'Original tool result', toolCallId: 'call-1',
-    toolName: 'Read', toolArgs: { path: 'notes.md' }, toolStatus: 'success' };
+    toolName: 'Read', toolArgs: { path: 'notes.md' }, toolStatus: 'success', toolResult: { details: { path: 'notes.md', content: 'Original tool result' } } };
   const rows = [message('older-prompt'), { ...message('older-answer'), role: 'assistant' }, message('prompt'), middle, tool, answer];
   const snapshotRows = [middle, tool, answer].map(row => ({ messageId: row.id, role: row.role, final: row === answer,
     content: row.role === 'assistant' ? row.content : '', thinking: row.thinking, hasThinking: Boolean(row.thinking),
@@ -46,6 +46,7 @@ export async function exerciseTurnContext({ root, i18n, message, frame, until })
     showToast: (text) => errors.push(text) });
   const seeded = reloaded();
   hydrate(id, seeded);
+  useAppStore.setState(state => ({ settings: { ...state.settings, transcriptDisplayMode: 'flat' } }));
   useAppStore.setState({ retainedSessionIds: [id], retainedTranscripts: { [id]: seeded.slice(2) }, transcriptViews: {
     [id]: { messages: seeded.slice(1), messageStart: 1, messageEnd: seeded.length, hasMoreBefore: true, hasMoreAfter: false, loading: null },
   } });
@@ -64,6 +65,8 @@ export async function exerciseTurnContext({ root, i18n, message, frame, until })
   const input = (kind, index = 0) => block(kind).querySelectorAll('textarea')[index];
   const button = (text, parent = form()) => [...parent.querySelectorAll('button')].find(b => b.textContent === text);
   const press = async (text, parent) => { button(text, parent).click(); await frame(); };
+  const processToggle = () => form().querySelector('button[aria-controls]');
+  const expand = async () => { processToggle().click(); await frame(); };
   const open = async () => { actions()[0].click(); await until(form, 'context editor did not open'); };
   const change = async (field, value) => {
     Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(field, value);
@@ -73,6 +76,10 @@ export async function exerciseTurnContext({ root, i18n, message, frame, until })
   const actionCount = actions().length;
   const forkCount = document.querySelectorAll(`button[aria-label="${i18n.t('chat.forkResponse')}"]`).length;
   await open();
+  const initialFocus = document.activeElement?.getAttribute('aria-label');
+  const collapsed = { kinds: blocks().map(row => row.dataset.contextKind), expanded: processToggle().getAttribute('aria-expanded'),
+    label: processToggle().textContent, focusedFinal: document.activeElement === input('final') };
+  await expand();
   const defaults = { kinds: blocks().map(row => row.dataset.contextKind),
     checked: blocks().map(row => row.querySelector('input').checked), saveDisabled: button('Save').disabled, count: count() };
   const layout = [500, 230].map(width => {
@@ -100,7 +107,9 @@ export async function exerciseTurnContext({ root, i18n, message, frame, until })
   const writesAfterCancel = writes.length;
 
   await open();
+  await expand();
   await change(input('thinking'), 'Edited middle thinking');
+  await change(input('final'), '**Edited final answer**');
   await change(input('text'), 'Edited middle text');
   await change(input('tool'), '[]');
   const invalidArgs = { save: button('Save').disabled, preview: button('Preview').disabled, alert: block('tool').querySelector('[role=alert]').textContent };
@@ -123,30 +132,69 @@ export async function exerciseTurnContext({ root, i18n, message, frame, until })
     message: form().querySelector('footer [role=alert]').textContent };
   await press('Save');
   await until(() => !form() && notice(), 'confirmed edit did not render the notice');
+  const bubble = () => document.querySelector('.message-bubble[data-message-id="answer"]');
+  const confirmed = { body: bubble().querySelector('.prose-chat')?.textContent,
+    bold: Boolean(bubble().querySelector('strong')), disclosure: bubble().querySelector('summary')?.textContent ?? null };
+  const copy = () => bubble().closest('[role=article]').querySelector(`.message-actions button[aria-label="${i18n.t('chat.copy')}"]`);
+  let copied;
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async text => { copied = text; } } });
+  copy().click();
+  const originalClosed = !bubble().querySelector('details').open;
+  bubble().querySelector('summary').click();
+  const revealed = bubble().querySelector('details[open] pre').innerText;
+  const turn = bubble().closest('[role=article]');
+  turn.querySelector('.turn-process > button[aria-expanded="false"]')?.click();
+  await frame();
+  const toolRow = turn.querySelector('.tool-row[data-message-id="tool"]');
+  toolRow.querySelector('.tool-row-header').click();
+  await until(() => toolRow.querySelector('.tool-row-body'), 'recorded tool result did not open');
+  const receipt = { middle: turn.querySelector('[data-message-id="middle"].message-bubble .prose-chat')?.innerText,
+    path: toolRow.querySelector('.tool-row-summary')?.textContent, result: toolRow.querySelector('.tool-row-body').innerText,
+    hasOverlay: turn.innerText.includes('model-only.md') || turn.innerText.includes('Edited result') };
   const state = useAppStore.getState();
   const windows = [state.messages, state.retainedTranscripts[id], state.transcriptViews[id].messages].map(list => ({
     length: list.length, override: list.find(row => row.id === tool.id).contextOverride,
   }));
   const original = { final: state.messages.at(-1).content, tool: state.messages.find(row => row.id === tool.id).toolName,
     status: state.messages.find(row => row.id === tool.id).toolStatus, result: state.messages.find(row => row.id === tool.id).content };
-  hydrate();
+  hydrate('other', [message('other-prompt')]);
   await frame();
+  hydrate(id, [...reloaded(), message('later-prompt'), { ...message('later-answer'), role: 'assistant' }]);
+  await until(bubble, 'historical answer did not mount');
+  const historical = { body: bubble().querySelector('strong')?.textContent, closed: !bubble().querySelector('details').open,
+    pencil: Boolean(bubble().closest('[role=article]').querySelector('button[aria-label="Edit context"]')) };
+  hydrate('other', [message('other-prompt')]);
+  await until(() => !bubble(), 'historical answer did not unmount');
+  hydrate();
+  await until(() => bubble()?.closest('[role=article]').querySelector('button[aria-label="Edit context"]'), 'latest answer did not reopen');
   const editedAfterReload = Boolean(notice());
   await open();
-  const reopened = [input('text').value, input('tool', 1).value];
+  await expand();
+  const reopened = [input('final').value, input('text').value, input('tool', 1).value];
   block('text').querySelector('summary').click();
   const originalDetails = block('text').querySelector('details[open] pre').textContent;
   await press('Restore block', block('tool'));
   await press('Save');
   await until(() => !form(), 'one-block restore did not save');
   await open();
+  await change(input('final'), '');
+  block('final').querySelector('input').click();
+  await frame();
+  await press('Save');
+  await until(() => !form(), 'empty excluded final did not save');
+  const excluded = { label: bubble().querySelector('.turn-context-notice')?.innerText, copy: Boolean(copy()),
+    originalHidden: !bubble().innerText.includes('Original final answer'), noProse: !bubble().querySelector('.prose-chat') };
+  bubble().querySelector('summary').click();
+  excluded.original = bubble().querySelector('details[open] pre').innerText;
+  await open();
+  await expand();
   await press('Restore originals');
   const restoration = { count: count(), text: input('text').value, writes: writes.length };
   await press('Save');
   await until(() => !form() && !notice(), 'whole-turn restore did not clear notice');
   hydrate();
   await frame();
-  const clearAfterReload = !notice();
+  const clearAfterReload = !notice() && !bubble().querySelector('details') && bubble().querySelector('.prose-chat')?.innerText === 'Original final answer';
 
   heldRead = Promise.withResolvers();
   actions()[0].click();
@@ -175,10 +223,13 @@ export async function exerciseTurnContext({ root, i18n, message, frame, until })
   await until(() => persisted.has(answer.id), 'stale save did not settle');
   await frame();
   const staleSaveIgnored = !form() && useAppStore.getState().messages[0].id === 'other-prompt' && !notice();
-  window.previewTurnContextEditor = async () => {
+  window.openKeyboardEditor = async () => {
     hydrate();
     await frame();
     await open();
+  };
+  window.previewTurnContextEditor = async () => {
+    await window.openKeyboardEditor();
     await i18n.changeLanguage('zh-CN');
     const style = document.createElement('style');
     style.textContent = '.thread-scroll{width:780px;height:800px}[data-message-id]{height:auto;overflow:visible}';
@@ -190,6 +241,7 @@ export async function exerciseTurnContext({ root, i18n, message, frame, until })
     return { x: x + window.scrollX, y: y + window.scrollY, width, height };
   };
   return { actionCount, forkCount, defaults, layout, noThinking, noThinkingKinds, finalOnly, writesAfterCancel,
+    initialFocus, confirmed, collapsed, copied, originalClosed, revealed, receipt, historical, excluded,
     blankFinalBlocked, finalExclusionAllowed, invalidArgs, preview, pending, afterFailure, windows, original, editedAfterReload, reopened, originalDetails,
     restoration, clearAfterReload, staleReadStarted, staleReadIgnored, staleSaveIgnored, busyDisabled, busyWrites, reads, writes, errors };
 }

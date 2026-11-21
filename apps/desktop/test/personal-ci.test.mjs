@@ -188,6 +188,11 @@ test("workflow restricts publishing, reuses the personal builder and pins action
   assert.match(publish.if, /needs\.build\.outputs\.publish_version != ''/);
   assert.equal(publish.permissions.contents, "write");
   const upload = build.steps.find((step) => step.name === "Upload installer and provenance");
+  const gate = build.steps.find(step => step.run === "pnpm check:personal-merge");
+  assert.ok(gate && build.steps.indexOf(gate) < build.steps.indexOf(upload),
+    "protected personal behaviors must pass before an installer is uploaded");
+  assert.equal(gate.if, undefined);
+  assert.equal(gate["continue-on-error"], undefined);
   assert.equal(upload.id, "installer");
   assert.equal(build.outputs.artifact_id, "${{ steps.installer.outputs.artifact-id }}");
   const download = publish.steps.find((step) => step.uses?.startsWith("actions/download-artifact@"));

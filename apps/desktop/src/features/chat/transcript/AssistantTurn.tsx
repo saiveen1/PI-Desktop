@@ -53,7 +53,7 @@ import {
   getAssistantTurnContent,
   reuseReferences,
 } from "../../../lib/transcript-summary";
-import { AssistantTurnParts } from "./AssistantTurnParts";
+import { AssistantMessageBubble, AssistantTurnParts } from "./AssistantTurnParts";
 import { TurnContextEditor, useTurnContextEditor } from "./TurnContextEditor";
 import { ObserverGuardTurnSummary } from "./ObserverGuardDisclosure";
 import { splitAtAnsweredQuestions } from "../../../lib/turn-question-sections";
@@ -311,15 +311,17 @@ export const AssistantTurn = memo(function AssistantTurn({
   const complete = !isActive && !partial && !summary.hasError && summary.hasContent && Boolean(actionMessage);
   const answerId = complete && summary.responses.at(-1)?.message === actionMessage ? actionMessage?.id : undefined;
   const editor = useTurnContextEditor(paneSessionId, answerId);
-  // A live reply is joined only on menu/copy demand. Finished reply plugins
-  // still receive exactly the text that the completed turn's Copy action uses.
-  const content = useMemo(
+  const finalOverride = answerId ? actionMessage?.contextOverride : undefined;
+  const editedText = finalOverride?.content ?? (finalOverride?.excludeContent ? actionMessage?.content : undefined);
+  // Plugins receive the same recorded reply as before; copying an edited answer uses its displayed Markdown.
+  const recordedContent = useMemo(
     () => complete ? getAssistantTurnContent(entry) : "",
     [complete, entry],
   );
+  const content = editedText ?? recordedContent;
   const slotReply = useMemo(() => complete && actionMessage
-    ? slotMessage("assistant", { ...actionMessage, content }) : undefined,
-  [complete, actionMessage, content]);
+    ? slotMessage("assistant", { ...actionMessage, content: recordedContent }) : undefined,
+  [complete, actionMessage, recordedContent]);
   const streaming = isActive && summary.streaming;
   // The same preference the nested levels read: hidden reasoning is not a
   // visible step of the turn's process.
@@ -445,7 +447,9 @@ export const AssistantTurn = memo(function AssistantTurn({
         })}
         {/* The answer stays outside the process disclosure: it is what the turn
             produced, not part of what it did. */}
-        <AssistantTurnParts parts={responses} {...partContext} />
+        {editedText !== undefined && actionMessage
+          ? <AssistantMessageBubble message={summary.messages.at(-1) ?? actionMessage} editedText={editedText} streaming={false} turnActive={false} />
+          : <AssistantTurnParts parts={responses} {...partContext} />}
         <ObserverGuardTurnSummary parts={entry.parts} sessionId={paneSessionId} />
         <TurnToolImages parts={entry.parts} />
         {/* Recorded work remains reachable during streaming and after interruption. */}
@@ -465,13 +469,15 @@ export const AssistantTurn = memo(function AssistantTurn({
             summary label={t("chat.runDetails.title")} />
         ) : null}
         {entry.parts.some((part) => (part.kind === "message" ? [part] : part.items).some(({ message }) =>
-          message.contextOverride || message.excludeThinkingFromContext)) &&
+          message.excludeThinkingFromContext || (editedText !== undefined && message.id === answerId
+            ? message.contextOverride?.thinking !== undefined || message.contextOverride?.excludeThinking
+            : message.contextOverride))) &&
           <p className="turn-context-notice">{t("turnContext.notice")}</p>}
         {complete && actionMessage ? (
           <div className="message-actions">
             <MessageTimestamp createdAt={actionMessage.createdAt} />
             <ActionSlotSide slot="assistantAction" side="left" message={slotReply} />
-            <CopyButton text={content} label={t("chat.copy")} />
+            {content.trim() && <CopyButton text={content} label={t("chat.copy")} />}
             {editor.editable ? <TooltipButton className="copy-btn icon" tooltip={t("turnContext.edit")}
               ariaLabel={t("turnContext.edit")} disabled={editor.loading} onClick={() => void editor.begin()}>
               <IconPencil size={13} />

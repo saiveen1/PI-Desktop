@@ -2603,8 +2603,12 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
 - **Expected**: A historical completed assistant response offers Copy, Fork and
   Regenerate, but not Delete or in-place Edit context. A local idle child exposes
   all top-level assistant/tool blocks from its current turn. Defaults preserve
-  current context; only explicit Save persists overlays. The next request uses
-  edited content, not an appended user correction. Tool exclusions remove both
+  current context; only explicit Save persists overlays. The pencil focuses the
+  final answer with the process folded. After Save and after reload, verify the
+  chat bubble shows the edited answer and the original is available on demand.
+  Excluding the answer labels it as not sent; restore returns the original.
+  The next request carries edited content, not an appended user correction.
+  Tool exclusions remove both
   call and result; editing results never executes or undoes tools. Original
   transcript and receipts stay intact, including media represented by editor
   placeholders. An included final answer must be nonblank; it may be excluded.

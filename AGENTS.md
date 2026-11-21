@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Policy-Sync: 2026-11-18.personal-edition.1
+Policy-Sync: 2026-11-21.personal-edition.1
 
 Mandatory rules for AI coding agents and maintainers working in PI-Desktop.
 
@@ -290,6 +290,9 @@ evidence proves they are superseded without regression, or the user explicitly
 approves the behavior change after the differences are explained. Never replace
 local regression assertions merely to match upstream. Record material decisions
 and validate both the retained local behavior and adopted upstream changes.
+Run `pnpm check:personal-merge` on every actual upstream integration candidate,
+even without conflicts. Follow the upstream merge gate in the delivery workflow
+for the pre-merge record, coverage changes, and approval requirements.
 
 Retire an optional worktree only after its changes are committed or safely
 migrated, and remove only the user-authorized worktree and branch.

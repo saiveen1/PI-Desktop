@@ -178,13 +178,18 @@ After implementation (or alongside it):
 
 ## 6. Pull/Merge Request Checklist
 
-Apply this section only when remote delivery or a PR/MR was requested.
+Apply this section to requested upstream integration, remote delivery, or a PR/MR.
 Local development does not require a remote merge or a dedicated branch/worktree.
 
 - [ ] The target remote was verified for this request (never assume
   `origin/main` is upstream), the target's latest applicable base is
   incorporated without discarding local work, and the target's own base check
   passes for that base.
+- [ ] For upstream integration, the [upstream merge gate](03-ai-development-workflow.md#upstream-merge-gate-personal-edition)
+  records the pre-merge revisions, affected local guarantees and decisions;
+  protected coverage changes or retirements have evidence and user approval.
+- [ ] `pnpm check:personal-merge` passed on the actual combined candidate, even
+  if there were no conflicts. Missing or skipped protected tests block acceptance.
 - [ ] Relevant validation ran against the actual integration candidate, or
   unavailable gates are recorded as `NOT RUN` with reason and remaining risk.
 - [ ] Only authorized publishing/merge actions occurred; no direct upstream

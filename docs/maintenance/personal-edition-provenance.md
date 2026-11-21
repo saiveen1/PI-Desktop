@@ -37,6 +37,13 @@ is an original-preserving context overlay, per-block editor, paired tool
 exclusion and reset; existing transcript storage/fork and Pi adapters remain
 inherited foundations. See [the ADR](../adr/whole-turn-context-editing.md).
 
+Local `20fe2008a` displayed the saved answer in chat. Local `8e5ef31bc`
+introduced reversible overlays but displayed the original instead. The answer
+renderer was identical on both sides of the later first-parent merge step
+(`c498a26eb^1` to `c498a26eb`, upstream parent `e89051fc7`); this particular
+display regression predates that merge. Preserve both behaviors together:
+the saved answer is visible by default and the original receipt is recoverable.
+
 Against locally recorded upstream `3dd8b955a`, response-level Fork is inherited:
 `a52166dae` previously edited by forking; `007cc482f` moved editing to user
 prompts. The current upstream `AssistantTurn.tsx` has Fork and Regenerate but

@@ -19,10 +19,12 @@ import { hasRepeatedDeepSeekThinkingEnd } from "../../../lib/deepseek-thinking-m
 import { useDisclosureAnchorNotifier } from "../../../lib/disclosure-anchor-context";
 
 /** Message bubble that optionally applies smooth text release. */
-const SmoothMessageBubble = memo(function SmoothMessageBubble({ message, streaming, turnActive }: {
+export const AssistantMessageBubble = memo(function AssistantMessageBubble({ message, streaming, turnActive, editedText }: {
   message: UiMessage;
   streaming: boolean;
   turnActive: boolean;
+  /** Present only for the completed turn's revised final answer; an empty edit is meaningful. */
+  editedText?: string;
 }) {
   const { t } = useTranslation();
   const smoothStreaming = useAppStore((s) => s.settings?.smoothStreaming !== false);
@@ -32,13 +34,14 @@ const SmoothMessageBubble = memo(function SmoothMessageBubble({ message, streami
     window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const enabled = smoothStreaming && !prefersReducedMotion;
   // A live suffix may still become prose. Only scan settled text, never smooth-release frames.
-  const protocol = useMemo(() => streaming ? undefined : splitDsmlProtocolTail(message.content || ""),
-    [streaming, message.content]);
+  const text = editedText ?? message.content;
+  const protocol = useMemo(() => streaming || editedText !== undefined ? undefined : splitDsmlProtocolTail(text || ""),
+    [streaming, editedText, text]);
   const model = message.responseModelId ?? message.modelId;
   const deepSeekAnswer = useMemo(() => hasRepeatedDeepSeekThinkingEnd(model, message.content), [model, message.content]);
-  const displayContent = useSmoothText(protocol?.prose ?? (message.content || ""), streaming, enabled);
+  const displayContent = useSmoothText(protocol?.prose ?? (text || ""), streaming, enabled);
   const showCursor = streaming && enabled && Boolean(displayContent);
-  const genUi = useGenUiSplit(displayContent, streaming, inlineVisualizations);
+  const genUi = useGenUiSplit(displayContent, streaming, inlineVisualizations && editedText === undefined);
   // Cards load the pane session's own copy, never the session a path names.
   const sessionId = useSlotSessionId();
   const remote = useAppStore((s) =>
@@ -55,7 +58,13 @@ const SmoothMessageBubble = memo(function SmoothMessageBubble({ message, streami
       className={`message-bubble assistant-turn-fragment${streaming ? " streaming" : ""}${showCursor ? " smooth-cursor" : ""}`}
       data-message-id={message.id}
     >
-      {genUi.content ? <TranscriptProse source={genUi.content} streaming={streaming} deepSeekAnswer={deepSeekAnswer} /> : null}
+      {editedText !== undefined && message.contextOverride?.excludeContent &&
+        <p className="turn-context-notice">{t("turnContext.notSent")}</p>}
+      {genUi.content ? <TranscriptProse source={genUi.content} streaming={streaming} deepSeekAnswer={editedText === undefined && deepSeekAnswer} /> : null}
+      {editedText !== undefined && <details className="turn-answer-original">
+        <summary onClick={(event) => notifyAnchor?.(event.currentTarget)}>{t("turnContext.editedOriginal")}</summary>
+        <pre className="selectable">{message.content}</pre>
+      </details>}
       <GenUiCards references={genUi.references} sessionId={sessionId} remote={remote} />
       {message.outputTruncated ? (
         <p className="message-output-notice" role="status">{t("chat.outputTruncated")}</p>
@@ -128,7 +137,7 @@ const TurnPartBlock = memo(function TurnPartBlock({
       turnDelegationTimings={turnDelegationTimings}
     />
   ) : (
-    <SmoothMessageBubble
+    <AssistantMessageBubble
       key={part.message.id}
       message={part.message}
       streaming={isActive && part.message.status === "streaming"}

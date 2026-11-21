@@ -248,9 +248,13 @@ test('transcript history demand and turn context editing', { timeout: 30000, ski
     });
     await t.test('Edit context previews and saves only the latest turn’s model overlays', async () => {
       const result = await evaluate('exerciseTurnContext()');
+      assert.deepEqual({ ...result.confirmed, focus: result.initialFocus }, {
+        body: 'Edited final answer', bold: true, disclosure: 'Edited · View original', focus: 'Final answer',
+      });
       assert.equal(result.actionCount, 1);
       assert.equal(result.forkCount, 2);
-      assert.deepEqual(result.defaults, { kinds: ['thinking', 'text', 'tool', 'thinking', 'final'],
+      assert.deepEqual(result.collapsed, { kinds: ['final'], expanded: 'false', label: 'Thinking, intermediate text and tools (4)', focusedFinal: true });
+      assert.deepEqual(result.defaults, { kinds: ['final', 'thinking', 'text', 'tool', 'thinking'],
         checked: [true, true, true, true, true], saveDisabled: true, count: 'Included: 5 / Omitted: 0' });
       assert.deepEqual(result.layout, [
         { wraps: false, fits: true, bounded: true, noHorizontalScroll: true },
@@ -263,22 +267,45 @@ test('transcript history demand and turn context editing', { timeout: 30000, ski
       assert.deepEqual(result.finalOnly, { count: 'Included: 1 / Omitted: 4', values: ['Original final answer'] });
       assert.equal(result.writesAfterCancel, 0);
       assert.deepEqual(result.invalidArgs, { save: true, preview: true, alert: 'Enter a valid JSON object.' });
-      assert.deepEqual(result.preview, [['Edited middle thinking'], ['{"path":"model-only.md"}', 'Edited result'], ['Final thinking'], ['Original final answer']]);
+      assert.deepEqual(result.preview, [['Edited middle thinking'], ['{"path":"model-only.md"}', 'Edited result'], ['Final thinking'], ['**Edited final answer**']]);
       assert.deepEqual(result.pending, { writes: 1, readOnly: true, cancelDisabled: true });
       assert.deepEqual(result.afterFailure, { text: 'Edited middle text', excluded: true, message: 'This turn or draft exceeds the context editor’s size limit.' });
       const toolOverlay = { version: 1, toolArgs: { path: 'model-only.md' }, toolResultText: 'Edited result' };
       assert.deepEqual(result.windows, [6, 4, 5].map(length => ({ length, override: toolOverlay })));
       assert.deepEqual(result.original, { final: 'Original final answer', tool: 'Read', status: 'success', result: 'Original tool result' });
       assert.equal(result.editedAfterReload, true);
-      assert.deepEqual(result.reopened, ['Edited middle text', 'Edited result']);
+      assert.equal(result.copied, '**Edited final answer**');
+      assert.equal(result.originalClosed, true);
+      assert.equal(result.revealed, 'Original final answer');
+      assert.deepEqual(result.receipt, { middle: 'Original intermediate text', path: 'notes.md', result: 'File content\nOriginal tool result', hasOverlay: false });
+      assert.deepEqual(result.historical, { body: 'Edited final answer', closed: true, pencil: false });
+      assert.deepEqual(result.reopened, ['**Edited final answer**', 'Edited middle text', 'Edited result']);
+      assert.deepEqual(result.excluded, { label: 'Not sent to model', copy: false, originalHidden: true, noProse: true, original: 'Original final answer' });
       assert.equal(result.originalDetails, 'Original intermediate text');
-      assert.deepEqual(result.restoration, { count: 'Included: 5 / Omitted: 0', text: 'Original intermediate text', writes: 3 });
+      assert.deepEqual(result.restoration, { count: 'Included: 5 / Omitted: 0', text: 'Original intermediate text', writes: 4 });
       assert.equal(result.clearAfterReload, true);
-      assert.equal(result.staleReadStarted, 5);
+      assert.equal(result.staleReadStarted, 6);
       assert.equal(result.staleReadIgnored, true);
       assert.equal(result.staleSaveIgnored, true);
       assert.equal(result.busyDisabled, true);
-      assert.equal(result.busyWrites, 4);
+      assert.equal(result.busyWrites, 5);
+      await evaluate('openKeyboardEditor()');
+      assert.equal(await evaluate('document.activeElement.value'), 'Edited final answer');
+      await send('Input.insertText', { text: 'Keyboard draft' });
+      const key = async (name, code) => {
+        const event = { key: name, code: name, windowsVirtualKeyCode: code };
+        await send('Input.dispatchKeyEvent', { ...event, type: 'keyDown' });
+        if (name === 'Enter') await send('Input.dispatchKeyEvent', { ...event, type: 'char', text: '\r' });
+        await send('Input.dispatchKeyEvent', { ...event, type: 'keyUp' });
+      };
+      for (let tab = 0; tab < 3; ++tab) await key('Tab', 9);
+      assert.equal(await evaluate('document.activeElement.getAttribute("aria-expanded")'), 'false');
+      await key('Enter', 13);
+      assert.equal(await evaluate('document.activeElement.getAttribute("aria-expanded")'), 'true');
+      await key('Tab', 9);
+      assert.equal(await evaluate('document.activeElement.getAttribute("aria-label")'), 'Include: Thinking');
+      await key('Escape', 27);
+      assert.equal(await evaluate('document.querySelector(".message-bubble[data-message-id=answer] .prose-chat").textContent'), 'Edited final answer');
       if (process.env.PI_TURN_CONTEXT_SCREENSHOT) {
         await send('Emulation.setDeviceMetricsOverride', { width: 1000, height: 1000, deviceScaleFactor: 1, mobile: false });
         const clip = await evaluate('previewTurnContextEditor()');
@@ -287,15 +314,17 @@ test('transcript history demand and turn context editing', { timeout: 30000, ski
       }
       assert.deepEqual(result.errors, []);
       const target = { sessionId: 'context-edit', anchorMessageId: 'answer' };
-      assert.deepEqual(result.reads, Array.from({ length: 6 }, () => target));
+      assert.deepEqual(result.reads, Array.from({ length: 7 }, () => target));
       const update = { ...target, expectedRevision: '0', edits: [
         { messageId: 'middle', contextOverride: { version: 1, thinking: 'Edited middle thinking', content: 'Edited middle text', excludeContent: true } },
         { messageId: 'tool', contextOverride: toolOverlay },
+        { messageId: 'answer', contextOverride: { version: 1, content: '**Edited final answer**' } },
       ] };
       assert.deepEqual(result.writes, [update, update,
         { ...target, expectedRevision: '1', edits: [{ messageId: 'tool', contextOverride: null }] },
-        { ...target, expectedRevision: '2', edits: [], restore: true },
-        { ...target, expectedRevision: '3', edits: [{ messageId: 'answer', contextOverride: { version: 1, content: 'Edited final answer' } }] },
+        { ...target, expectedRevision: '2', edits: [{ messageId: 'answer', contextOverride: { version: 1, content: '', excludeContent: true } }] },
+        { ...target, expectedRevision: '3', edits: [], restore: true },
+        { ...target, expectedRevision: '4', edits: [{ messageId: 'answer', contextOverride: { version: 1, content: 'Edited final answer' } }] },
       ]);
     });
   } finally {

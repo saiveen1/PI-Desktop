@@ -148,8 +148,10 @@ This edition strengthens the existing framework rather than replacing it.
 - **Edit an answer's model context.** In an idle local conversation, edit or
   exclude intermediate prose, thinking, tool arguments/results and the final
   answer before continuing. Preview the proposed context, exclude all thinking,
-  keep only the final answer, or restore originals. Original transcript and tool
-  receipts remain visible and are never re-executed or undone by edits. Earlier
+  keep only the final answer, or restore originals. The pencil opens on the
+  final answer; expand the process to edit other blocks. After Save, the chat
+  shows the edited answer with its original one click away. Excluded answers
+  are labeled. Tool receipts stay original; edits never rerun or undo tools. Earlier
   turns are unchanged; fork an older answer first. Oversized editing snapshots
   are refused instead of silently truncated.
 
@@ -322,7 +324,9 @@ Thanks to PI-Desktop's original authors and upstream contributors for the
 foundation. This is not an official upstream release; upstream downloads and
 support channels are not distribution or support endpoints for this edition.
 Following upstream means reviewed source integration, not automatic replacement
-of personal builds or unconditional adoption of every upstream change.
+of personal builds or unconditional adoption of every upstream change. Run
+`pnpm check:personal-merge` on the merge candidate to verify protected local
+behaviors, and test any other affected local features before landing.
 
 Original authorship and project credits are retained. PI-Desktop is licensed
 under the GNU Lesser General Public License v3.0; see [LICENSE](LICENSE).
