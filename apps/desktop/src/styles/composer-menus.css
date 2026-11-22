@@ -70,6 +70,14 @@
   visibility: hidden;
 }
 
+.composer-observer-menu {
+  width: min(280px, calc(100vw - 24px));
+}
+
+.composer-observer-menu .session-delegation-hint {
+  padding: 3px 8px;
+}
+
 .composer-model-menu {
   position: fixed;
   top: 0;

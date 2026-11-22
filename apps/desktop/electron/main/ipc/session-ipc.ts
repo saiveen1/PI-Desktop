@@ -100,6 +100,7 @@ export type SessionIpcDependencies = {
   getSidecar: () => AgentSidecar | null;
   dataDir: string;
   activeTurns: ReadonlyMap<string, string>;
+  cancelEndlessContinuation: (sessionId: string) => void;
   compactingSessions?: ReadonlySet<string>;
   sessionProjects: Map<string, string | null>;
   persistenceOutbox: PersistenceOutbox;
@@ -124,6 +125,7 @@ export function registerSessionIpc({
   getSidecar,
   dataDir,
   activeTurns,
+  cancelEndlessContinuation,
   compactingSessions = new Set<string>(),
   sessionProjects,
   persistenceOutbox,
@@ -877,9 +879,11 @@ export function registerSessionIpc({
       if (Object.prototype.hasOwnProperty.call(config, "observerMode") && !isObserverGuardMode(config.observerMode)) {
         throw Object.assign(new Error("observerMode is invalid"), { errorCode: ErrorCodes.INVALID_PARAMS });
       }
-      // Every mode other than the builtin Agent and Plan carries the parsed
-      // definition; the Host persists it as the session's policy snapshot.
-      const modeSnapshot = await modeCatalog.snapshotFor(config.mode);
+      const revokeOnly = config.observerMode === "off" && Object.keys(config).every(key => key === "mode" || key === "observerMode");
+      // Invalidate even between turns, before any await can admit a follow-up.
+      if (revokeOnly) cancelEndlessContinuation(id);
+      // Busy revocation must not refresh a running custom mode's policy snapshot.
+      const modeSnapshot = revokeOnly && activeTurns.has(id) ? undefined : await modeCatalog.snapshotFor(config.mode);
       const result = await host.call<{ session?: RuntimeSession | null }>(
         "session.configure",
         { id, ...config, ...(modeSnapshot ? { modeSnapshot } : {}) },

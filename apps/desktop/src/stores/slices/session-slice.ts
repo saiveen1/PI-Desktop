@@ -37,6 +37,7 @@ import {
   type SessionMeta,
 } from "../../lib/sidebar-preferences";
 import { api } from "../../lib/api";
+import { canRevokeRunningContinuation, supportsObserverGuard } from "../../lib/observer-guard-session";
 import { dropAskDraft } from "../../lib/pending-asks";
 import { isRemoteSession, safeSessionSummary, sessionAllows } from "../../lib/remote-session-safety";
 import { createRefreshCoordinator } from "../../lib/refresh-coordinator";
@@ -880,12 +881,18 @@ export function createSessionSlice({
     },
 
     configureActiveSession: async (config, targetSessionId) => {
-      const sessionId = targetSessionId ?? get().activeSessionId;
+      const current = get();
+      const sessionId = targetSessionId ?? current.activeSessionId;
+      const target = current.sessions.find((row) => row.id === sessionId);
+      const running = Boolean(sessionId && current.runningSessions[sessionId]);
+      let revokeRunningContinuation = false;
       if (config.observerMode !== undefined) {
         if (!isObserverGuardMode(config.observerMode)) throw new Error("observerMode is invalid");
-        const session = get().sessions.find((row) => row.id === sessionId);
-        if (!session || session.id.startsWith("native-pi:") || isRemoteSession(session) || (session.source && session.source !== "desktop") || get().runningSessions[session.id]) return;
-        if (runtime.sessionConfigurationFlushes.has(session.id)) throw new Error("session configuration is busy");
+        if (!target || !supportsObserverGuard(target)) return;
+        revokeRunningContinuation = canRevokeRunningContinuation(target.observerMode, config.observerMode, running) &&
+          config.mode === target.mode && Object.keys(config).every(key => key === "mode" || key === "observerMode");
+        if (running && !revokeRunningContinuation) return;
+        if (runtime.sessionConfigurationFlushes.has(target.id)) throw new Error("session configuration is busy");
       }
       if (!sessionId) {
         set((state) => ({
@@ -903,15 +910,12 @@ export function createSessionSlice({
         }));
         return;
       }
-      if (!sessionAllows(get().sessions.find((session) => session.id === sessionId), "canConfigureModel")) return;
-      if (get().pendingPlans[sessionId]?.status === "pending") return;
-      if (config.mode !== get().sessions.find((session) => session.id === sessionId)?.mode) {
+      if (!sessionAllows(target, "canConfigureModel")) return;
+      if (!revokeRunningContinuation && current.pendingPlans[sessionId]?.status === "pending") return;
+      if (config.mode !== target?.mode) {
         runtime.sessionModeSelections.set(sessionId, (runtime.sessionModeSelections.get(sessionId) ?? 0) + 1);
       }
-      if (
-        get().runningSessions[sessionId] ||
-        runtime.sessionConfigurationFlushes.has(sessionId)
-      ) {
+      if (!revokeRunningContinuation && (running || runtime.sessionConfigurationFlushes.has(sessionId))) {
         runtime.pendingSessionConfigurations.set(
           sessionId,
           runtime.mergeSessionConfiguration(
@@ -928,27 +932,41 @@ export function createSessionSlice({
         }));
         return;
       }
-      const payload = runtime.mergeSessionConfiguration(
+      // A revocation must not flush queued model/mode changes into a live turn.
+      const payload = revokeRunningContinuation ? config : runtime.mergeSessionConfiguration(
         runtime.pendingSessionConfigurations.get(sessionId),
         config,
       );
-      runtime.pendingSessionConfigurations.delete(sessionId);
-      const write = api.configureSession(sessionId, payload).then((result) => set((state) => ({
-        sessions: state.sessions.map((session) =>
-          session.id === sessionId
-            ? {
-                ...result.session,
-                ...(session.persona !== undefined ? { persona: session.persona } : {}),
-                pinned: sessionIsPinned(sessionId, state.sessionMeta),
-                archived: sessionIsArchived(sessionId, state.sessionMeta),
-              }
-            : session,
-        ),
-        planningStates: {
-          ...state.planningStates,
-          [sessionId]: result.session.mode === "plan" ? "planning" : "inactive",
-        },
-      })));
+      if (!revokeRunningContinuation) runtime.pendingSessionConfigurations.delete(sessionId);
+      const write = api.configureSession(sessionId, payload).then((result) => {
+        if (revokeRunningContinuation) {
+          if (result.session?.id !== sessionId || result.session.observerMode !== "off") {
+            throw new Error("Session did not acknowledge automatic continuation revocation");
+          }
+          set((state) => ({
+            sessions: state.sessions.map((session) => session.id === sessionId && session.observerMode === target?.observerMode
+              ? { ...session, observerMode: "off" }
+              : session),
+          }));
+          return;
+        }
+        set((state) => ({
+          sessions: state.sessions.map((session) =>
+            session.id === sessionId
+              ? {
+                  ...result.session,
+                  ...(session.persona !== undefined ? { persona: session.persona } : {}),
+                  pinned: sessionIsPinned(sessionId, state.sessionMeta),
+                  archived: sessionIsArchived(sessionId, state.sessionMeta),
+                }
+              : session,
+          ),
+          planningStates: {
+            ...state.planningStates,
+            [sessionId]: result.session.mode === "plan" ? "planning" : "inactive",
+          },
+        }));
+      });
       runtime.sessionConfigurationFlushes.set(sessionId, write);
       try {
         await write;

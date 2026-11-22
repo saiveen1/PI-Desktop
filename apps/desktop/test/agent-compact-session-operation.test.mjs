@@ -72,6 +72,8 @@ function buildHarness({ hostCall, sidecarCall, resolveSessionMessageInput }) {
       isRpcTimeoutError: () => false,
     },
     "./subagent-recovery-ipc": recoveryIpc,
+    "@pi-desktop/agent-host": { TRUSTED_ENDLESS_CONTINUATION: Symbol("endless") },
+    "../runtime/endless-continuations": { beginEndlessPrompt: () => undefined, cancelEndlessContinuation() {} },
     "../composer-mcp": { expandMcpInvocation: () => null },
     "../runtime/mode-runs": { modeContinuationOrigin: () => undefined },
     "../runtime/background-continuations": {

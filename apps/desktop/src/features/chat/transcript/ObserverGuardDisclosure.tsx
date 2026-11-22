@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import type { UiMessage } from "@pi-desktop/shared";
 import type { AssistantTurnPart } from "../../../lib/assistant-turns";
 import { Button } from "../../../components/ui";
-import { matchingObserver, observerDecisionKey, observerMessages, observerSummaryKey, observerVerdictKey } from "../../../lib/observer-guard-presentation";
+import { matchingObserver, observerContinuationProgress, observerDecisionKey, observerMessages, observerSummaryKey, observerVerdictKey } from "../../../lib/observer-guard-presentation";
 import { observerModelLabel } from "../../../lib/observer-guard-models";
 import { resolveObserverEvidenceMessageId } from "../../../lib/observer-guard-evidence-navigation";
 import { useDisclosureAnchorNotifier } from "../../../lib/disclosure-anchor-context";
@@ -36,6 +36,7 @@ export function ObserverGuardDisclosure({ message, sessionId }: { message: UiMes
   const endless = assessment.mode === "endless";
   const modelLabel = !endless && assessment.modelKey ? observerModelLabel(assessment.modelKey, providers) : undefined;
   const decisionKey = observerDecisionKey(assessment, interrupted);
+  const progress = observerContinuationProgress(assessment);
   const reveal = async (evidenceId: string) => {
     if (!sessionId || useAppStore.getState().activeSessionId !== sessionId) return;
     const request = ++navigation.current;
@@ -60,7 +61,7 @@ export function ObserverGuardDisclosure({ message, sessionId }: { message: UiMes
       {endless ? <span>{t("observerGuard.noReviewer")}</span> : null}
       {!endless && assessment.decision === "continue" && decisionKey !== "observerGuard.decisions.continue" ? <span>{t("observerGuard.decisions.continue")}</span> : null}
       {assessed && assessment.verdict ? <span>{t(observerVerdictKey(assessment))}</span> : null}
-      {assessment.continuationCount !== undefined && assessment.maxContinuations !== undefined ? <span>{t("observerGuard.continuationProgress", { current: assessment.continuationCount, max: assessment.maxContinuations })}</span> : null}
+      {progress ? <span>{t("observerGuard.continuationProgress", progress)}</span> : null}
     </div>
     {decisionKey !== "observerGuard.noReviewer" ? <p className="observer-assessment-decision">{t(decisionKey)}</p> : null}
     {assessed && assessment.reason ? <p className="observer-assessment-reason">{assessment.reason}</p> : null}

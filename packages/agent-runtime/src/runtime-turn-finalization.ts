@@ -40,14 +40,14 @@ export function finishRuntimeTurn({ turn, signal, corrections, toolNames, runtim
   }, signal, autonomous, sink);
 }
 
-export function finishDiagnosticMessage(corrections: TurnCorrectionPolicy, tracker: RunDiagnosticsTracker | undefined, turnId: string | undefined, now: number, message: UiMessage | undefined, publish: (message: UiMessage) => void, stopped: boolean): void {
+export function finishDiagnosticMessage(corrections: TurnCorrectionPolicy, tracker: RunDiagnosticsTracker | undefined, turnId: string | undefined, now: number, message: UiMessage | undefined, publish: (message: UiMessage) => void, outcome: "stopped" | "normal" | "other"): void {
   const current = tracker?.snapshot(now);
   if (!tracker || !current || current.turnId !== turnId || current.endedAt !== undefined) return;
   const settled = message && message.status !== "streaming" ? message : undefined;
   if (settled && corrections.observer.canRecord) {
     const sink = observerSink(tracker, turnId, settled.id);
-    if (stopped) corrections.observer.skip(sink, "stop_requested");
-    else corrections.observer.finish(sink);
+    if (outcome === "stopped") corrections.observer.skip(sink, "stop_requested");
+    else corrections.observer.finish(sink, outcome === "normal" && settled.status === "complete" && current.termination?.stopReason === "stop");
   }
   const final = tracker.finish(now);
   if (settled) publish({ ...settled, runDiagnostics: final });

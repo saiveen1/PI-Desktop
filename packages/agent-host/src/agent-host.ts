@@ -46,6 +46,7 @@ import { EventHub, type SubscribeParams, type SubscribeResult, type Subscription
 import {
   TRUSTED_MODE_ORIGIN,
   TRUSTED_BACKGROUND_CONTINUATION,
+  TRUSTED_ENDLESS_CONTINUATION,
   type TrustedBackgroundContinuation,
   type TrustedModeOrigin,
   MemoryQueueStore,
@@ -98,6 +99,7 @@ export type StartTurnParams = {
   /** In-process only; a Host-started mode run continuation never queues. */
   [TRUSTED_MODE_ORIGIN]?: TrustedModeOrigin;
   [TRUSTED_BACKGROUND_CONTINUATION]?: TrustedBackgroundContinuation;
+  [TRUSTED_ENDLESS_CONTINUATION]?: object;
   sessionId: string;
   idempotencyKey?: string;
   /** Main-private identity captured when authorizing a Live work scope. */
@@ -529,7 +531,8 @@ export class AgentHost {
     const busy = this.isBusy(state);
     const modeOrigin = params[TRUSTED_MODE_ORIGIN];
     const backgroundContinuation = params[TRUSTED_BACKGROUND_CONTINUATION];
-    if ((modeOrigin || backgroundContinuation) && (busy || forceQueue)) {
+    const endless = params[TRUSTED_ENDLESS_CONTINUATION];
+    if ((modeOrigin || backgroundContinuation || endless) && (busy || forceQueue)) {
       // Queued user input goes first; its turn continues the run when it ends.
       throw racpError("AGENT_BUSY", "the session already has an active or queued turn");
     }
@@ -569,6 +572,7 @@ export class AgentHost {
       const started = await this.runtime.prompt({
         ...(modeOrigin ? { [TRUSTED_MODE_ORIGIN]: modeOrigin } : {}),
         ...(backgroundContinuation ? { [TRUSTED_BACKGROUND_CONTINUATION]: backgroundContinuation } : {}),
+        ...(endless ? { [TRUSTED_ENDLESS_CONTINUATION]: endless } : {}),
         sessionId: state.id,
         content: params.input.text,
         ...(params.input.startGoal === undefined ? {} : { startGoal: params.input.startGoal }),

@@ -4,7 +4,7 @@ import { catalogs } from "../src/index.ts";
 import { observerGuardDiagnostics } from "../src/locales/observer-guard-diagnostics.ts";
 
 const locales = ["en", "zh-CN", "zh-TW", "de", "es", "fr", "ko", "pt-BR", "tr"];
-const rootKeys = ["busy", "configuredModel", "ready", "waiting", "triggerHint", "checkingHint", "interruptedHint", "legacyReason", "notReassessed", "details", "relatedTool", "reviewedResponse", "openResponse", "openEvidence", "evidenceUnavailable"];
+const rootKeys = ["busy", "turnOffWhileRunning", "configuredModel", "ready", "waiting", "triggerHint", "checkingHint", "interruptedHint", "legacyReason", "notReassessed", "details", "relatedTool", "reviewedResponse", "openResponse", "openEvidence", "evidenceUnavailable"];
 const skipReasons = ["response_error", "response_aborted", "response_length", "empty_response", "task_changed", "no_user_task", "stop_requested", "mode_closeout"];
 const continuationReasons = ["observe_only", "verdict_complete", "verdict_blocked", "verdict_needs_input", "verdict_unknown", "low_confidence", "correction_budget", "input_truncated", "task_not_actionable", "answer_needs_input", "tool_error", "tool_effects_unknown", "tool_receipt_mismatch", "stop_requested", "plan_mode", "pending_work", "task_changed", "runtime_unavailable", "continuation_limit", "decision_stop", "user_input_pending"];
 const paths = [...rootKeys, "summary.continued", "summary.notContinued", ...skipReasons.map((key) => `skipReasons.${key}`), ...continuationReasons.map((key) => `continuationReasons.${key}`)];
@@ -50,7 +50,7 @@ test("English diagnostics preserve uncertainty and continuation limits", () => {
 });
 
 test("auto continuation controls, privacy, costs, and counters are localized", () => {
-  const keys = ["title", "description", "privacy", "endless", "endlessHint", "limitHint", "maxContinuations", "continueOnTransientError", "continueOnTransientErrorHint", "guardOnly", "prompt", "promptHint", "promptInvalid", "resetPrompt", "noReviewer", "response", "decisions.continue", "decisions.stop", "continuationProgress"];
+  const keys = ["title", "description", "privacy", "endless", "endlessHint", "guardHint", "limitHint", "maxContinuations", "continueOnTransientError", "continueOnTransientErrorHint", "guardOnly", "prompt", "promptHint", "promptInvalid", "resetPrompt", "noReviewer", "response", "decisions.continue", "decisions.stop", "continuationProgress"];
   const en = catalogs.en.observerGuard;
   for (const locale of locales) {
     const copy = catalogs[locale].observerGuard;
@@ -63,8 +63,9 @@ test("auto continuation controls, privacy, costs, and counters are localized", (
   }
   assert.deepEqual(placeholders(en.continuationProgress), ["current", "max"]);
   assert.match(en.privacy, /only the final reply/);
-  assert.match(en.endlessHint, /turn limit.*No reviewer.*main-model requests may incur charges/);
-  assert.match(en.limitHint, /Tool calls do not reset/);
+  assert.match(en.endlessHint, /automatic Continue as a new turn.*without a reviewer.*main-model requests may incur charges/);
+  assert.match(en.guardHint, /reviewer.*recommendation.*new turn.*not a sent message/i);
+  assert.match(en.limitHint, /share one limit.*Automatic turns and tool calls do not reset/);
   assert.match(en.continueOnTransientErrorHint, /built-in retries are exhausted.*remaining auto-continuation limit.*No reviewer.*Stop remains available.*Off by default/);
   assert.equal(catalogs["zh-CN"].observerGuard.endless, "无尽");
   assert.equal(catalogs["zh-TW"].observerGuard.endless, "無盡");

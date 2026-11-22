@@ -549,12 +549,15 @@ Card order is **Session defaults → Execution → Computer use**.
   Warnings and diagnostic counters do not become main-Agent prompt context.
 - **Observer Guard** is a separate Behavior card. Off/Endless/Guard is selected
   per local conversation; new/forked sessions are off and old Observe becomes off.
-  Both enabled modes use a visible maximum continuation count (1-100, default 3)
-  per explicit user turn. A separate off-by-default toggle allows additional
-  recovery after built-in network/transient-service retries exhaust, spending
-  the same remaining count without calling the reviewer. It does not disable
-  existing retries or override the independently selected infinite-retry policy.
-  Endless needs no reviewer and does not judge completion.
+  The maximum continuation count is 1-100 (default 3) for either mode's chain
+  from one human input. Both can send a visible automatic **Continue** after an
+  eligible answer settles; only Guard reviews it. Choosing Off in either mode
+  suppresses future sends without interrupting the current main Agent turn.
+  The off-by-default extra recovery toggle uses the same chain allowance as
+  admitted follow-ups, after built-in network/transient-service or rate-limit
+  retries exhaust. Recovery calls no reviewer and sends no Continue message.
+  A follow-up never replenishes the cap. Built-in retries and the independent
+  infinite-retry policy are unchanged.
   Guard alone uses the exact independent provider/model and supported effort,
   never a silent fallback. Its multiline prompt has explicit Save and Reset to
   default; blank means default and the maximum is 8,000 characters. Partial saves

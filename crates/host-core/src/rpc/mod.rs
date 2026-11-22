@@ -3191,6 +3191,16 @@ async fn handle_request(
                 .transpose()
                 .map_err(|e| rpc_err(1002, e.to_string(), "INVALID_PARAMS"))?;
             let st = state.lock().await;
+            // Check wire keys, not parsed options: even null or unknown fields make this a full configure.
+            if observer_mode == Some(sessions::ObserverMode::Off)
+                && params.as_object().is_some_and(|fields| fields.len() == 3)
+            {
+                if let Some(session) = sessions::try_revoke_observer(&st.db, id, mode)
+                    .map_err(|e| rpc_err(1000, e.to_string(), "INTERNAL"))?
+                {
+                    return Ok(json!({ "session": remote_tools::session_value(&st.db, session)? }));
+                }
+            }
             let prepared = modes_rpc::prepare_configure(&st, id, mode, &params)?;
             let session = sessions::configure_session_with_delegation_and_mode_snapshot(
                 &st.db,
@@ -3205,7 +3215,7 @@ async fn handle_request(
                 delegation_approvals
                     .as_ref()
                     .map(|approvals| approvals.as_ref()),
-                prepared.snapshot_hash(),
+                sessions::ConfigureSnapshot::Prepared(&prepared),
                 observer_mode,
             )
             .map_err(|e| {
@@ -3220,11 +3230,7 @@ async fn handle_request(
             })?
             .ok_or_else(|| rpc_err(1007, "session not found", "NOT_FOUND"))?;
             let paused_run = modes_rpc::finish_configure(&st, prepared)?;
-            let session = remote_tools::decorate_session(
-                &st.db,
-                serde_json::to_value(session)
-                    .map_err(|e| rpc_err(1000, e.to_string(), "INTERNAL"))?,
-            )?;
+            let session = remote_tools::session_value(&st.db, session)?;
             drop(st);
             if let Some(run) = paused_run {
                 modes_rpc::notify(&tx, &run).await;

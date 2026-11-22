@@ -2023,23 +2023,31 @@ distinct. Missing historical diagnostic metadata creates no new warning.
 
 The local composer offers Off, Endless and Guard without replacing Agent/Plan
 or permission controls. New/forked sessions are off; legacy Observe becomes off.
-Endless is available without any reviewer model and explicitly says no reviewer
-is used. Guard requires the configured exact model/effort and links to Behavior
-settings for repair. Mode choices remain idle-gated while the menu is inspectable.
-Native/remote/scheduled conversations do not expose this local feature.
+In both modes, the settled main Agent answer stays final. If an eligible
+follow-up is admitted, a visible automatically sent **Continue** appears as the
+user-role message of a new ordinary turn, not a same-turn system reminder. Its
+localized label shows cumulative allowance consumed (admitted follow-ups plus
+opt-in extra recovery), not the provider retry count. Transport recovery does
+not create a chat row; an exhausted cap sends no follow-up. A review decision
+or eligibility is not a confirmed send or evidence of completion. Opening
+the transcript or old details never sends anything.
 
-The turn summary shows the latest owning `runDiagnostics.observer` result, its
-continuation count/limit and actual stop reason. Older records remain attached
-to their responses. New decisions are continue/stop, not completion verdicts;
-Endless does not display invented model/effort/usage/confidence. Guard checks new
-final replies until stop or the configured limit. Historical Observe, verdict,
-confidence and evidence links remain readable, including their old not-reassessed
-semantics. Do not turn a continuation request into a verified-success claim.
+The menu remains inspectable while busy. Selecting Off from Guard or Endless
+prevents future automatic follow-ups, including one pending admission, without
+interrupting the main Agent turn. A review already started may finish, but its
+stale result cannot send. Use ordinary Stop to interrupt active work. Enabling
+or changing to another enabled mode still requires idle. Native/remote/scheduled
+conversations do not expose this local feature.
 
-Stop stays usable during Guard checks. Message identity prevents cross-bubble
-leakage; stale checking cannot replace a terminal result. Reopening details never
-starts a request. Settings expose maximum continuations and editable Guard prompt
-with reset, explaining last-reply privacy and additional main-model costs.
+Guard alone requires the configured exact model/effort and links to Behavior
+settings for repair. It checks the last eligible reply, not prior conversation;
+Stop stays usable during checks. The summary shows the owning Guard result,
+count/limit and stop reason. Earlier records stay with their responses. Message
+identity prevents cross-bubble leakage; stale checking cannot replace a terminal
+result. Historical Observe/verdict/confidence/evidence and former Endless
+records remain readable without re-execution.
+Settings explain the cap, independent Guard review privacy, and possible
+additional main-model usage.
 
 ### 7.5 Accessibility
 
@@ -3326,7 +3334,9 @@ reasoning-level control.
 - Consecutive root `turnId` values create independent assistant conversation
   groups, including live streaming, background caches and restored history.
   Delegates stay under their Task; legacy messages without a turn id retain
-  their existing grouping and autonomous turns add no synthetic user rows.
+  their existing grouping. Autonomous mode-run turns add no synthetic user rows;
+  [Guard and Endless follow-ups](#74c-built-in-observer-guard-controls-and-results)
+  instead send ordinary user-role turns after settlement.
 - The right toolbar owns the remaining-capacity context inspector (when the
   newest assistant turn has usage) immediately left of one combined model ×
   reasoning-level chip. Explicitly installed plugins may add user-invoked

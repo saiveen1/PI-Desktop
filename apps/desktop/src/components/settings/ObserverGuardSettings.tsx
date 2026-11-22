@@ -76,7 +76,7 @@ export function ObserverGuardSettings({ settings, saveSettings }: { settings: Ap
   const levels = THINKING_LEVELS.filter(level => selected?.levels.includes(level));
   const effortOptions = levels.map(level => ({ id: level, label: t(`observerGuard.level.${level}`) }));
   if (!levels.includes(value.thinkingLevel)) effortOptions.push({ id: value.thinkingLevel, label: `${t(`observerGuard.level.${value.thinkingLevel}`)} — ${t("observerGuard.unavailable")}` });
-  return <SettingsCard title={t("observerGuard.title")} caption={`${t("observerGuard.description")} ${t("observerGuard.privacy")} ${t("observerGuard.endlessHint")}`}>
+  return <SettingsCard title={t("observerGuard.title")} caption={`${t("observerGuard.description")} ${t("observerGuard.endlessHint")} ${t("observerGuard.guardHint")} ${t("observerGuard.privacy")}`}>
     <NumberSetting name="maxContinuations" value={value.maxContinuations} save={save} />
     <SettingsRow title={t("observerGuard.model")} description={t("observerGuard.modelHint")}>
       <SettingsMenuSelect label={t("observerGuard.model")} value={current} options={options} onChange={id => {

@@ -8,6 +8,7 @@ import { TextToolCallRecovery } from "./text-tool-call-recovery.js";
 import { UnfinishedTodoContinuation } from "./unfinished-todo-continuation.js";
 import { ObserverGuard, type ObserverRuntimeBlock } from "./observer-guard.js";
 import { assistantContent } from "./agent-messages.js";
+import { LEGACY_OBSERVER_SECTION } from "./system-transcript.js";
 
 type EarlyEnd = NonNullable<AgentResponseTermination["earlyEnd"]>;
 
@@ -35,7 +36,7 @@ export class TurnCorrectionPolicy {
   get settings() { return this.activeSettings; }
   get progressSafe(): boolean { return !this.latestBatchUnsafe; }
   get attempts(): number { return this.budget.attempts; }
-  get pending(): boolean { return this.pendingEarlyEnd || this.todos.pending || this.textCalls.pending || this.observer.pendingCorrection; }
+  get pending(): boolean { return this.pendingEarlyEnd || this.todos.pending || this.textCalls.pending; }
 
   setSettings(settings?: AgentOutputGuardSettings): void {
     this.nextSettings = settings ? { ...settings } : undefined;
@@ -92,7 +93,7 @@ export class TurnCorrectionPolicy {
     if (correction) return correction;
     // A queued user message owns the next request; record the skip on its reply, not on this intermediate one.
     if (runtimeBlock() === "task_changed") return;
-    return this.observer.assess(turn, observerSink, () => runtimeBlock() ??
+    await this.observer.assess(turn, observerSink, () => runtimeBlock() ??
       (autonomous || this.latestBatchUnsafe ? "runtime_unavailable" : this.pending ? "pending_work" : undefined), signal);
   }
 
@@ -132,12 +133,14 @@ export class TurnCorrectionPolicy {
   }
 
   prepareRequest(context: AgentContext): AgentContext {
-    const prepared = this.observer.prepareRequest(this.textCalls.prepareRequest(this.todos.prepareRequest(context)));
-    const reminder = this.pendingEarlyEnd ? EARLY_END_REMINDER : null;
+    this.observer.requestStarted();
+    const prepared = this.textCalls.prepareRequest(this.todos.prepareRequest(context));
+    const current = getCurrentSystemMessage(prepared.messages)?.sections;
+    const sections: Record<string, string | null> = {};
+    if (current?.[LEGACY_OBSERVER_SECTION]) sections[LEGACY_OBSERVER_SECTION] = null;
+    if (this.pendingEarlyEnd || current?.[EARLY_END_SECTION]) sections[EARLY_END_SECTION] = this.pendingEarlyEnd ? EARLY_END_REMINDER : null;
     this.pendingEarlyEnd = false;
-    if (!reminder && !getCurrentSystemMessage(prepared.messages)?.sections?.[EARLY_END_SECTION]) return prepared;
-    return { ...prepared, messages: [...prepared.messages, {
-      role: "system", content: "", sections: { [EARLY_END_SECTION]: reminder }, timestamp: Date.now(),
-    }] };
+    if (!Object.keys(sections).length) return prepared;
+    return { ...prepared, messages: [...prepared.messages, { role: "system", content: "", sections, timestamp: Date.now() }] };
   }
 }

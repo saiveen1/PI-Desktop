@@ -19,14 +19,29 @@ function fixture(thinkingLevel: "off" | "high" = "off") {
   return { policy, turn };
 }
 
-it("keeps observer continuation active for compaction until its request is prepared", async () => {
+it("staged Guard decisions do not retain an active turn for compaction or survive another request", async () => {
   const { policy, turn } = fixture();
-  expect(await policy.finishTurn(turn, new Map(), () => undefined, () => {}, undefined, false, { messageId: "answer", publish() {} })).toEqual({ action: "continue" });
-  expect(policy.pending).toBe(true);
-  const prepared = policy.prepareRequest({ messages: [] });
-  expect(JSON.stringify(prepared)).toContain("observer_guard_correction");
+  const sink = { messageId: "answer", publish: vi.fn() };
+  expect(await policy.finishTurn(turn, new Map(), () => undefined, () => {}, undefined, false, sink)).toBeUndefined();
   expect(policy.pending).toBe(false);
-  expect(policy.attempts).toBe(0);
+  const context = { messages: [] };
+  expect(policy.prepareRequest(context)).toBe(context);
+  policy.observer.finish(sink, true);
+  expect(sink.publish).toHaveBeenCalledTimes(2);
+  expect(sink.publish).toHaveBeenLastCalledWith(expect.objectContaining({ messageId: "answer", status: "assessed", continued: false, continuationReason: "pending_work" }));
+});
+
+it("Endless never prepares a reminder or retains eligibility across another request", async () => {
+  const { policy, turn } = fixture();
+  policy.observer.setConfig({ mode: "endless", settings: { maxContinuations: 1 } });
+  policy.reset(); policy.setTask("Do the task."); policy.observer.userMessage("user", false);
+  const sink = { messageId: "answer", publish: vi.fn() };
+  expect(await policy.finishTurn(turn, new Map(), () => undefined, () => {}, undefined, false, sink)).toBeUndefined();
+  expect(policy.pending).toBe(false);
+  const context = { messages: [] };
+  expect(policy.prepareRequest(context)).toBe(context);
+  policy.observer.finish(sink, true);
+  expect(sink.publish).not.toHaveBeenCalled();
 });
 
 it("provides a reasoning budget without changing the explicitly selected effort", async () => {
@@ -49,9 +64,10 @@ it("does not spend a review on an ineligible intermediate response or attach it 
   const publish = vi.fn();
   await policy.finishTurn({ ...turn, message: { ...turn.message, stopReason: "length" } }, new Map(), () => "pending_work", () => {}, undefined, false, { messageId: "short", publish });
   expect(publish).not.toHaveBeenCalled();
-  policy.observer.finish({ messageId: "other", publish });
+  policy.observer.finish({ messageId: "other", publish }, true);
   expect(publish).not.toHaveBeenCalled();
-  expect(await policy.finishTurn(turn, new Map(), () => undefined, () => {}, undefined, false, { messageId: "answer", publish })).toEqual({ action: "continue" });
+  expect(await policy.finishTurn(turn, new Map(), () => undefined, () => {}, undefined, false, { messageId: "answer", publish })).toBeUndefined();
   expect(vi.mocked(completeOneShot)).toHaveBeenCalledTimes(1);
-  expect(publish).toHaveBeenLastCalledWith(expect.objectContaining({ messageId: "answer", status: "assessed", continued: true }));
+  policy.observer.finish({ messageId: "other", publish }, true);
+  expect(publish).toHaveBeenLastCalledWith(expect.objectContaining({ messageId: "answer", status: "checking" }));
 });

@@ -514,7 +514,7 @@ to later refresh and inference; the vendor picker does not collect them.
   invalid modes or levels return
   `INVALID_PARAMS`; mode is `plan | goal | agent` and changing any session
   configuration is allowed only while idle and without a pending/queued/running
-  Plan or Goal record
+  Plan or Goal record, subject to the revocation-only exception below
 - Its optional `delegationModelKeys` field preserves the saved session pool
   when omitted, removes the override when null, and disables delegation with
   an empty array. Up to 128 unique exact provider/model keys are accepted.
@@ -528,10 +528,14 @@ to later refresh and inference; the vendor picker does not collect them.
 - Optional `observerMode: off | endless | guard` is accepted by local session
   creation/configuration; invalid explicit values, including null, reject the
   write. Omission preserves configuration and defaults creation to off. It uses
-  the same idle transaction and never starts execution. Lists/get expose it;
-  forks deliberately reset it to off rather than inheriting model-use consent.
-  Assessments persist in existing message `runDiagnostics.observer` metadata,
-  not a new RPC that lets a reviewer execute tools. See
+  the Host session authority and never starts execution. In a supported local
+  Desktop session, only a request with `id`, the unchanged `mode`, and
+  `observerMode: off` may revoke Guard or Endless consent while busy. It
+  leaves other settings, pinned mode policy, Plan/Goal locks and any admitted
+  turn untouched. Lists/get expose the saved value; forks reset it to off.
+  Guard decisions and Endless eligibility use existing message diagnostics;
+  neither is an execution request. Admitted automatic Continue messages use
+  existing turn and transcript paths, not a new RPC or replay queue. See
   [Observer Guard](../../adr/builtin-observer-guard.md).
 - `session.delegationPolicy({ id })` returns
   `{ modelKeys: string[] | null, modelApprovals: Record<string, "auto" | "ask"> | null }`

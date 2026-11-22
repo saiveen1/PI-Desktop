@@ -6,7 +6,7 @@ import ts from "typescript";
 import * as shared from "@pi-desktop/shared";
 register(new URL("./helpers/ts-import-hooks.mjs", import.meta.url));
 const require = createRequire(import.meta.url);
-function sessionFixture() {
+function sessionFixture(options = {}) {
   const source = readFileSync(new URL("../electron/main/ipc/session-ipc.ts", import.meta.url), "utf8");
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const module = { exports: {} };
@@ -24,12 +24,33 @@ function sessionFixture() {
     throw Error(`Unexpected RPC ${method}`);
   } };
   module.exports.registerSessionIpc({ registrar: { handle: (name, handler) => handlers.set(name, handler) },
-    getHost: () => host, getSidecar: () => null, activeTurns: new Map(), sessionProjects: new Map(),
-    modeCatalog: { snapshotFor: async () => undefined }, sessionCapabilityContext: async () => ({ providers: [], defaults: {} }),
+    getHost: () => host, getSidecar: () => null, activeTurns: options.activeTurns ?? new Map(), sessionProjects: new Map(),
+    cancelEndlessContinuation: options.cancel ?? (() => {}),
+    modeCatalog: { snapshotFor: options.snapshotFor ?? (async () => undefined) }, sessionCapabilityContext: async () => ({ providers: [], defaults: {} }),
     enrichSession: session => session, plugins: { broadcastEvent() {} },
   });
   return { configure: handlers.get(shared.IPC.invoke.sessionConfigure), writes };
 }
+
+test("turning Endless off fences dispatch immediately without rewriting an active mode snapshot", async () => {
+  const events = [];
+  const f = sessionFixture({ activeTurns: new Map([["s", "turn"]]), cancel: id => events.push(id),
+    snapshotFor: () => { throw Error("revocation must not reload the current mode"); } });
+  const result = f.configure("s", { mode: "review", observerMode: "off" });
+  assert.deepEqual(events, ["s"]);
+  assert.equal((await result).session.observerMode, "off");
+  assert.deepEqual(f.writes, [["session.configure", { id: "s", mode: "review", observerMode: "off" }]]);
+});
+
+test("revocation fences an idle handoff too, without special-casing unrelated configuration", async () => {
+  const events = [];
+  const f = sessionFixture({ cancel: id => events.push(`cancel:${id}`), snapshotFor: async mode => { events.push(mode); } });
+  await f.configure("s", { mode: "agent", observerMode: "off" });
+  assert.equal(events[0], "cancel:s");
+  events.length = 0;
+  await f.configure("s", { mode: "agent", observerMode: "endless" });
+  assert.deepEqual(events, ["agent"]);
+});
 
 test("local configuration preserves the requested Observer mode through the real IPC handler", async () => {
   const f = sessionFixture();

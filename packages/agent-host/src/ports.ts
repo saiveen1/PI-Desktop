@@ -42,10 +42,13 @@ export type TrustedModeOrigin = "host" | "approval";
 /** Main-only identity: serialized input cannot request an automatic turn. */
 export const TRUSTED_BACKGROUND_CONTINUATION: unique symbol = Symbol("pi-desktop.backgroundContinuation");
 export type TrustedBackgroundContinuation = { id: string; host: object };
+/** Opaque Main-owned chain generation; never accepted from wire or persisted in FIFO. */
+export const TRUSTED_ENDLESS_CONTINUATION: unique symbol = Symbol("pi-desktop.endlessContinuation");
 
 export type TurnStartRequest = {
   [TRUSTED_MODE_ORIGIN]?: TrustedModeOrigin;
   [TRUSTED_BACKGROUND_CONTINUATION]?: TrustedBackgroundContinuation;
+  [TRUSTED_ENDLESS_CONTINUATION]?: object;
   sessionId: string;
   content: string;
   startGoal?: boolean;

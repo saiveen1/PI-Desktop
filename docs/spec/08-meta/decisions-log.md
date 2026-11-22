@@ -5495,14 +5495,16 @@ and `E2E-IMAGES-tool-inspection` in the conversation scenario catalog.
 
 ## Local amendment: bounded automatic continuation (2026-11-20)
 
-Replace the advisory Observe mode with explicitly selected Endless continuation;
-stored Observe consent migrates to off. Guard judges only the latest reply using
-an editable prompt and a continue/stop result. Both modes default to at most three
-automatic continuations per explicit user turn, configurable from 1 to 100, and
-replace legacy normal-stop nudges while enabled. Runtime Stop, permissions,
-pending work and transport recovery remain authoritative. Historical diagnostic
-records stay readable; continuation is not a task-completion proof. See
-[the amended decision](../../adr/builtin-observer-guard.md) and runtime §5e.4.
+The advisory Observe mode was replaced by explicit Endless consent; stored
+Observe migrated to off. The [amended decision](../../adr/builtin-observer-guard.md)
+uses ordinary new turns for both enabled modes: only live settlement can lead
+to a visible automatic Continue, leaving the prior answer final. Guard alone
+uses the exact independent reviewer; its terminal `continue` is not a send.
+The cap is 1-100 (default 3) per human input, shared by admitted follow-ups and
+opt-in extra transient recovery within the ongoing turn. Off revokes either
+mode without stopping the current main Agent turn; a stale review cannot send.
+Replay/restart cannot resume a chain. Permissions, pending work and built-in
+retries remain authoritative. See runtime §5e.4.
 
 ## Bundled Official Enhancements defaults
 

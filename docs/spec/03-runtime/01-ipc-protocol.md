@@ -279,14 +279,19 @@ Unsupported/native/remote session UI does not expose this local configuration.
 
 Observer mode is a local conversation opt-in; omission preserves it on configure.
 Invalid explicit values (including null) are rejected, and old/new/forked
-conversations default to off. It shares the idle configuration boundary but does
-not grant tools or change Agent/Plan/permission state. The composer hides this
-local control for native and remote sessions; the remote bridge rejects an
-explicit Observer field rather than dropping it silently. Global
-`AppSettings.observerGuard` selects the independent provider/model, effort and
-bounded evidence/deadline preferences. Main and renderer validate writes and
-merge partial preferences without losing siblings. Selecting a model does not
-enable the feature. See [the decision](../../adr/builtin-observer-guard.md).
+conversations default to off. A revocation-only request contains the unchanged
+session mode and `observerMode: off`, and may revoke Guard or Endless consent
+while busy in a supported local session. Main invalidates an unadmitted
+follow-up before awaiting persistence. Revocation changes no other setting,
+does not abort the current main Agent turn, and leaves Plan/Goal locks intact.
+Both modes use existing turn admission; no public IPC turns a decision into a prompt.
+The composer hides this local control for native/remote sessions; the remote
+bridge rejects an explicit Observer field rather than dropping it silently. Global
+`AppSettings.observerGuard` sets the cap and optional transient recovery for both
+modes, plus independent Guard provider/model, effort, prompt, reply bound and deadline.
+Main and renderer validate writes and merge partial preferences without losing
+siblings. Selecting a model does not enable the feature. See
+[the decision](../../adr/builtin-observer-guard.md).
 
 Only a changed effective global `defaultCommandShell` is idle-only across all
 affected sessions: any active turn or pending/queued/running Plan/Goal work blocks

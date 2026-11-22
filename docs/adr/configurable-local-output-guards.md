@@ -48,10 +48,11 @@ warning only on its owning message; no warning is injected into model context.
 
 Semantic assessment was initially an optional external Observer plugin. The
 [built-in Observer Guard](builtin-observer-guard.md) amendment moves the optional
-per-conversation assessment into the runtime with Observe/Guard choices. These
-local deterministic guards still require no reviewer and add no normal prompt
-context. No new privileged plugin API is introduced, and the external plugin is
-not automatically installed, disabled or removed.
+per-conversation assessment into the runtime as Guard. Both Guard and Endless
+use ordinary new-turn admission for bounded follow-ups; only Guard reviews.
+These local deterministic guards still require no reviewer or added prompt context.
+No new privileged plugin API is introduced; the external plugin is not
+automatically installed, disabled or removed.
 
 ## Compatibility and ownership
 

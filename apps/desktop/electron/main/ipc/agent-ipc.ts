@@ -1,5 +1,7 @@
 import { registerSubagentRecoveryIpc } from "./subagent-recovery-ipc";
 import { backgroundContinuationOrigin, backgroundCompletionMessage } from "../runtime/background-continuations";
+import { TRUSTED_ENDLESS_CONTINUATION } from "@pi-desktop/agent-host";
+import { beginEndlessPrompt, cancelEndlessContinuation } from "../runtime/endless-continuations";
 import { expandMcpInvocation } from "../composer-mcp";
 import { IPC, ErrorCodes, compactionRecordId, composeMentionPrompt, findSkillMentions, isGlobalPermissionMode, isRpcTimeoutError, type AgentEventEnvelope, type AgentPromptRequest, type AgentSteerRequest, type UiMessage, type AgentQueuePushRequest, type AgentStopRequest, type AgentStopSubagentsRequest, type AskToolResolution, type GlobalPermissionMode, type MessageUsage, type PendingInteractiveRequests, type PlanExecutionFinishStatus, type PlanResolveRequest, type PlanResolutionResult, type VoiceOrigin } from "@pi-desktop/shared";
 import type { FinishTurn } from "../runtime/plans";
@@ -23,6 +25,7 @@ import type { PluginSessionUserMessagePersisted } from "@pi-desktop/plugin-sdk";
 
 export type AgentIpcDependencies = {
   registrar: IpcRegistrar;
+  getLocale: () => string;
   getHost: () => HostProcess | null;
   getSidecar: () => AgentSidecar | null;
   getAgentHostBridge: () => AgentHostBridge | null;
@@ -91,6 +94,7 @@ function parseVoiceOrigin(value: unknown): VoiceOrigin | undefined {
 /** Register prompt, agent lifecycle, queue, approval and plan channels. */
 export function registerAgentIpc({
   registrar,
+  getLocale,
   getHost,
   getSidecar,
   getAgentHostBridge,
@@ -156,6 +160,7 @@ export function registerAgentIpc({
         errorCode: ErrorCodes.TURN_NOT_FOUND,
       });
     }
+    cancelEndlessContinuation(req.sessionId);
     const context = await sidecar.call<{ projectPath?: string; remoteWorkspace?: unknown; supportsVision: boolean }>(
       "agent.steeringContext", { sessionId: req.sessionId, expectedTurnId: req.expectedTurnId },
     );
@@ -214,6 +219,7 @@ export function registerAgentIpc({
   }
 
   handle(IPC.invoke.agentPrompt, async (req: AgentPromptRequest) => {
+    const host = getHost(), sidecar = getSidecar(), agentHostBridge = getAgentHostBridge();
     // Set only on an in-process request built by the Agent Host bridge for a
     // Host-started mode run turn; a renderer or plugin request never has it.
     const modeOrigin = modeContinuationOrigin(req);
@@ -243,6 +249,22 @@ export function registerAgentIpc({
       });
     }
     if (!host) throw new Error("host unavailable");
+    const sessionId = req.sessionId;
+    const generation = { host, sidecar, bridge: agentHostBridge };
+    const automatic = TRUSTED_ENDLESS_CONTINUATION in req;
+    const root = !modeOrigin && !background && !startGoal && !req.sessionMessageId && !req.voiceOrigin &&
+      !req.permissionMode && !isAutomationRequest(req) && !scheduledRunsBySession?.has(sessionId);
+    const chain = beginEndlessPrompt(req, root, agentHostBridge ? {
+      host, sidecar, bridge: agentHostBridge, locale: getLocale,
+      flush: () => persistenceOutbox.prepareSessionMutation(sessionId, getHost),
+      available: () => getHost() === generation.host && getSidecar() === generation.sidecar && getAgentHostBridge() === generation.bridge &&
+        !compactingSessions.has(sessionId) && !scheduledRunsBySession?.has(sessionId) && !approvedExecutionIdsBySession.has(sessionId),
+    } : undefined);
+    const checkAutomatic = (turnId?: string) => {
+      if (automatic && (!chain?.current() || (turnId ? !isTurnDispatchable(sessionId, turnId) : activeTurns.has(sessionId)))) {
+        throw new Error("Automatic continuation admission expired");
+      }
+    };
     if (background && background.host !== host) throw new Error("Background continuation belongs to an expired Host");
     if (startGoal && activeTurns.has(req.sessionId)) {
       const entry = await queueGoal({ ...req, userMessageId: req.messageId });
@@ -250,6 +272,7 @@ export function registerAgentIpc({
     }
     const releaseSessionOperation = await acquireSessionOperation(req.sessionId);
     try {
+    checkAutomatic();
     // The mark is added while the compaction still holds the operation and
     // cleared only when the sidecar call settles, so a prompt that acquires
     // the operation after a compaction started always sees it here — checking
@@ -266,7 +289,7 @@ export function registerAgentIpc({
     // context is deliberately fail-safe.
     const requestedViewingSessionId =
       typeof req.viewingSessionId === "string" ? req.viewingSessionId.trim() : "";
-    setNotificationViewingSessionId(
+    if (!automatic) setNotificationViewingSessionId(
       requestedViewingSessionId && requestedViewingSessionId === req.sessionId
         ? requestedViewingSessionId
         : null,
@@ -385,6 +408,12 @@ export function registerAgentIpc({
       session,
       settings,
     );
+    const enabled = launch.sidecarParams?.mode === "agent" &&
+      chain?.configure(session, launch.sidecarParams.observerGuard, launch.workspaceRoot ?? launch.projectPath,
+        session.permissionMode === "inherit" ? settings.defaultPermissionMode ?? "ask" : session.permissionMode);
+    if (!enabled) chain?.cancel();
+    if (automatic && enabled) await chain?.verifyHead();
+    checkAutomatic();
     sidecar.setProjectInstructionRoot(req.sessionId, launch.workspaceRoot ?? launch.projectPath);
 
     // Open a durable turn row, then persist the user message under it.
@@ -583,15 +612,17 @@ export function registerAgentIpc({
           }
         : {}),
     };
-    // A Host-started continuation is not user input and is never recorded as one.
+    // Mode/background signals are not user rows. An automatic Continue is an ordinary, labeled prompt.
     let insertedUserMessageId: string | null | undefined;
     if (!modeOrigin && !background) try {
+      checkAutomatic(durableTurnId);
       const persisted = await host.call<{ insertedUserMessageId?: string | null }>("session.appendMessage", {
         sessionId: req.sessionId,
         message: userMessage,
         turnId: durableTurnId,
       });
       insertedUserMessageId = persisted?.insertedUserMessageId;
+      if (automatic && insertedUserMessageId !== userMessage.id) throw new Error("Automatic prompt insertion was not confirmed");
     } catch (error) {
       if (preparedMode?.modeTurn) await modeRuns.abandonTurn(req.sessionId, durableTurnId).catch(() => undefined);
       await finishTurn(
@@ -607,7 +638,7 @@ export function registerAgentIpc({
       throw error;
     }
     if (insertedUserMessageId && !sessionMessage && !truncateFromMessageId && truncateBefore === undefined &&
-        !scheduledRunsBySession?.has(req.sessionId) && !isAutomationRequest(req)) {
+        !automatic && !scheduledRunsBySession?.has(req.sessionId) && !isAutomationRequest(req)) {
       try {
         observePersistedUserMessage?.({ sessionId: req.sessionId, turnId: durableTurnId, messageId: insertedUserMessageId });
       } catch (error) {
@@ -652,10 +683,14 @@ export function registerAgentIpc({
         emitAgentEvent({ sessionId: req.sessionId, turnId: durableTurnId, ts: Date.now(), event: { type: "message_end", message: completion } });
         if (getHost() !== host || getSidecar() !== sidecar || !isTurnDispatchable(req.sessionId, durableTurnId)) throw new Error("Background continuation dispatch expired");
       }
+      if (automatic) await chain?.verifyHead(durableTurnId, userMessage.id);
+      checkAutomatic(durableTurnId);
       result = await sidecar.call<{ accepted: boolean; turnId: string }>(
         "agent.prompt",
         {
           ...launch.sidecarParams,
+          ...(enabled && chain ? { observerGuard: { ...launch.sidecarParams.observerGuard,
+            endlessRemaining: chain.remainingForPrompt(automatic) } } : {}),
           mode: promptMode,
           ...(modeDefinition ? { modeDefinition } : {}),
           ...(preparedMode?.modeTurn
@@ -699,6 +734,9 @@ export function registerAgentIpc({
           ...(req.permissionMode ? { permissionMode: req.permissionMode } : {}),
         },
       );
+      if (enabled && result.accepted && result.turnId === durableTurnId && isTurnDispatchable(sessionId, durableTurnId)) {
+        chain?.accepted(durableTurnId, automatic);
+      } else chain?.cancel();
     } catch (e) {
       if (background) await host.call("backgroundContinuations.fail", { sessionId: req.sessionId, id: background.id }).catch((error: unknown) => logger.app("session", "warn", "Background continuation failure could not be recorded", { data: String(error) }));
       completionNoticeTurns.delete(durableTurnId);
@@ -719,12 +757,16 @@ export function registerAgentIpc({
       data: { providerId: launch.providerId, modelId: launch.modelId },
     });
     return result;
+    } catch (error) {
+      chain?.cancel();
+      throw error;
     } finally {
       releaseSessionOperation();
     }
   });
 
   handle(IPC.invoke.agentCompact, async (req: { sessionId: string }) => {
+    cancelEndlessContinuation(req.sessionId);
     rejectNativeAgentOperation(req.sessionId);
     if (!host || !sidecar) throw new Error("backend unavailable");
     // Hold the session operation across admission (busy check, settings,
@@ -808,6 +850,7 @@ export function registerAgentIpc({
   });
 
   handle(IPC.invoke.agentAbort, async (req: { sessionId: string; turnId?: string }) => {
+    cancelEndlessContinuation(req.sessionId, req.turnId === activeTurns.get(req.sessionId) ? undefined : req.turnId);
     if (!sidecar) throw new Error("sidecar unavailable");
     // Prompt admission holds this same session operation until the sidecar has
     // accepted the turn. Waiting here closes the startup window where the
@@ -877,6 +920,7 @@ export function registerAgentIpc({
   });
 
   handle(IPC.invoke.agentStop, async (req: AgentStopRequest) => {
+    cancelEndlessContinuation(req.sessionId, req.turnId === activeTurns.get(req.sessionId) ? undefined : req.turnId);
     if (!sidecar) throw new Error("sidecar unavailable");
     const activeTurnId = activeTurns.get(req.sessionId);
     if (req.turnId && activeTurnId !== req.turnId) {
@@ -900,6 +944,7 @@ export function registerAgentIpc({
   // The Host-owned turn queue (D375 / D386). The renderer mirrors it; the
   // headless module admits, orders, and drains it.
   handle(IPC.invoke.agentQueuePush, async (req: AgentQueuePushRequest) => {
+    cancelEndlessContinuation(req.sessionId);
     rejectNativeAgentOperation(req.sessionId);
     if (!agentHostBridge) throw new Error("agent host unavailable");
     return goalStartRequested(req) ? queueGoal(req) : agentHostBridge.queue.push(req);

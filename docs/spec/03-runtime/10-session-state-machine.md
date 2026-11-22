@@ -159,10 +159,11 @@ turn that has ended.
     planning state of the same contract mode
     and grant no execution tools. A pending interruption does the same; a
     queued/running interruption after approval stays Agent.
-15. A second prompt, Plan or Goal submission, configuration change, or execution
-    is
-    rejected while the session has an active turn, pending approval, or
-    queued/running execution. Configuration is accepted only while idle.
+15. A second prompt, Plan or Goal submission, ordinary configuration change,
+    or execution is rejected while the session has an active turn, pending
+    approval, or queued/running execution. The [Guard/Endless revocation-only
+    exception](06-host-rpc-protocol.md#sessions) changes consent only;
+    it does not resolve approvals, change operating mode, or admit a new turn.
 16. A later turn in the same contract mode may revise a
     rejected/expired/interrupted checkpoint and
     must create a new immutable artifact rather than overwrite the earlier

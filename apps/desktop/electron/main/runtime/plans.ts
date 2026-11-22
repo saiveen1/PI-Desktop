@@ -1,6 +1,7 @@
 import { ErrorCodes, IPC, type AgentEventEnvelope, type AppNotification, type MessageUsage, type PlanExecution, type PlanExecutionFinishStatus, type UiMessage } from "@pi-desktop/shared";
 import { executionFromResponse, executionListFromResponse, planExecutionFromUnknown } from "@pi-desktop/host-runtime";
 import type { RuntimeState } from "./context";
+import { cancelEndlessContinuation, settleEndlessTurn } from "./endless-continuations";
 import type {
   SessionCoordination,
   TurnEndedPayload,
@@ -17,6 +18,7 @@ export type FinishTurnOptions = {
   turnId: string;
   createNotification?: boolean;
   recoverInflight?: boolean;
+  rootAgentEnd?: boolean;
 };
 
 /**
@@ -184,6 +186,7 @@ function finishTurn(
   // Set once the durable end settled, so the collaboration hook below only runs
   // for a turn whose durable row really was closed.
   let settledTurnId: string | undefined;
+  let completedDurably = false;
 
   // Freeze the reason and snapshot the session-keyed data synchronously.
   // Nothing below may read or delete state by session id again: a newer turn can
@@ -219,6 +222,7 @@ function finishTurn(
             ...(recoverInflight ? { recoverInflight: true } : {}),
           });
           settledTurnId = turnId;
+          completedDurably = result.ok === true && reason === "completed";
           if (result.notification) {
             sendToRenderer(IPC.event.notificationChanged, {
               notification: result.notification,
@@ -323,14 +327,17 @@ function finishTurn(
     }
     // Settlement of the durable turn is the trigger for the collaborators that
     // follow it; a turn with no durable end has nothing to settle.
-    if (!isQuitting() && settledTurnId && typeof onTurnSettled === "function") {
-      void onTurnSettled(id, settledTurnId).catch((error: unknown) => {
-        logger.app("persistence", "warn", "session collaboration settlement failed", {
-          sessionId: id,
-          data: String(error),
-        });
-      });
-    }
+    void (async () => {
+      if (!isQuitting() && settledTurnId && onTurnSettled) {
+        try { await onTurnSettled(id, settledTurnId); }
+        catch (error) {
+          cancelEndlessContinuation(id, turnId);
+          logger.app("persistence", "warn", "session collaboration settlement failed", { sessionId: id, data: String(error) });
+          return;
+        }
+      }
+      await settleEndlessTurn(id, turnId, completedDurably && options.rootAgentEnd === true && !runId && !wasPlanSubmission, isQuitting);
+    })().catch((error: unknown) => logger.app("session", "warn", "Automatic continuation was not started", { sessionId: id, data: String(error) }));
   };
   // Register the record before the body runs, so a concurrent caller observes
   // the same promise even when this turn had no persistence step to await.

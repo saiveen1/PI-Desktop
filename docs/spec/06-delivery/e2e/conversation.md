@@ -5238,48 +5238,95 @@ Build two actual runtimes with identical configuration and different scratch dir
   end-to-end execution is not claimed by these isolated tests.
 
 ## E2E-RUNTIME-observer-guard
-- **Title:** A conversation opts into bounded Guard or model-free Endless continuation.
-- **Preconditions:** Synthetic independent/main providers and Host boundaries;
-  isolated storage, no credentials, daily profile or Desktop installation.
-- **Steps:** Choose Off/Endless/Guard, including Endless without a configured
-  reviewer. Set continuation counts 1, 3 and 5. Save a custom reviewer prompt,
-  reset it, reject invalid limits/prompts and preserve sibling settings. Verify
-  idle configuration gates, session changes and unsupported native/remote paths.
-  Feed successive normal-stop replies, intervening tools, completed replies,
-  input/approval waits, Stop/steering and errors/aborts. Have Guard return
-  continue/continue/stop, always continue, malformed output, and timeout. Include
-  innocent mentions of refusal, permissions and question marks. Reopen persisted
-  diagnostics, upgrade a populated Observe database, and fork a session.
-- **Expected:** Endless makes exactly N additional main-model requests and zero
-  independent calls/credential resolutions, regardless of answer semantics.
-  Guard sees only the redacted last reply plus the editable prompt, not system,
-  history, reasoning or tool data; only continue/stop is accepted. Guard reassesses
-  each new final candidate while capacity remains. No mode exceeds its count or
-  stacks legacy checklist/early-end nudges. Actual Stop, Plan, pending work,
-  permission/input state, stale-generation and malformed/timeout/error boundaries
-  remain effective. No synthetic user rows, tool replay or persisted resume job
-  is added. Counts reset only with a new explicit user turn.
-  The latest owning response displays the actual count and stop reason, while
-  older assessments remain readable. Endless never shows a fabricated reviewer,
-  usage, confidence or completion verdict. Post-response diagnostic refreshes
-  preserve response text/thinking/usage and cannot overwrite another response.
-  Migration maps Observe to off, preserves Guard and all unrelated data, and
-  supports Endless create/configure/reopen; forks stay off. Legacy Observe
-  diagnostics display without re-enabling that mode. All locales describe costs
-  and distinguish a continuation decision from verified completion.
-  Toggle optional transient-error continuation. After the built-in network or
-  rate-limit budget exhausts, each additional recovery consumes one remaining
-  auto-continuation, with no reviewer call and no reset on phase changes or
-  successful replies. Cover before-header and mid-stream failure, recovery after
-  a completed Write (exactly one write), normal continuation sharing the balance,
-  Stop during retry backoff, false/missing setting, and invalid boolean writes.
-  Permanent/auth/certificate/local errors retain their existing terminal behavior.
-- **Specs:** Runtime §5e.4; Observer Guard ADR; IPC session.configure; storage;
-  Behavior settings; transcript §7.4c.
+- **Title:** Guard decisions gate a bounded chain of visible new turns.
+- **Preconditions:** Synthetic independent/main providers, isolated Host storage
+  and a controllable admission boundary; no credentials, daily profile or Desktop
+  installation.
+- **Steps:** Choose Off/Endless/Guard. Set counts 1, 3 and 5. Save and reset a
+  custom prompt, reject invalid settings, and preserve siblings. Feed eligible
+  replies with intervening tools, input/approval waits, Stop/steering and
+  errors/aborts. Have Guard return continue/continue/stop, always continue,
+  malformed output, and timeout; try an unavailable configured reviewer. Include
+  innocent mentions of refusal, permissions and question marks.
+  Hold a review open, switch Off, then release a late `continue`. Also switch
+  Off during main streaming and between the decision and follow-up admission;
+  compare ordinary Stop. Replay a terminal update and reopen persisted history.
+  Upgrade a populated Observe database and fork a session. Enable optional
+  transient recovery with failures before headers and mid-stream, including
+  after a completed Write. Test the off/default setting, Stop during backoff,
+  and a cap exhausted by both extra recovery and admitted follow-ups.
+- **Expected:** Guard uses only the exact configured independent provider/model,
+  with no fallback. It sees only the redacted last reply plus the editable
+  prompt, not main system text, history, reasoning or tool data. Each eligible
+  final reply is assessed at most once while capacity remains. A terminal
+  `continue` is a decision, not a dispatch. A visible user-role **Continue**
+  starts a distinct ordinary turn only after settlement and successful
+  admission. The prior answer stays final; no in-turn system reminder or
+  stacked local nudge is injected. `stop`, any error, zero budget, pending input
+  or approval, stale ownership and Off never send. Off does not interrupt the
+  main Agent; an already started review may finish but its result cannot send.
+  Stop interrupts active work. Optional extra recovery stays in the current turn
+  after built-in retry exhaustion, without a reviewer request, chat row, or
+  tool replay. It spends the same chain cap as admitted follow-ups; neither
+  retry success nor an auto turn resets it. Permanent/local/certificate errors
+  remain terminal. Diagnostics preserve response text/thinking/usage and
+  existing count/limit fields; reopening or replay cannot send. Migration maps
+  Observe to off, preserves Guard and unrelated data, and forks stay off.
+  All locales distinguish review decisions from sends and from verified completion.
+- **Specs:** [Runtime §5e.4](../../03-runtime/02-agent-runtime.md#5e4-optional-built-in-observer-guard),
+  [Observer Guard ADR](../../../adr/builtin-observer-guard.md),
+  [Storage](../../03-runtime/04-data-storage.md),
+  [Behavior settings](../../04-ux/06-settings-ia.md) and
+  [Transcript §7.4c](../../04-ux/08-component-spec.md#74c-built-in-observer-guard-controls-and-results).
 - **Acceptance:** C / E / Privacy / Quality.
-- **Milestone:** Maintenance.
-- **Status:** Offline runtime, boundary, renderer interaction and migration
-  fixtures; installed upgrades, real-model judgement and live UI remain separate.
+- **Milestone:** M6+ (personal maintenance).
+- **Status:** Offline runtime, Host and renderer fixtures cover parts of this
+  scenario; installed upgrades, real-model judgement and live UI are separate.
+
+## E2E-RUNTIME-endless-follow-ups
+
+- **Title:** Endless sends a visible bounded chain of ordinary new turns after settled main Agent replies.
+- **Preconditions:** Opt-in local main Agent chat, deterministic main provider,
+  no configured reviewer, isolated profile, and a controllable admission boundary.
+- **Steps:** Send a human message with Endless enabled, limits 1, 3 and 5, and
+  eligible normal answers (including "done"), with settled tools/retries in at
+  least one turn. Inspect live and reopened history. Replay a terminal update,
+  reload/restart with persisted markers and follow-up rows, and send a new human
+  message. Try Off both during a turn and while the next auto-send is held before
+  admission; distinguish an already admitted auto turn and ordinary Stop. Try
+  invalid or combined busy writes; verify exact Host revocation preserves a
+  pinned custom mode and a pending Plan. Exercise input/approval waits, pending
+  work, steering, Plan/Goal, unsupported sessions and error/abort/length/empty
+  endings. Verify ordinary retries with recovery off, then enable
+  `continueOnTransientError` and exhaust built-in setup, mid-stream and rate-limit
+  retries. With cap 3, recover once in the first turn, admit one follow-up, then
+  recover once more in that turn after built-in retries exhaust.
+- **Expected:** The runtime marker alone sends nothing. Each of the N admitted
+  automatic **Continue** user-role messages begins a distinct normal turn only
+  after its predecessor settles. Prior answers remain final on reload. No in-turn
+  reminder or reviewer request/credential lookup is added. No tool replay, extra
+  authority, or alternate tool/permission path is created. A new human message
+  starts a fresh chain; tool calls, successes, and auto turns do not reset it.
+  Replay/restart does not duplicate sends or resume the chain. Off suppresses
+  future sends even across racing admission, but does not abort the already
+  admitted turn. Stop retains its ordinary interruption behavior
+  and prevents a sequel. A busy revocation cannot carry unrelated settings or
+  enable a continuation mode; other configuration retains its existing gates.
+  Ineligible endings and unresolved gates do not send. Built-in retries remain
+  available regardless of the cap. Extra recovery sends no message and preserves
+  completed receipts and permissions. In the cap-3 example, the follow-up label
+  shows 2/3; each terminal assessment records `endlessRecoveriesUsed: 1`, and no
+  second follow-up is sent. The field is absent on turns without an extra claim.
+- **Specs:** [Runtime §5e.4](../../03-runtime/02-agent-runtime.md#5e4-optional-built-in-observer-guard),
+  [Observer Guard ADR](../../../adr/builtin-observer-guard.md),
+  [IPC](../../03-runtime/01-ipc-protocol.md),
+  [Storage](../../03-runtime/04-data-storage.md) and
+  [Transcript §7.4c](../../04-ux/08-component-spec.md#74c-built-in-observer-guard-controls-and-results).
+- **Acceptance:** C / E / F / Privacy / Quality.
+- **Milestone:** M6+ (personal maintenance).
+- **Status:** Partially automated by runtime, IPC/Host fixtures and the headless
+  `scripts/e2e-endless-turns.mjs` fixture; no live Electron or installed-upgrade
+  result is implied.
 
 ## E2E-RUNTIME-configurable-output-guards
 - **Title:** Ordinary Agent early endings are advisory or boundedly corrected.

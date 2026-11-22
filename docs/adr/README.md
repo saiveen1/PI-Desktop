@@ -445,7 +445,7 @@ git history.
 | developer-performance-capture | [Opt-in local performance captures](developer-performance-capture.md) | Accepted; additive local developer IPC |
 | configurable-local-output-guards | [Configurable local output guards](configurable-local-output-guards.md) | Accepted; additive settings and normalized termination diagnostics |
 | whole-turn-context-editing | [Whole-turn model-context editing](whole-turn-context-editing.md) | Accepted; reversible context overlays over original execution history |
-| builtin-observer-guard | [Built-in per-conversation Observer Guard](builtin-observer-guard.md) | Accepted; optional independent assessment and bounded Guard continuation |
+| builtin-observer-guard | [Built-in per-conversation continuation](builtin-observer-guard.md) | Accepted; bounded settled-turn follow-ups with optional Guard review |
 | plugin-transcript-selection-views | [Docked views can accept transcript selections](plugin-transcript-selection-views.md) | Accepted (issue #2395) |
 | opt-in-background-job-continuation | [Opt-in background job continuation](opt-in-background-job-continuation.md) | Proposed (#2143) |
 | plugin-turn-observation-model-context-and-suggestion-targets | [Publish turn observations, scoped model context, and Composer suggestion targets](plugin-turn-observation-model-context-and-suggestion-targets.md) | Accepted (#2470) |

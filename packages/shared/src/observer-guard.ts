@@ -106,6 +106,8 @@ export type ObserverGuardAssessment = {
   decision?: "continue" | "stop";
   continuationCount?: number;
   maxContinuations?: number;
+  /** Extra recoveries charged by this turn to the shared follow-up cap (historical wire name). */
+  endlessRecoveriesUsed?: number;
   /** Legacy broad category for older readers. */
   continuationBlocked?: "observe_only" | "budget" | "unsafe" | "not_actionable";
   skipReason?: ObserverGuardSkipReason;

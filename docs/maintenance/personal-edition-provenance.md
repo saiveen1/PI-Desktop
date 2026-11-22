@@ -215,6 +215,20 @@ maps to off; old diagnostics remain readable. The original Agent/Host permission
 and transport-recovery foundations remain. Historical Luna validation above
 describes the earlier design, not coverage of these new modes.
 
+The settled-turn continuation redesign builds on local `70330c49e` (simplified
+continuation and opt-in error recovery) at personal base `2d1a1b068`, compared
+read-only with locally recorded `upstream/main` at
+`e89051fc7d5955e245e969f4b5e1ff7f6aea9ddd` (no fetch). That upstream tree has no
+`observer-guard.ts`, `observerMode`, or `continueOnTransientError` in the
+runtime/shared/Desktop source. The local increment uses main-turn settlement
+and bounded live Desktop admission for visible Continue turns in either mode.
+Guard alone keeps its exact independent reviewer; a `continue` decision is not
+a send. Both modes support revocation without stopping the active turn and share
+their chain cap with opt-in extra recovery. Normal turn admission, transcript
+storage, built-in provider recovery, and permission gates are inherited.
+This is current-source documentation, not a recorded release, installed
+upgrade, or live-provider validation.
+
 The local tool observer was implemented on personal base `2dea25a27` and checked
 against locally recorded upstream `aa35fee4b15c354303bb5a0c77c9c33a731d097f`
 without fetching. At that revision, `developer-sections.tsx` contains the developer

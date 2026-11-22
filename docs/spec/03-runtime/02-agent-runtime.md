@@ -714,27 +714,44 @@ Local Desktop sessions explicitly select `observerMode: off | endless | guard`.
 Off is the default. Stored Observe migrates to off, never to active continuation;
 old assessments remain readable. Native/remote and scheduled runs stay disabled.
 
-Both enabled modes append a fixed one-request "continue current work" reminder
-after eligible non-empty text-only normal-stop replies. They preserve the Agent
-context and successful tool receipts without fake user messages or new scope.
-`observerGuard.maxContinuations` (integer 1-100, default 3) caps extra requests per
-explicit user turn. Tools, retries and reviewer answers never replenish it.
-At the cap, stop visibly with `continuation_limit` without another review call.
-Enabled modes replace legacy checklist/early-end nudges, not stack another
-allowance. Tool-call repair and transport recovery keep their existing budgets;
-Off preserves existing local guards. Pending correction survives compaction until
-the next request consumes the reminder.
+Both modes use `observerGuard.maxContinuations` (integer 1-100, default 3)
+and replace legacy checklist/early-end nudges while enabled rather than
+stacking another normal-stop allowance. Off preserves the existing local
+guards. Tool-call repair and built-in provider recovery are unchanged.
 
-**Endless** directly continues up to the cap: no reviewer configuration,
-credentials, model call or text judgement. Even a normal "done" reply continues.
-The name does not mean unbounded execution; main-model requests still cost money.
-Actual Stop, Plan/mode closeout, steering, pending work and unsettled latest tool
-batches remain authoritative. Input/approval tools must settle through their
-existing workflow. Endless does not infer a pending question from plain text;
-users wanting semantic judgement use Guard, or stop manually.
+Both modes let each eligible ordinary local main Agent turn settle with its
+final answer intact. Only the live Desktop turn owner can submit a visible,
+automatically sent user-role **Continue** through ordinary new-turn admission
+for that session, after settlement. Neither mode injects a same-turn reminder
+or reopens the final answer. Endless marks an eligible non-empty normal-stop
+reply without reviewer configuration, a reviewer call, or text judgement.
+Guard requires the independent review decision below. Neither terminal record
+is a dispatch or evidence that a follow-up was sent.
 
-**Guard** independently assesses each new final reply while capacity remains,
-using only that reply plus a user-editable `prompt`. Empty prompt restores the
+Admitted automatic follow-up turns and opt-in extra transient recovery claims
+draw from one original limit per human input. Auto turns do not replenish the
+balance; ordinary provider retries and tool calls neither spend nor reset it.
+When no capacity remains, do not send a follow-up. A new human input supersedes
+the old chain, and queued human work takes priority. Deduplicate by live turn
+and response ownership. Recheck current consent, ownership, and admission before
+sending. Stored messages and historical markers cannot trigger dispatch; reload,
+replay, or restart cannot enqueue a duplicate or resume an old chain. The normal
+prompt path retains existing context, permission checks, scope and completed
+receipts. Neither mode adds approval authority or I/O capability; Endless can
+follow even a normal "done" and add main-model usage.
+
+Stop, steering, mode closeout, pending work, unsafe tool state, and real
+input/approval waits remain authoritative. A plain-text question is not a
+structured wait. Error, abort, length, and empty endings are ineligible. Off
+revokes either enabled mode, including a send pending admission, without
+aborting the current main Agent turn. An already started review may finish;
+its stale result cannot send. Ordinary Stop interrupts active work, including
+review, and prevents its automatic sequel.
+
+**Guard** independently assesses each new eligible final reply at most once
+while chain capacity remains. At zero remaining capacity, it does not review
+or send. The reviewer is the exact configured independent provider/model and
+uses only the reply plus a user-editable `prompt`. Empty prompt restores the
 shipped default; maximum prompt length is 8,000 characters. The default requests
 continue for unfinished work or a concrete worthwhile improvement, and stop for
 completion, genuine input/approval needs or refusal. Accept exactly `continue`
@@ -750,35 +767,36 @@ or 8,192 with thinking. Invalid/empty review output, timeout, cancellation or
 failure stops without retry. No model fallback, reviewer tools, native search,
 parent provider-side thread or reviewer-authored executable command is used.
 Redaction remains best effort. Stop/stale state is rechecked after the await.
+A terminal `continue` decision can qualify for Desktop admission; `stop`, a
+review error, stale ownership, or a blocked turn cannot dispatch.
 
-Configuration is snapshotted per turn. Each candidate is processed once; a later
-final reply can be checked again. Error/abort/length/empty replies are not
-normal-stop continuation; existing recovery owns those paths. Optional
-`observerGuard.continueOnTransientError` (boolean, default false) permits a main
-Agent request to draw from the remaining `maxContinuations` balance after its
-built-in network/transient-service or rate-limit retry budget is exhausted.
-Both request-setup and mid-stream recovery use the same claim path. No reviewer
-is called and no new retry counter, queue or tool replay is added. Existing
-backoff/Retry-After and context-preserving recovery remain authoritative; a
-successful response does not replenish the auto-continuation balance. Once an
-extra recovery is admitted, the retry indicator includes the remaining allowance
-rather than displaying an attempt above its stated limit. Off,
-Stop, steering, Plan/mode closeout, unsafe latest tool state, permanent failures,
-local errors and certificate verification failures cannot claim this allowance.
-The existing explicit infinite-provider-retry policy is unchanged: without
-exhaustion there is no extra continuation claim. Host notices and
-restored history do not start work. Steering cancels correction without resetting
-the count. Opening historical details never makes another request.
+Guard configuration is snapshotted per turn. Both modes retain optional
+`observerGuard.continueOnTransientError` (boolean, default false). An eligible
+main Agent request may claim an extra attempt after built-in network/transient-
+service or rate-limit retry exhaustion. Both modes spend their remaining chain
+balance on extra recovery and admitted follow-ups.
+The extra recovery stays within the ongoing turn's transport retry path and
+does not send a Continue message or call a reviewer. Request-setup and mid-stream
+recovery use the same claim path. Existing backoff, receipts, permissions and
+context-preserving recovery remain authoritative. Success does not replenish
+the allowance; the retry indicator includes the remaining allowance when an
+extra attempt is admitted. Off, Stop, steering, Plan/mode closeout, unsafe latest
+tool state, permanent/local errors and certificate failures cannot claim it.
+Built-in retries, including the separately selected infinite retry policy, are
+unchanged and do not depend on the continuation cap. Host notices, restored
+history and opening historical details never start work.
 
-The owning response keeps `runDiagnostics.observer`: status, times, optional
-`decision: continue | stop`, `continuationCount`, `maxContinuations`, continued
-and concrete stop/skip reasons. Guard adds independent model/effort/usage;
-Endless has none. Legacy verdict/confidence/evidence fields remain readable,
-not newly produced proof. The turn summary shows the latest result and count,
-not an earlier continued badge as a completion claim. Diagnostic refreshes
-preserve immutable response content and separate primary-model accounting.
-See [the decision](../../adr/builtin-observer-guard.md) and
-E2E-RUNTIME-observer-guard. These modes automate continuation, not acceptance.
+`runDiagnostics.observer` stays bound to its owning response. It uses the
+existing `continuationCount` and `maxContinuations` fields; Guard records its
+decision and independent model/effort/usage when available. A terminal recovery
+count describes only extra claims in that turn, not all provider retries or the
+chain total (both modes use the existing `endlessRecoveriesUsed` wire field).
+Neither eligibility nor a Guard `continue` asserts a send; only the admitted
+visible follow-up shows cumulative allowance consumed, including that follow-up.
+Legacy records remain readable. Diagnostic refreshes preserve immutable
+response content and separate primary-model accounting. See
+[the decision](../../adr/builtin-observer-guard.md), E2E-RUNTIME-observer-guard
+and E2E-RUNTIME-endless-follow-ups. Neither mode verifies task completion.
 
 ### 5.1 Context checkpoint protection (D158/D203, ADR 0030/0049/0061/0064)
 

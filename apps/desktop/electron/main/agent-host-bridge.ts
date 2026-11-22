@@ -3,6 +3,7 @@ import {
   RacpError,
   TRUSTED_MODE_ORIGIN,
   TRUSTED_BACKGROUND_CONTINUATION,
+  TRUSTED_ENDLESS_CONTINUATION,
   type TrustedBackgroundContinuation,
   type TrustedModeOrigin,
   type ApprovalPort,
@@ -32,6 +33,7 @@ import type {
 import { IPC, isGlobalPermissionMode } from "@pi-desktop/shared";
 import { backgroundContinuationRequest } from "./runtime/background-continuations";
 import { modeContinuationRequest } from "./runtime/mode-runs";
+import { excludeEndlessRoot } from "./runtime/endless-continuations";
 
 type IpcInvoke = (channel: string, args: readonly unknown[]) => Promise<unknown>;
 
@@ -154,6 +156,7 @@ export function createAgentHostBridge(options: AgentHostBridgeOptions) {
         const promptRequest = {
           sessionId: request.sessionId,
           content: request.content,
+          ...(request[TRUSTED_ENDLESS_CONTINUATION] ? { [TRUSTED_ENDLESS_CONTINUATION]: request[TRUSTED_ENDLESS_CONTINUATION] } : {}),
           ...(request.startGoal === undefined ? {} : { startGoal: request.startGoal }),
           ...(request.sessionMessageId ? { sessionMessageId: request.sessionMessageId } : {}),
           ...(request.userMessageId ? { messageId: request.userMessageId } : {}),
@@ -165,6 +168,7 @@ export function createAgentHostBridge(options: AgentHostBridgeOptions) {
         // reaches the prompt handler without any serializable field.
         const modeOrigin = request[TRUSTED_MODE_ORIGIN];
         const background = request[TRUSTED_BACKGROUND_CONTINUATION];
+        if (request.principal.subject !== DESKTOP_PRINCIPAL.subject) excludeEndlessRoot(promptRequest);
         if (background) backgroundContinuationRequest(promptRequest, background);
         const result = (await options.invoke(options.channels.agentPrompt, [
           modeOrigin ? modeContinuationRequest(promptRequest, modeOrigin) : promptRequest,
@@ -378,6 +382,12 @@ export function createAgentHostBridge(options: AgentHostBridgeOptions) {
         sessionId, admission: "reject_if_busy",
         input: { text: "Background job result ready" },
         context: { requestId: `background-continuation-${continuation.id}` },
+      });
+    },
+    startEndlessContinuation(sessionId: string, origin: object, content: string) {
+      return agentHost.startTurn(DESKTOP_PRINCIPAL, {
+        [TRUSTED_ENDLESS_CONTINUATION]: origin, sessionId, admission: "reject_if_busy",
+        input: { text: content }, context: { requestId: `endless-${Date.now()}` },
       });
     },
     startModeContinuation(sessionId: string, origin: TrustedModeOrigin, content: string) {

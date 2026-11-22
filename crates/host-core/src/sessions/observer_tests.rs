@@ -204,6 +204,26 @@ fn observer_late_diagnostics_stay_on_the_settled_candidate_after_reopen() {
     assessment["continued"] = json!(true);
     assessment["reviewedToolCount"] = json!(1);
     assessment["toolOutputIncluded"] = json!(false);
+    for (max, used) in [
+        (None, json!(1)),
+        (Some(3), json!(0)),
+        (Some(3), json!(-1)),
+        (Some(3), json!(1.5)),
+        (Some(3), json!(4)),
+        (Some(3), json!("1")),
+        (Some(3), Value::Null),
+        (Some(101), json!(1)),
+    ] {
+        let mut invalid = assessment.clone();
+        invalid["endlessRecoveriesUsed"] = used;
+        if let Some(max) = max {
+            invalid["maxContinuations"] = json!(max);
+        }
+        let invalid = refresh(&original, &turn, json!({"observer": invalid}));
+        append_message(&db, &session.id, &invalid, Some(&turn)).unwrap();
+    }
+    assessment["endlessRecoveriesUsed"] = json!(3);
+    assessment["maxContinuations"] = json!(3);
     let assessed = refresh(&original, &turn, json!({"observer": assessment}));
     append_message(&db, &session.id, &assessed, Some(&turn)).unwrap();
     append_message(&db, &session.id, &checking, Some(&turn)).unwrap();
@@ -328,6 +348,9 @@ fn observer_diagnostic_refresh_cannot_insert_or_rewrite_unowned_rows() {
         ("decision", json!("retry")),
         ("continuationCount", json!(-1)),
         ("continuationCount", json!(1.5)),
+        ("endlessRecoveriesUsed", json!(-1)),
+        ("endlessRecoveriesUsed", json!(1.5)),
+        ("endlessRecoveriesUsed", json!(4)),
         ("maxContinuations", json!(101)),
         ("maxContinuations", json!(0)),
         ("modelKey", json!("provider/model")),
@@ -428,6 +451,9 @@ fn observer_endless_decisions_and_legacy_assessment_survive_reopen() {
         if mode == "endless" {
             assessment["continuationCount"] = json!(index);
             assessment["maxContinuations"] = json!(3);
+        }
+        if index == 2 {
+            assessment["endlessRecoveriesUsed"] = json!(1);
         }
         if let Some(decision) = decision {
             assessment["decision"] = json!(decision);

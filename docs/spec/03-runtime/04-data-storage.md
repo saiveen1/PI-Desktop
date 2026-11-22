@@ -391,23 +391,33 @@ container round-trips it without a schema migration; legacy and plugin-imported
 rows may omit it and render without invented diagnostics. Stored message ISO
 timestamps remain unchanged; local timezone conversion is presentation only.
 
-Built-in Observer Guard assessments use `meta.runDiagnostics.observer` in the
+Built-in Observer Guard diagnostics use `meta.runDiagnostics.observer` in the
 same message metadata container; no separate assessment/result table is added.
-An assistant response can settle before its observer completes. The existing
-append path therefore accepts a narrowly validated diagnostic-only refresh for
-that already-settled main assistant message, rather than dropping it as a replay.
+The main assistant reply can finish before its Guard decision or Endless
+eligibility marker arrives. The existing append path accepts a narrowly validated
+refresh of diagnostics on that finished message, rather than dropping it as replay.
 The Host preserves the original content, thinking, usage, timestamps, tool data
 and unrelated metadata. Ownership, turn identity and monotonic assessment state
 are checked; a stale checking snapshot cannot erase a terminal result, nor can a
 different response/turn gain an assessment. This is not a general message upsert.
-Checking and terminal observer updates reach durable storage even if another
-response follows in the same turn. Main retains at most the latest omitted empty
-reply per active session until a matching observer record, next reply, terminal
-turn or transcript rewrite settles it; only a matching observation causes its
-original snapshot to be queued before the diagnostic-only refresh. Ordinary
-empty replies stay omitted. Reopening only reads recorded evidence and
-does not start a model call or grant tool permission. Existing optional metadata
-allows the added reason/receipt fields without a new table or schema migration.
+Checking and terminal observer updates reach durable storage. Main retains at
+most the latest omitted empty reply per active session until a matching observer
+record, next reply, terminal turn or transcript rewrite settles it. Only a
+matching observation queues its original snapshot before the diagnostic-only
+refresh. Ordinary empty replies stay omitted. Reopening only reads recorded
+evidence; it does not start a model call or grant tool permission. Existing
+optional metadata carries the diagnostics without a new table or schema migration.
+Terminal assessments use existing count/limit fields and may include a nonzero
+count of extra transport recovery claims within that turn (in Endless,
+`endlessRecoveriesUsed`). It is not a chain total, checkpoint, or send receipt.
+
+In either mode, an admitted follow-up is an ordinary visible user-role message
+in a distinct turn, recorded by the existing prompt/transcript path. The prior
+answer stays final. Neither these rows nor stored observer decisions or
+eligibility markers form a durable queue, checkpoint, or grant. Existing count
+fields are diagnostics; they do not rebuild the live chain or its once-only
+admission claim on history read, reconnect, or restart. No new schema, storage
+ownership or recovery job is required.
 
 Internal system-state rows use role `system`, empty visible content, and optional
 `meta.modelSystem = { version: 1, messageJson, beforeMessageId?, afterMessageId? }`.
@@ -957,7 +967,10 @@ CREATE INDEX idx_session_import_origins_plugin
   explicit null, booleans, arrays, objects, and unknown strings are rejected as
   `INVALID_PARAMS`, not coerced. Omission during configuration preserves the
   current value; creation persists an explicitly selected value atomically.
-  Changes use the existing host session authority and idle configuration gate.
+  Changes use the existing Host session authority and idle configuration gate.
+  A same-mode, revocation-only write on a supported local Desktop session may
+  set Guard or Endless consent to off while busy. It does not change other
+  configuration, pinned mode policy, Plan/Goal locks, or an admitted turn.
   The mode is independent of Agent/Plan/Goal, model selection, thinking level,
   and permission mode; configuring it never starts execution or a model call.
   Global observer model/effort settings do not enable conversations. Neither

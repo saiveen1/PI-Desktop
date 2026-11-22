@@ -7,14 +7,38 @@ import type { AssistantTurnPart } from "./assistant-turns";
 const errors = ["MODEL_NOT_CONFIGURED", "MODEL_UNAVAILABLE", "EFFORT_UNAVAILABLE", "PROVIDER_UNAVAILABLE", "TIMEOUT", "INVALID_RESPONSE", "CANCELLED", "INSUFFICIENT_EVIDENCE"];
 const verdicts = ["complete", "incomplete", "blocked", "needs_input", "unknown"];
 
+function isContinuationCandidate(assessment: ObserverGuardAssessment): boolean {
+  return assessment.status === "assessed" && assessment.decision === "continue" &&
+    assessment.continued === false && assessment.continuationCount === 0 &&
+    !assessment.continuationReason && !assessment.continuationBlocked;
+}
+
+function hasGuardRecommendation(assessment: ObserverGuardAssessment): boolean {
+  return assessment.mode === "guard" && Boolean(assessment.modelKey) && isContinuationCandidate(assessment);
+}
+
+export function visibleObserverAssessment(assessment?: ObserverGuardAssessment): ObserverGuardAssessment | undefined {
+  // An eligible Endless reply is not a result; the automatic user turn shows the follow-up.
+  return assessment?.mode === "endless" && isContinuationCandidate(assessment) ? undefined : assessment;
+}
+
+export function observerContinuationProgress(assessment?: ObserverGuardAssessment) {
+  if (!assessment) return;
+  const { continuationCount: current, maxContinuations: max, continuationReason } = assessment;
+  if (current === undefined || max === undefined) return;
+  // A zero on a candidate or shared-cap exhaustion is not cross-turn progress.
+  if (current === 0 && (continuationReason === "continuation_limit" || hasGuardRecommendation(assessment))) return;
+  return { current, max };
+}
+
 export function matchingObserver(message: UiMessage, live?: ObserverGuardAssessment): ObserverGuardAssessment | undefined {
   const saved = message.runDiagnostics?.observer;
   const persisted = saved?.messageId === message.id ? saved : undefined;
-  if (live?.messageId !== message.id) return persisted;
+  if (live?.messageId !== message.id) return visibleObserverAssessment(persisted);
   // A delayed live snapshot cannot roll a durable terminal assessment back to checking.
   if (persisted && (persisted.startedAt > live.startedAt ||
-    (persisted.startedAt === live.startedAt && persisted.status !== "checking" && live.status === "checking"))) return persisted;
-  return live;
+    (persisted.startedAt === live.startedAt && persisted.status !== "checking" && live.status === "checking"))) return visibleObserverAssessment(persisted);
+  return visibleObserverAssessment(live);
 }
 
 function isAutoContinuationAssessment(assessment: ObserverGuardAssessment): boolean {
@@ -43,6 +67,7 @@ export function observerSummaryKey(assessment: ObserverGuardAssessment, interrup
   if (interrupted) return "observerGuard.interrupted";
   if (assessment.status === "assessed") {
     if (assessment.continued) return "observerGuard.summary.continued";
+    if (hasGuardRecommendation(assessment)) return "observerGuard.status.assessed";
     if (assessment.continued === false || assessment.continuationBlocked || assessment.continuationReason || assessment.decision === "stop") return "observerGuard.summary.notContinued";
     if (assessment.mode === "endless") return "observerGuard.noReviewer";
     return "observerGuard.status.assessed";

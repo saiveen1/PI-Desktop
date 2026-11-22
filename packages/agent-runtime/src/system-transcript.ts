@@ -34,6 +34,7 @@ function currentSystemMessage(messages: readonly AgentMessage[]): SystemMessage 
 
 /** Desktop-owned sections retain their order ahead of extension sections. */
 export const CONTEXT_BUDGET_SECTION = "context_budget";
+export const LEGACY_OBSERVER_SECTION = "observer_guard_correction";
 
 function desktopSectionNames(sections: Record<string, unknown>): string[] {
   return ["runtime", TOOL_ACTIVATION_SECTION, "skills", ...Object.keys(sections)
@@ -113,8 +114,8 @@ export function systemTranscriptCheckpoint(messages: readonly AgentMessage[]): S
   // Use the journal's durable shape, including extension-provided text blocks.
   const checkpoint: SystemMessage = { ...current, content: contentText(current.content),
     ...(current.toolsAdded ? { toolsAdded: current.toolsAdded.map(toToolDeclaration) } : {}) };
-  if (!checkpoint.sections || !(CONTEXT_BUDGET_SECTION in checkpoint.sections)) return checkpoint;
-  const { [CONTEXT_BUDGET_SECTION]: _expired, ...sections } = checkpoint.sections;
+  if (!checkpoint.sections) return checkpoint;
+  const { [CONTEXT_BUDGET_SECTION]: _expired, [LEGACY_OBSERVER_SECTION]: _obsolete, ...sections } = checkpoint.sections;
   return { ...checkpoint, sections };
 }
 

@@ -2134,7 +2134,7 @@ pub fn configure_session_with_delegation(
         fast_mode,
         delegation_model_keys,
         delegation_model_approvals,
-        None,
+        ConfigureSnapshot::Stored(None),
         None,
     )
 }
@@ -2163,9 +2163,38 @@ pub fn configure_session_with_mode_snapshot(
         fast_mode,
         None,
         None,
-        mode_snapshot_hash,
+        ConfigureSnapshot::Stored(mode_snapshot_hash),
         None,
     )
+}
+
+/// Revoke consent without configuring the mode, replacing its snapshot or touching a run.
+pub fn try_revoke_observer(db: &Database, id: &str, mode: &str) -> Result<Option<SessionSummary>> {
+    if id.starts_with("remote:") || id.starts_with("native-pi:") || id.starts_with("native:") {
+        return Ok(None);
+    }
+    let tx = db.conn().unchecked_transaction()?;
+    let changed = tx.execute(
+        "UPDATE sessions SET observer_mode = 'off', updated_at = ?3
+         WHERE id = ?1 AND mode = ?2 AND observer_mode IN ('guard', 'endless') AND deleted_at IS NULL
+           AND COALESCE(NULLIF(source, ''), 'desktop') = 'desktop'
+           AND NOT EXISTS(SELECT 1 FROM session_import_origins WHERE session_id = ?1)
+           AND NOT EXISTS(SELECT 1 FROM task_runs WHERE session_id = ?1)
+           AND NOT EXISTS(SELECT 1 FROM projects WHERE id = sessions.project_id
+                          AND instr(trim(path), ?4) = 1)",
+        params![id, mode, now_ms(), crate::db::REMOTE_PROJECT_PREFIX],
+    )?;
+    if changed == 0 {
+        return Ok(None);
+    }
+    let session = session_summary(db, id)?;
+    tx.commit()?;
+    Ok(session)
+}
+
+pub enum ConfigureSnapshot<'a> {
+    Stored(Option<&'a str>),
+    Prepared(&'a crate::mode_runs::PreparedMode),
 }
 
 /// Persist session settings, mode snapshot and optional delegation policy in
@@ -2182,7 +2211,7 @@ pub fn configure_session_with_delegation_and_mode_snapshot(
     fast_mode: Option<bool>,
     delegation_model_keys: Option<Option<&[String]>>,
     delegation_model_approvals: Option<Option<&crate::session_delegation::ModelApprovals>>,
-    mode_snapshot_hash: Option<&str>,
+    snapshot: ConfigureSnapshot<'_>,
     observer_mode: Option<ObserverMode>,
 ) -> Result<Option<SessionSummary>> {
     if !(is_valid_mode(mode) || mode == "chat") {
@@ -2204,6 +2233,7 @@ pub fn configure_session_with_delegation_and_mode_snapshot(
         thinking_level,
         permission_mode,
     )?;
+    let tx = db.conn().unchecked_transaction()?;
     if observer_mode.is_some() {
         crate::session_delegation::ensure_idle(db, id)?;
     }
@@ -2258,7 +2288,13 @@ pub fn configure_session_with_delegation_and_mode_snapshot(
             Ok::<_, anyhow::Error>(next)
         })
         .transpose()?;
-    let tx = db.conn().unchecked_transaction()?;
+    let mode_snapshot_hash = match snapshot {
+        ConfigureSnapshot::Stored(hash) => hash,
+        ConfigureSnapshot::Prepared(prepared) => {
+            crate::mode_runs::store_session_snapshot(db, prepared)?;
+            prepared.snapshot_hash()
+        }
+    };
     let changed = db
         .conn()
         .prepare_cached(

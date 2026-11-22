@@ -25,6 +25,15 @@ fn valid_observer(value: &Value, message_id: &str) -> bool {
                 .as_u64()
                 .is_some_and(|count| (1..=100).contains(&count))
         })
+        && value.get("endlessRecoveriesUsed").is_none_or(|field| {
+            matches!(mode, Some("guard" | "endless"))
+                && field.as_u64().is_some_and(|used| {
+                    used > 0
+                        && value["maxContinuations"]
+                            .as_u64()
+                            .is_some_and(|max| used <= max)
+                })
+        })
         && (mode != Some("endless")
             || [
                 "modelKey",

@@ -58,16 +58,17 @@ This edition strengthens the existing framework rather than replacing it.
   has no project. Normal checks add no model context or reviewer call; actual
   continuations may add usage and never guarantee completion.
 - **Bounded automatic continuation.** Choose Guard or Endless beside the composer.
-  Guard asks an independent model whether to continue using only the last reply
-  and an editable prompt. Endless directly continues without a reviewer, even
-  after a completion statement. Set 1-100 additional continuations per user turn
-  (default 3); actual Stop, approvals and pending work remain authoritative.
-  An optional switch uses the same remaining allowance to recover from network
-  or temporary service failures after built-in retries are exhausted, without
-  consulting the reviewer or replaying completed tools.
-  Counts and stop reasons stay visible and survive reloads. Old Observe sessions
-  become off instead of silently enabling execution. Guard adds review cost;
-  both modes can add main-model usage. Neither mode verifies task completion.
+  Both keep each answer final and can send a visible **Continue** in a new turn
+  after an eligible reply settles. Guard asks the exact configured independent
+  model to review the last reply with an editable prompt; Endless skips review.
+  One cap of 1–100 (default 3) per human input covers follow-ups and opt-in extra
+  transient-error recovery after built-in retries exhaust. Recovery stays in the
+  current turn and sends no message; built-in retries and permissions are unchanged.
+  Switch either mode Off to prevent future sends without interrupting current
+  work; an already started review may finish but cannot send. Use Stop to
+  interrupt active work. Reloading does not resume the chain.
+  Old Observe sessions become off. Both modes can add model usage; neither
+  verifies task completion.
 - **Configurable degenerate-output protection.** Interrupt long whitespace/symbol
   runs or sustained exact narrative-paragraph repetition in model text/thinking.
   Behavior settings expose switches and thresholds; partial results are retained

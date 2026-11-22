@@ -12,6 +12,11 @@
 > Projectless local references belong to their originating session; existing
 > project references retain project ownership. Remote use is rejected.
 > Images and generated clipboard content retain bounded attachment handling.
+>
+> [Guard and Endless follow-up turns](../adr/builtin-observer-guard.md) use
+> ordinary Agent admission after settlement. Revoking either mode while busy
+> changes no pinned configuration or approval state; ordinary mode
+> configuration remains idle-gated.
 
 
 - Baseline Version: `0.4.22`

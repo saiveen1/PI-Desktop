@@ -6,6 +6,7 @@ import type { InflightCheckpointer } from "@pi-desktop/host-runtime";
 import type { Logger } from "../logger";
 import type { PersistenceOutbox } from "../persistence-outbox";
 import type { SessionCoordination } from "./session-coordination";
+import { cancelEndlessContinuation } from "./endless-continuations";
 
 export type EventPersistenceDependencies = {
   runtimeState: RuntimeState;
@@ -88,6 +89,7 @@ export function createEventPersistence({
 
   function beginTranscriptRewrite(sessionId: string) {
     const lease = transcriptRewrite.beginTranscriptRewrite(sessionId);
+    cancelEndlessContinuation(sessionId);
     let settled = false;
     return {
       commit(): void {
@@ -280,6 +282,7 @@ function persistAgentEvent(envelope: AgentEventEnvelope): UiMessage | undefined 
     completionNoticeTurns.delete(envelope.turnId ?? turnId ?? "");
     const turnFinalization = finishTurn(envelope.sessionId, "completed", undefined, {
       turnId: envelope.turnId ?? "",
+      rootAgentEnd: !envelope.parentToolCallId && !envelope.nestedParentToolCallId && !executionId,
     });
     // The finalizer's promise can reject — its body attempts the durable end and
     // its release handler no longer swallows a throwing body — so the chain is

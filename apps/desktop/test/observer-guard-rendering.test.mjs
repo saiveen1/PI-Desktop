@@ -50,7 +50,7 @@ test("new outcomes show the latest per-turn decision rather than one card per co
   assert.equal((html.match(/data-testid="observer-guard-assessment"/g) ?? []).length, 1);
   assert.match(html, /Auto-continuations: 2 \/ 2/);
   assert.match(html, /No reviewer used/);
-  assert.match(html, /turn limit was reached/);
+  assert.match(html, /continuation limit was reached/);
   assert.doesNotMatch(html, /Assessed|Reviewed response|Reviewer effort|Reviewer model|Usage|not reassessed/);
 });
 

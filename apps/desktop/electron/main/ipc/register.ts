@@ -24,6 +24,7 @@ import { registerComputerIpc } from "./computer-ipc";
 import { registerJevIpc } from "./jev-ipc";
 import { registerModesIpc } from "./modes-ipc";
 import type { ModeServices } from "../runtime/mode-services";
+import { cancelEndlessContinuation } from "../runtime/endless-continuations";
 import { registerProviderIpc } from "./provider-ipc";
 import { registerScheduledIpc } from "./scheduled-ipc";
 import { registerSessionIpc } from "./session-ipc";
@@ -298,6 +299,7 @@ export function registerIpcHandlers(dependencies: RegisterIpcDependencies) {
     sendToRenderer,
   });
   registerSessionIpc({
+    cancelEndlessContinuation,
     compactingSessions,
     registrar,
     getHost,
@@ -458,6 +460,7 @@ export function registerIpcHandlers(dependencies: RegisterIpcDependencies) {
     },
   });
   registerAgentIpc({
+    getLocale: getUpdaterLocale,
     compactingSessions,
     registrar,
     getHost,

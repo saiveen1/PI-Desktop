@@ -7143,7 +7143,9 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
   private emit(event: AgentEventEnvelope["event"], turnId?: string, ts = Date.now()) {
     const owner = turnId ?? this.turnId;
     if (event.type === "agent_end" || event.type === "error") finishDiagnosticMessage(this.turnCorrections, this.runDiagnostics, owner, ts,
-      this.runDiagnosticMessage, message => this.emit({ type: "message_update", message }, owner, ts), this.runCancelled);
+      this.runDiagnosticMessage, message => this.emit({ type: "message_update", message }, owner, ts),
+      this.runCancelled || this.gracefulStopRequested ? "stopped" : event.type === "agent_end" && !this.turnHadError &&
+        !this.disposed && this.mode === "agent" && !this.modeState.closeoutExhausted() ? "normal" : "other");
     // Business state is answer-only. The transcript (including later
     // diagnostic updates) retains signed commentary for rendering and replay.
     if ((event.type === "message_start" || event.type === "message_update" || event.type === "message_end") &&
@@ -10272,7 +10274,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     }
     return result.finally(() => {
       finishDiagnosticMessage(this.turnCorrections, this.runDiagnostics, turnId, Date.now(), this.runDiagnosticMessage,
-        message => this.emit({ type: "message_update", message }, turnId), this.runCancelled);
+        message => this.emit({ type: "message_update", message }, turnId), this.runCancelled ? "stopped" : "other");
       if (this.activeTurnSettlements.get(turnId) === settlement) {
         this.activeTurnSettlements.delete(turnId);
       }

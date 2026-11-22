@@ -8,6 +8,7 @@ import * as shared from "@pi-desktop/shared";
 register(new URL("./helpers/ts-import-hooks.mjs", import.meta.url));
 const { observerSelection, observerModelLabel } = await import("../src/lib/observer-guard-models.ts");
 const observerPresentation = await import("../src/lib/observer-guard-presentation.ts");
+const observerSession = await import("../src/lib/observer-guard-session.ts");
 const { resolveObserverEvidenceMessageId } = await import("../src/lib/observer-guard-evidence-navigation.ts");
 const { SETTINGS_NAV } = await import("../src/lib/settings-search.ts");
 const { catalogs } = await import("../../../packages/i18n/src/index.ts");
@@ -25,13 +26,13 @@ function load(path, extra) {
   new Function("require", "exports", "module", code)(id => {
     if (id === "react") return { useState: value => [value, () => {}], useRef: value => ({ current: value }), useEffect() {}, ...extra.react };
     if (id === "react/jsx-runtime") return jsx;
-    if (id === "react-i18next") return { useTranslation: () => ({ t }) };
+    if (id === "react-i18next") return { useTranslation: () => ({ t: extra.translate ?? t }) };
     if (id === "@pi-desktop/shared") return shared;
     if (id.includes("observer-guard-models")) return { observerSelection, observerModelLabel };
     if (id.includes("observer-guard-presentation")) return observerPresentation;
     if (id.includes("observer-guard-evidence-navigation")) return { resolveObserverEvidenceMessageId: (sessionId, id) => resolveObserverEvidenceMessageId(sessionId, id, extra.readObserverEvidence ?? (async (sessionId, options) => ({ session: { id: sessionId, messages: [{ id: options.messageAround }] } }))) };
     if (id.includes("disclosure-anchor-context")) return { useDisclosureAnchorNotifier: () => undefined };
-    if (id.includes("remote-session-safety")) return { isRemoteSession: session => session?.source === "remote" || session?.id?.startsWith("remote:") };
+    if (id.includes("observer-guard-session")) return observerSession;
     if (id.includes("app-store")) return extra;
     if (id.includes("primitives") || id.includes("/ui") || id.includes("SettingsMenuSelect") || id.includes("SettingsDisclosure") || id.includes("AnchoredMenu") || id.includes("icons")) return components;
     throw Error(id);
@@ -190,13 +191,16 @@ test("disclosure matches message IDs, shows live and renders model prose only as
 
 test("all locale catalogs expose observer keys and Behavior search indexes settings", () => {
   const expected = Object.keys(catalogs.en.observerGuard);
-  for (const [name, catalog] of Object.entries(catalogs)) assert.deepEqual(Object.keys(catalog.observerGuard), expected, name);
+  for (const [name, catalog] of Object.entries(catalogs)) {
+    assert.deepEqual(Object.keys(catalog.observerGuard), expected, name);
+    if (name !== "en") assert.notEqual(catalog.observerGuard.guardHint, catalogs.en.observerGuard.guardHint, name);
+  }
   const behavior = SETTINGS_NAV.find(row => row.id === "behavior");
   for (const key of ["title", "model", "effort", "timeoutSeconds", "maxInputChars", "maxContinuations", "prompt", "continueOnTransientError", "continueOnTransientErrorHint"]) assert.ok(behavior.keywordKeys.includes(`observerGuard.${key}`));
   for (const key of ["recentToolCount", "includeToolOutput"]) assert.ok(!behavior.keywordKeys.includes(`observerGuard.${key}`));
 });
 
-test("real store writes the work-session ID across selection changes and blocks live sessions", async t => {
+test("real store writes the work-session ID across selection changes and blocks busy enabling", async t => {
   const { createSessionSlice } = await import("../src/stores/slices/session-slice.ts");
   const { createSessionCoordination } = await import("../src/stores/runtime/session-coordination.ts");
   const { createSessionRuntime } = await import("../src/stores/runtime/session-runtime.ts");
@@ -216,20 +220,137 @@ test("real store writes the work-session ID across selection changes and blocks 
   assert.equal(state.sessions.find(row => row.id === "b").observerMode, "endless");
   assert.equal(state.sessions.find(row => row.id === "a").observerMode, undefined);
   state.runningSessions.b = true;
-  await slice.configureActiveSession({ mode: "agent", observerMode: "off" }, "b");
+  await slice.configureActiveSession({ mode: "agent", observerMode: "guard" }, "b");
   assert.equal(writes.length, 1);
 });
 
-test("observer status stays inspectable while running but mode changes remain blocked", () => {
-  const calls = [];
-  const state = { sessions: [{ ...session("b"), observerMode: "guard" }], activeSessionId: "b", runningSessions: { b: true }, pendingPlans: {}, settings, providers: [provider], providerModels: {}, agentStatuses: {}, configureActiveSession: (...args) => calls.push(args), showToast() {}, setSettingsTab() {} };
-  const { ObserverGuardPicker } = load("../src/features/sessions/ObserverGuardPicker.tsx", { useAppStore: makeStore(state) });
-  const tree = ObserverGuardPicker({ sessionId: "b" });
-  assert.equal(Boolean(tree.props.trigger(null).props.disabled), false);
-  const choices = tree.props.children[0];
-  assert.ok(choices.every(choice => choice.props.disabled));
-  choices[0].props.onClick();
-  assert.equal(calls.length, 0);
+for (const mode of ["endless", "guard"]) test(`running ${mode} can be turned off through the real store without interrupting its response`, async t => {
+  const { createSessionSlice } = await import("../src/stores/slices/session-slice.ts");
+  const { createSessionCoordination } = await import("../src/stores/runtime/session-coordination.ts");
+  const { createSessionRuntime } = await import("../src/stores/runtime/session-runtime.ts");
+  const { api } = await import("../src/lib/api.ts");
+  const agentStatus = { isRunning: true, currentTurnId: "turn", runDiagnostics: { turnId: "turn", observer: mode === "guard" ? { messageId: "reply", mode, status: "checking", startedAt: 1 } : undefined } };
+  let state = { activeSessionId: "a", sessions: [session("a"), { ...session("b"), observerMode: mode }], isRunning: true, runningSessions: { a: true, b: true }, pendingPlans: {}, sessionMeta: {}, planningStates: {}, retainedTranscripts: {}, settings, providers: [provider], providerModels: {}, agentStatuses: { b: agentStatus }, showToast: t.mock.fn() };
+  const access = { get: () => state, set: patch => { state = { ...state, ...(typeof patch === "function" ? patch(state) : patch) }; } };
+  const runtime = createSessionRuntime(access);
+  const slice = createSessionSlice({ ...access, runtime, ...createSessionCoordination({ ...access, runtime }) });
+  state.configureActiveSession = slice.configureActiveSession;
+  state.abortSession = t.mock.fn();
+  const abort = t.mock.method(api, "abort", async () => {});
+  let resolveWrite, rejectWrite;
+  const configure = t.mock.method(api, "configureSession", () => new Promise((resolve, reject) => { resolveWrite = resolve; rejectWrite = reject; }));
+  const useAppStore = Object.assign(selector => selector(state), { getState: access.get });
+  const { ObserverGuardPicker } = load("../src/features/sessions/ObserverGuardPicker.tsx", { useAppStore });
+  const picker = () => ObserverGuardPicker({ sessionId: "b" });
+  const choices = () => picker().props.children[0];
+  const busyHint = /observerGuard\.turnOffWhileRunning/;
+  if (mode === "guard") assert.match(rendered(picker()), /observerGuard\.checkingHint/);
+  assert.match(rendered(picker()), busyHint);
+  assert.deepEqual(choices().map(choice => choice.props.disabled), [false, true, true]);
+  for (const option of choices().slice(1)) await option.props.onClick();
+  await slice.configureActiveSession({ mode: "plan", observerMode: "off" }, "b");
+  await slice.configureActiveSession({ mode: "agent", observerMode: "off", fastMode: true }, "b");
+  assert.equal(configure.mock.callCount(), 0);
+
+  const rejected = choices()[0].props.onClick();
+  assert.deepEqual(configure.mock.calls[0].arguments, ["b", { mode: "agent", observerMode: "off" }]);
+  assert.equal(state.sessions[1].observerMode, mode, "Off displays only after acknowledgement");
+  rejectWrite(new Error("write failed"));
+  await rejected;
+  assert.equal(state.sessions[1].observerMode, mode);
+  assert.equal(state.showToast.mock.callCount(), 1);
+
+  const unconfirmed = choices()[0].props.onClick();
+  resolveWrite({ session: { ...session("b"), observerMode: mode } });
+  await unconfirmed;
+  assert.equal(state.sessions[1].observerMode, mode);
+  assert.equal(state.showToast.mock.callCount(), 2);
+
+  await slice.configureActiveSession({ mode: "agent", modelId: "queued-model" }, "b");
+  state.pendingPlans.b = { status: "pending" };
+  const write = choices()[0].props.onClick();
+  assert.deepEqual(configure.mock.calls[2].arguments, ["b", { mode: "agent", observerMode: "off" }]);
+  state.sessions[1] = { ...state.sessions[1], title: "New title" };
+  state.planningStates.b = "awaiting-approval";
+  resolveWrite({ session: { ...session("b"), title: "Stale title", observerMode: "off" } });
+  await write;
+  assert.equal(choices()[0].props["aria-checked"], true);
+  assert.ok(choices().every(choice => choice.props.disabled));
+  assert.equal(state.sessions[0].observerMode, undefined);
+  assert.equal(state.sessions[1].observerMode, "off");
+  assert.equal(state.sessions[1].title, "New title");
+  assert.equal(state.sessions[1].modelId, "queued-model");
+  assert.equal(runtime.pendingSessionConfigurations.get("b").modelId, "queued-model");
+  assert.equal(state.planningStates.b, "awaiting-approval");
+  assert.equal(state.pendingPlans.b.status, "pending");
+  assert.equal(state.isRunning, true);
+  assert.deepEqual(state.runningSessions, { a: true, b: true });
+  assert.equal(state.agentStatuses.b, agentStatus, "revocation leaves the active turn status alone");
+  assert.equal(abort.mock.callCount(), 0);
+  assert.equal(state.abortSession.mock.callCount(), 0);
+  assert.equal(configure.mock.callCount(), 3);
+});
+
+test("Endless eligibility is hidden in the transcript and running menu, but historical results still render", () => {
+  const marker = { messageId: "reply", mode: "endless", status: "assessed", startedAt: 1, decision: "continue", continued: false, continuationCount: 0, maxContinuations: 3 };
+  const runDiagnostics = { turnId: "turn", observer: marker };
+  const state = { sessions: [{ ...session("b"), observerMode: "endless" }], runningSessions: { b: true }, pendingPlans: {}, settings, providers: [], providerModels: {}, agentStatuses: { b: { isRunning: true, currentTurnId: "turn", runDiagnostics } } };
+  const useAppStore = makeStore(state);
+  const { ObserverGuardPicker } = load("../src/features/sessions/ObserverGuardPicker.tsx", { useAppStore });
+  const { ObserverGuardDisclosure, ObserverGuardTurnSummary } = load("../src/features/chat/transcript/ObserverGuardDisclosure.tsx", { useAppStore });
+  const reply = { id: "reply", role: "assistant", runDiagnostics };
+  const menu = () => rendered(ObserverGuardPicker({ sessionId: "b" }));
+  assert.equal(ObserverGuardDisclosure({ message: reply }), null);
+  assert.equal(ObserverGuardDisclosure({ message: { id: "reply" }, sessionId: "b" }), null);
+  assert.deepEqual(ObserverGuardTurnSummary({ parts: [{ kind: "message", message: reply }] }).props.children, []);
+  assert.doesNotMatch(menu(), /observerGuard\.(summary\.notContinued|continuationProgress)/);
+  assert.match(menu(), /observerGuard\.turnOffWhileRunning/);
+  state.agentStatuses.b.runDiagnostics = { turnId: "turn", observer: { ...marker, status: "checking" } };
+  assert.equal(ObserverGuardDisclosure({ message: reply, sessionId: "b" }), null, "late checking cannot replace the durable marker");
+  state.agentStatuses.b.runDiagnostics = runDiagnostics;
+
+  runDiagnostics.observer = { ...marker, continuationReason: "user_input_pending" };
+  for (const html of [menu(), rendered(ObserverGuardDisclosure({ message: reply }))]) {
+    assert.match(html, /observerGuard\.summary\.notContinued/);
+    assert.match(html, /observerGuard\.continuationProgress/);
+  }
+  runDiagnostics.observer = { ...marker, continued: true, continuationCount: 1 };
+  assert.match(menu(), /observerGuard\.summary\.continued/);
+});
+
+test("Guard recommendation is shown without claiming a continuation or a budget count", () => {
+  const marker = { messageId: "reply", mode: "guard", status: "assessed", startedAt: 1, decision: "continue", continued: false, continuationCount: 0, maxContinuations: 3, modelKey: "p/reviewer", usage: { inputTokens: 19, outputTokens: 7 } };
+  const runDiagnostics = { turnId: "turn", observer: marker };
+  const state = { sessions: [{ ...session("b"), observerMode: "guard" }], runningSessions: { b: true }, pendingPlans: {}, settings, providers: [provider], providerModels: {}, agentStatuses: { b: { isRunning: true, currentTurnId: "turn", runDiagnostics } } };
+  const useAppStore = makeStore(state);
+  const { ObserverGuardPicker } = load("../src/features/sessions/ObserverGuardPicker.tsx", { useAppStore });
+  const translate = (key, values) => key === "observerGuard.tokens" ? `${key}: ${values.input} / ${values.output}` : key;
+  const { ObserverGuardDisclosure } = load("../src/features/chat/transcript/ObserverGuardDisclosure.tsx", { useAppStore, translate });
+  const menu = () => rendered(ObserverGuardPicker({ sessionId: "b" }));
+  const disclosure = (restore = false) => ObserverGuardDisclosure(restore
+    ? { message: { id: "reply", runDiagnostics } } : { message: { id: "reply" }, sessionId: "b" });
+  for (const html of [menu(), rendered(disclosure()), rendered(disclosure(true))]) {
+    assert.match(html, /observerGuard\.decisions\.continue/);
+    assert.match(html, /Provider \/ reviewer/);
+    assert.doesNotMatch(html, /observerGuard\.(summary\.(notContinued|continued)|continuationProgress)/);
+  }
+  for (const tree of [disclosure(), disclosure(true)]) assert.match(rendered(tree), /observerGuard\.tokens: 19 \/ 7/);
+
+  for (const mode of ["guard", "endless"]) {
+    state.sessions[0].observerMode = mode;
+    runDiagnostics.observer = { ...marker, mode, continuationReason: "continuation_limit" };
+    for (const html of [menu(), rendered(disclosure(true))]) {
+      assert.match(html, /observerGuard\.continuationReasons\.continuation_limit/);
+      assert.doesNotMatch(html, /observerGuard\.continuationProgress/);
+    }
+  }
+  runDiagnostics.observer = { ...marker, continued: true, continuationCount: 1 };
+  assert.match(rendered(disclosure(true)), /observerGuard\.summary\.continued/);
+  assert.match(rendered(disclosure(true)), /observerGuard\.continuationProgress/);
+  runDiagnostics.observer = { ...marker, decision: "stop", continuationReason: "decision_stop" };
+  assert.match(rendered(disclosure(true)), /observerGuard\.continuationReasons\.decision_stop/);
+  runDiagnostics.observer = { ...marker, status: "error", decision: undefined, errorCode: "TIMEOUT" };
+  assert.match(rendered(disclosure(true)), /observerGuard\.errors\.TIMEOUT/);
 });
 
 test("observer picker separates configuration readiness from an owned current-turn assessment", () => {

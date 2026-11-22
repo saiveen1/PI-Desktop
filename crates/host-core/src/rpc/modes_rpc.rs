@@ -154,19 +154,15 @@ pub(super) async fn handle(
     Ok(response)
 }
 
-/// Validate `session.configure`'s mode and optional `modeSnapshot`, and
-/// store the snapshot so the session row can reference it.
+/// Validate the mode and optional snapshot without writing before configuration is authorized.
 pub(super) fn prepare_configure(
     st: &AppState,
     session_id: &str,
     mode: &str,
     params: &Value,
 ) -> Result<PreparedMode, JsonRpcError> {
-    let prepared =
-        mode_runs::prepare_session_mode(&st.db, session_id, mode, params.get("modeSnapshot"))
-            .map_err(error)?;
-    mode_runs::store_session_snapshot(&st.db, &prepared).map_err(error)?;
-    Ok(prepared)
+    mode_runs::prepare_session_mode(&st.db, session_id, mode, params.get("modeSnapshot"))
+        .map_err(error)
 }
 
 /// After the session row changed: pause a run whose mode the session left.

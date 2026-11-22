@@ -108,6 +108,13 @@ describe("system transcript helpers", () => {
     expect(rebuildSystemTranscript(rebuilt, [assistant, user])[0]).toBe(rebuilt[0]);
   });
 
+  it("drops an obsolete Guard reminder when compacting old system state", () => {
+    const legacy = { ...initial, sections: { ...initial.sections, observer_guard_correction: "obsolete reminder" } };
+    const checkpoint = systemTranscriptCheckpoint([legacy]);
+    expect(checkpoint?.sections).toEqual(initial.sections);
+    expect(legacy.sections.observer_guard_correction).toBe("obsolete reminder");
+  });
+
   it("keeps an earlier usage anchor and estimates an appended delta", () => {
     const newer = { ...delta, timestamp: 3_000 };
     const rebuilt = rebuildSystemTranscript([initial, assistant, newer], [assistant]);
