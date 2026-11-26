@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
-import { buildPersonal, parsePersonalBuildArgs, prepareBuild, runCommand } from "../../../scripts/build-personal-release.mjs";
+import { buildPersonal, parsePersonalBuildArgs, runCommand } from "../../../scripts/build-personal-release.mjs";
 import { assertNewBeta, captureGitSource, gitChanges } from "../../../scripts/personal-build-source.mjs";
 import { loadReleaseHistory, renderChangelog } from "../../../scripts/personal-release-notes.mjs";
 import { candidate, fixture, fixtureGit, syntheticBuild, version, write } from "./helpers/personal-release-fixture.mjs";
 
-const releaseContext = ({ root, env }) => prepareBuild({ root, env, platform: "win32", arch: "x64", releaseVersion: candidate });
+const releaseContext = (f) => f.preflight({ releaseVersion: candidate });
 const versionPaths = ["package.json", "apps/desktop/package.json", "docs/package.json", "packages/shared/package.json", "packages/shared/src/protocol.ts", "Cargo.toml", "Cargo.lock", "README.md", "README.zh-CN.md", "docs/releases/history.json", "CHANGELOG.md"];
 const snapshot = (root) => versionPaths.map((path) => readFileSync(join(root, path), "utf8"));
 
@@ -68,7 +68,7 @@ test("candidate selection refuses dirty sources, non-beta labels, downgrades and
   assert.throws(() => releaseContext(f), /already tagged locally/);
   write(join(f.root, "README.md"), "uncommitted source change");
   const later = candidate.replace(/(\d+)$/, (number) => String(Number(number) + 1));
-  assert.throws(() => prepareBuild({ root: f.root, env: f.env, platform: "win32", arch: "x64", releaseVersion: later }), /clean source checkout/);
+  assert.throws(() => f.preflight({ releaseVersion: later }), /clean source checkout/);
 });
 
 test("beta candidates compare correctly against a stable current version", (t) => {
@@ -96,7 +96,7 @@ test("Git-derived categories preserve commit evidence and never invent dirty-fil
   assert.equal(source.dirty, true);
   write(join(f.root, "uncommitted.txt"), "changed fixture bytes");
   assert.notEqual(captureGitSource(f.root).fingerprint, source.fingerprint);
-  const context = prepareBuild({ root: f.root, env: f.env, platform: "win32", arch: "x64" });
+  const context = f.preflight();
   const result = await buildPersonal(context, { run: syntheticBuild(context) });
   const notes = readFileSync(result.notes, "utf8");
   assert.ok(result.source.dirty);
@@ -109,7 +109,7 @@ test("a changed preflight source starts no commands and a mid-build edit publish
   const f = fixture(t);
   write(join(f.root, "README.md"), "change after preflight");
   await assert.rejects(buildPersonal(f.context, { run: async () => assert.fail("stale preflight must not execute") }), /Source changed since preflight/);
-  const context = prepareBuild({ root: f.root, env: f.env, platform: "win32", arch: "x64" });
+  const context = f.preflight();
   const run = syntheticBuild(context);
   await assert.rejects(buildPersonal(context, { run: async (stage) => {
     await run(stage);
@@ -147,7 +147,7 @@ test("ordinary packaging preserves an intentionally different dirty README relea
   const f = fixture(t);
   const before = "Current release line: 0.99.x\nUser draft must survive unchanged.\n";
   write(join(f.root, "README.md"), before);
-  const context = prepareBuild({ root: f.root, env: f.env, platform: "win32", arch: "x64" });
+  const context = f.preflight();
   const result = await buildPersonal(context, { run: syntheticBuild(context) });
   assert.equal(result.version, version);
   assert.equal(readFileSync(join(f.root, "README.md"), "utf8"), before);

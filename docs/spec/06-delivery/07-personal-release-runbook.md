@@ -74,6 +74,14 @@ the automatic personal-beta fallback.
   `pnpm --filter @pi-desktop/desktop exec install-electron` from this checkout.
   Preflight requires the installed distribution to match the Electron package
   version and have a Windows x64 executable; it never downloads or runs it.
+- Preflight resolves the Desktop package's electron-builder and electron-vite
+  entries and follows electron-builder's `app-builder-lib` dependency to the
+  ASAR implementation used for offline verification. It does not depend on a
+  root-level ASAR hoist. The resolved tools and NSIS template must belong to the
+  current checkout, and the NSIS template path must be at most 259 characters.
+  After a checkout move, inspect the targets of any unresolved required links;
+  repair the existing locked pnpm installation in place if needed, rather than
+  creating links by hand or reusing anything from the old checkout.
 - Do not fetch/merge, switch tags, create another checkout, copy binaries from
   another checkout, map drives, inject `NODE_OPTIONS`, change app identity,
   disable security guards, or silently bump versions.
@@ -163,7 +171,7 @@ blindly restart, increase timeouts or kill unrelated processes.
 Relevant offline checks for this workflow:
 
 ```bash
-node --test apps/desktop/test/personal-release.test.mjs apps/desktop/test/personal-release-history.test.mjs apps/desktop/test/workspace-version.test.mjs apps/desktop/test/main-wasm-assets.test.mjs apps/desktop/test/auto-update.test.mjs apps/desktop/test/updater-controller.test.mjs
+node --test apps/desktop/test/personal-release.test.mjs apps/desktop/test/personal-release-toolchain.test.mjs apps/desktop/test/personal-release-history.test.mjs apps/desktop/test/workspace-version.test.mjs apps/desktop/test/main-wasm-assets.test.mjs apps/desktop/test/auto-update.test.mjs apps/desktop/test/updater-controller.test.mjs
 pnpm check:agent-policy
 pnpm dist:personal --check
 ```

@@ -54,7 +54,38 @@ export function buildEnvironment(parent, pnpmEntry) {
   return env;
 }
 
-export function prepareBuild({ root = ROOT, platform = process.platform, arch = process.arch, env = process.env, releaseVersion } = {}) {
+export function resolvePersonalReleaseToolchain(root = ROOT) {
+  root = realpathSync(root);
+  const desktopRequire = createRequire(join(root, "apps/desktop/package.json"));
+  const owned = (path) => {
+    const real = realpathSync(path);
+    const location = relative(root, real);
+    if (location === ".." || location.startsWith(`..${sep}`) || isAbsolute(location)) {
+      throw new Error(`Personal release toolchain must belong to the current checkout: ${real}`);
+    }
+    return real;
+  };
+  const bin = (name) => {
+    const manifest = owned(desktopRequire.resolve(`${name}/package.json`));
+    return owned(join(dirname(manifest), json(manifest).bin[name]));
+  };
+  const builder = bin("electron-builder");
+  const vite = bin("electron-vite");
+  const builderRequire = createRequire(builder);
+  const library = owned(builderRequire.resolve("app-builder-lib/package.json"));
+  const template = join(dirname(library), "templates/nsis/include/allowOnlyOneInstallerInstance.nsh");
+  if (!existsSync(template) || template.length >= 260) {
+    throw new Error("NSIS template is missing or its path exceeds 259 characters. Stop; do not create another checkout or drive mapping.");
+  }
+  owned(template);
+  // Use the same ASAR implementation as the selected builder, not an incidental hoist.
+  const libraryRequire = createRequire(library);
+  const asar = libraryRequire(owned(libraryRequire.resolve("@electron/asar")));
+  if (typeof asar.extractFile !== "function") throw new Error("The installed builder's ASAR implementation does not expose extractFile.");
+  return { builder, vite, asar };
+}
+
+export function prepareBuild({ root = ROOT, platform = process.platform, arch = process.arch, env = process.env, releaseVersion, toolchain } = {}) {
   if (platform !== "win32" || arch !== "x64") throw new Error("Personal release requires Windows x64; no alternate targets are built.");
   root = realpathSync(root);
   const desktop = join(root, "apps/desktop");
@@ -65,22 +96,9 @@ export function prepareBuild({ root = ROOT, platform = process.platform, arch = 
   if (!pnpmEntry || !isAbsolute(pnpmEntry) || !existsSync(pnpmEntry) || !/^pnpm\.(?:exe|cjs|mjs|js)$/i.test(basename(pnpmEntry))) {
     throw new Error("Run pnpm dist:personal with the existing pnpm toolchain (npm_execpath must identify pnpm.exe or its JS entry).");
   }
-  const req = createRequire(join(desktop, "package.json"));
-  const bin = (name) => {
-    const manifest = req.resolve(`${name}/package.json`);
-    return join(dirname(manifest), json(manifest).bin[name]);
-  };
-  const builder = bin("electron-builder");
-  const vite = bin("electron-vite");
-  const asar = req("@electron/asar");
-  const builderReq = createRequire(builder);
-  const library = dirname(builderReq.resolve("app-builder-lib/package.json"));
-  const template = join(library, "templates/nsis/include/allowOnlyOneInstallerInstance.nsh");
-  if (!existsSync(template) || template.length >= 260) {
-    throw new Error("NSIS template is missing or its path exceeds 259 characters. Stop; do not create another checkout or drive mapping.");
-  }
+  const { builder, vite, asar } = toolchain ?? resolvePersonalReleaseToolchain(root);
   const configPath = join(desktop, "electron-builder.personal.cjs");
-  const config = req(configPath);
+  const config = createRequire(join(desktop, "package.json"))(configPath);
   if (config.appId !== pkg.build.appId || config.productName !== pkg.build.productName ||
       config.extraMetadata.piSelfManaged !== true || config.extraMetadata.piDistribution !== "installed" ||
       JSON.stringify(config.win.target) !== JSON.stringify([{ target: "nsis", arch: ["x64"] }]) ||

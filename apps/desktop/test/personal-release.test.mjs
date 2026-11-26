@@ -1,24 +1,29 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { finished } from "node:stream/promises";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
-import { buildEnvironment, buildPersonal, prepareBuild, runCommand } from "../../../scripts/build-personal-release.mjs";
+import { buildEnvironment, buildPersonal, runCommand } from "../../../scripts/build-personal-release.mjs";
 import { cleanPersonalRelease as cleanStandalone } from "../../../scripts/clean-personal-release.mjs";
 import { fixture, buildInputs, packageOutput, version, repo, write } from "./helpers/personal-release-fixture.mjs";
 
 test("preflight selects the current checkout, exact argv, one NSIS target, and creates no output", (t) => {
-  const { context, root } = fixture(t);
+  const { context, root, desktop } = fixture(t);
   assert.equal(context.root, root);
+  assert.equal(lstatSync(join(root, "node_modules"), { throwIfNoEntry: false }), undefined, "no borrowed dependency tree, including dangling links");
+  assert.deepEqual(readdirSync(join(desktop, "node_modules")), ["electron"]);
+  assert.equal(context.output, join(desktop, "release/personal"));
+  assert.equal(context.logs, join(root, ".artifacts/personal-release"));
   assert.equal(context.version, version);
   assert.equal(context.stages.length, 6);
   assert.deepEqual(context.stages[0].args, ["--filter", "@pi-desktop/desktop^...", "--fail-if-no-match", "run", "build"]);
   assert.ok(context.stages[1].args.includes("--locked"));
   const packaging = context.stages.at(-1);
+  assert.equal(packaging.cwd, desktop);
   assert.deepEqual(packaging.args.slice(1, 6), ["--win", "nsis", "--x64", "--publish", "never"]);
   assert.ok(!context.stages.some((s) => s.args.includes("zip") || s.args.includes("portable") || s.args.includes("install")));
   assert.ok(!existsSync(context.output));
@@ -26,9 +31,8 @@ test("preflight selects the current checkout, exact argv, one NSIS target, and c
 });
 
 test("personal preflight selects the installed Electron distribution and rejects an incompatible runtime", (t) => {
-  const { root, desktop, env, context } = fixture(t);
+  const { desktop, preflight, context } = fixture(t);
   const dist = join(desktop, "node_modules/electron/dist");
-  const preflight = () => prepareBuild({ root, platform: "win32", arch: "x64", env });
   assert.equal(context.electronDist, dist);
   const versionFile = join(dist, "version");
   const installedVersion = readFileSync(versionFile);
@@ -70,14 +74,14 @@ test("build environment drops inherited profiles/hooks without changing the pare
 });
 
 test("preflight refuses unsupported platforms, missing pnpm, mixed versions and missing updater guards", (t) => {
-  const { root, desktop, env } = fixture(t);
-  assert.throws(() => prepareBuild({ root, platform: "linux", env }), /Windows x64/);
-  assert.throws(() => prepareBuild({ root, platform: "win32", arch: "x64", env: {} }), /Run pnpm/);
+  const { root, desktop, preflight } = fixture(t);
+  assert.throws(() => preflight({ platform: "linux" }), /Windows x64/);
+  assert.throws(() => preflight({ env: {} }), /Run pnpm/);
   write(join(root, "package.json"), '{"version":"99.0.0"}');
-  assert.throws(() => prepareBuild({ root, platform: "win32", arch: "x64", env }), /versions differ/);
+  assert.throws(preflight, /versions differ/);
   write(join(root, "package.json"), JSON.stringify({ version }));
   write(join(desktop, "electron/main/updater.ts"), "// missing guard");
-  assert.throws(() => prepareBuild({ root, platform: "win32", arch: "x64", env }), /updater guard/);
+  assert.throws(preflight, /updater guard/);
 });
 
 test("representative build journey publishes only verified installer and checksums, never runs it", async (t) => {
@@ -247,8 +251,13 @@ test("cleanup refuses a staging path redirected behind a junction", (t) => {
   t.after(() => rmSync(victim, { recursive: true, force: true }));
   mkdirSync(dirname(context.staging), { recursive: true });
   symlinkSync(victim, context.staging, "junction");
-  assert.throws(() => cleanStandalone({ root: context.root }), /refusing to clean it/);
-  assert.ok(readdirSync(victim).length === 0 && existsSync(victim), "junction target must survive");
+  try {
+    assert.throws(() => cleanStandalone({ root: context.root }), /refusing to clean it/);
+    assert.ok(readdirSync(victim).length === 0 && existsSync(victim), "junction target must survive");
+  } finally {
+    // Detach the test's own junction before either temporary tree is removed.
+    if (lstatSync(context.staging, { throwIfNoEntry: false })?.isSymbolicLink()) unlinkSync(context.staging);
+  }
 });
 
 test("ordinary rebuilds keep the release version and retain both installer artifacts", async (t) => {

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { createRequire } from "node:module";
 import test from "node:test";
-import { buildPersonal, prepareBuild } from "../../../scripts/build-personal-release.mjs";
+import { buildPersonal } from "../../../scripts/build-personal-release.mjs";
 import { personalCiIdentity, personalCiPublishVersion, prepareCiRelease, preparePushedCiRelease, stageCiArtifacts, verifyCiDelivery } from "../../../scripts/personal-ci.mjs";
 import { renderBuildNotes, loadReleaseHistory } from "../../../scripts/personal-release-notes.mjs";
 import { applyFileEdits, planWorkspaceVersion } from "../../../scripts/workspace-version.mjs";
@@ -17,7 +17,7 @@ const envFor = (sha, release = false) => ({
 
 async function built(t, release = false, fixtureVersion = version) {
   const f = fixture(t, fixtureVersion);
-  const context = release ? prepareBuild({ root: f.root, env: f.env, platform: "win32", arch: "x64", releaseVersion: candidate }) : f.context;
+  const context = release ? f.preflight({ releaseVersion: candidate }) : f.context;
   const result = await buildPersonal(context, { run: syntheticBuild(context) });
   const identity = personalCiIdentity(envFor(result.source.commit, release));
   const delivery = await stageCiArtifacts(f.root, identity);
@@ -75,7 +75,7 @@ test("a multi-commit push publishes the new committed beta, not a rebuild or a s
   assert.equal(personalCiPublishVersion(f.root, { ...push, GITHUB_EVENT_NAME: "workflow_dispatch" }), "");
   assert.throws(() => personalCiPublishVersion(f.root, { ...push, PERSONAL_PUSH_BEFORE: "HEAD^" }), /invalid previous push commit/);
 
-  const context = prepareBuild({ root: f.root, env: f.env, platform: "win32", arch: "x64" });
+  const context = f.preflight();
   await buildPersonal(context, { run: syntheticBuild(context) });
   const staged = await stageCiArtifacts(f.root, personalCiIdentity(push));
   const remote = clone(t, f.root, true);

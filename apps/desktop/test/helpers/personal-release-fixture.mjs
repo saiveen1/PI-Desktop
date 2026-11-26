@@ -1,10 +1,10 @@
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { finished } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
-import { prepareBuild } from "../../../../scripts/build-personal-release.mjs";
+import { prepareBuild, resolvePersonalReleaseToolchain } from "../../../../scripts/build-personal-release.mjs";
 
 export const repo = fileURLToPath(new URL("../../../../", import.meta.url));
 export const read = (path) => readFileSync(join(repo, path), "utf8");
@@ -23,7 +23,7 @@ export function fixtureGit(root, ...args) {
 }
 
 export function fixture(t, fixtureVersion = version) {
-  const root = mkdtempSync(join(tmpdir(), "pi-personal-build-"));
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "personal release ")));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const desktop = join(root, "apps/desktop");
   write(join(root, "package.json"), JSON.stringify({ version: fixtureVersion }));
@@ -44,7 +44,6 @@ export function fixture(t, fixtureVersion = version) {
   fixtureGit(root, "init", "--initial-branch=main");
   fixtureGit(root, "add", "--", ".gitignore", "package.json", "apps/desktop/package.json", "apps/desktop/electron-builder.personal.cjs", "apps/desktop/electron/main/updater.ts", "docs/package.json", "packages/shared/package.json", "packages/shared/src/protocol.ts", "Cargo.toml", "Cargo.lock", "README.md", "README.zh-CN.md", "docs/releases/history.json", "CHANGELOG.md");
   fixtureGit(root, "-c", "commit.gpgsign=false", "commit", "-m", "chore(test): seed isolated build fixture", "-m", "No real toolchain or installer is executed.");
-  symlinkSync(join(repo, "node_modules"), join(root, "node_modules"), "junction");
   const electron = join(desktop, "node_modules/electron");
   write(join(electron, "package.json"), '{"name":"electron","version":"43.6.0"}');
   write(join(electron, "dist/version"), "43.6.0");
@@ -58,8 +57,10 @@ export function fixture(t, fixtureVersion = version) {
   const pnpm = join(root, "tools/pnpm.exe");
   write(pnpm, "synthetic command boundary; never execute");
   const env = { PATH: process.env.PATH || "", npm_execpath: pnpm, PI_DESKTOP_DATA_DIR: "do-not-touch-live-data", NODE_OPTIONS: "--require=do-not-load-hook" };
-  const context = prepareBuild({ root, platform: "win32", arch: "x64", env });
-  return { root, desktop, pnpm, env, context };
+  // Only the tools come from this checkout; Git, Electron and outputs belong to the fixture.
+  const toolchain = resolvePersonalReleaseToolchain(repo);
+  const preflight = (options) => prepareBuild({ platform: "win32", arch: "x64", env, ...options, root, toolchain });
+  return { root, desktop, pnpm, env, preflight, context: preflight() };
 }
 
 export function buildInputs(context) {
