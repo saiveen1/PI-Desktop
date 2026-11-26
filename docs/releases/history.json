@@ -208,6 +208,1317 @@
   },
   "releases": [
     {
+      "version": "0.24.0-beta.6",
+      "sourceCommit": "b30c34536019e7ce5a643b7430ea346bcc034b71",
+      "sourceFingerprint": "ac356b52797c4f0f4325c915221a6116fbf2bbd408c99584eee24828a65275c6",
+      "versionOverride": {
+        "from": "0.23.1-beta.1",
+        "to": "0.24.0-beta.6"
+      },
+      "buildId": "20261126T193157851Z-gb30c34536019-eca40002",
+      "builtAt": "2026-11-26T19:35:19.714Z",
+      "sha256": "3d3bbcaeeae85e12b5ed8ae1d47685da20a32c7f6630a3d2b47c4f7388a23f28",
+      "artifact": "PI-Desktop-Personal-Setup-0.24.0-beta.6-20261126T193157851Z-gb30c34536019-eca40002.exe",
+      "changes": [
+        {
+          "commit": "b30c34536019e7ce5a643b7430ea346bcc034b71",
+          "subject": "fix(shared): compile image test fixtures without Node globals",
+          "category": "Fixed"
+        },
+        {
+          "commit": "eb247a66d898a0f0f3ddb6dd1edc9fc92873a8f5",
+          "subject": "fix(release): resolve packaging tools from the current checkout",
+          "category": "Fixed"
+        },
+        {
+          "commit": "de0bb15121b81f9026aa307d7cc6a187dbedaab7",
+          "subject": "fix(release): reuse installed Electron for personal Windows builds",
+          "category": "Fixed"
+        },
+        {
+          "commit": "ee746ec5baa982d5176c954958cfd2ce790b171f",
+          "subject": "feat(chat): group generated images in a turn gallery",
+          "category": "Added"
+        },
+        {
+          "commit": "532508f2e8dff58f7720c38a0bd4b939f288e436",
+          "subject": "feat(images): add a bounded original-image read",
+          "category": "Added"
+        },
+        {
+          "commit": "e687621e6655ca35f0c72a16d15f15695572f3ba",
+          "subject": "fix(imagegen): avoid duplicate Markdown image results",
+          "category": "Fixed"
+        },
+        {
+          "commit": "7e4ed9908b532b2a0e19beb0e4afad1621e93065",
+          "subject": "fix(delegations): distinguish unstarted attempts from failed runs",
+          "category": "Fixed"
+        },
+        {
+          "commit": "4daa98040cad9e7ece55fb8133548e4bf88cea33",
+          "subject": "test(sessions): initialize project tab defaults in creation fixtures",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "9cd193fc0d6ce24d67e5fc54f389c0877646b38a",
+          "subject": "feat(work-panel): retain a File Manager entry across project sessions",
+          "category": "Added"
+        },
+        {
+          "commit": "439779170bc312824e69947447ad99ac9ac59f7c",
+          "subject": "feat(chat): fold long prompts and reflow subagent messages",
+          "category": "Added"
+        },
+        {
+          "commit": "3083e6a78fbb249bd883e3560d2e8418d64058a2",
+          "subject": "test(composer): align the native paragraph guard contract",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "a5d39de9f9e3d8a3ddfae5d7a0c9cb76fd7a9093",
+          "subject": "chore(release): prepare v0.24.0-beta.5",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "ff01d91ee729244b2ad27f43aea322a392f4c616",
+          "subject": "fix(composer): preserve the native undo anchor for tail deletion",
+          "category": "Fixed"
+        },
+        {
+          "commit": "70c91e0ef6f19b2179fbb2407c0a930fb203b206",
+          "subject": "feat(composer): render selected skills as inline nodes",
+          "category": "Added"
+        },
+        {
+          "commit": "3bffe922a98f9e0ac8f127d8b7fec504711f5ad3",
+          "subject": "fix(composer): keep the end-of-draft break in the native undo stack",
+          "category": "Fixed"
+        },
+        {
+          "commit": "faf0a994a3f420be5042f3fb6207e939a8001d38",
+          "subject": "chore(release): prepare v0.24.0-beta.4",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "fa7a21d866fb7bef5a5d4ebdb070ff1ea9577de3",
+          "subject": "fix(composer): keep the empty last line without a phantom character",
+          "category": "Fixed"
+        },
+        {
+          "commit": "9d25b7a991d78fea025729c78994a40721e292c0",
+          "subject": "feat(chat): align subagent tabs with the conversation display",
+          "category": "Added"
+        },
+        {
+          "commit": "d351bb80776b624b8ecf05ae4f739b3e44ca669f",
+          "subject": "fix(transcript): fold finished groups as the turn moves on",
+          "category": "Fixed"
+        },
+        {
+          "commit": "297008070a1a65c3c1738724c1ad54104a6c0dfc",
+          "subject": "test(desktop): load mode projection in the compaction harness",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "fd976b6fcd766bb6c853a30ad89f2505202051fd",
+          "subject": "chore(release): prepare v0.24.0-beta.3",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "7cb109378048a03d1318cc572416343f6a6ee1f9",
+          "subject": "refactor(settings): give modes and roles dedicated detail pages",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "c40c8068732fea30637c76c8fd6096bbe3dde2c5",
+          "subject": "fix(modes): project bundle definitions for the sidecar",
+          "category": "Fixed"
+        },
+        {
+          "commit": "30496ad76fc3a8471a946e22c38eb37a3c59db18",
+          "subject": "fix(desktop): keep unavailable image model settings reachable",
+          "category": "Fixed"
+        },
+        {
+          "commit": "deed0df586d53453ead88816bf6f13fecc6a86c3",
+          "subject": "test(models): align catalog fixture with refreshed snapshot",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "2077b04532ec3c031ed151f8536b4fcc28236f75",
+          "subject": "chore(release): prepare v0.24.0-beta.2",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "c0f6df85548089f66cd7cab76ce40557e0ea4a5a",
+          "subject": "fix(desktop): keep image generation model row visible without candidates",
+          "category": "Fixed"
+        },
+        {
+          "commit": "59216f5f23a0d5cc1f5f9c93df0446cc57133ce9",
+          "subject": "fix(providers): support unsigned thinking replay",
+          "category": "Fixed"
+        },
+        {
+          "commit": "f2020d68422bea825cc3cea64f2d9b04672aa14c",
+          "subject": "fix(sidebar): preserve Recent project labels",
+          "category": "Fixed"
+        },
+        {
+          "commit": "7ca4cdd23fdd1bd04f861a61dda3063fa147355c",
+          "subject": "test(desktop): assert window state sync wiring",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "d5866bc303b86a6bc89e4fb673db0bfa7ac6a850",
+          "subject": "fix(desktop): keep window bootstrap within architecture ratchet",
+          "category": "Fixed"
+        },
+        {
+          "commit": "660cce17fb1478831998752012948f9c97880acc",
+          "subject": "fix(desktop): resync maximize state after fullscreen",
+          "category": "Fixed"
+        },
+        {
+          "commit": "5b47a85e570bde721a4bcde2577d90ac139558bf",
+          "subject": "docs(runtime): document Mistral store compatibility",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "ea0768a788b36553a6c617b4cccc90d80be9d1fd",
+          "subject": "test(composer): fix Windows file-reference paste fixture",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "66158df8ce5f62ae63ef0dc2ca057e8d9d513241",
+          "subject": "fix(runtime): suppress OpenAI store field for Mistral Chat Completions",
+          "category": "Fixed"
+        },
+        {
+          "commit": "e2045bbcddbda3511fec3ca521ceb9eb1b46fc81",
+          "subject": "test(file-manager): exercise the updated remote panel",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "00efcdf33cca3304273f00e5fb1fe5d96a927672",
+          "subject": "feat(file-manager): bundle File Manager 0.13.0",
+          "category": "Added"
+        },
+        {
+          "commit": "4e4c40474cbfd9b5653802a89791ba5b0a261cd6",
+          "subject": "chore(architecture): warn when oversized source files grow",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "056a1037a1c3f7b9791fc2c8d34371c400005b15",
+          "subject": "test(ipc): check the settings write payload independently of its reply",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "cc79ff1259bc093afff8c6dc867182685df2b43e",
+          "subject": "fix(composer): make subagent presentations mutually exclusive",
+          "category": "Fixed"
+        },
+        {
+          "commit": "2857aee1336ee50293de07a26daeb2381a46ef75",
+          "subject": "fix(composer): notify the renderer after a subagent style write",
+          "category": "Fixed"
+        },
+        {
+          "commit": "2011746085fd68f4d148186cbaa15178b6605c47",
+          "subject": "fix(composer): keep an empty last line's caret without adding a line",
+          "category": "Fixed"
+        },
+        {
+          "commit": "15ad98b13d6fb31f80b810dc361ed0563385d105",
+          "subject": "feat(composer): surface active subagents above the input",
+          "category": "Added"
+        },
+        {
+          "commit": "4bd6d4a1f2de751fb722454ff391c583556ce138",
+          "subject": "fix(protocol): register scoped-write denial codes",
+          "category": "Fixed"
+        },
+        {
+          "commit": "b77aa33302ec8d61e5f3508838205ee1df6df4af",
+          "subject": "feat(modes): bundle private teams and constrain delegated work",
+          "category": "Added"
+        },
+        {
+          "commit": "dea5dae959a6a0655e6f691bfd62fa4b45edf712",
+          "subject": "test(desktop): check Bash flags independently of field order",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "0ec2417d71bf04bfb2559487b589f937270f8e35",
+          "subject": "fix(tools): use a ten-second Bash wait within architecture limits",
+          "category": "Fixed"
+        },
+        {
+          "commit": "5b82f16e9621372cb2deca24856013371ff0944b",
+          "subject": "feat(tools): yield long-running Bash after the initial wait",
+          "category": "Added"
+        },
+        {
+          "commit": "0d9d8e306511ef453a6ee6fe88ae719e998b9dd4",
+          "subject": "fix(composer): attach pasted image files as images",
+          "category": "Fixed"
+        },
+        {
+          "commit": "03cabe3edf5af3277d11ed3d1ce1bb9d658a72a4",
+          "subject": "fix(mcp): fall back to the legacy HTTP+SSE transport",
+          "category": "Fixed"
+        },
+        {
+          "commit": "2b104a8c509aa925e6a5f48bad45ad3f6f6f2854",
+          "subject": "fix(desktop): restore macOS window bounds after zoom",
+          "category": "Fixed"
+        },
+        {
+          "commit": "f266499ee30c8c473ef492ecf8bce7f852203716",
+          "subject": "fix(sidebar): keep projects reachable at high zoom",
+          "category": "Fixed"
+        },
+        {
+          "commit": "4b16f28f52ea4b80808ece869e05c1eef43e1db1",
+          "subject": "fix(tests): pass the loader hook a URL instead of a doubled Windows path",
+          "category": "Fixed"
+        },
+        {
+          "commit": "ccded25e50c637531cfc2a5f333db557b7221b41",
+          "subject": "perf(review): avoid rebuilding the review revision on text-only updates",
+          "category": "Improved"
+        },
+        {
+          "commit": "a49355872cd07c1050b4cb4ab8ba1d7c3025ad23",
+          "subject": "fix(subagents): read frontmatter from files saved with a UTF-8 BOM",
+          "category": "Fixed"
+        },
+        {
+          "commit": "304a50d366f74d43c685c92618b3e46a1b633ebf",
+          "subject": "fix(chat): start automatic continuations as visible new turns",
+          "category": "Fixed"
+        },
+        {
+          "commit": "820e8eefe8946ea0dc34d3b102805ae2c8b69909",
+          "subject": "perf(review): reuse serialization for unchanged diff payloads",
+          "category": "Improved"
+        },
+        {
+          "commit": "0bb31869c22d45de69e58137291b2a1cd8fef24b",
+          "subject": "fix(plugins): let Agent question answers from a plugin be allowed until quit",
+          "category": "Fixed"
+        },
+        {
+          "commit": "b51583fc58c01a93d1ef0bcde88f17b049d76487",
+          "subject": "test(agent-runtime): cover steering during active-turn compaction",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "dabbf76591f6f6bc393ce65890f90f3e8853c0aa",
+          "subject": "fix(agent-runtime): preserve compaction fallback message order",
+          "category": "Fixed"
+        },
+        {
+          "commit": "ec590a1f747311210e0e0500d86bcbd649465c75",
+          "subject": "fix(agent-runtime): resume active turns from the compaction checkpoint",
+          "category": "Fixed"
+        },
+        {
+          "commit": "2d1a1b0682b49b4f79b9f00ce82e7467451ee16e",
+          "subject": "fix(chat): show edited answers and guard personal merge behavior",
+          "category": "Fixed"
+        },
+        {
+          "commit": "385193145534b2b72b1feee618b628581b78241b",
+          "subject": "fix(settings): make conversation personas easier to manage",
+          "category": "Fixed"
+        },
+        {
+          "commit": "3b300ac45bfcf02f0ccff05cdc32897bb6269b14",
+          "subject": "fix(settings): restore the full-window settings route",
+          "category": "Fixed"
+        },
+        {
+          "commit": "86e93799230434e8434b5d0d53d2755334522599",
+          "subject": "fix(chat): reveal the previous readable turn on scroll",
+          "category": "Fixed"
+        },
+        {
+          "commit": "28673422828c28f37b6235fd2e6de4cbed35adbc",
+          "subject": "feat(sidebar): make section layout independently adjustable",
+          "category": "Added"
+        },
+        {
+          "commit": "d1229c3ea7de1be3e4fb5943ae85b778a6d3bd06",
+          "subject": "fix(sidebar): restore the visible recycle bin entry",
+          "category": "Fixed"
+        },
+        {
+          "commit": "942ee99135a9e1994c466743749339acc07fbfc8",
+          "subject": "fix(chat): render partial transcript turns accurately",
+          "category": "Fixed"
+        },
+        {
+          "commit": "458f5c9eabdcd96c9133e27a41e609ab0d0692dc",
+          "subject": "feat(agent-runtime): add opt-in sandboxed codemode tool",
+          "category": "Added"
+        },
+        {
+          "commit": "c3b4673c61d498b0e1e04edb586c560ea73aa7a9",
+          "subject": "test(desktop): stabilize native editing menu interactions",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "7d915eebdba6a08716c0d98a7a5a87b0ebbdeff7",
+          "subject": "test(desktop): expect double-quoted pnpm filter in build:deps",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "207eb498310df162399890f188d6a886acb9cbc9",
+          "subject": "fix(host-core): restore the Edit description line continuation",
+          "category": "Fixed"
+        },
+        {
+          "commit": "6ca3226a0f0c08587d06a83ee15d3483649c3124",
+          "subject": "fix(build:deps): use double quotes so the pnpm filter matches on Windows",
+          "category": "Fixed"
+        },
+        {
+          "commit": "bfab44ea2c9bea3953e3ed8f655f5cdb8567908c",
+          "subject": "feat(desktop): add native editing context menu for editable text",
+          "category": "Added"
+        },
+        {
+          "commit": "cbd0e0c80659908e632ea07277e51b4125ed9577",
+          "subject": "fix(projects): relocate only missing folders and cover two-step repair",
+          "category": "Fixed"
+        },
+        {
+          "commit": "d7dbeac041734552bc33c62063610f23140fa61d",
+          "subject": "fix(agent-runtime): shrink the retained-tail fallback until it fits",
+          "category": "Fixed"
+        },
+        {
+          "commit": "2b86721c4c16c99ed6898b0d210da817e48eceba",
+          "subject": "test(host-core): check the current schema in legacy Goal migrations",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "e9fcb5fc35a74e0dd8aac2f62eaab8bab086cfd4",
+          "subject": "test(desktop): align discovery assertions with endpoint cache writes",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "a67d2c1f5d2610871f26fb4c4b095cbcb8bbd9ec",
+          "subject": "test(host-core): use the current schema in the elapsed migration test",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "a1c977033ab022d741b144361537de28af173b5c",
+          "subject": "fix(window): scope the maximize fix to the main window",
+          "category": "Fixed"
+        },
+        {
+          "commit": "526417126f8d9fee4cc7952f0c827acaf720f3a0",
+          "subject": "fix(plugin-net): type binary capabilities and keep existing fetch contract docs",
+          "category": "Fixed"
+        },
+        {
+          "commit": "9d1b09d1dc3d1d5b75730e40bac677f58a16bde5",
+          "subject": "fix(composer): show full background task commands on expansion",
+          "category": "Fixed"
+        },
+        {
+          "commit": "6505471813f400f4c906e3b0ed228c5934a1eae6",
+          "subject": "fix(chat): restore retained and oversized image previews",
+          "category": "Fixed"
+        },
+        {
+          "commit": "70330c49e74da58f0f814743213796ee439c31c8",
+          "subject": "feat(observer): simplify continuation and add optional error recovery",
+          "category": "Added"
+        },
+        {
+          "commit": "e66bb0c348bd2b68104bad85b123bcbd920ce872",
+          "subject": "fix(desktop): open another browser tab from the work panel launcher",
+          "category": "Fixed"
+        },
+        {
+          "commit": "aef5adac40012b36ec1209e4b7c637ce72c3e4b0",
+          "subject": "fix(agent-runtime): accept job plus multi-id TaskWait selectors",
+          "category": "Fixed"
+        },
+        {
+          "commit": "7d0f4ab628379b426b77210faedfcfc1b333ffbc",
+          "subject": "fix(windows): reuse the registered install scope on NSIS updates",
+          "category": "Fixed"
+        },
+        {
+          "commit": "f36d97eafa3aa81ce3e8572c77a65761711f7d5e",
+          "subject": "fix(plugin-net): narrow binary response limit input",
+          "category": "Fixed"
+        },
+        {
+          "commit": "702170eaa24e887e484124059bdddb2fbcd45f83",
+          "subject": "fix(plugin-net): support bounded binary responses",
+          "category": "Fixed"
+        },
+        {
+          "commit": "5145ff846fba15f8ef360d80782d50ee4a7928a0",
+          "subject": "fix(runtime): honor endpoint-reported context windows",
+          "category": "Fixed"
+        },
+        {
+          "commit": "107e2389a54883fe52497fcf799c36ccba3452bf",
+          "subject": "fix(agent-runtime): forward the computer-use switch to the sidecar runtime",
+          "category": "Fixed"
+        },
+        {
+          "commit": "4f4e3b47f359aee1654e5a748753128267f3f692",
+          "subject": "chore(release): prepare v0.24.0-beta.1",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "78725e19153ede2c869168d867d5d03cd39925fc",
+          "subject": "fix(mcp): retry failed connections on later tool calls",
+          "category": "Fixed"
+        },
+        {
+          "commit": "80a1c022fe6c054b9e5c508b1e191d7b0ef3ccb0",
+          "subject": "test(plugins): stub the automation probe in the compaction fixture",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "52861567190386e82d63636b8e1acdf60b2a4099",
+          "subject": "feat(plugins): bundle official enhancements with titles enabled",
+          "category": "Added"
+        },
+        {
+          "commit": "9660da5ca72a2a2e4c82c22389a8ff40458f5bfb",
+          "subject": "fix(chat): call the projectless target Temporary chat",
+          "category": "Fixed"
+        },
+        {
+          "commit": "84b9cbea84dcd70fe573fe665f935ac3dbccf853",
+          "subject": "docs(projects): clarify relocation conflict handling",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "f89c40d56fb146cd8d40cd4d96e1874086a83f8e",
+          "subject": "fix(chat): pick a project from the temporary home's title",
+          "category": "Fixed"
+        },
+        {
+          "commit": "f9adbff6d12b4708828171aaddc8d83ddfa0a021",
+          "subject": "fix(plugins): keep manifest validation inside the module LOC limit",
+          "category": "Fixed"
+        },
+        {
+          "commit": "412f695badda2de165963b5b1d57bdc3ecd38f2e",
+          "subject": "fix(chat): make the temporary home's project picker a quiet caption",
+          "category": "Fixed"
+        },
+        {
+          "commit": "0569d0c8bca8fe0be061a6162525c45cd2e2eead",
+          "subject": "fix(file-manager): update bundled plugin to 0.9.1",
+          "category": "Fixed"
+        },
+        {
+          "commit": "127872cd577fa6aaca2aed2fefb58cea604cd4fa",
+          "subject": "feat(plugins): add scoped turn events, model context and suggestion groups",
+          "category": "Added"
+        },
+        {
+          "commit": "98a48056b98656650a89b10ae2f5c36952a0a38f",
+          "subject": "fix(settings): widen model pickers so long model ids stay readable",
+          "category": "Fixed"
+        },
+        {
+          "commit": "be7a3499a6c9411ed9b99f37a69ba56f80ff2e93",
+          "subject": "fix(projects): preserve sessions when replacing a moved folder",
+          "category": "Fixed"
+        },
+        {
+          "commit": "3919e54b0e7ed11ae4b6460104756d4276b7cdf5",
+          "subject": "test(desktop): pin the tail-only context budget reminder contract",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "d7545e356db9e9f08ec80ab74a8c4b37e05173e1",
+          "subject": "fix(sessions): start New Task outside projects and let chats move freely",
+          "category": "Fixed"
+        },
+        {
+          "commit": "3cf4c69353621e257bd01a90483493f22e0b48f6",
+          "subject": "fix(responses): strip commentary from live results and answer copy",
+          "category": "Fixed"
+        },
+        {
+          "commit": "f8ecd7c680e3976d65752dc449279a44e5d994b6",
+          "subject": "fix(host-core): clarify Edit parse recovery",
+          "category": "Fixed"
+        },
+        {
+          "commit": "b419535b0e74c5344d768c74f28d77700b79cdbf",
+          "subject": "fix(agent-runtime): keep the context budget reminder out of the prefix",
+          "category": "Fixed"
+        },
+        {
+          "commit": "b4bae22575cc88caaf3deb61caa00b147b6cd4c3",
+          "subject": "fix(window): restore pseudo-maximized windows to an explicit windowed rect",
+          "category": "Fixed"
+        },
+        {
+          "commit": "59a9c26b09aa48041086721734008813ccbebfa3",
+          "subject": "feat(personas): add session personas and opt-in child inheritance",
+          "category": "Added"
+        },
+        {
+          "commit": "8e5ef31bc33739ab6aa50d413514d0a8f91e90ef",
+          "subject": "feat(chat): edit whole-turn model context",
+          "category": "Added"
+        },
+        {
+          "commit": "cd6c21c9418078abcc91cebc293c3eae17cb8727",
+          "subject": "fix(desktop): drop chevron from home project switcher",
+          "category": "Fixed"
+        },
+        {
+          "commit": "0562bb3867bc6818cad355441f0b907068e82a58",
+          "subject": "fix(config-sync): merge entities absent from one side as implicit deletes",
+          "category": "Fixed"
+        },
+        {
+          "commit": "ef8ee9d9f5a067578f47c8c6665b30369a1621a7",
+          "subject": "fix(runtime): explicitly disable unsupported Responses strict mode",
+          "category": "Fixed"
+        },
+        {
+          "commit": "a2933249703f7673657680a2f8798509bd6bb261",
+          "subject": "fix(runtime): normalize redundant batch wait selectors",
+          "category": "Fixed"
+        },
+        {
+          "commit": "aa4ffa922514ce709591a8ad9944d7b1e8ac8866",
+          "subject": "fix(chat): dismiss floating image previews from blank space",
+          "category": "Fixed"
+        },
+        {
+          "commit": "fa089d87a6076acaf427beaa867e383e2bd126d2",
+          "subject": "fix(chat): navigate past folded tool-heavy turns",
+          "category": "Fixed"
+        },
+        {
+          "commit": "2cff3281b9c0ea775e57799f65d423b52ca2ce67",
+          "subject": "chore(git): ignore local Project Graph canvases",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "3dfaeafe08bcd3317599d824d4201aeccdef4b9e",
+          "subject": "fix(chat): preserve scroll position inside expanded thinking",
+          "category": "Fixed"
+        },
+        {
+          "commit": "a6b80485b4a3b8171219e28dff63d14ad7b5ba3c",
+          "subject": "feat(ci): publish personal betas when the pushed version advances",
+          "category": "Added"
+        },
+        {
+          "commit": "fa4ec705a506bb7cfc4e4fca4c4c4d301189a912",
+          "subject": "fix(desktop): keep long chat scrolling and retain stall evidence",
+          "category": "Fixed"
+        },
+        {
+          "commit": "e459653fa7fa7fe910a1e65f6de988a74f802825",
+          "subject": "fix: align continuation regression checks and error codes",
+          "category": "Fixed"
+        },
+        {
+          "commit": "47a96c4beefde4aa91b5d49944a93937a2f3de0a",
+          "subject": "feat(agent): add opt-in background job continuation",
+          "category": "Added"
+        },
+        {
+          "commit": "3e7912af76607fee773743c5750a04795a600f05",
+          "subject": "fix(desktop): hide redundant subagent loading feedback",
+          "category": "Fixed"
+        },
+        {
+          "commit": "82a9f88205d26e37ed54704dddf7331afabcefa3",
+          "subject": "feat(agent-runtime): add provider hook contextRequestId and getContextUsage().autoCompactAt",
+          "category": "Added"
+        },
+        {
+          "commit": "51790f647773359d7484c99da6b2a551011ad077",
+          "subject": "test(e2e): hit-test the Settings row menu only once it is revealed",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "476fb5bdd30a14a8141cdd8624238904640367e3",
+          "subject": "fix(desktop): keep Settings menus above the Settings dialog",
+          "category": "Fixed"
+        },
+        {
+          "commit": "9ffdc6bd39b87a8884b67e8d50bced1d73f7024d",
+          "subject": "chore(release): prepare v0.23.0",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "4590169c53018e34467745140c896d06f45763af",
+          "subject": "fix(plugins): keep manifest validation within the Rust budget",
+          "category": "Fixed"
+        },
+        {
+          "commit": "9be26c5c408eaf472598e531d609fc73988d78d7",
+          "subject": "test(chat): synchronize selection menu checks and ADR index",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "7caaeee40562053b2881b3c8c8fa45c46ca64c4f",
+          "subject": "style(host): format the view selection validator",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "0fbb2ddbfacac6acb361bd4bb6eb9b5d1e3ae66f",
+          "subject": "feat(plugins): open docked views from transcript selections",
+          "category": "Added"
+        },
+        {
+          "commit": "241808f7d5eeeb43f1ec7b16d8fe9aa38f155bda",
+          "subject": "fix(delegation): preserve resume selection metadata",
+          "category": "Fixed"
+        },
+        {
+          "commit": "bb1f59c13bb7033c8b80affe8d776ba893b82204",
+          "subject": "fix(transcript): Preserve Responses process order",
+          "category": "Fixed"
+        },
+        {
+          "commit": "ff388a1741ae59e1be4cfb4724d458d24f40af2b",
+          "subject": "test(desktop): match project name inside the switcher name span",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "841feea2705ff080c1f2dd34a0c4a76dab718ba1",
+          "subject": "feat(desktop): show dropdown chevron on home project switcher",
+          "category": "Added"
+        },
+        {
+          "commit": "50d202da5931d681b6892b3f29d6f206dd969102",
+          "subject": "feat(sidebar): turn the Sessions section into Recent sessions",
+          "category": "Added"
+        },
+        {
+          "commit": "a61f165d8c25d3c2b456ddd3020ff18fba2e56d2",
+          "subject": "refactor(settings): regroup the per-model advanced sheet",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "6ae0c51034d768e630c6db8748e0e4b3d1e594b0",
+          "subject": "fix(chat): retrigger CI after an unrelated E2E timeout",
+          "category": "Fixed"
+        },
+        {
+          "commit": "eb7508b199f97fae3644729c56729d4b99ece289",
+          "subject": "fix(composer): keep an empty last line's caret on that line",
+          "category": "Fixed"
+        },
+        {
+          "commit": "a0be0df0dd58543b7efbb219818e0801ed06309a",
+          "subject": "test(chrome): settle the window-controls fixture before sampling",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "ac3578bf1f0272f47a1ccf377241c71b6002afb1",
+          "subject": "feat(sidebar): let users choose which sidebar modules are shown",
+          "category": "Added"
+        },
+        {
+          "commit": "92376038da8ff8bf61d858c90e54fbc45d406f75",
+          "subject": "fix(chat): Separate Responses commentary from replies",
+          "category": "Fixed"
+        },
+        {
+          "commit": "1acbed25286998768f9024b99a7628c5605e7ccc",
+          "subject": "chore(release): prepare v0.23.0-beta.3",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "9ba56d3290979be59807e1f571c5b3c9b9671a7d",
+          "subject": "fix(agent-runtime): detect compact DSML tool calls",
+          "category": "Fixed"
+        },
+        {
+          "commit": "525a5801814b35a7db295ce99d2749d3d44ffb91",
+          "subject": "test(e2e): keep startup overlays off for automated renderer sessions",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "fbcaffff72958528d61087e14474533f67735c59",
+          "subject": "feat(desktop): settings dialog, sidebar primary nav, startup guide and release announcement",
+          "category": "Added"
+        },
+        {
+          "commit": "de815b3fbf4c75875320b2bed2c94f6fdfb9ce52",
+          "subject": "fix(chat): fork visible historical replies outside the live window",
+          "category": "Fixed"
+        },
+        {
+          "commit": "6463d87d99ee1b88110e3d8a32ca513d5f924ec6",
+          "subject": "fix(observer): retain bounded context for continuation reviews",
+          "category": "Fixed"
+        },
+        {
+          "commit": "3339b26f13e0c63c5b1d4b79d33d525523b29c7b",
+          "subject": "feat(chat): control thinking context when editing replies",
+          "category": "Added"
+        },
+        {
+          "commit": "1dcb045c84be73ad1824871a71324aef90b75653",
+          "subject": "fix(agent-runtime): send the GPT-6.2 Codex system prompt inside input",
+          "category": "Fixed"
+        },
+        {
+          "commit": "e4af2c4ff5f9311c51fd71c790ef430131421b5a",
+          "subject": "fix(host): avoid unused mut in desktop PID collection",
+          "category": "Fixed"
+        },
+        {
+          "commit": "d0d6ae27032422b816e1b46d683468cb0fcda93c",
+          "subject": "fix(runtime): restore checklist continuation and hide leaked markers",
+          "category": "Fixed"
+        },
+        {
+          "commit": "159379dcc1baa39ee3e9f225244f28206fb994ee",
+          "subject": "fix(chrome): keep conversation actions clear of the work-panel toggle",
+          "category": "Fixed"
+        },
+        {
+          "commit": "4451ddca1922d7969ab81651fb0d0cb783ae23f1",
+          "subject": "fix(window): restore the toggle when the maximized flag is lost on Windows",
+          "category": "Fixed"
+        },
+        {
+          "commit": "97615d018f8d5f6482e1590dab274b3463c68456",
+          "subject": "chore(release): prepare v0.23.0-beta.2",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "e848b4e507a9120af4ec668deec6750250aac823",
+          "subject": "fix(chat): resolve Git Bash drive paths in Windows file links",
+          "category": "Fixed"
+        },
+        {
+          "commit": "f2bb89bb0519c8e0fa4a1a7a591aaa5bf107b6f9",
+          "subject": "chore(pi): read the provider key from the API_KEY secret",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "0b9d2b4ffaa5dc79d85b7db974e2bdef499de0dc",
+          "subject": "chore(pi): read the provider key from the API_KEY secret",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "9c61f45a3b1ae35a6d0d65718a76e86ad6f51226",
+          "subject": "docs(spec): describe the @pi issue automation",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "1bf6314806250fc6f5cb636d7d761f4cca3fb84c",
+          "subject": "ci(pi): add the triage label vocabulary",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "f02e72cffa3c80d07cf6bdad23b8b5434e4361d1",
+          "subject": "ci(pi): label new issues and link duplicates",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "c3ae65f4d05351ad9ba3b253e9daf53a8dbdcd09",
+          "subject": "ci(pi): reply to @pi mentions with the pi agent",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "20fe2008a70d6550942695c9fb5b12682c263154",
+          "subject": "feat(chat): edit the latest assistant reply in place",
+          "category": "Added"
+        },
+        {
+          "commit": "3abac01fb2b8d6b2a4c6cb003ba6fe4f0b57b7fc",
+          "subject": "fix(chat): load earlier messages only on reader demand",
+          "category": "Fixed"
+        },
+        {
+          "commit": "3ea8f4dc114de25fd30f9d44adf9df3510547817",
+          "subject": "feat(models): support GPT-6.2 Sol and GPT-6.2 Astra",
+          "category": "Added"
+        },
+        {
+          "commit": "4281788630da9e87f10983cb47cfda572be1125f",
+          "subject": "fix(providers): list GPT-6.2 models for ChatGPT accounts",
+          "category": "Fixed"
+        },
+        {
+          "commit": "41c3ef4c33df3f13d434c83444c74f90c44ab3e9",
+          "subject": "feat(runtime): support per-task reasoning effort",
+          "category": "Added"
+        },
+        {
+          "commit": "72254b8131e8c74a2aa2975a73532043698691e1",
+          "subject": "chore(deps): upgrade Pi runtime to 1.5.2 and adopt its features",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "99b5b2fe0d2e0f7018be13784a0b831f4074b279",
+          "subject": "fix(transcript): tolerate runtimes without liveSessionTranscripts in the settled-read guard",
+          "category": "Fixed"
+        },
+        {
+          "commit": "2e81fd0c7795139215a5190e632662f9d792d675",
+          "subject": "fix(composer): refresh context usage after compacting a failed turn",
+          "category": "Fixed"
+        },
+        {
+          "commit": "6c50378b378d8ea4e289011070a49d552bd53a89",
+          "subject": "feat(chat): keep answered questions visible in the transcript",
+          "category": "Added"
+        },
+        {
+          "commit": "d7a502af5c509e7e175e83fcf56be566ea9c6393",
+          "subject": "feat(diagnostics): add opt-in desktop performance capture",
+          "category": "Added"
+        },
+        {
+          "commit": "695b1629f9fa7a75bbe698b052a82b0cb4b88bce",
+          "subject": "feat(sidebar): mark conversations as read or unread",
+          "category": "Added"
+        },
+        {
+          "commit": "2000e8ce271bc93d398ae8667c3cd23950a5eb03",
+          "subject": "fix(observer): persist assessments and explain guard decisions",
+          "category": "Fixed"
+        },
+        {
+          "commit": "9b4e4ba7bab8508efc6a4ba4bb43f03ef415de40",
+          "subject": "fix(sidebar): make the group add button clickable",
+          "category": "Fixed"
+        },
+        {
+          "commit": "8240316b9f30c827bac01a9a3adb8e30b6c83196",
+          "subject": "feat(sidebar): keep new and forked conversations in their groups",
+          "category": "Added"
+        },
+        {
+          "commit": "5cdd2ea159046e06a5a1a3489ba7f92e41437b7a",
+          "subject": "fix(chat): restore normal turn folding around protocol diagnostics",
+          "category": "Fixed"
+        },
+        {
+          "commit": "afa2781821e05421d5af8b5553fecdd8a1b6c22b",
+          "subject": "fix(chat): keep narration readable when tool activity folds",
+          "category": "Fixed"
+        },
+        {
+          "commit": "c6df984b0e439aac34b56ec7b691578eb9bb439d",
+          "subject": "fix(sidebar): close the row menu after moving a conversation",
+          "category": "Fixed"
+        },
+        {
+          "commit": "44365d55d8edab34a4be43092fb0c820207df61a",
+          "subject": "fix(chat): fold orphan DSML tails into protocol details",
+          "category": "Fixed"
+        },
+        {
+          "commit": "e1d018e9cfe43df32cfdada95cfa4279e95642fa",
+          "subject": "fix(desktop): show inspected images at their Read call",
+          "category": "Fixed"
+        },
+        {
+          "commit": "397232197a0de19b6f138583971eebdd88cc1e5a",
+          "subject": "fix(sidebar): keep named conversation groups folded by default",
+          "category": "Fixed"
+        },
+        {
+          "commit": "0f53e40d0cfebd4494523715da65221370164087",
+          "subject": "fix(dev): run current source with optional configuration backup",
+          "category": "Fixed"
+        },
+        {
+          "commit": "d6adecba25bb592ceec598c9bfdb6be782f7072a",
+          "subject": "fix(desktop): hide empty subagent history pagination",
+          "category": "Fixed"
+        },
+        {
+          "commit": "4692f015b0ac89fe816b18c4ca5b54631e8b603c",
+          "subject": "fix(runtime): preserve streamed content at Responses settlement",
+          "category": "Fixed"
+        },
+        {
+          "commit": "de30818be22e2e9a64164ceb9cf9d09c368de258",
+          "subject": "docs(agents): require link-safe worktree isolation and teardown",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "ec936b7ed61537118d72c53b15f2f9b9d6b7cf71",
+          "subject": "fix(release): validate personal beta documentation separately",
+          "category": "Fixed"
+        },
+        {
+          "commit": "6cde8ffbf6239ae22918eb43b6862838b8b07241",
+          "subject": "fix(subagents): preserve task visibility and refresh state",
+          "category": "Fixed"
+        },
+        {
+          "commit": "eed8b3231eef86145fd44efee7c768fb4e61aa4b",
+          "subject": "fix(sidebar): preserve independent conversation group pagination",
+          "category": "Fixed"
+        },
+        {
+          "commit": "e72fdba94ebb18f754e640747b2441105d156a5f",
+          "subject": "fix(runtime): preserve native Responses image output",
+          "category": "Fixed"
+        },
+        {
+          "commit": "3a52237c355b046f09d33e970c43c3a48944b775",
+          "subject": "fix(composer): support file references without a project",
+          "category": "Fixed"
+        },
+        {
+          "commit": "f28653e41522e6960042ed5a108f68ae06705472",
+          "subject": "feat(observer): add conversation-scoped Observer Guard",
+          "category": "Added"
+        },
+        {
+          "commit": "dafc177172bc08277c7c5c51635500626f17bbae",
+          "subject": "fix(transcript): keep a turn started during Stop's settled read in charge of the transcript",
+          "category": "Fixed"
+        },
+        {
+          "commit": "3bbf76f2493856e20a77e9beb3ab75141033e5a3",
+          "subject": "fix(plugins): use session scratch path for scaffolding",
+          "category": "Fixed"
+        },
+        {
+          "commit": "047c4eab1c97a349b3cf8c734229b64ed9d87764",
+          "subject": "fix(plugins): read the catalog fields the catalog actually uses (#2403)",
+          "category": "Fixed"
+        },
+        {
+          "commit": "ed93df9c8b57aaaa46bd6430e7dc658a484daef7",
+          "subject": "fix(composer): reference local files across all entry points",
+          "category": "Fixed"
+        },
+        {
+          "commit": "e2f137dff7f2ad77d6f1588dd50ba49751b8eb3b",
+          "subject": "feat(plugins): show marketplace categories in the app's language (#2400)",
+          "category": "Added"
+        },
+        {
+          "commit": "d2cd523e99dc51339dc21a0c581721c718bce198",
+          "subject": "docs(agents): require restoring shared pnpm shims before worktree removal",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "f91799f3f190bb7f03cb4794605a69d99fa9701e",
+          "subject": "feat(plugins): page, sort and filter the marketplace through the center (#2397)",
+          "category": "Added"
+        },
+        {
+          "commit": "95446db66354e730df2bb8e9371720e4aee0931a",
+          "subject": "fix(host): ignore model system snapshot when retracting a stopped prompt",
+          "category": "Fixed"
+        },
+        {
+          "commit": "41bc76096e0e4dfe612bfe884ae8412a25e1941e",
+          "subject": "test(desktop): track native tile minimum in shell size guard",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "fceabebecb2a9e9c7a3c9573ca717635c244c562",
+          "subject": "fix(desktop): restore native window maximize and tiling behavior",
+          "category": "Fixed"
+        },
+        {
+          "commit": "1abcea09b1b7a90e7a2cdc1d542d092392405e80",
+          "subject": "fix(remote): give host project groups their own sidebar section",
+          "category": "Fixed"
+        },
+        {
+          "commit": "a0dc3a3bc36b25359950846bcb68c848f694a32f",
+          "subject": "fix(chat): classify Unicode letters and isolate message paragraphs",
+          "category": "Fixed"
+        },
+        {
+          "commit": "9903eb871cd27096fcdd10d88d96ea4a66f7a04e",
+          "subject": "fix(scope): resolve durable session projects for desktop reads",
+          "category": "Fixed"
+        },
+        {
+          "commit": "a402d2cec516e3809bd1471f78e8d99243986340",
+          "subject": "fix(desktop): keep Read image previews inside tool details",
+          "category": "Fixed"
+        },
+        {
+          "commit": "1e2e43651e47054878c1d8c8527d27dde5d5e912",
+          "subject": "fix(chat): render mixed RTL/LTR paragraphs with content-aware direction",
+          "category": "Fixed"
+        },
+        {
+          "commit": "6dc84f7c89483feb8f53e4e7217f36fc6b4cf2c9",
+          "subject": "test(remote): drive journey attach through production session/attach and fail closed on any failed check",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "4afca6934ef2b14e82bd22179f288d96aaf32bcb",
+          "subject": "fix(scope): apply activation scope to desktop.control session reads",
+          "category": "Fixed"
+        },
+        {
+          "commit": "9b4d5d621f6512ff6ba28df2303780d2baf48db2",
+          "subject": "test(remote): add paired-host project-groups integration journey acceptance",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "c7c26729f4f1ecc5e2fdce72ecf4f9de023d9041",
+          "subject": "fix(plugins): treat a null send callback as delivery success, not failure",
+          "category": "Fixed"
+        },
+        {
+          "commit": "5b7af692892bed5fc2bd3399a16eb38c79060792",
+          "subject": "fix(remote): keep authoritative projectId in mixed-batch session decoration",
+          "category": "Fixed"
+        },
+        {
+          "commit": "47f86696c306b144163749b0751d7aee7135a6cf",
+          "subject": "fix(plugins): bound async IPC send failures to a single terminal exit",
+          "category": "Fixed"
+        },
+        {
+          "commit": "855ea422b3a845b7ae3cb26c002f8965d4345c1a",
+          "subject": "feat(runtime): add configurable local output guards",
+          "category": "Added"
+        },
+        {
+          "commit": "a80b9ab386c15a7d26bb29eec7672ebe2c4203d0",
+          "subject": "fix(remote): make session project-id decoration best effort and keep test-asserted CSS formatting",
+          "category": "Fixed"
+        },
+        {
+          "commit": "722bdf630c60664821a4b735e5e5f9211bb132b1",
+          "subject": "feat(diagnostics): add local tool observer and chat references",
+          "category": "Added"
+        },
+        {
+          "commit": "16b032efb17d9b27aa762596fe8d038ffce88134",
+          "subject": "fix(remote): use single-line token var for sidebar font-size to satisfy check-style-tokens",
+          "category": "Fixed"
+        },
+        {
+          "commit": "a9b78b5e6b4314135783bbf58e3da9890856108e",
+          "subject": "fix: 刷新提供商时保留活跃远端会话身份",
+          "category": "Fixed"
+        },
+        {
+          "commit": "f3c8fb1c604dc1e37aef3a7a48bc553f82af2095",
+          "subject": "fix: 防止旧项目响应覆盖当前插件视图",
+          "category": "Fixed"
+        },
+        {
+          "commit": "cd1208a12f50742822bdb44e8816eb09e818392b",
+          "subject": "fix: 会话切换后停止仅更新所属会话状态",
+          "category": "Fixed"
+        },
+        {
+          "commit": "9ab36de45d836ed7ae581b1c5b5bff9dff375b31",
+          "subject": "fix: 保留来源会话已确认的停止状态",
+          "category": "Fixed"
+        },
+        {
+          "commit": "87068f4b8fa2edbfcf35dfd34aa660d47ec1ae1a",
+          "subject": "fix(remote): keep host project groups collapsible and their rows in the group",
+          "category": "Fixed"
+        },
+        {
+          "commit": "e875d4fc7aee769e56cbaa969b5185a580a5f1ea",
+          "subject": "fix(plugins): tie plugin host lifetime to the parent and bound IPC diagnostics",
+          "category": "Fixed"
+        },
+        {
+          "commit": "509bad64319aa25123a2520bdb1f2975253cd160",
+          "subject": "fix(agent-runtime): CJK-aware compaction summary sizing and chunked delegate summaries (#2364)",
+          "category": "Fixed"
+        },
+        {
+          "commit": "5d30f36b9abf845e549a9debe3372a013d839cad",
+          "subject": "fix(desktop): treat image-marked models by capability when inheriting chat defaults",
+          "category": "Fixed"
+        },
+        {
+          "commit": "ac93a0ff75cbe59235813180e3de4f9e7b257e57",
+          "subject": "feat(modes): let users edit builtin modes; drop the Goal budget setting",
+          "category": "Added"
+        },
+        {
+          "commit": "9253fa12de19d1899f4754e7f7f4446f0ac6d967",
+          "subject": "test(plugins): align row action contract with supported panels",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "733b753883e584b38ecf9cd8828e25d22f9cdd82",
+          "subject": "fix(mods): retire legacy Goal turn snapshot triggers",
+          "category": "Fixed"
+        },
+        {
+          "commit": "2dea25a27fb8d0f9cdcc4a8f21a5b7f8af44f5a4",
+          "subject": "test(e2e): create revision history through regeneration",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "2d1eff92afac414d14223e64ddf678968dca9d2e",
+          "subject": "fix(desktop): bundle Photon WASM required during startup",
+          "category": "Fixed"
+        },
+        {
+          "commit": "2877d6d27da7acb9a07363fbbffcfe5c79b04d8b",
+          "subject": "fix(runtime): reject incomplete image inputs before model delivery",
+          "category": "Fixed"
+        },
+        {
+          "commit": "c8d23c7636fa6500ef8cc360cbccb18a1a8ab620",
+          "subject": "chore(release): record 0.23.1-beta.1",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "e2a0e325fbdbb7514b2f5c9bd191c217ab7b2dd4",
+          "subject": "test(plugins): align card action assertion with restored panel button",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "2c722d22711a2e280e2be8d1025ed567f6290fb7",
+          "subject": "test(composer): qualify installed File Manager line references",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "669704429f4dec3a075fb6a79b4894741fa9dc84",
+          "subject": "test(desktop): assert the composer model menu per source rail section",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "811d3e9670858258c00d9d65c9c4ab886405e1ba",
+          "subject": "test(plugins): wait for completed local saves in remote journey",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "6fc71dbfd0cce13ba44a0f0569b9d295e13946e7",
+          "subject": "test(composer): align history fixture with queue mode state",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "34d4d96083460977c926e5ae6913ee158d1e0e45",
+          "subject": "test(desktop): adapt the image chat e2e to the current settings and composer model menus",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "3bda0ac13201e18129cd53aad70351d9d8e02e68",
+          "subject": "fix(desktop): migrate only a chat default the image save made unable to chat",
+          "category": "Fixed"
+        },
+        {
+          "commit": "b84f779eb7abcef05d295a97bb25e7929bce8e66",
+          "subject": "fix(desktop): subscribe the subagent editor to image metadata reactively",
+          "category": "Fixed"
+        },
+        {
+          "commit": "4b67b9b3d625576e3c4b7a0d4224e5ccf1dbc9cb",
+          "subject": "fix(desktop): pass the same modalities metadata to every chat-eligibility call site",
+          "category": "Fixed"
+        },
+        {
+          "commit": "59849e32297124801212e270e688207f220a083f",
+          "subject": "refactor: update subagent model-choice source assertions for the image-binding argument",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "f9578f4d35fcfed690e149c6b19d8877d5eae288",
+          "subject": "fix(desktop): keep pure image-generation endpoints out of chat and admit dual-capability models",
+          "category": "Fixed"
+        },
+        {
+          "commit": "20bf901036263dab535184c7034f0388382bc9da",
+          "subject": "test(desktop): make the image-model launch fixture complete and drop the committed launch artifact",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "ae58a722067b08616280473f3ef9751215003bd8",
+          "subject": "test(desktop): image-designated models are chat-ready in the Composer",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "bae7a7258e33b2f7a8bf7e640cd9789d36b178bf",
+          "subject": "test(desktop): update source pins for image-model chat inclusion",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "c90c55418b1c1a326218f4c7073408d11c9a5a29",
+          "subject": "fix(settings): let an image-generation model stay usable for chat",
+          "category": "Fixed"
+        },
+        {
+          "commit": "b378ed4c2ad5ed1bea24759669ac7506589e2c61",
+          "subject": "docs(composer): link the source ADR from the locale mirror",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "c6d14515a7f590e80d40bc5c99ead1a461ae62ae",
+          "subject": "fix(e2e): wait for Openbox before browser capture",
+          "category": "Fixed"
+        },
+        {
+          "commit": "30de3043d1e8afeef073f74c092e22f6f73db4e1",
+          "subject": "fix(composer): validate and restore file line references",
+          "category": "Fixed"
+        },
+        {
+          "commit": "a1b9212b98e8e67a82f0fd74c30803c5b16587b2",
+          "subject": "fix(plugins): check file line registration when invoked",
+          "category": "Fixed"
+        },
+        {
+          "commit": "297ddcec0f18e667f7c6927287eb621b98c9ec76",
+          "subject": "fix(composer): isolate file line prefetches and gate view capability",
+          "category": "Fixed"
+        },
+        {
+          "commit": "079c9fef44e9753c877fc8eb6753695bf9ce6eda",
+          "subject": "test(composer): cover text paste alongside file line references",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "ca771730cea1da93f3750c85cafa746538aa956a",
+          "subject": "docs(composer): register the file line reference ADR",
+          "category": "Maintenance"
+        },
+        {
+          "commit": "a38f49990f25570870aaac66f556e60425725459",
+          "subject": "feat(composer): accept file manager line references",
+          "category": "Added"
+        },
+        {
+          "commit": "f60e5daf35f8684bf27c8b26eaede36af2b6c1e3",
+          "subject": "fix(markdown): preserve preview styles in standalone SVG exports",
+          "category": "Fixed"
+        },
+        {
+          "commit": "0a381a14c99dcc5a5c225ca7b0d0f00723785527",
+          "subject": "feat(markdown): copy and export Mermaid diagrams as SVG",
+          "category": "Added"
+        }
+      ],
+      "validation": "Offline package checks only; no profile compatibility or Authenticode claim."
+    },
+    {
       "version": "0.23.1-beta.1",
       "sourceCommit": "e83aa74b1f6b16334b39c483e6ec212fa3ddff18",
       "sourceFingerprint": "2f915dbc274aae4209d656213a7c029932a0c93f8ae44208f5b4ba5e215b7081",

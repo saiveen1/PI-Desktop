@@ -1,6 +1,6 @@
 # PI-Desktop · Personal Edition
 
-> **Current release line: 0.23.x.**
+> **Current release line: 0.24.x.**
 
 An independently maintained, local-first AI agent workspace focused on
 **execution-harness hardening, multi-agent collaboration, and everyday usability**.
