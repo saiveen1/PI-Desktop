@@ -290,6 +290,8 @@ installer with official automatic updates disabled. Each build has a unique ID,
 source metadata, Git-derived change notes, and a SHA-256 checksum. Main bundles
 retain the Photon decoder WASM needed at startup, and the installer gate rejects
 a missing or invalid copy. Build cleanup removes intermediates, not previous installers.
+Preflight also identifies broken Electron resolution after a checkout move, and
+NSIS output-open errors report the affected file and its post-failure state.
 
 ```bash
 pnpm dist:personal --check  # Preview the build plan without building

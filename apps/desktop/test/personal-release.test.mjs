@@ -116,6 +116,54 @@ test("a failed build stops immediately, keeps the previous installer and release
   assert.ok(!existsSync(join(context.logs, "build.lock")));
 });
 
+test("NSIS output-open diagnostics keep the original failure and inspect only this build's intermediates", async (t) => {
+  const { context } = fixture(t);
+  buildInputs(context);
+  const output = join(context.staging, context.installerName);
+  const uninstaller = output.replace(/\.exe$/, ".__uninstaller.exe");
+  let original;
+  let invocations = 0;
+  const run = async (stage, { log }) => {
+    if (stage.name !== "NSIS installer only") return;
+    invocations++;
+    write(output, "stub");
+    write(uninstaller, "uninstaller");
+    // electron-builder can pad makensis stderr heavily and repeat it in a stack trace.
+    const stderr = `Output: "${output}"\r\n${" ".repeat(4096)}Can't open output file\r\nError - aborting creation process\r\n`;
+    await runCommand({ ...stage, command: process.execPath,
+      args: ["-e", "process.stderr.write(process.argv[1]); process.exitCode = 7;", stderr] }, { env: context.env, log })
+      .catch((error) => { original = error; throw error; });
+  };
+  await assert.rejects(buildPersonal(context, { run }), (error) => {
+    assert.equal(error.cause, original);
+    assert.match(error.message, /NSIS output-open failure/);
+    assert.ok(error.message.includes(output), error.message);
+    assert.match(error.message, /NSIS installer only failed \(7\)/);
+    assert.match(error.message, /installer: 4 bytes \(post-failure open: succeeded\); uninstaller: 11 bytes/);
+    assert.match(error.message, /original Windows error is unknown/i);
+    return true;
+  });
+  assert.equal(invocations, 1);
+  assert.match(readFileSync(join(context.logs, "build.log"), "utf8"), /NSIS output-open failure/);
+  assert.equal(readFileSync(output, "utf8"), "stub");
+  assert.ok(!existsSync(join(context.output, context.installerName)));
+  assert.ok(!existsSync(join(context.logs, "build.lock")));
+});
+
+test("an earlier stage's output-open text does not classify an unrelated NSIS failure", async (t) => {
+  const { context } = fixture(t);
+  buildInputs(context);
+  const original = new Error("installer script syntax failure");
+  await assert.rejects(buildPersonal(context, { run: async (stage, { log }) => {
+    if (stage.name === "Desktop production build") {
+      await runCommand({ ...stage, command: process.execPath,
+        args: ["-e", "console.error(\"Can't open output file\")"] }, { env: context.env, log });
+    }
+    if (stage.name === "NSIS installer only") throw original;
+  } }), (error) => error === original);
+  assert.doesNotMatch(readFileSync(join(context.logs, "build.log"), "utf8"), /NSIS output-open failure/);
+});
+
 test("missing dist-bundle stops before electron-builder, not after shipping a broken EXE", async (t) => {
   const { context } = fixture(t);
   const invoked = [];
@@ -187,6 +235,12 @@ test("real command boundary preserves failure status and argument tokens without
   await runCommand({ name: "argv probe", command: process.execPath, cwd: dir, args: ["-e", "console.log(process.argv[1])", "literal^caret & spaces"] }, { env: process.env, log });
   assert.match(readFileSync(log, "utf8"), /literal\^caret & spaces/);
   await assert.rejects(runCommand({ name: "failure", command: process.execPath, cwd: dir, args: ["-e", "process.exit(7)"] }, { env: process.env, log }), /failure failed \(7\)/);
+  const missing = join(dir, "missing-compiler.exe");
+  await assert.rejects(runCommand({ name: "compiler", command: missing, cwd: dir, args: [] }, { env: process.env, log }), (error) => {
+    assert.ok(error.message.includes(`compiler could not start ${missing} in ${dir} (ENOENT)`));
+    assert.equal(error.cause?.code, "ENOENT");
+    return true;
+  });
 });
 
 test("CLI rejects install/launch/target overrides before creating any build state", () => {

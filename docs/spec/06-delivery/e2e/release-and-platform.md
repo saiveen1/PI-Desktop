@@ -1467,6 +1467,11 @@ Use synthetic Darwin x64/arm64 uname responses through production SSH bootstrap,
   installed Electron, rejects a missing, wrong-version or wrong-architecture
   runtime, and that packaging cleans stock files from the copy without modifying
   the source runtime. Reject install/launch/target overrides.
+  Simulate a moved checkout with a dangling Electron link visible to Vite but
+  not needed by Desktop; preflight names the consumer and link target without
+  mutating the installation. Simulate `makensis` rejecting its output open
+  after writing stubs; verify the original failure and the diagnostic snapshot
+  are visible without rerunning the builder or publishing the stubs.
   Exercise self-managed updater behavior through the real controller with
   Electron/electron-updater boundary stubs on all supported controller platforms.
 - **Expected:** One NSIS x64 installer target with publishing disabled;
@@ -1474,8 +1479,8 @@ Use synthetic Darwin x64/arm64 uname responses through production SSH bootstrap,
   no installer/Desktop execution, registry/profile access or process termination.
   Failures do not deliver stubs or replace the prior verified installer. Marked
   packages cannot re-enable upstream updates; ordinary packages are unchanged.
-- **Coverage:** `personal-release.test.mjs`, `auto-update.test.mjs`,
-  `updater-controller.test.mjs`, `agent-policy-sync.test.mjs`.
+- **Coverage:** `personal-release.test.mjs`, `personal-release-toolchain.test.mjs`,
+  `auto-update.test.mjs`, `updater-controller.test.mjs`, `agent-policy-sync.test.mjs`.
 - **Specs:** [Personal runbook](../07-personal-release-runbook.md),
   [Release runbook](../06-release-runbook.md#self-maintained-daily-release-and-isolated-development).
 - **Acceptance:** Offline runner/controller journey and artifact contracts only.

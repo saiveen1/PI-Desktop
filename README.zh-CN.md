@@ -184,6 +184,7 @@ Windows 运行 [start-local.cmd](start-local.cmd) 即可编译必要的当前源
 每次构建都附带唯一标识、源码元数据、从 Git 历史生成的变更说明和 SHA-256 校验值。
 主进程打包保留启动所需的 Photon 解码器 WASM，安装包检查会拒绝缺失或损坏的副本。
 构建清理只处理临时产物，不删除以往安装包。
+预检还会定位工作区迁移后的 Electron 解析问题；NSIS 无法打开输出文件时，会报告目标文件及失败后的状态。
 
 ```bash
 pnpm dist:personal --check  # 预览构建计划，不执行构建

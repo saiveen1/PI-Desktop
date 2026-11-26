@@ -2,11 +2,12 @@
 // Build artifacts only. Never install, launch Desktop, or manage user processes.
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { constants, createReadStream, appendFileSync, closeSync, copyFileSync, existsSync, mkdirSync, openSync, readFileSync, readSync, realpathSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { constants, createReadStream, appendFileSync, closeSync, copyFileSync, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, readlinkSync, readSync, realpathSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { cleanPersonalRelease } from "./clean-personal-release.mjs";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { stripVTControlCharacters } from "node:util";
 import { applyFileEdits, assertRepositoryFile, planWorkspaceVersion, restoreFileEdits } from "./workspace-version.mjs";
 import { assertNewBeta, captureGitSource } from "./personal-build-source.mjs";
 import { collectReleaseChanges, loadReleaseHistory, planReleaseRecord, renderBuildNotes } from "./personal-release-notes.mjs";
@@ -57,13 +58,28 @@ export function buildEnvironment(parent, pnpmEntry) {
 export function resolvePersonalReleaseToolchain(root = ROOT) {
   root = realpathSync(root);
   const desktopRequire = createRequire(join(root, "apps/desktop/package.json"));
+  const inCheckout = (path) => {
+    const location = relative(root, path);
+    return location !== ".." && !location.startsWith(`..${sep}`) && !isAbsolute(location);
+  };
   const owned = (path) => {
     const real = realpathSync(path);
-    const location = relative(root, real);
-    if (location === ".." || location.startsWith(`..${sep}`) || isAbsolute(location)) {
-      throw new Error(`Personal release toolchain must belong to the current checkout: ${real}`);
-    }
+    if (!inCheckout(real)) throw new Error(`Personal release toolchain must belong to the current checkout: ${real}`);
     return real;
+  };
+  const electronManifest = (requireFrom, request, consumer, modules) => {
+    try {
+      return owned(requireFrom.resolve(request));
+    } catch (error) {
+      if (error.code !== "MODULE_NOT_FOUND") throw error;
+      const links = modules.filter(inCheckout).flatMap((directory) => {
+        const candidate = join(directory, "electron");
+        return lstatSync(candidate, { throwIfNoEntry: false })?.isSymbolicLink()
+          ? [`${candidate} -> ${readlinkSync(candidate)}`] : [];
+      });
+      const details = links.length ? ` Electron links in lookup order: ${links.join("; ")}.` : "";
+      throw new Error(`${consumer} cannot resolve electron/package.json (${request}).${details} After a checkout move, inspect stale links and repair the current installation with pnpm install --frozen-lockfile; do not reuse the old checkout.`, { cause: error });
+    }
   };
   const bin = (name) => {
     const manifest = owned(desktopRequire.resolve(`${name}/package.json`));
@@ -71,6 +87,12 @@ export function resolvePersonalReleaseToolchain(root = ROOT) {
   };
   const builder = bin("electron-builder");
   const vite = bin("electron-vite");
+  const viteRequire = createRequire(vite);
+  const viteElectron = electronManifest(viteRequire, "electron/package.json", "electron-vite", viteRequire.resolve.paths("electron") ?? []);
+  const desktopElectron = electronManifest(desktopRequire, "./node_modules/electron/package.json", "Desktop packaging config", [join(root, "apps/desktop/node_modules")]);
+  if (json(viteElectron).version !== json(desktopElectron).version) {
+    throw new Error(`electron-vite and Desktop packaging config resolve different Electron versions: ${viteElectron} vs ${desktopElectron}. Repair the locked pnpm installation in this checkout.`);
+  }
   const builderRequire = createRequire(builder);
   const library = owned(builderRequire.resolve("app-builder-lib/package.json"));
   const template = join(dirname(library), "templates/nsis/include/allowOnlyOneInstallerInstance.nsh");
@@ -82,7 +104,7 @@ export function resolvePersonalReleaseToolchain(root = ROOT) {
   const libraryRequire = createRequire(library);
   const asar = libraryRequire(owned(libraryRequire.resolve("@electron/asar")));
   if (typeof asar.extractFile !== "function") throw new Error("The installed builder's ASAR implementation does not expose extractFile.");
-  return { builder, vite, asar };
+  return { builder, vite, asar, viteElectron };
 }
 
 export function prepareBuild({ root = ROOT, platform = process.platform, arch = process.arch, env = process.env, releaseVersion, toolchain } = {}) {
@@ -96,7 +118,7 @@ export function prepareBuild({ root = ROOT, platform = process.platform, arch = 
   if (!pnpmEntry || !isAbsolute(pnpmEntry) || !existsSync(pnpmEntry) || !/^pnpm\.(?:exe|cjs|mjs|js)$/i.test(basename(pnpmEntry))) {
     throw new Error("Run pnpm dist:personal with the existing pnpm toolchain (npm_execpath must identify pnpm.exe or its JS entry).");
   }
-  const { builder, vite, asar } = toolchain ?? resolvePersonalReleaseToolchain(root);
+  const { builder, vite, asar, viteElectron } = toolchain ?? resolvePersonalReleaseToolchain(root);
   const configPath = join(desktop, "electron-builder.personal.cjs");
   const config = createRequire(join(desktop, "package.json"))(configPath);
   if (config.appId !== pkg.build.appId || config.productName !== pkg.build.productName ||
@@ -144,7 +166,7 @@ export function prepareBuild({ root = ROOT, platform = process.platform, arch = 
   const changes = collectReleaseChanges(root, history);
   return { root, desktop, output, staging, logs, currentVersion: pkg.version, version, release: releaseVersion !== undefined,
     installerName: `PI-Desktop-Personal-Setup-${version}.exe`, source, history, versionEdits, ...changes,
-    env: buildEnvironment(env, pnpmEntry), stages, asar, electronDist, electronVersion };
+    env: buildEnvironment(env, pnpmEntry), stages, asar, electronDist, electronVersion, viteElectron };
 }
 
 export function runCommand(stage, { env, log }) {
@@ -160,13 +182,56 @@ export function runCommand(stage, { env, log }) {
     };
     child.stdout.on("data", output);
     child.stderr.on("data", output);
-    child.once("error", reject);
+    child.once("error", (error) => reject(new Error(`${stage.name} could not start ${stage.command} in ${stage.cwd} (${error.code ?? error.message}); see ${log}.`, { cause: error })));
     child.once("close", (code, signal) => {
       if (outputError) reject(new Error(`${stage.name} output logging failed after child exit (${signal || code}); no retry was attempted.`, { cause: outputError }));
       else if (code === 0) accept();
       else reject(new Error(`${stage.name} failed (${signal || code}); see ${log}. No retry or installation was attempted.`));
     });
   });
+}
+
+function installerFileState(path, probeOpen = false) {
+  let state;
+  try {
+    const info = lstatSync(path, { throwIfNoEntry: false });
+    if (!info) return "missing";
+    if (!info.isFile() || realpathSync(path).toLowerCase() !== path.toLowerCase()) return "not a regular file at the expected path; not opened";
+    state = `${info.size} bytes`;
+    if (!probeOpen) return state;
+    // Read/write access only, no truncation or write. This cannot replay the original open.
+    closeSync(openSync(path, "r+"));
+    return `${state} (post-failure open: succeeded)`;
+  } catch (error) {
+    const code = error.code ?? error.name;
+    return state ? `${state} (post-failure open: ${code})` : `inspection failed (${code})`;
+  }
+}
+
+function explainNsisFailure(error, { staging, installerName }, log, logStart) {
+  let diagnostic;
+  try {
+    const fd = openSync(log, "r");
+    let output;
+    try {
+      const end = fstatSync(fd).size;
+      const start = Math.min(end, Math.max(logStart, end - 256 * 1024));
+      const tail = Buffer.alloc(end - start);
+      output = tail.toString("utf8", 0, readSync(fd, tail, 0, tail.length, start));
+    } finally {
+      closeSync(fd);
+    }
+    if (!/^[ \t]*Can't open output file[ \t\r]*$/m.test(stripVTControlCharacters(output))) return error;
+    const installer = join(staging, installerName);
+    const uninstaller = installer.replace(/\.exe$/, ".__uninstaller.exe");
+    diagnostic = `NSIS output-open failure (makensis: Can't open output file): ${installer}\n` +
+      `Post-failure snapshot — installer: ${installerFileState(installer, true)}; uninstaller: ${installerFileState(uninstaller)} (${uninstaller}). ` +
+      "The original Windows error is unknown. Preserve build.log and .build before tracing the failing file open; do not run these intermediates.";
+    appendFileSync(log, `\n${diagnostic}\n`);
+  } catch (diagnosticError) {
+    diagnostic = `${diagnostic ? `${diagnostic}\n` : ""}NSIS log/diagnostic I/O failed (${diagnosticError.code ?? diagnosticError.name}).`;
+  }
+  return new Error(`${error.message}\n${diagnostic}`, { cause: error });
 }
 
 function nonempty(path) {
@@ -230,7 +295,12 @@ export async function buildPersonal(context, { run = runCommand, now = () => new
       const heading = `[${index + 1}/${context.stages.length}] ${stage.name}\n`;
       console.log(heading.trim());
       appendFileSync(log, heading);
-      await run(stage, { env, log });
+      const logStart = stage.name === "NSIS installer only" ? statSync(log).size : undefined;
+      try {
+        await run(stage, { env, log });
+      } catch (error) {
+        throw logStart === undefined ? error : explainNsisFailure(error, context, log, logStart);
+      }
     }
     const built = verifyPackage(context);
     const digest = await sha256(built);
@@ -290,7 +360,7 @@ async function main() {
     console.log(JSON.stringify({ root: context.root, currentVersion: context.currentVersion, version: context.version, release: context.release,
       source: context.source, baseCommit: context.baseCommit, baselineKind: context.baselineKind, changes: context.changes,
       versionFiles: context.versionEdits.map((entry) => entry.path), output: context.output,
-      electronDist: context.electronDist, electronVersion: context.electronVersion, stages: context.stages }, null, 2));
+      electronDist: context.electronDist, electronVersion: context.electronVersion, viteElectron: context.viteElectron, stages: context.stages }, null, 2));
     return;
   }
   console.log(JSON.stringify(await buildPersonal(context), null, 2));

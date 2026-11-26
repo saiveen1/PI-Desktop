@@ -77,11 +77,14 @@ the automatic personal-beta fallback.
 - Preflight resolves the Desktop package's electron-builder and electron-vite
   entries and follows electron-builder's `app-builder-lib` dependency to the
   ASAR implementation used for offline verification. It does not depend on a
-  root-level ASAR hoist. The resolved tools and NSIS template must belong to the
-  current checkout, and the NSIS template path must be at most 259 characters.
-  After a checkout move, inspect the targets of any unresolved required links;
-  repair the existing locked pnpm installation in place if needed, rather than
-  creating links by hand or reusing anything from the old checkout.
+  root-level ASAR hoist. It also checks that electron-vite resolves the same
+  Electron version as the Desktop packaging config and prints the Vite-resolved
+  manifest in `--check`. The tools, manifests and NSIS template must belong to
+  the current checkout, and the NSIS template path must be at most 259 characters.
+  If Electron resolution fails, preflight reports the consumer and any Electron
+  link targets found on its checkout-local lookup paths. After a checkout move,
+  inspect those links and repair the locked pnpm installation in place; do not
+  create links by hand or reuse anything from the old checkout.
 - Do not fetch/merge, switch tags, create another checkout, copy binaries from
   another checkout, map drives, inject `NODE_OPTIONS`, change app identity,
   disable security guards, or silently bump versions.
@@ -167,6 +170,16 @@ path with scratch logging and the real exit status. The wrapper may invoke only
 this fixed entry; it must not replace stages or sources. Inspect new log stages,
 compiler/archiver activity and artifacts at bounded checkpoints. Do not sleep,
 blindly restart, increase timeouts or kill unrelated processes.
+
+If `makensis` reports `Can't open output file`, the runner adds an
+`NSIS output-open failure` summary to the error and `build.log`. It gives the
+expected installer and uninstaller paths, presence or byte sizes, and the
+result of a non-truncating installer open (including the probe's error code if
+it fails). This is a post-failure snapshot, not the original Windows error or
+proof of a lock holder. Preserve the log and `.build` before an instrumented
+rerun; the next build cleans both. In a Windows file I/O trace, inspect
+`makensis.exe` `CreateFile` events for the reported installer path and record
+that operation's result. Do not execute the intermediate EXEs.
 
 Relevant offline checks for this workflow:
 
