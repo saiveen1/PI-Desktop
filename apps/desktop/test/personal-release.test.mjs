@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { finished } from "node:stream/promises";
+import { pathToFileURL } from "node:url";
 import test from "node:test";
 import { buildEnvironment, buildPersonal, prepareBuild, runCommand } from "../../../scripts/build-personal-release.mjs";
 import { cleanPersonalRelease as cleanStandalone } from "../../../scripts/clean-personal-release.mjs";
@@ -22,6 +23,37 @@ test("preflight selects the current checkout, exact argv, one NSIS target, and c
   assert.ok(!context.stages.some((s) => s.args.includes("zip") || s.args.includes("portable") || s.args.includes("install")));
   assert.ok(!existsSync(context.output));
   assert.ok(!existsSync(context.logs));
+});
+
+test("personal preflight selects the installed Electron distribution and rejects an incompatible runtime", (t) => {
+  const { root, desktop, env, context } = fixture(t);
+  const dist = join(desktop, "node_modules/electron/dist");
+  const preflight = () => prepareBuild({ root, platform: "win32", arch: "x64", env });
+  assert.equal(context.electronDist, dist);
+  const versionFile = join(dist, "version");
+  const installedVersion = readFileSync(versionFile);
+  write(versionFile, "0.1.0");
+  assert.throws(preflight, /Electron distribution version/);
+  write(versionFile, installedVersion);
+  const executable = join(dist, "electron.exe");
+  const wrongArchitecture = readFileSync(executable);
+  wrongArchitecture.writeUInt16LE(0xaa64, 68);
+  write(executable, wrongArchitecture);
+  assert.throws(preflight, /Electron distribution must be Windows x64/);
+  rmSync(executable);
+  assert.throws(preflight, /Installed Electron distribution.*electron\.exe/);
+});
+
+test("personal packaging removes Electron's stock app from the copied output only", async (t) => {
+  const { context, desktop } = fixture(t);
+  const { default: config } = await import(pathToFileURL(join(desktop, "electron-builder.personal.cjs")).href);
+  const appOutDir = join(context.staging, "win-unpacked");
+  for (const file of ["resources/default_app.asar", "version", "resources/app.asar"]) write(join(appOutDir, file), "fixture");
+  await config.afterPack({ appOutDir });
+  assert.equal(existsSync(join(appOutDir, "resources/default_app.asar")), false);
+  assert.equal(existsSync(join(appOutDir, "version")), false);
+  assert.equal(readFileSync(join(appOutDir, "resources/app.asar"), "utf8"), "fixture");
+  assert.ok(existsSync(join(context.electronDist, "resources/default_app.asar")));
 });
 
 test("build environment drops inherited profiles/hooks without changing the parent", () => {

@@ -1,8 +1,19 @@
 // Preserve the installed application's identity; personal delivery is NSIS only.
 const { build } = require("./package.json");
+const { rm } = require("node:fs/promises");
+const { join } = require("node:path");
+const { version: electronVersion } = require("./node_modules/electron/package.json");
 
 module.exports = {
   ...build,
+  electronVersion,
+  // Copy the installed runtime without the Windows archive-directory rename.
+  electronDist: join(__dirname, "node_modules/electron/dist"),
+  async afterPack({ appOutDir }) {
+    // Custom distributions skip electron-builder's default runtime cleanup.
+    await rm(join(appOutDir, "resources/default_app.asar"), { force: true });
+    await rm(join(appOutDir, "version"), { force: true });
+  },
   directories: { ...build.directories, output: "release/personal/.build" },
   extraMetadata: {
     ...build.extraMetadata,

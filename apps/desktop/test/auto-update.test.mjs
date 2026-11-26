@@ -6,6 +6,7 @@ import {
 } from "./helpers/source-contracts.mjs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { loadStyles } from "./helpers/styles.mjs";
 
@@ -386,8 +387,13 @@ test("personal release build is opt-in, isolated from official artifacts, and pr
     "node ../../scripts/build-personal-release.mjs",
   );
   const { default: personalConfig } = await import("../electron-builder.personal.cjs");
+  const electron = JSON.parse(await read("../node_modules/electron/package.json"));
+  assert.equal(typeof personalConfig.afterPack, "function");
   assert.deepEqual(personalConfig, {
     ...desktopPackage.build,
+    electronVersion: electron.version,
+    electronDist: fileURLToPath(new URL("../node_modules/electron/dist", import.meta.url)),
+    afterPack: personalConfig.afterPack,
     directories: { ...desktopPackage.build.directories, output: "release/personal/.build" },
     extraMetadata: { ...desktopPackage.build.extraMetadata, piSelfManaged: true, piDistribution: "installed" },
     win: { ...desktopPackage.build.win, target: [{ target: "nsis", arch: ["x64"] }] },

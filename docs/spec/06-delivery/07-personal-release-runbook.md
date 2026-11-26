@@ -70,6 +70,10 @@ the automatic personal-beta fallback.
   an explicit release; do not auto-commit someone else's changes to get clean.
 - Use existing Windows x64 Node/pnpm, Rust/MSVC, Electron and dependencies.
   Do not install a second environment solely for packaging.
+  If Electron has not been provisioned, run
+  `pnpm --filter @pi-desktop/desktop exec install-electron` from this checkout.
+  Preflight requires the installed distribution to match the Electron package
+  version and have a Windows x64 executable; it never downloads or runs it.
 - Do not fetch/merge, switch tags, create another checkout, copy binaries from
   another checkout, map drives, inject `NODE_OPTIONS`, change app identity,
   disable security guards, or silently bump versions.
@@ -97,6 +101,9 @@ the automatic personal-beta fallback.
 6. Bundle the Node agent runtime and build Desktop Main/preload/renderer.
 7. Run the offline updater regression tests, then installed electron-builder once
    with `--win nsis --x64 --publish never --config electron-builder.personal.cjs`.
+   The personal config copies the installed Electron distribution directly,
+   avoiding the archive extraction's Windows directory rename, and removes
+   Electron's stock app and version marker from the copied output only.
 8. Require Main's `photon_rs_bg.wasm` before packaging and validate the copy in
    the final ASAR. Verify resource metadata, version, unique build ID and source commit;
    verify source has not changed, hash the installer, and write its audit files.
@@ -174,8 +181,9 @@ documentation-only pushes do not. A push that advances the version to a newer
 beta also publishes a prerelease after its build succeeds. Manual dispatch with
 an empty `release_version` builds without publishing. Ordinary builds accept a
 stable or beta current version; publication remains beta-only. The Windows job
-installs locked dependencies and calls the same `pnpm dist:personal` entry, with
-offline release/policy regression, Desktop typecheck and lint. Before uploading
+installs locked dependencies, provisions the installed Electron distribution,
+and calls the same `pnpm dist:personal` entry, with offline release/policy
+regression, Desktop typecheck and lint. Before uploading
 the installer it runs `pnpm check:personal-merge` on the built source. Failed
 or missing protected behavior blocks delivery. This uses isolated fixtures,
 never installs or launches Desktop, and requires no signing credential or

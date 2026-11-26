@@ -1463,7 +1463,10 @@ Use synthetic Darwin x64/arm64 uname responses through production SSH bootstrap,
   `build-personal-release.mjs` pipeline with synthetic fixtures and external
   build-command stubs. Verify exact dependency argv, failure propagation,
   missing dist-bundle rejection, build-lock exclusion, real ASAR metadata
-  validation and SHA-256 delivery. Reject install/launch/target overrides.
+  validation and SHA-256 delivery. Check that preflight selects the checkout's
+  installed Electron, rejects a missing, wrong-version or wrong-architecture
+  runtime, and that packaging cleans stock files from the copy without modifying
+  the source runtime. Reject install/launch/target overrides.
   Exercise self-managed updater behavior through the real controller with
   Electron/electron-updater boundary stubs on all supported controller platforms.
 - **Expected:** One NSIS x64 installer target with publishing disabled;

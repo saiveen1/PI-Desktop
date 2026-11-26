@@ -2,10 +2,10 @@
 // Build artifacts only. Never install, launch Desktop, or manage user processes.
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { constants, createReadStream, appendFileSync, closeSync, copyFileSync, existsSync, mkdirSync, openSync, readFileSync, realpathSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { constants, createReadStream, appendFileSync, closeSync, copyFileSync, existsSync, mkdirSync, openSync, readFileSync, readSync, realpathSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { cleanPersonalRelease } from "./clean-personal-release.mjs";
-import { basename, dirname, extname, isAbsolute, join, resolve } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { applyFileEdits, assertRepositoryFile, planWorkspaceVersion, restoreFileEdits } from "./workspace-version.mjs";
 import { assertNewBeta, captureGitSource } from "./personal-build-source.mjs";
@@ -13,6 +13,34 @@ import { collectReleaseChanges, loadReleaseHistory, planReleaseRecord, renderBui
 
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
 const json = (path) => JSON.parse(readFileSync(path, "utf8"));
+
+function verifyInstalledElectron(root, dist, version) {
+  for (const file of ["electron.exe", "version", "resources.pak", "icudtl.dat"]) {
+    const info = statSync(join(dist, file), { throwIfNoEntry: false });
+    if (!info?.isFile() || !info.size) {
+      throw new Error(`Installed Electron distribution is missing ${file}; run pnpm --filter @pi-desktop/desktop exec install-electron.`);
+    }
+  }
+  const location = relative(root, realpathSync(dist));
+  if (location === ".." || location.startsWith(`..${sep}`) || isAbsolute(location)) {
+    throw new Error("Installed Electron distribution must belong to the current checkout.");
+  }
+  if (readFileSync(join(dist, "version"), "utf8").trim().replace(/^v/, "") !== version) {
+    throw new Error(`Installed Electron distribution version does not match the Electron package (${version}).`);
+  }
+  const dos = Buffer.alloc(64);
+  const pe = Buffer.alloc(6);
+  const fd = openSync(join(dist, "electron.exe"), "r");
+  try {
+    if (readSync(fd, dos, 0, dos.length, 0) !== dos.length || dos.readUInt16LE(0) !== 0x5a4d ||
+        readSync(fd, pe, 0, pe.length, dos.readUInt32LE(60)) !== pe.length ||
+        pe.readUInt32LE(0) !== 0x4550 || pe.readUInt16LE(4) !== 0x8664) {
+      throw new Error("Installed Electron distribution must be Windows x64.");
+    }
+  } finally {
+    closeSync(fd);
+  }
+}
 
 export function buildEnvironment(parent, pnpmEntry) {
   const env = Object.fromEntries(Object.entries(parent).filter(([key]) =>
@@ -60,6 +88,8 @@ export function prepareBuild({ root = ROOT, platform = process.platform, arch = 
       config.nsis.artifactName !== "PI-Desktop-Personal-Setup-${version}.${ext}") {
     throw new Error("Personal build configuration violates the installer-only contract.");
   }
+  const { electronDist, electronVersion } = config;
+  verifyInstalledElectron(root, electronDist, electronVersion);
   const updater = readFileSync(join(desktop, "electron/main/updater.ts"), "utf8");
   if (!updater.includes("metadata.piSelfManaged === true")) throw new Error("Current source lacks the self-managed updater guard; metadata alone does not disable updates.");
   const output = join(desktop, "release/personal");
@@ -96,7 +126,7 @@ export function prepareBuild({ root = ROOT, platform = process.platform, arch = 
   const changes = collectReleaseChanges(root, history);
   return { root, desktop, output, staging, logs, currentVersion: pkg.version, version, release: releaseVersion !== undefined,
     installerName: `PI-Desktop-Personal-Setup-${version}.exe`, source, history, versionEdits, ...changes,
-    env: buildEnvironment(env, pnpmEntry), stages, asar };
+    env: buildEnvironment(env, pnpmEntry), stages, asar, electronDist, electronVersion };
 }
 
 export function runCommand(stage, { env, log }) {
@@ -128,6 +158,9 @@ function nonempty(path) {
 export function verifyPackage(context) {
   const unpacked = join(context.staging, "win-unpacked");
   for (const path of ["PI-Desktop.exe", "resources/app.asar", "resources/bin/pi-desktop-host-core.exe", "resources/agent-runtime/sidecar.js", "resources/agent-runtime/package.json"]) nonempty(join(unpacked, path));
+  if (existsSync(join(unpacked, "resources/default_app.asar")) || existsSync(join(unpacked, "version"))) {
+    throw new Error("Packaged Electron still contains stock application files.");
+  }
   const pkg = JSON.parse(context.asar.extractFile(join(unpacked, "resources/app.asar"), "package.json").toString("utf8"));
   if (pkg.version !== context.version || pkg.piSelfManaged !== true || pkg.piDistribution !== "installed") throw new Error("Packaged version or self-managed installed metadata is incorrect.");
   if (pkg.piBuildId !== context.buildId || pkg.piSourceCommit !== context.source.commit) throw new Error("Packaged source/build identity is incorrect.");
@@ -169,6 +202,7 @@ export async function buildPersonal(context, { run = runCommand, now = () => new
     const env = { ...context.env, PI_PERSONAL_BUILD_ID: context.buildId, PI_PERSONAL_SOURCE_COMMIT: context.source.commit };
     const cleaned = cleanPersonalRelease({ root: context.root }).cleaned;
     writeFileSync(log, `Building version ${context.version}; build ${context.buildId}; source ${context.source.commit}; dirty=${buildSource.dirty}. Build only, never install.\n`);
+    appendFileSync(log, `Electron ${context.electronVersion} from ${context.electronDist}.\n`);
     for (const entry of cleaned) appendFileSync(log, `clean ${entry.removed ? "removed" : "absent"} ${entry.label}\n`);
     mkdirSync(context.staging, { recursive: true });
     for (const [index, stage] of context.stages.entries()) {
@@ -237,7 +271,8 @@ async function main() {
   if (check) {
     console.log(JSON.stringify({ root: context.root, currentVersion: context.currentVersion, version: context.version, release: context.release,
       source: context.source, baseCommit: context.baseCommit, baselineKind: context.baselineKind, changes: context.changes,
-      versionFiles: context.versionEdits.map((entry) => entry.path), output: context.output, stages: context.stages }, null, 2));
+      versionFiles: context.versionEdits.map((entry) => entry.path), output: context.output,
+      electronDist: context.electronDist, electronVersion: context.electronVersion, stages: context.stages }, null, 2));
     return;
   }
   console.log(JSON.stringify(await buildPersonal(context), null, 2));

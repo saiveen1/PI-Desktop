@@ -45,7 +45,16 @@ export function fixture(t, fixtureVersion = version) {
   fixtureGit(root, "add", "--", ".gitignore", "package.json", "apps/desktop/package.json", "apps/desktop/electron-builder.personal.cjs", "apps/desktop/electron/main/updater.ts", "docs/package.json", "packages/shared/package.json", "packages/shared/src/protocol.ts", "Cargo.toml", "Cargo.lock", "README.md", "README.zh-CN.md", "docs/releases/history.json", "CHANGELOG.md");
   fixtureGit(root, "-c", "commit.gpgsign=false", "commit", "-m", "chore(test): seed isolated build fixture", "-m", "No real toolchain or installer is executed.");
   symlinkSync(join(repo, "node_modules"), join(root, "node_modules"), "junction");
-  symlinkSync(join(repo, "apps/desktop/node_modules"), join(desktop, "node_modules"), "junction");
+  const electron = join(desktop, "node_modules/electron");
+  write(join(electron, "package.json"), '{"name":"electron","version":"43.6.0"}');
+  write(join(electron, "dist/version"), "43.6.0");
+  const pe = Buffer.alloc(70);
+  pe.writeUInt16LE(0x5a4d, 0);
+  pe.writeUInt32LE(64, 60);
+  pe.writeUInt32LE(0x4550, 64);
+  pe.writeUInt16LE(0x8664, 68);
+  write(join(electron, "dist/electron.exe"), pe);
+  for (const file of ["resources.pak", "icudtl.dat", "resources/default_app.asar"]) write(join(electron, "dist", file), "synthetic Electron distribution");
   const pnpm = join(root, "tools/pnpm.exe");
   write(pnpm, "synthetic command boundary; never execute");
   const env = { PATH: process.env.PATH || "", npm_execpath: pnpm, PI_DESKTOP_DATA_DIR: "do-not-touch-live-data", NODE_OPTIONS: "--require=do-not-load-hook" };
