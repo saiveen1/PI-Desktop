@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { generateImageBatch } from "./index.js";
 import { imageGenerationUrl } from "./openai-images.js";
 import { generateTestImage } from "./test-fixture.js";
+import { imageGenerationDescription } from "./tool.js";
 import {
   publicImageAddress,
   generatedImageType,
@@ -17,6 +18,12 @@ const response = () => Response.json({ data: [{ b64_json: png }] });
 const save = async (_image: unknown, index: number) => `/scratch/image-${index}.png`;
 
 describe("image generation", () => {
+  it("instructs the model not to duplicate renderer-owned image results", () => {
+    expect(imageGenerationDescription).toContain("desktop displays automatically");
+    expect(imageGenerationDescription).toContain("do not duplicate them as Markdown images");
+    expect(imageGenerationDescription).toContain("Confirm successes in text and report failures");
+    expect(imageGenerationDescription).toContain("do not retry without the user's request");
+  });
   it("normalizes root/versioned base URLs without doubling the version", () => {
     expect(imageGenerationUrl(endpoint.baseUrl)).toBe("https://example.com/v1/images/generations");
     expect(imageGenerationUrl("https://example.com/gateway/v1/")).toBe(
