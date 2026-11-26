@@ -15,6 +15,19 @@ export const es = {
   observerGuard: observerGuard.es,
   toolObserver: en.toolObserver,
   performanceDiagnostics: en.performanceDiagnostics,
+  generatedGallery: {
+    title: "Imágenes generadas",
+    succeeded: "{{count}} imágenes generadas", succeeded_one: "{{count}} imagen generada", succeeded_other: "{{count}} imágenes generadas",
+    timedOut: "{{count}} imágenes agotaron el tiempo de espera", timedOut_one: "{{count}} imagen agotó el tiempo de espera", timedOut_other: "{{count}} imágenes agotaron el tiempo de espera",
+    failed: "{{count}} imágenes fallidas", failed_one: "{{count}} imagen fallida", failed_other: "{{count}} imágenes fallidas",
+    cancelled: "{{count}} imágenes canceladas", cancelled_one: "{{count}} imagen cancelada", cancelled_other: "{{count}} imágenes canceladas",
+    details: "Detalles", item: "Lote {{batch}}, imagen {{index}}", openImage: "Abrir imagen {{index}}",
+  },
+  imagePreviewState: {
+    loading: "Cargando vista previa…", missing: "No se encontró el archivo de imagen", restricted: "Acceso a la imagen restringido",
+    tooLarge: "Imagen demasiado grande para la vista previa", invalid: "Imagen no válida", unavailable: "Vista previa no disponible",
+    reduced: "Vista previa de resolución reducida", openOriginal: "Ver original", original: "Resolución original", showPreview: "Volver a la vista previa", openOriginalFailed: "No se pudo leer la imagen original.",
+  },
   toolImages: {
     title: "Imágenes de la herramienta", image: "Imagen {{index}}", returned: "{{count}} imágenes devueltas",
     returned_one: "{{count}} imagen devuelta", returned_other: "{{count}} imágenes devueltas",

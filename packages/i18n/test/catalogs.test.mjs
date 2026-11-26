@@ -50,6 +50,35 @@ test("every shipped catalog matches English keys and interpolation variables", (
   }
 });
 
+test("generated image gallery and preview states are localized with count and item placeholders", () => {
+  const counts = ["succeeded", "timedOut", "failed", "cancelled"];
+  const keys = ["title", "details", "item", "openImage", ...counts.flatMap((key) => [key, `${key}_one`, `${key}_other`])]
+    .map((key) => `generatedGallery.${key}`)
+    .concat(["loading", "missing", "restricted", "tooLarge", "invalid", "unavailable", "reduced", "openOriginal", "original", "showPreview", "openOriginalFailed"].map((key) => `imagePreviewState.${key}`));
+  for (const [id, catalog] of Object.entries(catalogs)) {
+    const flat = flattenCatalog(catalog);
+    for (const key of keys) {
+      assert.equal(typeof flat[key], "string", `${id} ${key}`);
+      assert.ok(flat[key].trim(), `${id} ${key}`);
+      assert.deepEqual(placeholders(flat[key]), placeholders(english[key]), `${id} ${key}`);
+    }
+    for (const key of counts) {
+      for (const suffix of ["", "_one", "_other"]) {
+        assert.deepEqual(placeholders(flat[`generatedGallery.${key}${suffix}`]), ["count"], `${id} ${key}${suffix}`);
+      }
+    }
+    assert.deepEqual(placeholders(flat["generatedGallery.item"]), ["batch", "index"]);
+    assert.deepEqual(placeholders(flat["generatedGallery.openImage"]), ["index"]);
+  }
+  assert.equal(english["generatedGallery.succeeded_one"], "{{count}} image generated");
+  assert.equal(english["generatedGallery.succeeded_other"], "{{count}} images generated");
+  assert.match(english["imagePreviewState.reduced"], /reduced-resolution/i);
+  assert.equal(english["imagePreviewState.openOriginal"], "View original");
+  assert.equal(english["imagePreviewState.original"], "Original resolution");
+  assert.equal(english["imagePreviewState.showPreview"], "Back to preview");
+  assert.match(english["imagePreviewState.openOriginalFailed"], /read/i);
+});
+
 test("Live Voice preparation and call recovery copy is localized in every shipped catalog", () => {
   const keys = [
     "prepareCall", "details", "workOptions", "allowWork", "noWorkSession",

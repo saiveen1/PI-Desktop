@@ -6,6 +6,7 @@ import { catalogs } from "@pi-desktop/i18n";
 import type { AppSettings, ProviderPublic, UiMessage } from "@pi-desktop/shared";
 import { ModelConfigPage } from "../../apps/desktop/src/components/settings/ModelConfigPage";
 import { GeneratedImages } from "../../apps/desktop/src/features/chat/transcript/GeneratedImages";
+import { verifyGeneratedTurnGallery } from "./generated-turn-gallery";
 import { Markdown } from "../../apps/desktop/src/components/Markdown";
 import { api } from "../../apps/desktop/src/lib/api";
 import { useAppStore } from "../../apps/desktop/src/stores/app-store";
@@ -127,6 +128,7 @@ globalThis.imageGenerationProbe = async () => {
       ".provider-chosen-capability input[type=\"checkbox\"]",
     )].find((element) => element.getAttribute("aria-label") === label);
   try {
+    await verifyGeneratedTurnGallery(root, container, i18n);
     for (const locale of ["en", "zh-CN"]) {
       await i18n.changeLanguage(locale);
       // The scenario precondition is "no image model configured", so each locale
@@ -371,7 +373,7 @@ globalThis.imageGenerationProbe = async () => {
     } as UiMessage;
     render(message);
     await until(() => (container.querySelector("img")?.naturalWidth ?? 0) > 0, "generated preview did not decode");
-    assert(container.textContent?.includes("IMAGE_TIMEOUT"), "partial failure missing");
+    assert(container.innerText.includes(i18n.t("generatedGallery.timedOut", { count: 1 })), "partial failure count missing");
     render({
       ...message,
       toolResult: {
@@ -409,6 +411,10 @@ globalThis.imageGenerationProbe = async () => {
         "unavailable-summary",
         "chat-default-preserved",
         "image-preview-partial-failure",
+        "turn-contact-sheet-14-batches-37-items-28-images-9-timeouts",
+        "deferred-card-read-and-stable-decode-error",
+        "mixed-results-and-cross-batch-viewer-append",
+        "failure-only-and-cancelled-trace",
         "setup-navigation",
         "absolute-image-markdown",
         "refused-image-selection-report",

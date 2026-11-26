@@ -87,29 +87,31 @@ attachment store after realpath containment. Each edit input set is capped at
 
 ## Results and recovery
 
-Successful results appear in one rounded image card. A batch with multiple
-successful images has a thumbnail strip beside the selected image; selecting a
-thumbnail updates the card and its download target without hiding failed-result
-messages. The strip remains reachable in narrow windows. Opening the card shows
-a modal preview above the conversation, with a centered image, compact floating
-controls and a themed scrim. A click in blank space dismisses without activating
-the conversation underneath; a press and release must both hit the same
-backdrop. The image, thumbnails and controls do not dismiss on click, except
-for explicit close or open-file actions. Escape and the close button also
-dismiss, returning focus to the trigger without scrolling the conversation.
-The preview retains keyboard previous/next, batch thumbnails, zoom and fit,
-and a way back to the file panel. Switching images never displays the previous
-image under the newly selected thumbnail.
-Switching between loaded images keeps the card and viewer image visible without a
-blank placeholder frame. The viewer keeps fitted dimensions stable while the
-next image decodes, and the latest navigation wins during rapid input. The selected
-thumbnail uses a light gray ring. Viewer selection remains selected in chat after closing.
-A bounded
-preview can be downloaded from the card or viewer using a safe MIME-derived
-filename. The viewer's Show in folder action uses the contained `fs/reveal`
-path. A missing or unreadable preview has no download action; revealing a
-missing file reports an error. These actions do not move or overwrite the
-original scratch file.
+Successful results and per-item failure states remain outside collapsible process
+details. Standalone results remain visible. Multiple generated batches in one
+assistant turn share an overview with status counts derived from result metadata
+before previews load; tool details do not duplicate the gallery. Previews load
+lazily near visibility. Thumbnail selection opens the shared conversation viewer,
+which navigates across the turn's images. Only thumbnail presentation crops fully
+transparent margins; the original canvas remains intact in the viewer and saved
+file. Loading, missing, restricted, too-large, invalid and unavailable previews
+are distinguishable. A reduced-resolution preview is labeled as such.
+
+The modal viewer keeps keyboard previous/next, thumbnails, zoom, fit and a file
+panel action. A blank-space dismissal requires both press and release on the
+backdrop; Escape and close also dismiss and return focus without scrolling. Image,
+thumbnail and control clicks do not dismiss except explicit close or file actions.
+Switching images must not show the previous image under the new selection; loaded
+images remain visible without a blank frame, fitted dimensions stay stable while
+another decodes, and the latest navigation wins. Selection remains in chat after
+closing. The contained `fs/reveal` action reports errors for missing files.
+Save As is a separate action that saves the original file when the preview is
+reduced. For a local session's generated raster in its own scratch directory,
+the user may request the full-resolution original inside the viewer, return to
+the reduced preview, and see an error if the read fails. The opt-in original
+read is bounded to 16 MiB and 16 million pixels and checks the signature, decoded
+dimensions and realpath containment; it never falls back to preview bytes or opens
+a system application. These actions do not move or overwrite the original.
 
 The renderer owns successful-result previews in the conversation. The bundled
 imagegen skill confirms generation in text and reports failures, but does not

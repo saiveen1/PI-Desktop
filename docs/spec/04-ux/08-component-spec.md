@@ -1,5 +1,18 @@
 # 08. Component Spec
 
+### Generated-image overview
+
+Generated results remain outside folded process details, including standalone
+results. Multiple batches in one turn share an overview whose status counts come
+from metadata before previews load. Previews load near visibility; selecting a
+thumbnail opens the shared viewer. Thumbnail presentation may crop only fully
+transparent margins, never the viewer or saved original canvas. Show distinct
+loading, missing, restricted, too-large, invalid and unavailable states, and
+label reduced-resolution previews. For eligible local generated files, offer an
+explicit original-resolution view in the same dialog, a return to preview, and a
+visible read error. Save As is separate and saves the original.
+
+
 ### Composer persona selector
 
 A labeled Persona chip sits immediately before the mode picker. Its popover

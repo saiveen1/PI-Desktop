@@ -402,6 +402,29 @@ folder/mixed-selection behavior. No system clipboard contents are changed.
   use `PI_IMAGE_CHAT_EVIDENCE_DIR`. The images are deterministic raster fixtures,
   not evidence of real-model quality or provider compatibility.
 
+## E2E-IMAGES-turn-overview
+
+- **Preconditions:** Isolated synthetic session with multiple generated batches,
+  mixed successes, timeouts, failures and cancellations; include a standalone
+  result, a transparent-margin image and an oversized original. No live provider.
+- **Steps:** Inspect a collapsed turn before preview reads complete, scroll its
+  gallery into view, open a thumbnail, navigate between batches, view an eligible
+  original in the dialog, return to preview, and separately use Save As. Repeat
+  after session reload; exercise missing, restricted, invalid and unavailable files.
+- **Expected:** Metadata counts appear before image loading; standalone results
+  remain visible and details do not duplicate the gallery. Near-visible previews
+  load lazily. Only thumbnails visually trim fully transparent margins; the viewer
+  and saved original retain the full canvas. Reduced previews are labeled; file
+  errors are distinct and original-read failures are visible. Paths remain subject
+  to the existing containment boundary.
+- **Specs:** 03-runtime/21-image-generation; 04-ux/08-component-spec.
+- **Coverage:** `node scripts/e2e-image-generation-ui.mjs` exercises cold entry,
+  stable sizing, counts and cross-batch navigation with 14 synthetic batches.
+  `node --test apps/desktop/test/tool-result-images-user-path.test.mjs` covers
+  restored image presentation, full-resolution viewing and saving; the original
+  reader and IPC tests separately check byte identity and session containment.
+  These are isolated fixtures, not a replay against a live provider.
+
 ## Conversation Stream & Abort
 
 ## E2E-008: New session and send message

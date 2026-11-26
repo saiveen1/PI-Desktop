@@ -15,6 +15,19 @@ export const fr = {
   observerGuard: observerGuard.fr,
   toolObserver: en.toolObserver,
   performanceDiagnostics: en.performanceDiagnostics,
+  generatedGallery: {
+    title: "Images générées",
+    succeeded: "{{count}} images générées", succeeded_one: "{{count}} image générée", succeeded_other: "{{count}} images générées",
+    timedOut: "{{count}} images : délai dépassé", timedOut_one: "{{count}} image : délai dépassé", timedOut_other: "{{count}} images : délai dépassé",
+    failed: "{{count}} images en échec", failed_one: "{{count}} image en échec", failed_other: "{{count}} images en échec",
+    cancelled: "{{count}} images annulées", cancelled_one: "{{count}} image annulée", cancelled_other: "{{count}} images annulées",
+    details: "Détails", item: "Lot {{batch}}, image {{index}}", openImage: "Ouvrir l’image {{index}}",
+  },
+  imagePreviewState: {
+    loading: "Chargement de l’aperçu…", missing: "Fichier image introuvable", restricted: "Accès à l’image restreint",
+    tooLarge: "Image trop volumineuse pour l’aperçu", invalid: "Image invalide", unavailable: "Aperçu indisponible",
+    reduced: "Aperçu en résolution réduite", openOriginal: "Voir l’original", original: "Résolution originale", showPreview: "Retour à l’aperçu", openOriginalFailed: "Impossible de lire l’image originale.",
+  },
   toolImages: {
     title: "Images de l’outil", image: "Image {{index}}", returned: "{{count}} images renvoyées",
     returned_one: "{{count}} image renvoyée", returned_other: "{{count}} images renvoyées",

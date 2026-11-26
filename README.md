@@ -205,8 +205,13 @@ This edition strengthens the existing framework rather than replacing it.
   and delivery failures do not automatically repeat generation. Tool and generated
   images open over the conversation and close with a click in the surrounding
   space. History restores retained tool-image bytes when they fit a bounded
-  single-message read, even if the source file is outside the project. Oversized
-  local generated images use a bounded thumbnail while downloads keep the original.
+  single-message read, even if the source file is outside the project. Generated
+  batches in one turn share an overview of results and status counts;
+  previews load near visibility, and selecting a thumbnail opens the viewer.
+  Transparent margins are cropped only in thumbnails; the original canvas remains
+  intact in the viewer and downloads. Reduced-resolution previews are identified,
+  and eligible local originals can be viewed in the same dialog on request;
+  Save As remains a separate action.
 
 ### Fixes that matter in daily use
 

@@ -4,11 +4,12 @@ import type { UiMessage } from "@pi-desktop/shared";
 import { IconChevronRight, IconImage } from "../../../components/icons";
 import { Button } from "../../../components/ui";
 import type { AssistantTurnPart } from "../../../lib/assistant-turns";
+import { groupGeneratedImageMessages } from "../../../lib/generated-image-groups";
 import { turnToolImageMessages } from "../../../lib/tool-image-groups";
 import { toolResultImageSet } from "../../../lib/tool-result-images";
 import { useSlotSessionId } from "../../../plugins/renderer-slots/use-slots";
 import { useAppStore } from "../../../stores/app-store";
-import { GeneratedImages } from "./GeneratedImages";
+import { GeneratedBatchGallery, GeneratedImages } from "./GeneratedImages";
 import { GeneratedImageThumbnail } from "./GeneratedImageThumbnail";
 import { GeneratedImageViewer } from "./GeneratedImageViewer";
 import { useRestoredToolImages } from "./use-restored-tool-images";
@@ -16,8 +17,12 @@ import "../../../styles/generated-images.css";
 import "../../../styles/tool-result-images.css";
 
 export function TurnToolImages({ parts }: { parts: readonly AssistantTurnPart[] }) {
-  const messages = useMemo(() => turnToolImageMessages(parts), [parts]);
-  return <>{messages.map((message) => <ToolResultImages key={message.id} message={message} />)}</>;
+  const paneSessionId = useSlotSessionId();
+  const sessionId = useAppStore(state => paneSessionId || state.activeSessionId);
+  const outputs = useMemo(() => groupGeneratedImageMessages(turnToolImageMessages(parts)), [parts]);
+  return <>{outputs.map(output => output.kind === "generated"
+    ? <GeneratedBatchGallery key={JSON.stringify([sessionId, output.batches[0].message.id])} batches={output.batches} />
+    : <ToolResultImages key={output.message.id} message={output.message} />)}</>;
 }
 
 export const ToolResultImages = memo(function ToolResultImages({ message }: { message: UiMessage }) {

@@ -15,6 +15,19 @@ export const ko = {
   observerGuard: observerGuard.ko,
   toolObserver: en.toolObserver,
   performanceDiagnostics: en.performanceDiagnostics,
+  generatedGallery: {
+    title: "생성된 이미지",
+    succeeded: "{{count}}개 생성 완료", succeeded_one: "{{count}}개 생성 완료", succeeded_other: "{{count}}개 생성 완료",
+    timedOut: "{{count}}개 시간 초과", timedOut_one: "{{count}}개 시간 초과", timedOut_other: "{{count}}개 시간 초과",
+    failed: "{{count}}개 실패", failed_one: "{{count}}개 실패", failed_other: "{{count}}개 실패",
+    cancelled: "{{count}}개 취소됨", cancelled_one: "{{count}}개 취소됨", cancelled_other: "{{count}}개 취소됨",
+    details: "세부 정보", item: "배치 {{batch}}, 이미지 {{index}}", openImage: "이미지 {{index}} 열기",
+  },
+  imagePreviewState: {
+    loading: "미리보기 불러오는 중…", missing: "이미지 파일을 찾을 수 없음", restricted: "이미지 접근이 제한됨",
+    tooLarge: "이미지가 너무 커서 미리 볼 수 없음", invalid: "유효하지 않은 이미지", unavailable: "미리보기 불가",
+    reduced: "낮은 해상도 미리보기", openOriginal: "원본 보기", original: "원본 해상도", showPreview: "미리보기로 돌아가기", openOriginalFailed: "원본 이미지를 읽을 수 없습니다.",
+  },
   toolImages: {
     title: "도구 이미지", image: "이미지 {{index}}", returned: "이미지 {{count}}개 반환됨",
     returned_one: "이미지 {{count}}개 반환됨", returned_other: "이미지 {{count}}개 반환됨",

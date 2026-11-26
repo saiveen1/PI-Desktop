@@ -1,0 +1,31 @@
+.generated-image-viewer-viewport > img {
+  background-color: var(--ds-bg-secondary);
+  background-image: conic-gradient(var(--ds-bg-primary) 25%, transparent 0 50%, var(--ds-bg-primary) 0 75%, transparent 0);
+  background-size: 16px 16px;
+}
+
+.generated-image-viewer-preview-info {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0 6px;
+  padding-inline: 6px;
+  color: var(--ds-text-secondary);
+  text-align: center;
+}
+
+.generated-image-viewer .generated-image-viewer-preview-info button {
+  color: var(--ds-text-primary);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.generated-image-viewer .generated-image-viewer-preview-info button[aria-disabled="true"] {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.generated-image-viewer-original-status {
+  flex-basis: 100%;
+}

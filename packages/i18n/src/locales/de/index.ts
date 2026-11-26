@@ -15,6 +15,19 @@ export const de = {
   observerGuard: observerGuard.de,
   toolObserver: en.toolObserver,
   performanceDiagnostics: en.performanceDiagnostics,
+  generatedGallery: {
+    title: "Generierte Bilder",
+    succeeded: "{{count}} Bilder generiert", succeeded_one: "{{count}} Bild generiert", succeeded_other: "{{count}} Bilder generiert",
+    timedOut: "{{count}} Bilder: Zeitüberschreitung", timedOut_one: "{{count}} Bild: Zeitüberschreitung", timedOut_other: "{{count}} Bilder: Zeitüberschreitung",
+    failed: "{{count}} Bilder fehlgeschlagen", failed_one: "{{count}} Bild fehlgeschlagen", failed_other: "{{count}} Bilder fehlgeschlagen",
+    cancelled: "{{count}} Bilder abgebrochen", cancelled_one: "{{count}} Bild abgebrochen", cancelled_other: "{{count}} Bilder abgebrochen",
+    details: "Details", item: "Stapel {{batch}}, Bild {{index}}", openImage: "Bild {{index}} öffnen",
+  },
+  imagePreviewState: {
+    loading: "Vorschau wird geladen…", missing: "Bilddatei nicht gefunden", restricted: "Bildzugriff eingeschränkt",
+    tooLarge: "Bild für Vorschau zu groß", invalid: "Ungültiges Bild", unavailable: "Vorschau nicht verfügbar",
+    reduced: "Vorschau mit reduzierter Auflösung", openOriginal: "Original ansehen", original: "Originalauflösung", showPreview: "Zurück zur Vorschau", openOriginalFailed: "Das Originalbild konnte nicht gelesen werden.",
+  },
   toolImages: {
     title: "Werkzeugbilder", image: "Bild {{index}}", returned: "{{count}} Bilder zurückgegeben",
     returned_one: "{{count}} Bild zurückgegeben", returned_other: "{{count}} Bilder zurückgegeben",

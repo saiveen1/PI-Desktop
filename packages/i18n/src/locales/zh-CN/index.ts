@@ -17,6 +17,19 @@ export const zhCN = {
   observerGuard: observerGuard["zh-CN"],
   performanceDiagnostics: performanceDiagnostics["zh-CN"],
   toolObserver,
+  generatedGallery: {
+    title: "生成的图片",
+    succeeded: "{{count}} 张生成成功", succeeded_one: "{{count}} 张生成成功", succeeded_other: "{{count}} 张生成成功",
+    timedOut: "{{count}} 张超时", timedOut_one: "{{count}} 张超时", timedOut_other: "{{count}} 张超时",
+    failed: "{{count}} 张失败", failed_one: "{{count}} 张失败", failed_other: "{{count}} 张失败",
+    cancelled: "{{count}} 张已取消", cancelled_one: "{{count}} 张已取消", cancelled_other: "{{count}} 张已取消",
+    details: "详情", item: "第 {{batch}} 批，第 {{index}} 张", openImage: "打开第 {{index}} 张图片",
+  },
+  imagePreviewState: {
+    loading: "正在加载预览…", missing: "图片文件不存在", restricted: "图片访问受限",
+    tooLarge: "图片过大，无法预览", invalid: "图片无效", unavailable: "预览不可用",
+    reduced: "低分辨率预览", openOriginal: "查看原图", original: "原始分辨率", showPreview: "返回预览", openOriginalFailed: "无法读取原图。",
+  },
   toolImages: {
     title: "工具图像", image: "图像 {{index}}", returned: "已返回 {{count}} 张图像",
     returned_one: "已返回 {{count}} 张图像", returned_other: "已返回 {{count}} 张图像",

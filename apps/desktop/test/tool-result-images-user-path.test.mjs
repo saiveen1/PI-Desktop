@@ -13,7 +13,7 @@ const { build } = createRequire(join(root, "packages/agent-runtime/package.json"
 const inspectionStages = ["open", "next", "previous", "close", "keyboard-open", "close-again",
   "lightbox-open", "lightbox-drag", "lightbox-image", "lightbox-zoom", "lightbox-left", "lightbox-reopen", "lightbox-right",
   "restore", "retained-image", "states", "read-disclosure", "turn", "group", "group-next", "group-close", "group-boundaries"];
-const generationStages = ["generated-large", "generated", "generated-dismiss", "snapshot-light", "snapshot-dark", "finish"];
+const generationStages = ["generated-large", "generated", "generated-dismiss", "generated-aggregate", "snapshot-light", "snapshot-dark", "finish"];
 
 async function runFixture(temp) {
   const entry = join(temp, "main.cjs");

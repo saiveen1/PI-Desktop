@@ -17,6 +17,19 @@ export const zhTW = {
   observerGuard: observerGuard["zh-TW"],
   performanceDiagnostics: performanceDiagnostics["zh-TW"],
   toolObserver,
+  generatedGallery: {
+    title: "生成的圖片",
+    succeeded: "{{count}} 張生成成功", succeeded_one: "{{count}} 張生成成功", succeeded_other: "{{count}} 張生成成功",
+    timedOut: "{{count}} 張逾時", timedOut_one: "{{count}} 張逾時", timedOut_other: "{{count}} 張逾時",
+    failed: "{{count}} 張失敗", failed_one: "{{count}} 張失敗", failed_other: "{{count}} 張失敗",
+    cancelled: "{{count}} 張已取消", cancelled_one: "{{count}} 張已取消", cancelled_other: "{{count}} 張已取消",
+    details: "詳細資訊", item: "第 {{batch}} 批，第 {{index}} 張", openImage: "開啟第 {{index}} 張圖片",
+  },
+  imagePreviewState: {
+    loading: "正在載入預覽…", missing: "找不到圖片檔案", restricted: "圖片存取受限",
+    tooLarge: "圖片過大，無法預覽", invalid: "圖片無效", unavailable: "無法預覽",
+    reduced: "低解析度預覽", openOriginal: "檢視原圖", original: "原始解析度", showPreview: "返回預覽", openOriginalFailed: "無法讀取原圖。",
+  },
   toolImages: {
     title: "工具圖像", image: "圖像 {{index}}", returned: "已傳回 {{count}} 張圖像",
     returned_one: "已傳回 {{count}} 張圖像", returned_other: "已傳回 {{count}} 張圖像",

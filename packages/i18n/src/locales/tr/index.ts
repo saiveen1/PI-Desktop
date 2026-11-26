@@ -15,6 +15,19 @@ export const tr = {
   observerGuard: observerGuard.tr,
   toolObserver: en.toolObserver,
   performanceDiagnostics: en.performanceDiagnostics,
+  generatedGallery: {
+    title: "Oluşturulan görseller",
+    succeeded: "{{count}} görsel oluşturuldu", succeeded_one: "{{count}} görsel oluşturuldu", succeeded_other: "{{count}} görsel oluşturuldu",
+    timedOut: "{{count}} görsel zaman aşımına uğradı", timedOut_one: "{{count}} görsel zaman aşımına uğradı", timedOut_other: "{{count}} görsel zaman aşımına uğradı",
+    failed: "{{count}} görsel başarısız", failed_one: "{{count}} görsel başarısız", failed_other: "{{count}} görsel başarısız",
+    cancelled: "{{count}} görsel iptal edildi", cancelled_one: "{{count}} görsel iptal edildi", cancelled_other: "{{count}} görsel iptal edildi",
+    details: "Ayrıntılar", item: "Grup {{batch}}, görsel {{index}}", openImage: "Görsel {{index}} aç",
+  },
+  imagePreviewState: {
+    loading: "Önizleme yükleniyor…", missing: "Görsel dosyası bulunamadı", restricted: "Görsele erişim kısıtlı",
+    tooLarge: "Görsel önizleme için çok büyük", invalid: "Geçersiz görsel", unavailable: "Önizleme kullanılamıyor",
+    reduced: "Düşük çözünürlüklü önizleme", openOriginal: "Orijinali görüntüle", original: "Orijinal çözünürlük", showPreview: "Önizlemeye dön", openOriginalFailed: "Orijinal görsel okunamadı.",
+  },
   toolImages: {
     title: "Araç görselleri", image: "Görsel {{index}}", returned: "{{count}} görsel döndürüldü",
     returned_one: "{{count}} görsel döndürüldü", returned_other: "{{count}} görsel döndürüldü",
