@@ -39,13 +39,13 @@ function gif(width: number, height: number): Uint8Array {
 
 function riff(chunk: string, payload: number[]): Uint8Array {
   const bytes = new Uint8Array(16 + payload.length);
-  bytes.set([...Buffer.from("RIFF"), 0, 0, 0, 0, ...Buffer.from("WEBP"), ...Buffer.from(chunk)]);
+  bytes.set(new TextEncoder().encode(`RIFF\0\0\0\0WEBP${chunk}`));
   bytes.set(payload, 16);
   return bytes;
 }
 
 function base64(bytes: Uint8Array): string {
-  return Buffer.from(bytes).toString("base64");
+  return btoa(Array.from(bytes, (byte) => String.fromCharCode(byte)).join(""));
 }
 
 describe("image dimension probe", () => {
