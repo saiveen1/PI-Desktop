@@ -56,3 +56,13 @@ completed output on cancellation and makes delivery failures terminal to automat
 replay. Existing inline-preview limits still apply; larger files remain accessible
 through the file-chip fallback. This accepts providers' native output without
 pretending that a local function tool executed.
+
+## Amendment: opt-in local original viewing
+
+The existing image IPC gains an opt-in original read for the owning local
+session's scratch raster only. It retains realpath containment, validates the
+generated format and decoded dimensions, and caps source bytes and pixels at
+16 MiB and 16 million. It returns the original bytes, not a reduced preview,
+only after an explicit viewer action. Other reads keep their existing 5 MiB
+limit. This does not authorize a generic file read, OS shell open, regeneration,
+remote session read or new persistence; Save As remains a distinct action.

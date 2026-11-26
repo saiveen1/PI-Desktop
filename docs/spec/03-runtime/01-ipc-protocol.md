@@ -2276,7 +2276,7 @@ Renderer IPC kept for the Plan-safe preview facade and URL fallback:
   (ADR 0339); no path is withheld, since the file is only shown to the user who
   clicked it. Relative traversal, `~`, and other escapes are rejected
   (`INVALID_ARGUMENT`).
-- `fs/readImageDataUrl({ref, mimeType?, sessionId?, allowThumbnail?})` → `FsImageDataUrlResult`
+- `fs/readImageDataUrl({ref, mimeType?, sessionId?, allowThumbnail?, generatedOriginal?})` → `FsImageDataUrlResult`
   (`image` with `dataUrl`, or `missing` / `notImage` / `tooLarge`). Root
   containment only: the ADR 0339 external-file rule does not apply, so a
   model-written image reference cannot render an arbitrary local image. Never returns non-image bytes. Renderer-only;
@@ -2285,7 +2285,15 @@ Renderer IPC kept for the Plan-safe preview facade and URL fallback:
   a PNG preview if the local decoder supports the source (up to 1024 px on
   the preview's long edge), with `isThumbnail: true`.
   The source must stay within the generation byte cap and 16 million pixels.
-  The option does not change remote reads or file-panel preview limits.
+  The option does not change remote reads or file-panel preview limits. Explicit
+  `generatedOriginal: true` instead requires an existing local session and an
+  absolute raster inside that session's actual scratch directory. Main checks
+  realpath containment, PNG/JPEG/WebP signature and decoded dimensions, with
+  16 MiB and 16 million pixel caps. It returns original bytes without thumbnail
+  fallback; remote, native-pi, missing, invalid and escaped paths are denied.
+  Old callers retain the ordinary 5 MiB behavior. The renderer exposes this as
+  `fsReadGeneratedOriginal(ref, mimeType, sessionId)` for an explicit viewer
+  action; it does not invoke the system shell or Save As.
 - `fs/reveal({path})` → reveal in Finder. Same rules as `fs/read`,
   including the ADR 0339 external-file rule.
 - `fs/open({path, mimeType?})` → open an existing regular file with the OS

@@ -98,10 +98,10 @@ app.whenReady().then(async () => {
   try {
     if (${nativePreview}) {
       log("TOOL_IMAGES_NATIVE_PREVIEW");
-      const { readGeneratedImagePreview } = await import(pathToFileURL(${JSON.stringify(join(root, "apps/desktop/electron/main/generated-image-preview.ts"))}).href);
+      const { readGeneratedImagePreview, readGeneratedImageOriginal } = await import(pathToFileURL(${JSON.stringify(join(root, "apps/desktop/electron/main/generated-image-preview.ts"))}).href);
       const width = 2304, height = 1536;
       const pixels = randomBytes(width * height * 4);
-      for (let offset = 3; offset < pixels.length; offset += 4) pixels[offset] = 255;
+      for (let offset = 3; offset < pixels.length; offset += 4) pixels[offset] = offset < width * 4 ? 0 : 255;
       const original = nativeImage.createFromBitmap(pixels, { width, height }).toPNG();
       assert.ok(original.length > 5 * 1024 * 1024 && original.length < 16 * 1024 * 1024);
       const raster = path.join(__dirname, "large.png");
@@ -111,6 +111,13 @@ app.whenReady().then(async () => {
       assert.equal(preview.isThumbnail, true);
       assert.ok(preview.size < original.length);
       assert.deepEqual(nativeImage.createFromDataURL(preview.dataUrl).getSize(), { width: 1024, height: 683 });
+      const full = await readGeneratedImageOriginal(raster, __dirname, "image/png", bytes => nativeImage.createFromBuffer(bytes).getSize());
+      assert.equal(full.kind, "image");
+      assert.equal(full.isThumbnail, undefined);
+      assert.deepEqual(Buffer.from(full.dataUrl.split(",")[1], "base64"), original);
+      const decoded = nativeImage.createFromDataURL(full.dataUrl);
+      assert.deepEqual(decoded.getSize(), { width, height });
+      assert.equal(decoded.toBitmap()[3], 0);
       assert.deepEqual(fs.readFileSync(raster), original);
       log("TOOL_IMAGES_NATIVE_PREVIEW passed");
     }

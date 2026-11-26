@@ -1885,6 +1885,10 @@ export const api = {
       ...(sessionId ? { sessionId } : {}),
       ...(allowThumbnail ? { allowThumbnail } : {}),
     }),
+  fsReadGeneratedOriginal: (ref: string, mimeType: string | undefined, sessionId: string) =>
+    invoke<FsImageDataUrlResult>(IPC.invoke.fsReadImageDataUrl, {
+      ref, ...(mimeType ? { mimeType } : {}), sessionId, generatedOriginal: true,
+    }),
   fsReveal: (path: string, sessionId?: string) => invoke(IPC.invoke.fsReveal, { path, ...(sessionId ? { sessionId } : {}) }),
   fsRevealDirectory: (path: string, sessionId: string) =>
     invoke(IPC.invoke.fsReveal, { path, sessionId, directory: true }),

@@ -161,3 +161,37 @@ it("keeps relative, absolute and workspace-boundary behavior", async () => {
     expect(await resolveRealOpenablePath("/etc/passwd", root, [scratch])).toBeNull();
   }
 });
+
+it("reports an absent image only for a leaf with a proven contained parent", async () => {
+  const base = await tempDir("pi-image-absence-");
+  const root = join(base, "workspace"), attachments = join(base, "attachments");
+  await mkdir(root); await mkdir(attachments);
+  const missing = { kind: "missing", errorCode: "FILE_NOT_FOUND" };
+  const denied = { kind: "missing", errorCode: "PATH_OUTSIDE_ALLOWED_ROOT" };
+  for (const ref of ["absent.png", join(root, "absent.png"), `attachments/${"b".repeat(64)}`]) {
+    expect(await readOpenableImage(ref, root, [attachments])).toEqual(missing);
+    expect(await resolveRealOpenablePath(ref, root, [attachments])).toBeNull();
+  }
+  await writeFile(join(root, "not-a-directory"), "text");
+  for (const ref of ["missing-parent/absent.png", "not-a-directory/a.png", "../outside.png", join(base, "outside.png")]) {
+    expect(await readOpenableImage(ref, root, [attachments])).toEqual(denied);
+  }
+});
+
+it("keeps absent and present children of escaped links indistinguishable", async (ctx) => {
+  const base = await tempDir("pi-image-parent-");
+  const root = join(base, "workspace"), outside = join(base, "outside"), link = join(root, "link");
+  await mkdir(root); await mkdir(outside);
+  try { await symlink(outside, link, process.platform === "win32" ? "junction" : "dir"); }
+  catch (error) {
+    if (["EPERM", "EACCES", "ENOSYS"].includes((error as NodeJS.ErrnoException).code ?? "")) return ctx.skip();
+    throw error;
+  }
+  await writeFile(join(outside, "present.png"), PNG);
+  const denied = { kind: "missing", errorCode: "PATH_OUTSIDE_ALLOWED_ROOT" };
+  expect(await readOpenableImage("link/present.png", root, [])).toEqual(denied);
+  expect(await readOpenableImage("link/absent.png", root, [])).toEqual(denied);
+  await rm(outside, { recursive: true });
+  expect(await readOpenableImage("link", root, [])).toEqual(denied);
+  expect(await readOpenableImage("link/absent.png", root, [])).toEqual(denied);
+});

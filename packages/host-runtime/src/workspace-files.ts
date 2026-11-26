@@ -1,4 +1,4 @@
-import { readFile, readdir, realpath, stat } from "node:fs/promises";
+import { lstat, readFile, readdir, realpath, stat } from "node:fs/promises";
 import nodePath, { type PlatformPath, basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { FsEntry, FsImageDataUrlResult, FsReadResult } from "@pi-desktop/shared";
 
@@ -374,6 +374,28 @@ export async function readOpenableFile(
   return previewFile(target, path, mimeType);
 }
 
+/** Classify only; an absent leaf is never a target for a read or a retry. */
+export async function unavailableImage(
+  ref: string, workspaceRoot: string | null | undefined, extraRoots: readonly string[],
+): Promise<FsImageDataUrlResult> {
+  const denied = { kind: "missing", errorCode: "PATH_OUTSIDE_ALLOWED_ROOT" } as const;
+  const raw = String(ref ?? "").trim();
+  // An absolute ref may use the canonical spelling of an aliased root. The
+  // existing real-path gate must approve its parent before checking the leaf.
+  const candidate = resolveOpenablePath(raw, workspaceRoot, extraRoots) ?? (isAbsolute(raw) ? resolve(raw) : null);
+  if (!candidate) return denied;
+  const parent = await resolveRealOpenablePath(dirname(candidate), workspaceRoot, extraRoots);
+  if (!parent || !(await lstat(parent).catch(() => null))?.isDirectory()) return denied;
+  try {
+    await lstat(join(parent, basename(candidate))); // Do not follow a dangling leaf link.
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT" && await realRootOrNull(dirname(candidate)) === parent) {
+      return { kind: "missing", errorCode: "FILE_NOT_FOUND" };
+    }
+  }
+  return denied;
+}
+
 /**
  * Bounded image data URL for in-chat display. Never returns file bytes for
  * non-images, so a markdown `![](secret.txt)` cannot dump text into the
@@ -386,9 +408,7 @@ export async function readOpenableImage(
   mimeType?: string,
 ): Promise<FsImageDataUrlResult> {
   const target = await resolveRealOpenablePath(path, workspaceRoot, extraRoots);
-  if (!target) {
-    return { kind: "missing", errorCode: "PATH_OUTSIDE_ALLOWED_ROOT" };
-  }
+  if (!target) return unavailableImage(path, workspaceRoot, extraRoots);
   try {
     const result = await previewFile(target, path, mimeType);
     if (result.kind === "image" && result.dataUrl) {
@@ -399,6 +419,6 @@ export async function readOpenableImage(
     }
     return { kind: "notImage", size: result.size, errorCode: "NOT_AN_IMAGE" };
   } catch {
-    return { kind: "missing", errorCode: "FILE_NOT_FOUND" };
+    return unavailableImage(path, workspaceRoot, extraRoots);
   }
 }

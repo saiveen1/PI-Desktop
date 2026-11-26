@@ -53,7 +53,7 @@ import { saveFileAs } from "../fs-save-as";
 import { isChatRefOutsideRoots, resolveChatFileRef, resolveExternalChatRef } from "../chat-ref-resolve";
 import { rebaseWorktreeRef, type WorktreeRefContext } from "../worktree-ref";
 import { getWorkspaceFileIndex, searchWorkspaceFiles } from "../fs-index";
-import { readGeneratedImagePreview } from "../generated-image-preview";
+import { readGeneratedImageOriginal, readGeneratedImagePreview } from "../generated-image-preview";
 import {
   projectFolderPaths,
   refreshProjectGroups,
@@ -999,8 +999,32 @@ handleWithEvent(
 
   handle(
     IPC.invoke.fsReadImageDataUrl,
-    async (input: { ref?: string; mimeType?: string; sessionId?: string; allowThumbnail?: boolean } = {}) => {
+    async (input: { ref?: string; mimeType?: string; sessionId?: string; allowThumbnail?: boolean; generatedOriginal?: boolean } = {}) => {
       const ref = String(input.ref ?? "").trim();
+      if (input.generatedOriginal === true) {
+        const sessionId = typeof input.sessionId === "string" ? input.sessionId.trim() : "";
+        if (!sessionId || sessionId.startsWith("native-pi:") || sessionId.startsWith("remote:")) {
+          return { kind: "missing", errorCode: "PATH_OUTSIDE_ALLOWED_ROOT" };
+        }
+        try {
+          const owner = getHost();
+          if (!owner) return { kind: "missing", errorCode: "PATH_OUTSIDE_ALLOWED_ROOT" };
+          const { session } = await owner.call<{ session?: { projectPath?: string; remoteWorkspace?: unknown } }>(
+            "session.get", { id: sessionId, messageLimit: 1 },
+          );
+          if (getHost() !== owner || !session || session.remoteWorkspace || session.projectPath?.startsWith("remote-project:")) {
+            return { kind: "missing", errorCode: "PATH_OUTSIDE_ALLOWED_ROOT" };
+          }
+          const scratchRoot = await sessionScratchRoot(sessionId);
+          if (getHost() !== owner) return { kind: "missing", errorCode: "PATH_OUTSIDE_ALLOWED_ROOT" };
+          return readGeneratedImageOriginal(ref, scratchRoot, input.mimeType, (bytes) => {
+            const image = nativeImage.createFromBuffer(bytes);
+            return image.isEmpty() ? null : image.getSize();
+          });
+        } catch {
+          return { kind: "missing", errorCode: "FILE_NOT_FOUND" };
+        }
+      }
       const read = (root: string | null, roots: string[]) => input.allowThumbnail === true
         ? readGeneratedImagePreview(ref, root, roots, input.mimeType, (bytes, width, height) => {
           const image = nativeImage.createFromBuffer(bytes);
