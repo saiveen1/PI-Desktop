@@ -186,16 +186,19 @@ Local development does not require a remote merge or a dedicated branch/worktree
   incorporated without discarding local work, and the target's own base check
   passes for that base.
 - [ ] For upstream integration, the [upstream merge gate](03-ai-development-workflow.md#upstream-merge-gate-personal-edition)
-  records the pre-merge revisions, affected local guarantees and decisions;
-  protected coverage changes or retirements have evidence and user approval.
-- [ ] `pnpm check:personal-merge` passed on the actual combined candidate, even
-  if there were no conflicts. Missing or skipped protected tests block acceptance.
-- [ ] Relevant validation ran against the actual integration candidate, or
-  unavailable gates are recorded as `NOT RUN` with reason and remaining risk.
+  records both parent SHAs, merge base, and decisions for materially overlapping
+  behavior, including conflict-free changes. Retained and incoming guarantees
+  have witnesses; changing local guarantees or replacing protected coverage
+  has evidence and user approval.
+- [ ] For upstream integration, the verified tree is recorded and workspace
+      packages resolved to that candidate. Unfiltered `pnpm check:personal-merge` exited zero
+      and all protected cases ran and passed. A focused pass or timeout is not
+      a substitute. Record initial failures, corrective reruns and `NOT RUN` limits.
 - [ ] Only authorized publishing/merge actions occurred; no direct upstream
   main push, force-push, or bypassed gate was inferred from a local request.
-- [ ] Requested integration is verified; affected checks rerun if executable
-  content changed, and optional worktree cleanup retains all task changes.
+- [ ] For an authorized landing, the merge parents and tree match the verified
+      candidate (or only the reviewed evidence record differs). The destination
+      contains the verified commit and the record distinguishes trial from landing.
 - [ ] Optional branch cleanup is authorized and deletes no unique changes.
 - [ ] Issue reference is included when applicable (e.g. `Refs #12` or
   `Closes #12`).
@@ -216,7 +219,8 @@ Apply only when cleanup of an optional worktree or branch is requested:
 - [ ] Verified links were detached without touching their targets; external
       targets and affected CLI entry points passed checks before removal.
 - [ ] Ordinary `git worktree remove` only received a link-free retiring tree;
-      errors did not trigger force deletion or a recursive shell fallback.
+      Windows path lengths were checked. On failure, both Git registration and
+      disk contents were inspected before recovery; no forced or recursive fallback.
 - [ ] Only the authorized worktree was removed; branch deletion was separately
       requested, not inferred from worktree cleanup.
 - [ ] `git worktree list` and directory absence confirm the requested removal.

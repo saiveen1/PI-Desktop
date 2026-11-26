@@ -80,13 +80,7 @@ Branches and worktrees are optional, not prerequisites for development.
   latest applicable base, use the target repository's own base check, and
   validate the actual integration candidate without discarding local work or
   force-pushing shared history.
-- Before an upstream merge, compare both histories, implementation, specs and
-  regression tests, including conflict-free overlaps. A newer upstream commit
-  may still lack an intentional local optimization or fix. Preserve that local
-  behavior unless evidence proves it superseded without regression, or the user
-  explicitly approves the explained change. Never change local assertions just
-  to match upstream; record material decisions and test both retained fixes and
-  adopted updates.
+- For an authorized upstream integration, use the [merge gate below](#upstream-merge-gate-personal-edition).
 - Retire optional worktrees only when authorized and after verifying their
   changes are committed or safely migrated. Git-clean status and repaired shims
   are not sufficient: follow §5's link-safe teardown, verify external targets,
@@ -95,25 +89,56 @@ Branches and worktrees are optional, not prerequisites for development.
 
 ### Upstream merge gate (personal edition)
 
-1. **Before integration**, record the personal and upstream revisions, their merge
-   base, and the intentional local differences in the affected user paths. Start
-   with the [provenance map](../../maintenance/personal-edition-provenance.md),
-   then compare both sides' code, tests and specs since that base. For each
-   overlap record the observable guarantee, upstream evidence, decision (retain,
-   replace with equivalent behavior, or retire), and the test that proves it.
-2. **Before accepting the candidate**, compare `check:personal-merge`, its
-   registered cases, assertions and fixtures with the pre-merge personal revision.
-   Protect behavior, not file contents. A rename or equivalent replacement must
-   exercise the same user path and failure mode; demonstrate that it fails when
-   the guarantee is lost. Record the evidence and obtain user approval before
-   replacing protected coverage or retiring/changing an intentional guarantee.
-3. Run **`pnpm check:personal-merge`** from the combined candidate, even after a
-   conflict-free merge. It runs the whole-turn editor's isolated Chromium fixture
-   and the full-window Settings route tests; a skipped protected case (including
-   missing Chromium), missing protected test, or failure blocks acceptance. Record candidate revision
-   plus uncommitted changes, command, and results. Re-run after relevant changes.
-   These sentinels do not replace targeted tests for other overlaps or incoming
-   changes. The command does not fetch, merge, install, or launch Desktop.
+1. **Pin the inputs before editing.** Verify the upstream repository and branch
+   against the remote, not a stale tracking ref. Record the personal SHA, upstream
+   SHA and merge base in `docs/maintenance/upstream-integration-<short-sha>.md`.
+   Compare both change sets from that base. `git merge-tree --write-tree` can
+   predict textual conflicts; also inspect paths both sides changed **without**
+   conflicts and callers on either side of a changed contract.
+2. **Decide by behavior, not by file.** Start with the [personal provenance map](../../maintenance/personal-edition-provenance.md).
+   For each materially affected user path, record the personal guarantee and
+   its regression test, the incoming behavior, the decision (retain, combine,
+   replace or retire), and the test of the result. Newer code is not proof of
+   equivalence; compare implementation, specs and tests on both sides.
+   For permission or lifecycle overlaps, test both what must still work and what
+   must not happen at the owning boundary (e.g. cold resume without replay **and**
+   out-of-scope write denied before mutation). A marker-free file with a known
+   lost guarantee is unresolved. Keep personal release metadata unless a version
+   change was separately requested.
+3. **Prepare and freeze the candidate.** In an isolated trial, verify that
+   workspace packages resolve to candidate sources/build outputs. Check installed
+   Pi pins and patches with `pnpm check:pi-dependencies` and `pnpm check:pi-patches`
+   if that runtime is involved. Build producers before checking consumers; missing
+   outputs or tests that fail during collection are not behavioral test results.
+   With all intended inputs staged, no unmerged entries (`git ls-files -u`),
+   unstaged changes or untracked source inputs, record the index tree from
+   `git write-tree`. Run applicable build, type, lint and regression checks on it;
+   include `pnpm docs:check` when integrating specs or ADR indexes.
+4. **Require the unfiltered `pnpm check:personal-merge`.** Compare its registered
+   cases, assertions and fixtures with the personal parent. Obtain user approval
+   before retiring/changing an intentional guarantee or replacing protected
+   coverage; show that equivalent replacement coverage fails when the guarantee
+   is lost. The whole-turn editor and full-window Settings cases must actually
+   pass. A missing browser, skipped/cancelled protected case or nonzero exit
+   blocks acceptance. Filtered diagnostics do not qualify the combined tree.
+   For a timing failure, keep the failed result. If attribution is unclear, run
+   the personal baseline and unchanged candidate sequentially on the same host
+   with fresh isolated profiles and the original deadlines. Record exit codes,
+   counts and timing margin; do not rerun until green or weaken assertions.
+   Report a targeted corrective rerun separately from the original batch.
+5. **Land exactly what passed, when authorized.** Check the merge commit's two
+   ordered parents (`git show -s --format=%P`) against the pinned inputs. Compare
+   its tree with the verified tree: a later edit confined to the integration
+   record is allowed only after inspecting that diff; any other change needs
+   relevant revalidation on the new tree. For a separately requested landing
+   from a trial, fast-forward the clean destination to the verified merge SHA
+   (`git merge --ff-only --no-overwrite-ignore <merge-sha>`). If the destination
+   diverged, do not force it: validate a new candidate. Verify the destination
+   SHA and close the record with landing and [cleanup](#link-safe-retirement)
+   outcomes. A trial, commit, landing, branch deletion, push and release are not
+   interchangeable permissions.
+
+Worked example: [c2042ae0f decisions, gate results and retirement](../../maintenance/upstream-integration-c2042ae0f.md).
 
 ### Windows local source launcher
 
@@ -504,12 +529,18 @@ environment or weakening E2E isolation.
    has been checked in scratch on this OS; never recurse into their targets.
    Verify external targets and affected CLI commands still work, then rescan.
    Only a link-free retiring tree may reach ordinary `git worktree remove`.
+   On Windows, check the longest absolute paths found during the no-follow
+   inventory, including ignored dependency outputs. If long paths are present,
+   use `git -c core.longpaths=true worktree remove <path>` after the same
+   preflight; do not change global Git settings or skip link checks.
    Worktree removal does not authorize deleting the branch.
 4. **Stop on unexpected effects.** A lock, partial deletion or changed external
    target requires diagnosis before any retry. Do not add `--force`, use a
    recursive shell-delete fallback, raise timeouts or reinstall packages just
-   to finish cleanup. Check the owned process and actual filesystem/Git state;
-   do not replay an uncertain destructive command.
+   to finish cleanup. Check both Git registration and directory contents: a
+   failed removal may unregister a worktree but leave files on disk. Keep its
+   branch, verify the surviving checkout, and obtain approval for a bounded
+   recovery plan before further destructive work. Do not replay the removal.
 5. **Verify survivors.** Check the worktree list, directory absence, surviving
    checkout status, retained history, preserved ignored files and affected
    toolchain entry points. Ordinary successful cleanup needs no full build;
