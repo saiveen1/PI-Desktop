@@ -213,6 +213,18 @@ truncated tool calls retain their existing behavior.
    conversation dropped before any read, and the runtime quotes it to the model
    as one `<session_reference name="…" session="…">` block ahead of the user's
    own words
+   A validated File Manager `lineRange` travels as file attachment metadata.
+   Inclusive line numbers are positive 32-bit signed integers and each range
+   spans at most 4,000 lines, matching the Host Read line budget. Unsupported
+   clipboard selections retain plain-text paste rather than changing the range.
+   Main and runtime reject malformed references or more than four references
+   with `INVALID_ARGUMENT` before any prefetch; neither silently drops a chip.
+   The runtime executes one workspace-only Read per distinct range through
+   the normal tool hooks and quotes its bounded result as file context for
+   the provider turn. Permission blocks and read failures use a separate
+   `file_reference_error` block with a `blocked` or `failed` status. The
+   prefetch runs outside assistant tool batches and creates no tool transcript
+   row. Restoring the reference preserves its path and range metadata.
 7. snapshot the effective shell ID and dialect for the turn
 8. start pi turn with the resolved session configuration and effective
    thinking level; HTTP 429 setup and stream failures use the runtime-owned
@@ -907,6 +919,11 @@ decides what a *successful* checkpoint leaves behind:
   within the keep-recent budget below. The goal receives at most half that
   budget and the existing active-user cap. Truncated text is explicitly marked
   (`[checkpoint truncated: this message crossed the retained context budget]`).
+  When the summary is nonempty and the retained tail contains only the request
+  with no reasoning to replay, the request precedes the checkpoint; newer
+  messages follow it. Reasoning replay stays between the summary and user tail.
+  The older upstream-only single-user retention is superseded by the budgeted
+  execution window described here.
 - A `completed_turn` checkpoint is created at a terminal turn boundary, before
   a new user prompt, or for manual compaction. It carries no naked historical
   user messages. The summary is authoritative for completed work, and the next
@@ -914,6 +931,7 @@ decides what a *successful* checkpoint leaves behind:
 - A retained-tail fallback carries its recent window in both modes, because the
   alternative is an empty context; the mode still decides whether it has to
   keep the active task's user message as well.
+  Its recovery notice precedes that window even if only the user message fits.
 - The `fresh_window` family remains the deliberate no-summary exception from
   ADR 0064 and always carries an empty tail.
 
@@ -1514,11 +1532,11 @@ not override the parent session by default: they follow `auto` completely
 their normal approval behavior. An explicit builtin or user scope remains an
 intentional override.
 
-**Tools (ADR 0089).** Task requires a non-empty subagent catalog. The three
-job controls are always declared and belong to the Agent core set rather than
-the on-demand catalog of §7.1. Execution of all four is restricted to Agent mode:
+**Tools (ADR 0089).** Task requires a non-empty effective role catalog. Its
+job controls belong to the core set, not the on-demand catalog of §7.1.
+Execution requires an agent-level mode or stage:
 
-- `Task(agent, task, description?, model?, effort?, resume?)` — validates its arguments (an
+- `Task(agent, task, description?, model?, effort?, resume?, userRequest?, scope?)` — validates its arguments (an
   unknown `agent`, an empty `task`, an unresolvable model pin and a definition
   whose tools are all unavailable each return a tool error explaining the
   failure rather than throwing), starts the delegate **in the background**, and
@@ -1566,6 +1584,16 @@ the on-demand catalog of §7.1. Execution of all four is restricted to Agent mod
   The Task definition catalog displays each default model and treats omitting
   or repeating that key as keeping the default. See
   [ADR subagent-model-opt-in](../../adr/subagent-model-opt-in.md).
+  For a YAML mode bundle, the private role list is the entire default catalog.
+  Explicit global inclusion adds only active, project-authorized definitions;
+  private names win. A role pin is not a dispatcher permission: switching away
+  from a private role's primary pin requires explicit approval for that task,
+  in addition to model availability. Each fallback may select its own thinking
+  level. Neither the bundle nor a task can change the parent session model.
+  Electron Main keeps the bundle in the catalog and complete Host snapshots.
+  The sidecar receives the mode's execution definition without bundle metadata
+  on prompt dispatch and run release; resolved skill and subagent catalogs
+  travel separately on launch.
   When a model key is not pre-resolved, the runtime asks Electron main to resolve it
   on-demand via the `provider.resolveSubagentModel` RPC. The started `Task`
   result details record the effective `modelId` and resolved `thinkingLevel`
@@ -1578,7 +1606,21 @@ the on-demand catalog of §7.1. Execution of all four is restricted to Agent mod
   and requested effort when the new `Task(resume)` omits those fields; the active
   model may still clamp the requested effort to its capabilities. The Task result
   records `resumedFrom`, so renderer history presents the run as a continuation,
-  not a new unrelated delegation.
+  not a new unrelated delegation. A resumed chain retains its original role and
+  write boundary. An explicit `model` on resume may confirm the recorded
+  binding, not replace it. For a scoped chain the recorded binding and role
+  must still be authorized; if either is unavailable, start a new Task rather
+  than attach its history to a different model or a broader role. Legacy
+  unscoped chains retain their existing approval and fallback rules.
+  When the user names an expert, `userRequest` contains only the original words
+  addressed to that expert. `task` supplies the coordinator's separate context.
+  A quote does not grant permission. A new task may set `scope.write` to a list
+  of workspace paths. Omission preserves existing access, an empty list denies
+  all writes, and opaque tools are withheld when their writes cannot be checked.
+- `TaskSend(delegationId, instruction)` queues a correction for the same running
+  child in this conversation. `TaskList` and `TaskWait` distinguish queued,
+  delivered at a child boundary, and undelivered at cancellation or settlement.
+  Sending a correction never replaces the role, its model, or its permissions.
 - `TaskWait(delegationIds?, mode?, minCompleted?, timeoutSeconds?)` — converges
   on running delegations (defaults to all of them) and returns their reports;
   `mode: "any"` with `minCompleted` converges as soon as the first N settle.
@@ -1773,6 +1815,10 @@ No thinking text or credentials are copied into this diagnostic. Historical
 records without these fields remain readable without inferred measurements.
 TaskStop returns retired workers' partial reports along with status. It still
 reports uncooperative workers as pending, not stopped.
+
+The child model's workspace write scope does not disable these runtime-owned
+recovery files. A report supplies content, not a filesystem destination or new
+permission; a scoped or read-only child still cannot write an arbitrary path.
 
 Scratch restoration accepts only the expected session/agent/chain/run and a
 bounded regular JSON file, rejecting escaping links and unknown formats. It

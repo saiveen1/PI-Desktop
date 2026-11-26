@@ -35,20 +35,9 @@ function translator(catalog) {
 
 const buckets = (...pairs) => pairs.map(([id, count]) => ({ id, count }));
 
-test("a settled group folds by default and follows the switch", () => {
-  // The old size tier is gone: a two-row group and a twenty-row group answer the
-  // same way, because the setting - not the row count - decides.
-  for (const collapseSettled of [true]) {
-    assert.equal(
-      activityGroupStartsOpen({ turnActive: false, groupActive: false, collapseSettled }),
-      false,
-    );
-  }
-  assert.equal(
-    activityGroupStartsOpen({ turnActive: false, groupActive: false, collapseSettled: false }),
-    true,
-    "turning auto-collapse off keeps every settled group open",
-  );
+test("a settled group follows the switch regardless of its turn or size", () => {
+  assert.equal(activityGroupStartsOpen({ groupActive: false, collapseSettled: true }), false);
+  assert.equal(activityGroupStartsOpen({ groupActive: false, collapseSettled: false }), true);
   assert.equal(ACTIVITY_LABEL_MAX_BUCKETS, 3);
 });
 

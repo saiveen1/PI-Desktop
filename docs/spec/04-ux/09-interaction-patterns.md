@@ -135,8 +135,9 @@ recency only breaks ties between equally relevant matches.
   resets this handshake.
 - Frameless minimize, maximize/restore, and close controls remain outside the
   drag region. Maximize state is queried on mount and updated from native
-  window events, so the restore affordance never depends only on optimistic
-  renderer state.
+  maximize/unmaximize events. Fullscreen enter/exit also rechecks native
+  maximize state after the transition settles, so macOS caption dragging and
+  the restore affordance reflect the actual window state.
 - Windows/Linux explicit minimize actions use native minimize and keep the
   taskbar entry. On Windows, clicking the focused window's taskbar button also
   uses native minimize and keeps the taskbar entry; clicking it again
@@ -616,6 +617,13 @@ may be retained while exactly one workspace supplies the visible shell context.
   localized prose.
 
 ### 1.8 Work panel entry and resources (D128, D142, D154, D173, D179, D207, D221)
+
+- Opening the bundled File Manager opts the project into a default tab for this
+  renderer lifetime. Each existing or new local project session receives one plain
+  entry, without opening its dock, replacing a selection, or copying a file location.
+  Closing that entry (including bulk close) opts out only that session until it
+  reopens the view itself. Closing the last tab does not reset the project default.
+  Temporary sessions, remote sessions, and other projects do not inherit the tab.
 
 - The shell starts without a visible work panel. The viewport-fixed toggle and
   `Cmd/Ctrl + J` both toggle the active session's panel: they reveal the
@@ -1995,6 +2003,8 @@ Project drag/drop follows these patterns:
   changing preferences. If even the minimum expanded heights do not fit, the
   section stack can scroll while primary navigation and the footer stay fixed.
 - No horizontal scroll in the sidebar.
+- Resizing or zoom changes preserve the loaded conversations; reaching the
+  minimum viewport never hides project navigation.
 - Scroll indicators use the platform's subtle overlay treatment without
   changing the lists' width. The 6px thumb is transparent at rest and
   appears when the owning list is hovered or focused; dragging keeps it
@@ -2141,8 +2151,10 @@ This does not prevent state changes — it makes them instant.
   chat-width contract is unchanged; this exception only relaxes the native
   window constraint so small/scaled displays can accept side-by-side tiles.
   The minimum height remains 560 DIP, capped to the work-area height.
-- On macOS and Windows a maximized main window rejects manual edge resizing.
-  Windows retains native drag-to-restore. On macOS the shell temporarily disables
+- On Windows a maximized main window rejects manual edge resizing and retains
+  native drag-to-restore. AppKit owns edge resizing and Zoom/Restore on macOS.
+  Both use the same cancellable resize event, so cancelling it would also block
+  restoration of the window's original frame. The macOS shell temporarily disables
   CSS caption dragging and handles caption double-click as Restore; normal
   windows retain native double-click behavior. The inherited `--window-drag-region`
   marker distinguishes caption text from explicit no-drag controls. Do not use

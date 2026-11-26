@@ -61,6 +61,7 @@ export function TurnProcess({
   isActive,
   failed,
   partial = false,
+  stopped,
   activity,
   children,
 }: {
@@ -74,6 +75,8 @@ export function TurnProcess({
   failed: boolean;
   /** The loaded page ends before a confirmed outcome. */
   partial?: boolean;
+  /** A delegation can settle as stopped without a final assistant row. */
+  stopped?: boolean;
   /** Live runtime stage, when the runtime reports one. */
   activity?: AgentActivity;
   children: ReactNode;
@@ -122,7 +125,7 @@ export function TurnProcess({
   // `startedAt` is absent for history that recorded no timing, and "0s" would be
   // a lie there, so the duration is dropped instead.
   const hasTiming = !partial && startedAt !== undefined && seconds > 0;
-  const phase = turnProcessPhase({ parts: turnParts, isActive, failed, activity });
+  const phase = turnProcessPhase({ parts: turnParts, isActive, failed, stopped, activity });
   // The header's label is the status alone. Duration and tool count are separate
   // values so each can be omitted independently, and the caret can follow the
   // last one instead of being pushed to the far edge of the band.
@@ -143,7 +146,7 @@ export function TurnProcess({
   // included, so the header must not add them again.
   const toolCount = summary.tools;
   return (
-    <section className={`turn-process${disclosure.open ? " open" : ""}${isActive ? " active" : ""}`}>
+  <section className={`turn-process${disclosure.open ? " open" : ""}${isActive ? " active" : ""}`}>
       <button
         type="button"
         ref={disclosure.titleRef}

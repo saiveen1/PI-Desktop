@@ -1612,13 +1612,13 @@ export const api = {
    * the registry. `builtins` keeps a switched-off default in the list, flagged
    * `enabled: false`, so Settings can still show that row and its switch.
    */
-  subagentCatalog: () =>
+  subagentCatalog: (query?: { sessionId?: string; mode: string }) =>
     invoke<{
       subagents: SubagentDefinition[];
       builtins: Array<SubagentDefinition & { enabled: boolean }>;
       diagnostics: string[];
       projectPath: string | null;
-    }>(IPC.invoke.subagentCatalog),
+    }>(IPC.invoke.subagentCatalog, query),
   createUserSubagent: (subagent: UserSubagentInput) =>
     invoke<{ subagent: UserSubagentRecord }>(IPC.invoke.subagentCreate, subagent),
   updateUserSubagent: (id: string, subagent: Omit<UserSubagentInput, "id">) =>
@@ -1926,8 +1926,15 @@ export const api = {
       ...(sessionId ? { sessionId } : {}),
       ...(options?.allowDirectory ? { allowDirectory: true } : {}),
     }),
-  composerCommands: () =>
-    invoke<{ commands: ComposerCommand[] }>(IPC.invoke.composerCommands),
+  /**
+   * The merged `/` source. `mode` asks for that mode's private skills too, so a
+   * mode switch in the composer shows the skills the new mode actually offers.
+   */
+  composerCommands: (query?: { mode?: string }) =>
+    invoke<{ commands: ComposerCommand[] }>(
+      IPC.invoke.composerCommands,
+      query?.mode ? { mode: query.mode } : undefined,
+    ),
   setWorkPanelReservation: (width: number) =>
     invoke<{ requested: number; reserved: number }>(
       IPC.invoke.windowSetWorkPanelReservation,
@@ -2100,6 +2107,16 @@ export const api = {
       });
     });
   },
+  /**
+   * A plugin offered one line for the composer, or the main process ordered
+   * whatever is on screen dropped (`pi.composer.suggest`, ADR 0333).
+   *
+   * The shell answers every offer over `pluginComposerSuggestionResult`, because
+   * only the renderer knows whether the draft can take it. A malformed message
+   * is ignored — nothing here decides whether a plugin's suggestion is valid.
+   */
+  onComposerFileLines: (listener: (payload: { sessionId: string; reference: import("@pi-desktop/shared").FileLineReference }) => void) =>
+    window.piDesktop?.on?.(IPC.event.composerFileLines, (payload) => listener(payload as Parameters<typeof listener>[0])) ?? (() => {}),
   /** Shell-only composer target, offer and clear messages. */
   onPluginComposerSuggestion: (listener: (event: ComposerSuggestionMessage) => void) => {
     if (!window.piDesktop?.on) return () => undefined;

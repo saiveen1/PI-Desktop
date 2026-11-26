@@ -296,7 +296,8 @@
 
 .sidebar-sections {
   display: flex;
-  min-height: 0;
+  /* Leave a reachable section viewport when high zoom forces outer scrolling. */
+  min-height: 70px;
   flex: 1 1 0;
   flex-direction: column;
   overflow-x: hidden;
@@ -427,6 +428,12 @@
   font-size: var(--text-sm);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Recent rows share one line between task and project identity. Let a long
+   task title take only the space left after the project label. */
+.thread-item.recent-project-session .thread-item-project {
+  flex: 0 0 auto;
 }
 
 /* Multi-select highlight: visually distinct from the single active row. */

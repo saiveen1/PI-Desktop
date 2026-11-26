@@ -289,6 +289,17 @@ export const IPC = {
     modesRunUpdate: "pi-desktop/modes/run/update",
     modesRunResolve: "pi-desktop/modes/run/resolve",
     /**
+     * New-format `mode.yaml` bundle surface (issue #2544): read every document a
+     * map references, write them all or none, copy a whole mode directory, and
+     * the mode's own `skills/` folder.
+     */
+    modesBundleRead: "pi-desktop/modes/bundle/read",
+    modesBundleWrite: "pi-desktop/modes/bundle/write",
+    modesCopy: "pi-desktop/modes/copy",
+    modesBundleSettings: "pi-desktop/modes/bundle/settings",
+    modesSkills: "pi-desktop/modes/skills",
+    modesSkillsOpen: "pi-desktop/modes/skills/open",
+    /**
      * List every paired remote `pi-host` this desktop knows, redacted so no
      * device token reaches the renderer. See ADR 0286 (R2b pairing UX).
      */
@@ -561,6 +572,7 @@ export const IPC = {
      * `pluginComposerSuggestionResult`.
      */
     pluginComposerSuggestion: "pi-desktop/plugin/composer/event/suggestion",
+    composerFileLines: "pi-desktop/composer/event/fileLines",
     windowMaximized: "pi-desktop/window/event/maximized",
     windowFullScreen: "pi-desktop/window/event/fullscreen",
     windowWorkPanelResize: "pi-desktop/window/event/workPanelResize",

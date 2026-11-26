@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Policy-Sync: 2026-11-21.personal-edition.1
+Policy-Sync: 2026-11-27.personal-edition.1
 
 Mandatory rules for AI coding agents and maintainers working in PI-Desktop.
 
@@ -342,6 +342,12 @@ New work must not increase architectural entropy. These hotspot files are
 **SHRINK OR STAY STABLE**:
 
 ```text
+packages/agent-runtime/src/runtime.ts
+crates/host-core/src/rpc/mod.rs
+crates/host-core/src/sessions.rs
+crates/host-core/src/tools/mod.rs
+apps/desktop/electron/main/plugin-runtime.ts
+apps/desktop/src/components/Sidebar.tsx
 apps/desktop/electron/main/index.ts
 apps/desktop/src/stores/app-store.ts
 apps/desktop/src/components/ChatTranscript.tsx
@@ -356,6 +362,9 @@ Split by domain, responsibility, ownership, or lifecycle — not by line count.
 New TS/TSX modules normally stay below ~500 LOC and warrant review around ~800;
 new Rust modules normally stay below ~700 LOC and warrant review around ~1000.
 Generated files, locales, changelogs, fixtures, and declarative data are exempt.
+
+`node scripts/check-architecture.mjs` warns when an oversized production TS/TSX
+or Rust file grows relative to its base; see `docs/architecture/README.md`.
 
 Keep entry files thin (registration, routing, exports, wiring); business rules,
 parsing, state, and side effects live behind existing responsibility boundaries.

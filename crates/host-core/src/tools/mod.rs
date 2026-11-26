@@ -4,7 +4,7 @@ use regex::RegexBuilder;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::fs::File;
-use std::future::pending;
+use std::future::{pending, poll_fn, Future};
 use std::io::{self, BufRead, BufReader, ErrorKind, Read};
 use std::path::{Path, PathBuf};
 use std::process::{ExitStatus, Stdio};
@@ -12,12 +12,15 @@ use std::sync::{
     atomic::{AtomicU64, Ordering},
     Arc,
 };
+use std::task::Poll;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 #[cfg(not(test))]
 use tokio::io::AsyncWriteExt;
 use tokio::io::{AsyncRead, AsyncReadExt};
 use tokio::process::{ChildStderr, ChildStdin, ChildStdout, Command};
-use tokio::sync::{mpsc, watch};
+use tokio::sync::{mpsc, oneshot, watch};
+
+use crate::background_tasks::{BackgroundTask, BackgroundTaskState};
 
 use crate::workspace::{
     resolve_tool_path_with_external, simple_canonicalize, ContainedRoots, ToolRoot,
@@ -41,6 +44,7 @@ mod search_control;
 pub mod shell;
 #[cfg(windows)]
 mod windows_process_tree;
+pub(crate) mod write_scope;
 
 pub use hashline::{HashlineContext, HashlineStore};
 
@@ -58,6 +62,7 @@ pub const MAX_TIMEOUT_MS: u64 = 2_147_483_647;
 pub const MIN_BASH_TIMEOUT_MS: u64 = 1_000;
 pub const MAX_BASH_TIMEOUT_MS: u64 = 21_600_000;
 pub const DEFAULT_BASH_TIMEOUT_MS: u64 = 60_000;
+const BASH_INITIAL_WAIT_MS: u64 = 10_000;
 pub const INTERNAL_TOOL_RUNNER_FLAG: &str = "--internal-tool-runner";
 // Windows inherits the parent process' Job Object unless the child is created
 // with CREATE_BREAKAWAY_FROM_JOB. The hidden runner is immediately assigned to
@@ -664,6 +669,9 @@ pub struct ToolsExecuteParams {
     pub tool_call_id: String,
     pub tool_name: String,
     pub args: Value,
+    /// Restrict an automatic composer Read to the local project.
+    #[serde(default)]
+    pub workspace_only: bool,
     /// Host-issued source-order binding, not a permission or resource claim.
     #[serde(default)]
     pub file_batch_ticket: Option<String>,
@@ -680,12 +688,18 @@ pub struct ToolsExecuteParams {
     /// host-core resolves it against its registry; an unknown id is ignored.
     #[serde(default)]
     pub delegation_id: Option<String>,
+    /// Frozen per-delegation restriction from the trusted runtime, not a tool
+    /// argument or an approval. Omit for unscoped calls; `[]` denies every write.
+    #[serde(default, deserialize_with = "write_scope::deserialize")]
+    pub write_scope: Option<write_scope::WriteScope>,
     #[serde(default)]
     pub expected_command_shell_id: Option<String>,
     #[serde(default)]
     pub expected_command_shell_dialect: Option<String>,
     #[serde(default)]
     pub run_in_background: bool,
+    #[serde(default)]
+    pub yield_after_initial_wait: bool,
     pub timeout_ms: Option<u64>,
     /// Action names that may run in Plan or Goal mode (ADR 0211). When
     /// set and non-empty, host-core admits this `plugin_*` tool in
@@ -895,6 +909,7 @@ pub struct BashExecutionOptions {
     /// Start as a background task detached from the turn: no timeout, no
     /// abort wiring. The caller owns the registry; see `background_tasks`.
     pub run_in_background: bool,
+    pub yield_after_initial_wait: bool,
     pub continuation_turn_id: Option<String>,
     /// Host state the background spawn registers into. Present for RPC-driven
     /// calls; `None` for test/`local` constructions that never go background.
@@ -912,6 +927,7 @@ impl BashExecutionOptions {
             output_tx: None,
             extra_env: Vec::new(),
             run_in_background: false,
+            yield_after_initial_wait: false,
             continuation_turn_id: None,
             app_state: None,
         }
@@ -926,6 +942,8 @@ pub struct ToolExecutionOptions<'a> {
     /// Session visualization directory: a contained root for Read and for
     /// `.html`-only Write/Edit (D671). `None` for remote sessions (contract modes still deny writes).
     pub visualization_root: Option<&'a Path>,
+    /// Additive restriction on the actual file mutation, after normal permissions.
+    pub write_scope: Option<write_scope::BoundWriteScope>,
 }
 
 pub fn validate_timeout_ms(timeout_ms: Option<u64>) -> Result<(), (String, String)> {
@@ -1180,25 +1198,37 @@ pub async fn execute_tool_with_options(
             allow_external_paths: false,
             hashline: None,
             visualization_root: None,
+            write_scope: None,
         },
     )
     .await
 }
 
+struct FileToolPaths<'a> {
+    workspace: Option<&'a Path>,
+    roots: ContainedRoots,
+    allow_external_paths: bool,
+    write_scope: Option<write_scope::BoundWriteScope>,
+}
+
 /// Run a synchronous file-tool body on Tokio's blocking pool so a long
 /// traversal, read, or rg child wait cannot occupy an async worker (#1071).
 async fn run_file_tool(
-    workspace: Option<&Path>,
-    roots: ContainedRoots,
+    paths: FileToolPaths<'_>,
     tool_name: &str,
     args: &Value,
-    allow_external_paths: bool,
     hashline: Option<&HashlineContext<'_>>,
     lease: Option<(
         Arc<crate::tool_budget::ToolPermit>,
         Arc<crate::file_resources::FileResources>,
     )>,
 ) -> Result<Value, hashline::ToolError> {
+    let FileToolPaths {
+        workspace,
+        roots,
+        allow_external_paths,
+        write_scope,
+    } = paths;
     let workspace = workspace.map(Path::to_path_buf);
     let tool_name = tool_name.to_string();
     let args = args.clone();
@@ -1257,10 +1287,23 @@ async fn run_file_tool(
                 &search_control,
             )
             .map_err(Into::into),
-            "Write" => tool_write(workspace, roots, args, allow_external_paths, hashline)
-                .map_err(Into::into),
+            "Write" => tool_write(
+                workspace,
+                roots,
+                args,
+                allow_external_paths,
+                hashline,
+                write_scope.as_ref(),
+            ),
             // "Edit": the caller routes only these five file tools here.
-            _ => tool_edit(workspace, roots, args, allow_external_paths, hashline),
+            _ => tool_edit_scoped(
+                workspace,
+                roots,
+                args,
+                allow_external_paths,
+                hashline,
+                write_scope.as_ref(),
+            ),
         }
     })
     .await
@@ -1296,6 +1339,7 @@ pub async fn execute_tool_with_file_lease(
         allow_external_paths,
         hashline,
         visualization_root,
+        write_scope,
     } = options;
     let started = Instant::now();
     let timeout_ms = effective_timeout_ms(tool_name, requested_timeout_ms);
@@ -1309,14 +1353,14 @@ pub async fn execute_tool_with_file_lease(
     // Scratch is created lazily, and only for tools that can produce files
     // there — Read/Glob/Grep on a session that never wrote scratch files
     // should not leave empty directories behind.
-    if matches!(tool_name, "Write" | "Edit" | "Bash") {
+    if write_scope.is_none() && matches!(tool_name, "Write" | "Edit" | "Bash") {
         if let Some(dir) = scratch {
             let _ = std::fs::create_dir_all(dir);
         }
     }
     // The visualization dir is created only when a Write/Edit actually
     // targets it, so ordinary sessions never get an empty directory (D671).
-    if matches!(tool_name, "Write" | "Edit") {
+    if write_scope.is_none() && matches!(tool_name, "Write" | "Edit") {
         if let (Some(dir), Some(path)) =
             (visualization_root, args.get("path").and_then(Value::as_str))
         {
@@ -1336,14 +1380,17 @@ pub async fn execute_tool_with_file_lease(
         "GenerateImages" | "Computer" => Ok(serde_json::json!({ "authorized": true })),
         "Read" | "Glob" | "Grep" | "Write" | "Edit" => {
             run_file_tool(
-                workspace,
-                ContainedRoots::scratch_only(scratch).with(
-                    ToolRoot::Visualization,
-                    visualization_root.map(Path::to_path_buf),
-                ),
+                FileToolPaths {
+                    workspace,
+                    roots: ContainedRoots::scratch_only(scratch).with(
+                        ToolRoot::Visualization,
+                        visualization_root.map(Path::to_path_buf),
+                    ),
+                    allow_external_paths,
+                    write_scope,
+                },
                 tool_name,
                 args,
-                allow_external_paths,
                 hashline.as_ref(),
                 file_lease.zip(resources),
             )
@@ -1423,9 +1470,10 @@ pub async fn execute_tool_with_file_lease(
                 is_error: Some(true),
                 content,
                 duration_ms: started.elapsed().as_millis() as u64,
-                denied: Some(
-                    public_code == "TOOL_DENIED" || public_code == "PATH_OUTSIDE_WORKSPACE",
-                ),
+                denied: Some(matches!(
+                    public_code.as_str(),
+                    "TOOL_DENIED" | "PATH_OUTSIDE_WORKSPACE" | write_scope::VIOLATION
+                )),
                 error_code: Some(public_code),
                 command_shell_id,
             }
@@ -1726,45 +1774,90 @@ fn tool_read(
     Ok(out)
 }
 
+/// Resolve once with the usual permission policy, then check the exact path
+/// the mutator will use (including Edit's parsed move destination).
+fn resolve_mutation_path(
+    root: &Path,
+    roots: &ContainedRoots,
+    input: &str,
+    allow_external_paths: bool,
+    scope: Option<&write_scope::BoundWriteScope>,
+) -> Result<(PathBuf, ToolRoot), hashline::ToolError> {
+    if let Some(scope) = scope {
+        scope.validate_target(input)?;
+    }
+    let (resolved, kind) =
+        resolve_tool_path_with_external(root, roots, input, allow_external_paths).map_err(
+            |error| match scope {
+                Some(_) => write_scope::denied(input),
+                None => hashline::ToolError::new(error.clone(), error),
+            },
+        )?;
+    if let Some(scope) = scope {
+        scope.check(root, input, &resolved, kind)?;
+    }
+    Ok((resolved, kind))
+}
+
+/// Review capture can initialize managed directories. Skip it for denied
+/// scoped paths; the blocking mutation body still authorizes them again.
+pub(crate) fn can_review_scoped_write(
+    workspace: Option<&Path>,
+    roots: &ContainedRoots,
+    args: &Value,
+    scope: &write_scope::BoundWriteScope,
+) -> bool {
+    workspace
+        .zip(args.get("path").and_then(Value::as_str))
+        .is_some_and(|(root, path)| {
+            resolve_mutation_path(root, roots, path, false, Some(scope)).is_ok()
+        })
+}
+
 fn tool_write(
     workspace: Option<&Path>,
     roots: &ContainedRoots,
     args: &Value,
     allow_external_paths: bool,
     hashline: Option<&HashlineContext<'_>>,
-) -> Result<Value, (String, String)> {
+    scope: Option<&write_scope::BoundWriteScope>,
+) -> Result<Value, hashline::ToolError> {
     let root = require_workspace(workspace)?;
     let path = args
         .get("path")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| ("INVALID_ARGUMENT".into(), "path required".into()))?;
+        .ok_or_else(|| hashline::ToolError::new("INVALID_ARGUMENT", "path required"))?;
     let content = args
         .get("content")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| ("INVALID_ARGUMENT".into(), "content required".into()))?;
+        .ok_or_else(|| hashline::ToolError::new("INVALID_ARGUMENT", "content required"))?;
     let content = hashline::strip_write_markup(content);
     let (resolved, root_kind) =
-        resolve_tool_path_with_external(root, roots, path, allow_external_paths)
-            .map_err(|e| (e.clone(), e))?;
+        resolve_mutation_path(root, roots, path, allow_external_paths, scope)?;
     if ignore_rules::is_sensitive_path(&resolved) {
-        return Err(ignore_rules::denied_error(path));
+        return Err(ignore_rules::denied_error(path).into());
     }
     ensure_visualization_fragment(roots, root_kind, &resolved)?;
-    if root_kind != ToolRoot::Visualization {
-        if let Some(parent) = resolved.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| ("TOOL_FAILED".into(), format!("mkdir failed: {e}")))?;
-        }
-    }
-    std::fs::write(&resolved, &content).map_err(|e| {
-        if e.kind() == std::io::ErrorKind::NotFound {
-            ("FILE_NOT_FOUND".into(), format!("File not found: {path}"))
-        } else {
-            ("TOOL_FAILED".into(), format!("write failed: {e}"))
-        }
-    })?;
-    let landed = std::fs::read(&resolved)
-        .map_err(|e| ("TOOL_FAILED".into(), format!("read back failed: {e}")))?;
+    let landed = if let Some(scope) = scope {
+        let target = scope.target(path, &resolved, true)?;
+        target
+            .write(content.as_bytes(), true)
+            .map_err(|e| scoped_io_error(path, "write", e))?;
+        target
+            .read()
+            .map_err(|e| scoped_io_error(path, "read back", e))?
+    } else {
+        write_file(&resolved, root_kind, content.as_bytes()).map_err(|e| {
+            if e.code == "FILE_NOT_FOUND" {
+                hashline::ToolError::new("FILE_NOT_FOUND", format!("File not found: {path}"))
+            } else {
+                e
+            }
+        })?;
+        std::fs::read(&resolved).map_err(|e| {
+            hashline::ToolError::new("TOOL_FAILED", format!("read back failed: {e}"))
+        })?
+    };
     let file = hashline::normalize_file(&landed);
     let tag = hashline::tag_of_lf_text(&file.text);
     let display = display_tool_path(root_kind, root, &resolved);
@@ -1776,6 +1869,37 @@ fn tool_write(
         "tag": tag,
         "header": hashline::section_header(&display, &tag),
     }))
+}
+
+fn write_file(resolved: &Path, root: ToolRoot, bytes: &[u8]) -> Result<(), hashline::ToolError> {
+    if root != ToolRoot::Visualization {
+        if let Some(parent) = resolved.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| {
+                hashline::ToolError::new("TOOL_FAILED", format!("mkdir failed: {e}"))
+            })?;
+        }
+    }
+    std::fs::write(resolved, bytes).map_err(|e| {
+        hashline::ToolError::new(
+            if e.kind() == ErrorKind::NotFound {
+                "FILE_NOT_FOUND"
+            } else {
+                "TOOL_FAILED"
+            },
+            format!("write failed: {e}"),
+        )
+    })
+}
+
+fn scoped_io_error(path: &str, operation: &str, error: io::Error) -> hashline::ToolError {
+    if error.kind() == ErrorKind::NotFound {
+        hashline::ToolError::new("FILE_NOT_FOUND", format!("File not found: {path}"))
+    } else {
+        hashline::ToolError::new(
+            "TOOL_FAILED",
+            format!("{operation} failed for `{path}`: {error}"),
+        )
+    }
 }
 
 /// Lower a legacy `old_string`/`new_string` replacement to one line-anchored op.
@@ -1823,6 +1947,7 @@ fn legacy_replace_ops(text: &str, start: usize, old: &str, new: &str) -> Option<
     Some(ops)
 }
 
+#[cfg(test)]
 fn tool_edit(
     workspace: Option<&Path>,
     roots: &ContainedRoots,
@@ -1830,27 +1955,38 @@ fn tool_edit(
     allow_external_paths: bool,
     hashline: Option<&HashlineContext<'_>>,
 ) -> Result<Value, hashline::ToolError> {
+    tool_edit_scoped(workspace, roots, args, allow_external_paths, hashline, None)
+}
+
+fn tool_edit_scoped(
+    workspace: Option<&Path>,
+    roots: &ContainedRoots,
+    args: &Value,
+    allow_external_paths: bool,
+    hashline: Option<&HashlineContext<'_>>,
+    scope: Option<&write_scope::BoundWriteScope>,
+) -> Result<Value, hashline::ToolError> {
     let root = require_workspace(workspace).map_err(|(c, m)| hashline::ToolError::new(c, m))?;
     let path = args
         .get("path")
         .and_then(|v| v.as_str())
         .ok_or_else(|| hashline::ToolError::new("INVALID_ARGUMENT", "path required"))?;
     let (resolved, root_kind) =
-        resolve_tool_path_with_external(root, roots, path, allow_external_paths)
-            .map_err(|e| hashline::ToolError::new(e.clone(), e))?;
+        resolve_mutation_path(root, roots, path, allow_external_paths, scope)?;
     if ignore_rules::is_sensitive_path(&resolved) {
         let (code, message) = ignore_rules::denied_error(path);
         return Err(hashline::ToolError::new(code, message));
     }
     ensure_visualization_fragment(roots, root_kind, &resolved)
         .map_err(|(code, message)| hashline::ToolError::new(code, message))?;
-    let live = std::fs::read(&resolved).map_err(|e| {
-        if e.kind() == std::io::ErrorKind::NotFound {
-            hashline::ToolError::new("FILE_NOT_FOUND", format!("File not found: {path}"))
-        } else {
-            hashline::ToolError::new("TOOL_FAILED", format!("read failed: {e}"))
-        }
-    })?;
+    let scoped_target = scope
+        .map(|scope| scope.target(path, &resolved, false))
+        .transpose()?;
+    let live = match &scoped_target {
+        Some(target) => target.read(),
+        None => std::fs::read(&resolved),
+    }
+    .map_err(|e| scoped_io_error(path, "read", e))?;
     let legacy_old = args.get("old_string").and_then(Value::as_str);
     let legacy_new = args.get("new_string").and_then(Value::as_str);
     let tag_arg = args.get("tag").and_then(Value::as_str);
@@ -1935,10 +2071,12 @@ fn tool_edit(
     )?;
 
     if success.delete_file {
-        ensure_visualization_fragment(roots, root_kind, &resolved)
-            .map_err(|(code, message)| hashline::ToolError::new(code, message))?;
-        std::fs::remove_file(&resolved)
-            .map_err(|e| hashline::ToolError::new("TOOL_FAILED", format!("delete failed: {e}")))?;
+        ensure_visualization_fragment(roots, root_kind, &resolved)?;
+        match &scoped_target {
+            Some(target) => target.remove(),
+            None => std::fs::remove_file(&resolved),
+        }
+        .map_err(|e| hashline::ToolError::new("TOOL_FAILED", format!("delete failed: {e}")))?;
         hashline::invalidate_path(hashline, &canonical);
         return Ok(json!({
             "path": display,
@@ -1952,8 +2090,7 @@ fn tool_edit(
     let bytes = hashline::encode_success(&file);
     if let Some(dest) = &success.moved_to {
         let (dest_resolved, dest_root) =
-            resolve_tool_path_with_external(root, roots, dest, allow_external_paths)
-                .map_err(|e| hashline::ToolError::new(e.clone(), e))?;
+            resolve_mutation_path(root, roots, dest, allow_external_paths, scope)?;
         if ignore_rules::is_sensitive_path(&dest_resolved) {
             let (code, message) = ignore_rules::denied_error(dest);
             return Err(hashline::ToolError::new(code, message));
@@ -1968,19 +2105,23 @@ fn tool_edit(
                 "MV destination resolves to the source file; choose a different destination",
             ));
         }
-        if dest_root != ToolRoot::Visualization {
-            if let Some(parent) = dest_resolved.parent() {
-                std::fs::create_dir_all(parent).map_err(|e| {
-                    hashline::ToolError::new("TOOL_FAILED", format!("mkdir failed: {e}"))
-                })?;
-            }
+        ensure_visualization_fragment(roots, root_kind, &resolved)?;
+        if let (Some(scope), Some(source)) = (scope, &scoped_target) {
+            scope.check(root, path, &resolved, root_kind)?;
+            let destination = scope.target(dest, &dest_resolved, true)?;
+            destination
+                .write(&bytes, true)
+                .map_err(|e| scoped_io_error(dest, "write", e))?;
+            source
+                .remove()
+                .map_err(|e| scoped_io_error(path, "move", e))?;
+        } else {
+            write_file(&dest_resolved, dest_root, &bytes)
+                .map_err(|e| hashline::ToolError::new("TOOL_FAILED", e.message))?;
+            std::fs::remove_file(&resolved).map_err(|e| {
+                hashline::ToolError::new("TOOL_FAILED", format!("move failed: {e}"))
+            })?;
         }
-        ensure_visualization_fragment(roots, root_kind, &resolved)
-            .map_err(|(code, message)| hashline::ToolError::new(code, message))?;
-        std::fs::write(&dest_resolved, &bytes)
-            .map_err(|e| hashline::ToolError::new("TOOL_FAILED", format!("write failed: {e}")))?;
-        std::fs::remove_file(&resolved)
-            .map_err(|e| hashline::ToolError::new("TOOL_FAILED", format!("move failed: {e}")))?;
         hashline::invalidate_path(hashline, &canonical);
         let dest_display = display_tool_path(dest_root, root, &dest_resolved);
         let dest_file = hashline::normalize_file(&bytes);
@@ -2003,8 +2144,11 @@ fn tool_edit(
 
     ensure_visualization_fragment(roots, root_kind, &resolved)
         .map_err(|(code, message)| hashline::ToolError::new(code, message))?;
-    std::fs::write(&resolved, &bytes)
-        .map_err(|e| hashline::ToolError::new("TOOL_FAILED", format!("write failed: {e}")))?;
+    match &scoped_target {
+        Some(target) => target.write(&bytes, false),
+        None => std::fs::write(&resolved, &bytes),
+    }
+    .map_err(|e| hashline::ToolError::new("TOOL_FAILED", format!("write failed: {e}")))?;
     hashline::record_write(hashline, &canonical, &file, &success.tag);
     Ok(json!({
         "path": display,
@@ -2498,17 +2642,27 @@ where
     }
 }
 
-fn process_output_chunk(
+async fn process_output_chunk(
     chunk: OutputChunk,
     stdout: &mut CapturedOutput,
     stderr: &mut CapturedOutput,
     notifier: &mut OutputNotifier,
+    job: Option<&BackgroundTask>,
 ) {
     let decoded = match chunk.stream {
         OutputStream::Stdout => stdout.push(&chunk.bytes),
         OutputStream::Stderr => stderr.push(&chunk.bytes),
     };
-    notifier.push(chunk.stream, decoded);
+    if let Some(job) = job {
+        job.append_yielded_output(
+            matches!(chunk.stream, OutputStream::Stdout),
+            &decoded,
+            false,
+        )
+        .await;
+    } else {
+        notifier.push(chunk.stream, decoded);
+    }
 }
 
 async fn wait_for_cancellation(receiver: &mut Option<watch::Receiver<bool>>) -> bool {
@@ -2687,6 +2841,7 @@ async fn drain_output(
     stdout: &mut CapturedOutput,
     stderr: &mut CapturedOutput,
     notifier: &mut OutputNotifier,
+    job: Option<&BackgroundTask>,
     stdout_task: &mut tokio::task::JoinHandle<()>,
     stderr_task: &mut tokio::task::JoinHandle<()>,
     pid: u32,
@@ -2695,7 +2850,7 @@ async fn drain_output(
 ) -> Result<(), String> {
     let drain = async {
         while let Some(chunk) = output_rx.recv().await {
-            process_output_chunk(chunk, stdout, stderr, notifier);
+            process_output_chunk(chunk, stdout, stderr, notifier, job).await;
         }
         *output_closed = true;
     };
@@ -2724,6 +2879,32 @@ enum BashStop {
     TimedOut,
     Aborted,
     LifecycleFailed(String),
+}
+
+// A requested timeout is a completion deadline, not permission to return a
+// running result before the caller's requested observation interval.
+fn bash_may_yield(args: &Value, options: &BashExecutionOptions, timeout_ms: u64) -> bool {
+    options.yield_after_initial_wait
+        && args.get("timeout").is_none()
+        && timeout_ms == DEFAULT_BASH_TIMEOUT_MS
+        && timeout_ms > BASH_INITIAL_WAIT_MS
+}
+
+#[cfg(test)]
+#[test]
+fn initial_wait_respects_requested_timeout_and_opt_in() {
+    let mut options = BashExecutionOptions::local("test".into(), Some(DEFAULT_BASH_TIMEOUT_MS));
+    let plain = json!({"command": "example"});
+    assert!(!bash_may_yield(&plain, &options, DEFAULT_BASH_TIMEOUT_MS));
+    options.yield_after_initial_wait = true;
+    assert!(bash_may_yield(&plain, &options, DEFAULT_BASH_TIMEOUT_MS));
+    assert!(!bash_may_yield(
+        &json!({"timeout": 60}),
+        &options,
+        DEFAULT_BASH_TIMEOUT_MS
+    ));
+    assert!(!bash_may_yield(&plain, &options, 15_000));
+    assert!(!bash_may_yield(&plain, &options, BASH_INITIAL_WAIT_MS));
 }
 
 async fn tool_bash(
@@ -2801,6 +2982,48 @@ async fn tool_bash(
         env_path: shell::user_login_path().map(str::to_string),
         extra_env: options.extra_env.clone(),
     };
+    let may_yield = bash_may_yield(args, &options, timeout_ms);
+    let (early, mut early_result) = oneshot::channel();
+    let mut execution = Box::pin(run_foreground_bash(
+        config,
+        scratch.map(Path::to_path_buf),
+        command.to_owned(),
+        options,
+        timeout_ms,
+        may_yield,
+        early,
+    ));
+    let yielded = poll_fn(|cx| {
+        // Observe the handoff in the same poll that performs it. Dropping an
+        // outstanding request must not strand a registered job with no owner.
+        if let Poll::Ready(result) = execution.as_mut().poll(cx) {
+            return Poll::Ready(Err(result));
+        }
+        match std::pin::Pin::new(&mut early_result).poll(cx) {
+            Poll::Ready(Ok(result)) => Poll::Ready(Ok(result)),
+            Poll::Ready(Err(_)) | Poll::Pending => Poll::Pending,
+        }
+    })
+    .await;
+    match yielded {
+        Ok(result) => {
+            // The same future retains the process, pipes and original deadline.
+            tokio::spawn(execution);
+            Ok(result)
+        }
+        Err(finished) => finished,
+    }
+}
+
+async fn run_foreground_bash(
+    config: ToolRunnerStartConfig,
+    scratch: Option<PathBuf>,
+    command: String,
+    options: BashExecutionOptions,
+    timeout_ms: u64,
+    may_yield: bool,
+    early: oneshot::Sender<Value>,
+) -> Result<Value, (String, String)> {
     let SpawnedToolRunner {
         pid,
         mut ownership,
@@ -2817,8 +3040,16 @@ async fn tool_bash(
     let stderr_task = tokio::spawn(read_pipe(stderr, OutputStream::Stderr, chunk_tx.clone()));
     drop(chunk_tx);
 
+    let started_at = Instant::now();
     let timeout_future = tokio::time::sleep(Duration::from_millis(timeout_ms));
     tokio::pin!(timeout_future);
+    let initial_wait = tokio::time::sleep(Duration::from_millis(BASH_INITIAL_WAIT_MS));
+    tokio::pin!(initial_wait);
+    let mut may_yield = may_yield;
+    let mut early = Some(early);
+    let mut job: Option<BackgroundTask> = None;
+    let mut on_settled = None;
+    let mut background_stop = None;
     let mut cancellation = options.cancellation.clone();
     let mut stdout = CapturedOutput::default();
     let mut stderr = CapturedOutput::default();
@@ -2828,17 +3059,9 @@ async fn tool_bash(
 
     let stop = loop {
         tokio::select! {
+            biased;
             waited = &mut wait_task => {
                 break BashStop::Exited(waited);
-            }
-            chunk = output_rx.recv(), if !output_closed => {
-                match chunk {
-                    Some(chunk) => process_output_chunk(chunk, &mut stdout, &mut stderr, &mut notifier),
-                    None => output_closed = true,
-                }
-            }
-            _ = output_tick.tick() => {
-                notifier.flush_due();
             }
             _ = &mut timeout_future => {
                 match kill_and_reap(pid, &mut ownership, &mut control, &mut wait_task).await {
@@ -2846,13 +3069,57 @@ async fn tool_bash(
                     Err(error) => break BashStop::LifecycleFailed(error),
                 }
             }
-            cancelled = wait_for_cancellation(&mut cancellation) => {
-                if cancelled {
-                    match kill_and_reap(pid, &mut ownership, &mut control, &mut wait_task).await {
-                        Ok(()) => break BashStop::Aborted,
-                        Err(error) => break BashStop::LifecycleFailed(error),
-                    }
+            _ = wait_for_cancellation(&mut cancellation) => {
+                match kill_and_reap(pid, &mut ownership, &mut control, &mut wait_task).await {
+                    Ok(()) => break BashStop::Aborted,
+                    Err(error) => break BashStop::LifecycleFailed(error),
                 }
+            }
+            _ = wait_for_cancellation(&mut background_stop), if job.is_some() => {
+                match kill_and_reap(pid, &mut ownership, &mut control, &mut wait_task).await {
+                    Ok(()) => break BashStop::Aborted,
+                    Err(error) => break BashStop::LifecycleFailed(error),
+                }
+            }
+            _ = &mut initial_wait, if may_yield => {
+                may_yield = false;
+                let Some(state) = options.app_state.as_ref() else { continue };
+                let Some(early) = early.take() else { continue };
+                match tokio::time::timeout_at(
+                    tokio::time::Instant::from_std(started_at) + Duration::from_millis(timeout_ms),
+                    crate::background_tasks::yielded::register_yielded_task(
+                        state, &options.session_id, &command, &options.command_shell_id,
+                        started_at, cancellation.as_ref(), [stdout.result(), stderr.result()],
+                    ),
+                ).await {
+                    Ok(Ok(Some((task, stop_rx, mut result, callback)))) => {
+                        // The foreground result interpreter expects exitCode only on completion.
+                        if let Some(fields) = result.as_object_mut() {
+                            fields.remove("exitCode");
+                        }
+                        result["backgroundTaskId"] = json!(task.id);
+                        result["commandShellId"] = json!(options.command_shell_id);
+                        result["message"] = json!("Bash is still running. Use TaskWait with its job reference before relying on the result.");
+                        background_stop = Some(stop_rx);
+                        on_settled = callback;
+                        job = Some(task);
+                        notifier.finish();
+                        notifier.tx = None;
+                        let _ = early.send(result);
+                        tokio::task::yield_now().await;
+                    }
+                    Ok(Ok(None)) | Err(_) => {}
+                    Ok(Err(error)) => tracing::warn!(%error, "Bash could not publish a job; continuing to wait"),
+                }
+            }
+            chunk = output_rx.recv(), if !output_closed => {
+                match chunk {
+                    Some(chunk) => process_output_chunk(chunk, &mut stdout, &mut stderr, &mut notifier, job.as_ref()).await,
+                    None => output_closed = true,
+                }
+            }
+            _ = output_tick.tick(), if job.is_none() => {
+                notifier.flush_due();
             }
         }
     };
@@ -2865,6 +3132,7 @@ async fn tool_bash(
         &mut stdout,
         &mut stderr,
         &mut notifier,
+        job.as_ref(),
         &mut stdout_task,
         &mut stderr_task,
         pid,
@@ -2876,10 +3144,58 @@ async fn tool_bash(
         Ok(()) => stop,
         Err(error) => BashStop::LifecycleFailed(error),
     };
-    notifier.push(OutputStream::Stdout, stdout.finish());
-    notifier.push(OutputStream::Stderr, stderr.finish());
-    notifier.finish();
+    let stdout_tail = stdout.finish();
+    let stderr_tail = stderr.finish();
+    if let Some(job) = job.as_ref() {
+        job.append_yielded_output(true, &stdout_tail, false).await;
+        job.append_yielded_output(false, &stderr_tail, false).await;
+    } else {
+        notifier.push(OutputStream::Stdout, stdout_tail);
+        notifier.push(OutputStream::Stderr, stderr_tail);
+        notifier.finish();
+    }
 
+    let was_stopped = matches!(stop, BashStop::Aborted);
+    let result = finish_foreground_bash(
+        stop,
+        timeout_ms,
+        stdout,
+        stderr,
+        scratch.as_deref(),
+        &options.command_shell_id,
+    );
+    if let Some(job) = job {
+        let (state, exit_code, error) = match &result {
+            Ok(value) => {
+                let code = value["exitCode"]
+                    .as_i64()
+                    .and_then(|code| i32::try_from(code).ok());
+                let state = if code == Some(0) {
+                    BackgroundTaskState::Exited
+                } else {
+                    BackgroundTaskState::Failed
+                };
+                (state, code, None)
+            }
+            Err((_, error)) if was_stopped => {
+                (BackgroundTaskState::Stopped, None, Some(error.as_str()))
+            }
+            Err((_, error)) => (BackgroundTaskState::Failed, None, Some(error.as_str())),
+        };
+        job.finish_yielded(state, exit_code, error, on_settled)
+            .await;
+    }
+    result
+}
+
+fn finish_foreground_bash(
+    stop: BashStop,
+    timeout_ms: u64,
+    stdout: CapturedOutput,
+    stderr: CapturedOutput,
+    scratch: Option<&Path>,
+    command_shell_id: &str,
+) -> Result<Value, (String, String)> {
     match stop {
         BashStop::TimedOut => Err((
             "TOOL_TIMEOUT".into(),
@@ -2928,7 +3244,7 @@ async fn tool_bash(
                 "stdout": stdout,
                 "stderr": stderr,
                 "truncated": trunc_out || trunc_err,
-                "commandShellId": options.command_shell_id,
+                "commandShellId": command_shell_id,
             }))
         }
     }
@@ -3909,6 +4225,7 @@ mod tests {
                 allow_external_paths: true,
                 hashline: None,
                 visualization_root: None,
+                write_scope: None,
             },
         )
         .await;
@@ -4069,6 +4386,7 @@ mod tests {
                 allow_external_paths: true,
                 hashline: None,
                 visualization_root: None,
+                write_scope: None,
             },
         )
         .await;
@@ -4093,6 +4411,7 @@ mod tests {
                 allow_external_paths: true,
                 hashline: None,
                 visualization_root: None,
+                write_scope: None,
             },
         )
         .await;
@@ -4117,6 +4436,7 @@ mod tests {
                 allow_external_paths: true,
                 hashline: None,
                 visualization_root: None,
+                write_scope: None,
             },
         )
         .await;
@@ -4145,6 +4465,7 @@ mod tests {
                 allow_external_paths: true,
                 hashline: None,
                 visualization_root: None,
+                write_scope: None,
             },
         )
         .await;
@@ -4173,6 +4494,7 @@ mod tests {
                 allow_external_paths: true,
                 hashline: None,
                 visualization_root: None,
+                write_scope: None,
             },
         )
         .await;
@@ -4195,6 +4517,7 @@ mod tests {
                 allow_external_paths: true,
                 hashline: None,
                 visualization_root: None,
+                write_scope: None,
             },
         )
         .await;
@@ -4878,6 +5201,7 @@ mod tests {
                 output_tx: None,
                 extra_env: Vec::new(),
                 run_in_background: false,
+                yield_after_initial_wait: false,
                 continuation_turn_id: None,
                 app_state: None,
             }),
@@ -4923,6 +5247,7 @@ mod tests {
                 output_tx: None,
                 extra_env: Vec::new(),
                 run_in_background: false,
+                yield_after_initial_wait: false,
                 continuation_turn_id: None,
                 app_state: None,
             }),
@@ -4963,6 +5288,7 @@ mod tests {
                 output_tx: None,
                 extra_env: Vec::new(),
                 run_in_background: false,
+                yield_after_initial_wait: false,
                 continuation_turn_id: None,
                 app_state: None,
             }),
@@ -5036,6 +5362,7 @@ mod tests {
             output_tx: Some(tx),
             extra_env: Vec::new(),
             run_in_background: false,
+            yield_after_initial_wait: false,
             continuation_turn_id: None,
             app_state: None,
         };
@@ -5065,6 +5392,7 @@ mod tests {
             output_tx: None,
             extra_env: Vec::new(),
             run_in_background: false,
+            yield_after_initial_wait: false,
             continuation_turn_id: None,
             app_state: None,
         };
@@ -5156,6 +5484,7 @@ mod tests {
             output_tx: None,
             extra_env: Vec::new(),
             run_in_background: false,
+            yield_after_initial_wait: false,
             continuation_turn_id: None,
             app_state: None,
         };

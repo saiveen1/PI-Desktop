@@ -47,6 +47,18 @@ the runtime `session-persona-user-path.test.ts`, and the desktop
 `session-personas-user-path.test.mjs` and `session-persona-main-ipc.test.mjs` fixtures. Live-provider adherence and installed-profile upgrade
 are separate manual acceptance, not implied by the isolated checks.
 
+## E2E-SUBAGENT-composer-presence
+
+Upstream introduced a composer presence bar. In the integration candidate,
+exercise active delegates, a collapsed task dock, avatar focus/hover, `+N`
+roster and Escape, scoped Stop, settlement, session switching and restart.
+Verify tool history, lifecycle rows and source-session Work panel records remain
+available without duplicate task presentations. Upstream topology-card defaults
+and ordinary-row replacement do not supersede the personal task-first contract;
+style integration and defaults require candidate verification. The upstream
+`subagent-presence-user-path.test.mjs` and `scripts/e2e-subagent-stop.mjs` are
+test entry points, not evidence that this candidate passed.
+
 ## E2E-stop-navigation-running-state
 
 Hold the history read after a successful local Stop, switch to another running session, then resolve the older session's history. Verify only the stopped session is settled, the new transcript remains and its toolbar still offers Stop. Also navigate synchronously during the hydration commit to exercise the final state writer. Coverage: `stop-navigation-running-state.test.mjs`, related smart-stop/terminal regressions, and `scripts/e2e-stop-navigation-running-state.mjs` using the production store and ComposerToolbar in Electron.
@@ -57,6 +69,69 @@ Click the production Composer Stop button for a Native Pi source. Let abort succ
 
 > Part of the [E2E test plan](../04-e2e-test-plan.md). Sessions, transcripts, the composer, streaming, queueing, context, and review.
 > Scenario template, gates, and traceability live in the plan.
+
+## E2E-FILE-LINES — File Manager selections in Composer
+
+Install the File Manager normally. In a temporary local project, open a source
+file with two distinct lines and select both. Verify **Add to chat** adds one
+removable `gpt.py (85:86)` chip
+without sending. Delete it, copy the selection, and paste into the Composer:
+the same chip appears, while paste into an ordinary editor yields the selected
+text. End a selection at the start of the next line and verify that line is
+excluded. A one-line selection displays one line number.
+
+Open the same view from a development-loaded File Manager and verify that
+the host does not advertise `composerFileLines`.
+
+With the Host unavailable, open an eligible installed File Manager view.
+Verify opening completes immediately and `composerFileLines` remains true.
+**Add to chat** reports Host unavailability. Reconnect the Host and retry
+from the same view. The selection is added after registration is checked.
+
+Insert an unsaved line before the range. Copying still pastes the original
+text and the selection menu has no **Add to chat** action. Save the file and
+verify that both actions use the new saved line numbers.
+
+Change the saved text after adding the chip, then send it. Observe one scoped
+Read with offset 84 and limit 2 and the saved result in the model request.
+Restart and verify the reference is still visible and there is no synthetic
+Read in the transcript or restored model history. Submit again after deleting
+the file and verify a failed reference marker in the model request. Repeat
+with Read permission denied and verify a blocked marker. Neither marker is
+quoted as file content. Repeat with a queued turn and a project switch. A
+different project's clipboard metadata cannot add the chip.
+Fill the draft with four distinct line references, then paste another range.
+Verify a limit warning, four unchanged references, and the pasted plain text.
+Paste metadata for a 4,001-line selection or an out-of-bounds line number and
+verify ordinary text paste. A trailing workspace separator must behave the same
+for the context-menu and clipboard paths; another workspace must still fail.
+Submit five references or a malformed range directly to the prompt boundary
+and runtime boundary: both reject with `INVALID_ARGUMENT` before any Read.
+Restore a historical attachment with range metadata and a recorded excerpt;
+verify the excerpt remains a file-lines block without an assistant tool call.
+Repeat a file-reference prompt in a staged Goal run: the current objective is
+already in the system prompt when the scoped Read executes, and the provider
+input retains the file context. Controlled coverage: `runtime.test.ts`.
+
+Add a line selection and a native disk-file reference to the same draft. Recall
+it from input history and verify the range, disk identity and byte size remain.
+Send and restart: the model context retains the scoped file-lines block and the
+disk path/size metadata, with no synthetic tool history or eager disk-file read.
+An attachment combining `lineRange` and `localReference` is rejected before any
+Read. Coverage: `composer-input-history.test.mjs`, `composer-file-reference-draft.test.mjs`,
+`composer-file-references.test.mjs` and `runtime.test.ts`.
+
+Automated installed-package coverage:
+`PI_FILE_MANAGER_QA_DIR=<existing Playwright install> PI_DESKTOP_HOST_BIN=<candidate Host> node scripts/e2e-file-manager-lines.mjs <File Manager .piplug>`.
+Build the candidate Desktop and workspace packages first. The runner installs
+the package through Host with its declared grants, selects the real session,
+and opens the production view through its public IPC. Context-menu input then
+reaches the real Composer. It verifies unsaved-selection rejection, scoped
+reads of current disk lines at the provider boundary, and range persistence
+across a full Desktop/Host restart without resending. The provider is a
+loopback Chat Completions fixture; application, capability and agent state
+use temporary directories. Native clipboard gestures and live providers
+remain separate qualification.
 
 ## E2E-CHAT-output-token-truncation (#2277)
 
@@ -348,8 +423,9 @@ folder/mixed-selection behavior. No system clipboard contents are changed.
   image checkbox. Cancel once, repeat and Save, then reopen settings and editor.
 - **Expected:** Cancel preserves both configurations. Save removes the model and
   its image candidate and clears the image default, even when another image
-  candidate remains on this or another provider. The settings summary therefore
-  shows the unavailable state until the user explicitly chooses a new default.
+  candidate remains on this or another provider. The image model row remains
+  visible: it shows **Not configured** with a picker when another candidate is
+  runnable, or an empty-state hint without a picker when no candidates remain.
   An unaffected chat default stays unchanged; a removed chat default still falls
   back to the first configured model. Reload preserves results.
 - **Specs:** 03-runtime/21-image-generation. **Acceptance:** B.
@@ -361,27 +437,30 @@ folder/mixed-selection behavior. No system clipboard contents are changed.
 - **Preconditions:** Isolated desktop profile and workspace, built image feature,
   local chat and OpenAI Images HTTP fixtures; no live provider credentials.
 - **Steps:** Open Models settings with no image model configured; verify the image
-  summary row is absent. Open a provider's Advanced model settings and verify
-  **Set as image model** is grouped with the image/document attachment
-  capabilities and can be checked for multiple models. Save, use the image
-  summary menu to choose one marked model as the default, then submit a
-  two-image request through the composer and edit the first output through a
+  model row shows the no-candidates hint without a picker. Open a provider's
+  Advanced model settings and verify **Set as image model** is grouped with
+  the image/document attachment capabilities and can be checked for multiple
+  models. Save, choose a marked model from the image summary menu, then submit
+  a two-image request through the composer and edit the first output through a
   follow-up message. Collapse tool details.
-- **Expected:** After saving, the image summary appears with a 12px default-row
-  gap and lists all marked candidates, the selected default is changeable
-  without changing the chat default, decoded image previews stay outside
-  collapsed process details, multipart source upload is used for editing,
+- **Expected:** After saving, the image summary keeps its 12px default-row gap
+  and lists all marked candidates in the picker. Changing the image default does
+  not change the chat default, decoded image previews stay outside collapsed
+  process details, multipart source upload is used for editing,
   originals are preserved, and no image HTTP request occurs while unconfigured.
-- **Settings interactions:** The unconfigured state renders no image summary.
-  Mark candidates in the attachment capability group, save, and select one
-  from the summary menu. An existing missing/disabled candidate shows only
-  Currently unavailable. Covered in `scripts/e2e-image-generation-ui.mjs`.
+- **Settings interactions:** Mark candidates in the attachment capability group,
+  save, and select one from the summary menu. A missing or disabled default
+  shows **Currently unavailable**; another runnable candidate remains selectable.
+  When all marked models are unavailable, the row still shows **Currently
+  unavailable**, without a picker. Covered in `scripts/e2e-image-generation-ui.mjs`
+  and `apps/desktop/test/image-generation-row-empty-state.test.mjs`.
 - **Image model deselection (#826):** With one provider and one model marked
   for images, uncheck it in the provider editor. Cancel must preserve the image
   default; Save must clear both its candidate and default binding. Reopen settings
-  and the editor: the image row stays hidden, the checkbox stays unchecked, and
-  the model can be selected as the chat default. Covered in English and Chinese
-  by `scripts/e2e-image-generation-ui.mjs` with an API-boundary fixture.
+  and the editor: the image row shows the no-candidates hint without a picker,
+  the checkbox stays unchecked, and the model can be the chat default. Covered
+  in English and Chinese by `scripts/e2e-image-generation-ui.mjs` with an
+  API-boundary fixture.
 - **Conversation selection:** Every marked image provider/model is absent from
   default and Composer candidates. Other providers retain same-ID models. An
   existing session pinned to any marked image binding is rejected before
@@ -448,17 +527,24 @@ folder/mixed-selection behavior. No system clipboard contents are changed.
 - **Steps**: 1) Leave Enter-to-send enabled. Type a draft and press Enter.
   2) Disable Enter-to-send in Settings. 3) Type a second draft and press
   Cmd/Ctrl+Enter. 4) Press Enter and Shift+Enter in a third draft, then
-  Shift+Enter at the end and type one character.
+  Shift+Enter at the end, then type one character and press ArrowDown once.
 - **Expected**: Step 1 sends. After the setting is off, Cmd/Ctrl+Enter sends;
   plain Enter and Shift+Enter insert newlines and do not send. IME composition
-  and an open autocomplete menu still take precedence over send. The character
-  typed on the empty last line stays on that line.
+  and an open autocomplete menu still take precedence over send. The composer
+  grows by exactly one line per newline, the caret stays on the new empty line
+  instead of resolving to a neighbouring one, ArrowDown cannot move it below
+  that line, and the character typed there stays on it.
 - **Specs linked**: `04-ux/01-ui-ia.md`, `04-ux/08-component-spec.md` §11.5,
   `04-ux/09-interaction-patterns.md` §1.2
 - **Acceptance**: C (composer send)
 - **Milestone**: M2
-- **Status**: Source-level regression (`composer-ime.test.mjs`); full UI
-  keyboard journey remains Draft. Protocol smoke does not dispatch key events.
+- **Automation**: `pnpm test:e2e:composer-tail-line` mounts the production editor in
+  Electron. Type three lines, click the end of line one, insert one break, click
+  each painted line, then type and backspace at the end. Check the exact draft,
+  line geometry, selection and caret, including an empty last line, consecutive
+  breaks, native undo/redo of both insertion and Backspace, and IME preedit/commit. On a disposable desktop with
+  its own empty clipboard, add `--isolated-clipboard` to check native copy as well.
+  The full Settings-to-send journey remains Draft; this lane needs no provider.
 
 ## E2E-008e: Host speech transcribe and speak
 
@@ -1485,7 +1571,9 @@ folder/mixed-selection behavior. No system clipboard contents are changed.
   changes occur. The keyboard hint includes Shift+Enter and a submit hint, while the
   command/file hint includes `/` and `@`. The slash menu still contains `/new`,
   `/compact`, `/agent-mode`, `/plan-mode`, and `/goal-mode`, followed by a
-  Skills group at the bottom. Selecting a Skill inserts `/skill:<id>`; sending
+  Skills group at the bottom. Select a Skill mid-sentence and type its arguments;
+  verify the editor has one atomic Skill node, deletion removes the whole node,
+  and native undo restores it. The node serializes to `/skill:<id>` without an attachment; sending
   it keeps the typed command chip visible and the model calls `Skill` with the
   original ID before answering. Verify builtin, plugin, and user Skill prefixes,
   multiple inline references, and a prompt template sharing the unprefixed
@@ -3356,6 +3444,17 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
 - **Milestone**: M5
 - **Status**: Unit-covered (`runtime.test.ts`); full provider/UI journey Draft
 
+## E2E-COMPOSER-sentinel-native-editing
+
+In an isolated Composer draft, mix ordinary text, inline file-reference chips,
+and pasted-text chips. Edit adjacent text, use native deletion, undo/redo and
+IME composition, then recall the draft from input history and send. Verify
+chips and their sentinel-backed references stay paired and resolve at their
+original positions; removing one never deletes a neighboring reference. At
+the draft end, Enter inserts one newline, including on undo/redo, without
+exposing Chromium's layout-only placeholder. The source guard and tail-line
+fixtures are test entry points, not evidence of a candidate pass.
+
 ## E2E-COMPOSER-local-file-references: Native file intake keeps paths and sizes
 
 - **Preconditions**: Local sessions both with and without a project, and synthetic
@@ -3372,7 +3471,9 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
   Removable inline cards show human-readable size. No ordinary source contents
   cross paste IPC or enter scratch/content-addressed snapshots. Raster images,
   screenshots and generated text retain bounded attachment/image behavior.
-  Dispatch refreshes size and preserves metadata
+  Native raster images within the bounded import path, including temporary PNG
+  file URLs, attach as image bytes rather than metadata references and remain
+  available if the original is deleted. Dispatch refreshes size and preserves metadata
   through messages and model history, and clearly rejects unavailable or
   redirected sources. Forged ids/paths, another project and remote metadata
   references are refused. Projectless local sessions reference ordinary files with
@@ -3395,7 +3496,9 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
   preparation and Composer history. Paste, drop and picker all retain a sparse
   64 MiB + 1 byte source and a small file outside the project as size cards without
   renderer byte reads or scratch writes. The native dialog/clipboard source is
-  injected at the OS boundary, not replaced by renderer paths. The fixture
+  injected at the OS boundary, not replaced by renderer paths. A native PNG in
+  a mixed selection is imported to scratch and prepared as inline image data.
+  The fixture
   edits the large source before send and verifies refreshed size in model context.
   A second Electron process recalls the stored metadata and dispatches through
   the persisted reference records. Native clipboard metadata and provider
@@ -3414,6 +3517,18 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
 - **Milestone**: M5.
 - **Status**: Targeted unit/integration and isolated Electron fixture; manual OS
   gestures and live-provider delivery remain separate verification.
+- **Native pasteboard coverage (macOS)**: `pnpm test:e2e:composer-paste-image-file`
+  runs the built Desktop with a real Host, agent sidecar and preload IPC, writes
+  a temporary PNG outside the project to the general pasteboard as a file URL
+  (the PixPin/Finder shape from issue #2529), and pastes with a real paste
+  command. It asserts an image chip, deletes the source before send, then
+  verifies the local vision-capable Chat Completions fixture receives the exact
+  PNG as an `image_url` part with no local file reference context, and that the
+  transcript stores `attachments/<sha256>`. Only the model endpoint is a local
+  fixture. The pasteboard is shared with the desktop session, so the script
+  retries a paste only when Chromium saw an empty pasteboard.
+  The native pasteboard journey is a separate platform-specific check; it has
+  not been run as part of this documentation merge.
 
 ## E2E-COMPOSER-deep-file-mentions: `@` reaches deep files in a large workspace
 
@@ -4704,6 +4819,16 @@ command, a delegate, and an explicit Stop. Accepted input is delivered once.
 - **Acceptance / milestone:** C / E / Quality; personal maintenance.
 - **Status:** Updated contract; task-candidate verification pending.
 
+Upstream's former active-open group and live-thinking defaults are historical;
+they do not replace the personal live-closed defaults above. Preserve compatible
+coverage for group handoff, retained-pane remounts, nested search, localization,
+reading anchors and settings layout. Candidate test entry points include
+`pnpm test:e2e:transcript`, `pnpm test:e2e:transcript-disclosure`,
+`node scripts/e2e-settings-scroll.mjs`, `turn-process.test.mjs`,
+`activity-group-folding.test.mjs`, `transcript-display-modes-ui.test.mjs`,
+`turn-process-header.test.mjs`, `turn-process-header-style.test.mjs`,
+`transcript-display-mode-settings.test.mjs`, and `settings-roundtrip.test.mjs`.
+
 ## E2E-OUTPUT-CAP-716: Keep model requests inside the published context window
 
 - **Preconditions:** A deterministic provider fixture exposes a published context
@@ -5568,3 +5693,17 @@ Build two actual runtimes with identical configuration and different scratch dir
 - With a side-question plugin, verify the quote preview can be removed
   atomically and the first explicitly sent prompt contains only the excerpt
   and the new question. The main conversation and its input remain intact.
+
+## E2E-CHAT-long-user-message-preview
+
+- **Steps**: Send a six-line message and a seven-line message. Expand the
+  longer message, then collapse it. Narrow the conversation until an
+  otherwise short message wraps beyond six lines. Search for content after
+  line six. Copy or edit the message, then restart the app.
+- **Expected**: Six lines or fewer have no button. Longer text starts folded
+  with a six-line preview, a bottom fade, and a centered text-and-chevron
+  button. Search reveals the matching message. Copy and edit use the full
+  text, and restart restores the default.
+- **Specs linked**: `04-ux/08-component-spec.md`
+- **Status**: Renderer interactions and resize covered by
+  `apps/desktop/test/subagent-conversation-user-path.test.mjs`.

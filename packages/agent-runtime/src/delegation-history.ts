@@ -48,6 +48,9 @@ import {
 import { isRecord, timestampMs, toJsonObject, toJsonValue, usageToPi } from "./agent-messages.js";
 import { restoredToolResultContent } from "./tool-result-content.js";
 import type { ContextBudgetLimits } from "./context-budget.js";
+import { composeDelegateBrief } from "./delegation-brief.js";
+import { canResumeDelegation, readDelegationModel, readDelegationPolicy, type DelegationModelSelection, type DelegationPolicy } from "./delegation-policy.js";
+import { parseWriteScope, sameWriteScope } from "./delegation-scope.js";
 import {
   apiBindingForProviderModel,
   type RuntimeProviderConfig,
@@ -86,6 +89,10 @@ export type DelegationChain = {
   latestModelReason?: string;
   /** Requested effort before provider-specific clamping. */
   latestRequestedThinkingLevel?: SubagentThinkingLevel;
+  policy?: DelegationPolicy;
+  latestModel?: DelegationModelSelection;
+  /** New runs with incomplete metadata must never resume as legacy runs. */
+  incompleteSnapshot?: boolean;
   /** Settled status of the latest run; `running` while it works. Owns the
    * resumability gate so pruning finished delegation records cannot make a
    * running chain look reusable (ADR 0279). */
@@ -219,8 +226,13 @@ export function originalTaskFromTranscript(
   );
   if (!row) return undefined;
   const args = isRecord(row.toolArgs) ? row.toolArgs : undefined;
+  return briefFromTaskArgs(args);
+}
+
+function briefFromTaskArgs(args: Record<string, unknown> | undefined): string | undefined {
   const task = typeof args?.task === "string" ? args.task.trim() : "";
-  return task || undefined;
+  if (!task) return undefined;
+  return composeDelegateBrief({ task, userRequest: typeof args?.userRequest === "string" ? args.userRequest : undefined });
 }
 
 export function taskObjectiveFromArgs(args: unknown): string {
@@ -516,6 +528,9 @@ export type RebuiltTaskCall = {
   requestedModel?: string;
   modelReason?: string;
   requestedThinkingLevel?: SubagentThinkingLevel;
+  policy?: DelegationPolicy;
+  model?: DelegationModelSelection;
+  incompleteSnapshot?: boolean;
   createdAt: number;
   /** Settled status this call's `Task` row recorded, when it recorded one. */
   status?: string;
@@ -582,7 +597,13 @@ export function rebuildChainsFromTranscript(
     );
     if (!agentName) continue;
     const resume = typeof args?.resume === "string" ? args.resume.trim() : "";
-    const task = typeof args?.task === "string" ? args.task.trim() : "";
+    const task = briefFromTaskArgs(args);
+    const policy = readDelegationPolicy(details?.delegationPolicy);
+    const model = readDelegationModel(details?.delegationModel);
+    const scope = parseWriteScope(args?.scope);
+    const incompleteSnapshot = ((details?.delegationPolicy !== undefined || details?.delegationModel !== undefined || args?.scope !== undefined || args?.userRequest !== undefined) && (!policy || !model)) ||
+      scope.kind === "invalid" || (scope.kind === "scoped" && !sameWriteScope(scope.entries, policy?.writeScope)) ||
+      (model !== undefined && details?.modelId !== undefined && model.modelId !== details.modelId);
     const modelId =
       typeof details?.modelId === "string" ? details.modelId : undefined;
     const scheduling = isRecord(details?.scheduling) ? details.scheduling : undefined;
@@ -593,7 +614,7 @@ export function rebuildChainsFromTranscript(
     const selectedDecision = Array.isArray(scheduling?.decisions)
       ? [...scheduling.decisions].reverse().find(candidate => isRecord(candidate) && candidate.decision === "selected" && typeof candidate.model === "string")
       : undefined;
-    const modelKey = isRecord(selectedDecision) && typeof selectedDecision.model === "string" ? selectedDecision.model : undefined;
+    const modelKey = model?.key ?? (isRecord(selectedDecision) && typeof selectedDecision.model === "string" ? selectedDecision.model : undefined);
     const checkpointPath =
       typeof details?.checkpointPath === "string" ? details.checkpointPath : undefined;
     const call: RebuiltTaskCall = {
@@ -610,6 +631,9 @@ export function rebuildChainsFromTranscript(
       ...(requestedThinkingLevel ? { requestedThinkingLevel } : {}),
       ...restoredDelegationPersona(details?.persona),
       ...(checkpointPath ? { checkpointPath } : {}),
+      ...(policy ? { policy } : {}),
+      ...(model ? { model } : {}),
+      ...(incompleteSnapshot ? { incompleteSnapshot } : {}),
       status: chainStatusFromDetail(details, row),
       createdAt: timestampMs(row.createdAt) || Date.now(),
     };
@@ -678,6 +702,13 @@ export function rebuildChainsFromTranscript(
       ...(latest?.requestedModel ? { latestRequestedModel: latest.requestedModel } : {}),
       ...(latest?.modelReason ? { latestModelReason: latest.modelReason } : {}),
       ...(latest?.requestedThinkingLevel ? { latestRequestedThinkingLevel: latest.requestedThinkingLevel } : {}),
+      policy: latest?.policy,
+      latestModel: latest?.model,
+      // A partial later receipt cannot downgrade a snapshotted chain to legacy access.
+      incompleteSnapshot: ordered.some(call => {
+        const prior = call.resume ? byDelegationId.get(call.resume)?.policy : undefined;
+        return call.incompleteSnapshot || (prior && (!call.policy || !call.model || !canResumeDelegation(prior, call.policy)));
+      }),
       latestStatus: latest?.status,
       ...(latest?.checkpointPath ? { checkpointPath: latest.checkpointPath } : {}),
       lastActivityAt: latest?.createdAt ?? root.createdAt,

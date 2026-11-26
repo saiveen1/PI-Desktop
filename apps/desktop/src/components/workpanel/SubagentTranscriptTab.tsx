@@ -8,6 +8,7 @@ import { DelegationSelectionSummary } from "../../features/chat/transcript/Deleg
 import { SubagentStopButton } from "../../features/chat/transcript/SubagentStopButton";
 import { SubagentRetryButton } from "../../features/chat/transcript/SubagentRetryButton";
 import { SubagentTurnContent } from "../../features/chat/transcript/SubagentTurnContent";
+import { CollapsibleUserText } from "../../features/chat/transcript/CollapsibleUserText";
 import { TranscriptDisclosureProvider } from "../../features/chat/transcript/disclosure";
 import { delegateModelId, delegateThinkingLevel } from "../../features/chat/transcript/model";
 import { SubagentModelInfo } from "../../features/chat/transcript/SubagentModelInfo";
@@ -33,7 +34,7 @@ import { delegationHistoryDiagnostics } from "../../features/delegations/session
 export function SubagentTranscriptTab({ delegationId }: { delegationId: string }) {
   const sessionId = useAppStore((state) => state.activeSessionId) ?? "";
   return <SlotSessionProvider sessionId={sessionId}>
-    <TranscriptDisclosureProvider key={`${sessionId}:${delegationId}`} sessionId={sessionId}>
+    <TranscriptDisclosureProvider key={JSON.stringify([sessionId, delegationId])} sessionId={sessionId} delegationId={delegationId}>
       <SubagentTranscriptSurface key={`${sessionId}:${delegationId}`} delegationId={delegationId} sessionId={sessionId} />
     </TranscriptDisclosureProvider>
   </SlotSessionProvider>;
@@ -116,16 +117,22 @@ function SubagentTranscriptSurface({ delegationId, sessionId }: { delegationId: 
             <SubagentDiagnosticsSummary payload={payload ?? (history.entry ? delegationHistoryDiagnostics(history.entry) : undefined)} />
           </details> : null}
           {transcriptResult ? transcriptResult.turns.map((turn, index) => (
-            <Fragment key={`${delegationId}:${index}`}>
-              <details className="subagent-task-report">
+            <Fragment key={turn.call.id}>
+              <details className="subagent-task-report subagent-task-brief">
                 <summary>{t("chat.taskGroups.brief")}</summary>
-                <div className="message-user-text selectable">{turn.task || t("panel.subagentTaskEmpty")}</div>
+                <div className="message-row user"><div className="message-col"><div className="message-bubble">
+                  <CollapsibleUserText messageId={turn.call.id} dir="auto">{turn.task || t("panel.subagentTaskEmpty")}</CollapsibleUserText>
+                </div></div></div>
               </details>
-              <SubagentTurnContent id={`${delegationId}:${index}`} rows={turn.rows}
-                active={delegateRunning && index === transcriptResult.turns.length - 1} />
+              <SubagentTurnContent id={`${delegationId}:${turn.call.id}`} rows={turn.rows}
+                active={delegateRunning && index === transcriptResult.turns.length - 1}
+                outcome={subagentTaskOutcome(turn.call, statuses)} />
             </Fragment>
-          )) : attemptTask ? <details className="subagent-task-report">
-            <summary>{t("chat.taskGroups.brief")}</summary><div className="message-user-text selectable">{attemptTask}</div>
+          )) : attemptTask && selectedCall ? <details className="subagent-task-report subagent-task-brief">
+            <summary>{t("chat.taskGroups.brief")}</summary>
+            <div className="message-row user"><div className="message-col"><div className="message-bubble">
+              <CollapsibleUserText messageId={selectedCall.id} dir="auto">{attemptTask}</CollapsibleUserText>
+            </div></div></div>
           </details> : !attempt && !history.loading && !history.error ? <div className="subagent-transcript-empty" role="status">{t("panel.subagentEmpty")}</div> : null}
           {history.entry?.report && !transcriptResult?.turns.some(turn => turn.rows.some(row => row.kind === "answer" && row.message.content.trim() === history.entry?.report?.trim())) ? <section className="subagent-task-report">
             <h3>{t("delegationHistory.report")}</h3>

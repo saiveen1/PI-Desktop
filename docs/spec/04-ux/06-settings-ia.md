@@ -414,6 +414,10 @@ deletes conversations. Filtering lives in the sidebar; no label creates a task.
   visualizations**. Context usage display controls whether the composer toolbar
   context ring and its popover lead with the remaining or the used capacity
   figure; the default is remaining.
+- Upstream also introduced a Subagent style selector and composer presence bar.
+  Its topology-card default conflicts with the personal task-first presentation;
+  the combined candidate's style integration and default require verification.
+  Neither style may lose tool history, lifecycle rows, or Work panel records.
 - **Input & links** card: the **Enter-to-send** control, the large text paste
   threshold, and the **Link open destination**. The threshold controls when a
   text-only paste becomes a temporary session-scratch file; it defaults to 600

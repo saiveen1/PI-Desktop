@@ -97,6 +97,8 @@ export class DelegationChainRegistry {
     requestedThinkingLevel?: DelegationChain["latestRequestedThinkingLevel"];
     resumedFrom?: DelegationChain;
     persona?: import("@pi-desktop/shared").SessionPersona;
+    policy?: DelegationChain["policy"];
+    latestModel?: DelegationChain["latestModel"];
   }): DelegationChain {
     const existing = options.resumedFrom
       ? this.chains.get(options.resumedFrom.delegateSessionId)
@@ -113,6 +115,8 @@ export class DelegationChainRegistry {
           latestRequestedModel: options.requestedModel ?? existing.latestRequestedModel,
           latestModelReason: options.modelReason ?? existing.latestModelReason,
           latestRequestedThinkingLevel: options.requestedThinkingLevel ?? existing.latestRequestedThinkingLevel,
+          policy: options.policy ?? existing.policy,
+          latestModel: options.latestModel ?? existing.latestModel,
           latestStatus: "running",
           lastActivityAt: Date.now(),
         }
@@ -132,6 +136,8 @@ export class DelegationChainRegistry {
           latestModelReason: options.modelReason,
           latestRequestedThinkingLevel: options.requestedThinkingLevel,
           ...(options.persona ? { persona: structuredClone(options.persona) } : {}),
+          policy: options.policy,
+          latestModel: options.latestModel,
           latestStatus: "running",
           lastActivityAt: Date.now(),
         };
@@ -161,7 +167,7 @@ export class DelegationChainRegistry {
   /** Record the binding the running delegate switched to (fallback models). */
   retarget(
     delegateSessionId: string,
-    binding: { modelKey?: string; modelId: string },
+    binding: { modelKey?: string; modelId: string; selection?: DelegationChain["latestModel"] },
   ): void {
     const chain = this.chains.get(delegateSessionId);
     if (!chain) return;
@@ -169,6 +175,7 @@ export class DelegationChainRegistry {
       ...chain,
       ...(binding.modelKey ? { latestModelKey: binding.modelKey } : {}),
       latestModelId: binding.modelId,
+      ...(binding.selection ? { latestModel: binding.selection } : {}),
       lastActivityAt: Date.now(),
     });
   }
@@ -199,6 +206,7 @@ export class DelegationChainRegistry {
     for (const chain of this.chains.values()) {
       const latest = chain.latestDelegationId;
       if (!latest) continue;
+      if (chain.incompleteSnapshot) continue;
       if (options.runningDelegationIds.has(latest)) continue;
       if (chain.latestStatus && !RESUMABLE_STATUSES.has(chain.latestStatus)) {
         continue;

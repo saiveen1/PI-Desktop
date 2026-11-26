@@ -17,6 +17,16 @@ import {
   stripInlineComposerFileReferenceTokens,
 } from "./composer-trigger.js";
 
+it("serializes agent mentions and saved line references in the same draft", () => {
+  const text = serializeInlineComposerFileReferences("\uE001 explain \uE002", [
+    { path: "reviewer", kind: "agent", token: "\uE001" },
+    { path: "/project/sample.txt", kind: "file", token: "\uE002", lineRange: { start: 2, end: 3 } },
+  ]);
+  expect(text).toContain("@reviewer explain /project/sample.txt (2:3)");
+  expect(text).not.toContain("\uE001");
+  expect(text).not.toContain("\uE002");
+});
+
 describe("splitComposerDirectoryPrompt", () => {
   const path = "/tmp/a & <b> &lt;";
 
@@ -351,6 +361,17 @@ describe("agent mentions (ADR 0346)", () => {
     expect(findAgentMentions(content, agents).map((m) => m.name)).toEqual(["explorer"]);
     // A chip-less agent reference never leaks into the trailing path list.
     expect(serializeComposerFileReferences("hi", [{ path: "explorer", kind: "agent" }])).toBe("hi");
+  });
+
+  it("serializes adjacent Skill chips as separate canonical mentions, never trailing paths", () => {
+    const refs = [
+      { kind: "skill", path: "plugin/review", token: "\ue001" },
+      { kind: "skill", path: "review", token: "\ue002" },
+      { kind: "skill", path: "removed" },
+    ];
+    const text = serializeComposerFileReferences("go\ue002\ue001now", refs);
+    expect(text).toBe("go /skill:review /skill:plugin/review now");
+    expect(findSkillMentions(text, new Map([["skill:review", "review"]])).map(m => m.id)).toEqual(["review"]);
   });
 
   it("keeps the file serialization byte-for-byte unchanged", () => {

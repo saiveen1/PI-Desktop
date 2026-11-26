@@ -226,6 +226,27 @@ with only Host API controlled. Running-turn configuration remains queued.
   binding tests; desktop settings coverage remains part of the provider model
   configuration E2E fixture.
 
+## E2E-PROVIDER-unsigned-thinking-replay
+
+- **Preconditions:** A saved Anthropic Messages custom provider backed by a
+  local mock SSE endpoint. The endpoint emits a non-empty thinking block with
+  an empty signature; no live credentials or external service.
+- **Steps:** In Settings → Models, open the custom model's Advanced options,
+  enable unsigned thinking replay, save, reload the provider configuration,
+  and send two prompts in one session. Capture the second outbound request.
+- **Expected:** The setting survives save and reload. The second request sends
+  the prior reasoning as `{ type: "thinking", signature: "" }`, not as an
+  assistant text block. An absent setting preserves existing adapter/catalog
+  behavior, and an explicit false overrides published metadata.
+- **Coverage:** Host provider storage round-trip tests, model binding tests,
+  and `pi-1.5-adapter-features.test.ts` use a local request fixture. Settings
+  control wiring is covered by `model-advanced-capabilities.test.mjs`.
+- **Specs:** `03-runtime/12-provider-config-schema.md` and
+  `07-plugins/02-plugin-manifest-schema.md`.
+- **Acceptance:** Persisted user configuration and second-request replay.
+- **Milestone:** Maintenance.
+- **Status:** Candidate regression coverage added.
+
 ## Provider & Key
 
 ## E2E-169: Default model picker selects a configured model
@@ -804,6 +825,25 @@ with only Host API controlled. Running-turn configuration remains queued.
   retained-reasoning wire proof); live OpenCode / aggregator
   verification deferred; rendered UI scenario pending
 
+## E2E-PROVIDER-mistral-store-compat: Omit OpenAI-only store on Mistral Chat Completions
+
+- **Preconditions**: Agent-runtime provider rows for native Mistral, Mistral-hosted
+  DeepSeek, a custom row pointing at Mistral, and OpenAI; local stub fetch only,
+  with no live credentials or provider requests.
+- **Steps**: Serialize one Chat Completions request for each row through the real
+  pi-ai adapter and capture its request body at the fetch boundary.
+- **Expected**: Mistral requests omit `store`, including the custom Mistral URL
+  and Mistral-hosted DeepSeek rows. DeepSeek reasoning replay compatibility stays
+  enabled. OpenAI keeps its existing `store: false` body.
+- **Coverage**: `provider-binding.test.ts` captures serialized adapter bodies;
+  `provider-presets.test.ts` checks endpoint and vendor matching, including
+  spoofed hosts and rows repointed to another published vendor. No real API is
+  called.
+- **Specs linked**: `03-runtime/11-provider-model-system.md`.
+- **Acceptance**: B (provider Chat Completions compatibility).
+- **Milestone**: Maintenance.
+- **Status**: Unit-covered; live Mistral verification is intentionally not run.
+
 ## E2E-006: Key survives restart
 
 - **Preconditions**: Provider + key configured.
@@ -1170,6 +1210,10 @@ with only Host API controlled. Running-turn configuration remains queued.
     keeps both ends with a marker; unmatched calls/results are not sent.
     Completed-turn checkpoints still have an empty tail. Expanding original
     transcript rows shows complete persisted results, unchanged by compaction.
+  - When the retained active tail contains only the request and no reasoning to
+    replay, verify the request precedes a nonempty summary and newer messages
+    follow it (issue #2512). The upstream-only rule discarding all prior
+    assistant/tool messages is historical, not the personal retention contract.
   - Restart restores the summary and the recorded active/completed retention
     mode, and every earlier compaction row is still drawn. A regenerate/fork
     before a checkpoint boundary drops that record specifically; records
@@ -1195,6 +1239,8 @@ with only Host API controlled. Running-turn configuration remains queued.
     once more with smaller head/tail tool-result excerpts rather than skipping the
     model. If fallback persistence or the safe budget guard fails,
     `CONTEXT_COMPACTION_FAILED` is emitted once.
+    The fallback's recovery notice precedes the retained window even when it
+    contains only the active request.
   - If the newest checkpoint is already the transcript leaf when a follow-up
     prompt crosses the hard budget, the runtime rebuilds a smaller tail from
     the full transcript and carries the existing summary forward instead of
@@ -1815,6 +1861,9 @@ with only Host API controlled. Running-turn configuration remains queued.
   calls, and the OpenCode Go UI variant were not exercised.
 
 ## E2E-PROVIDER-vendor-account-model-picker: A vendor account and an AI service offer the same model picker
+
+Upstream scenario ID: `E2E-162`. The descriptive ID disambiguates it from the
+personal delegate-workflow scenario that also uses `E2E-162`.
 
 - **Preconditions**: One signed-in vendor (OAuth) account and one API-key AI
   service, both with discoverable models, and at least one of them exposing a

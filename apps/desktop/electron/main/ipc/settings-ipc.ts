@@ -1,4 +1,4 @@
-import { IPC, type UpdatePreference } from "@pi-desktop/shared";
+import { IPC, isSubagentStyle, type UpdatePreference } from "@pi-desktop/shared";
 import { resolveAgentOutputGuardSettings, resolveObserverGuardSettings } from "@pi-desktop/shared";
 import type { AgentSidecar } from "../agent-sidecar";
 import type { HostProcess } from "../host-process";
@@ -9,6 +9,7 @@ import { currentSystemProxyRelayUrl } from "../network-proxy";
 
 export type SettingsIpcDependencies = {
   registrar: IpcRegistrar;
+  sendToRenderer: (channel: string, payload: unknown) => void;
   getHost: () => HostProcess | null;
   getSidecar: () => AgentSidecar | null;
   dataDir: string;
@@ -36,6 +37,7 @@ export type SettingsIpcDependencies = {
 /** Register app settings and command-shell channels. */
 export function registerSettingsIpc({
   registrar,
+  sendToRenderer,
   getHost,
   getSidecar,
   dataDir,
@@ -93,13 +95,17 @@ export function registerSettingsIpc({
       ? { ...currentSettings, ...(validatedSettings as Partial<AppSettings>) }
       : currentSettings;
     const releaseSettingsWrite = liveCallService?.beginSettingsWrite(prospectiveSettings);
-    let result: AppSettings;
+    let result: { ok: true };
     try {
-      result = await host.call<AppSettings>("settings.set", validatedSettings);
-      // Revoke diagnostics as soon as Host commits the setting, before unrelated async work.
-      applyDeveloperMode(result);
+      result = await host.call<{ ok: true }>("settings.set", validatedSettings);
+      // The host acknowledges the write rather than returning stored settings.
+      applyDeveloperMode(prospectiveSettings);
+      const style = validatedSettings?.subagentStyle;
+      if (isSubagentStyle(style)) {
+        sendToRenderer(IPC.event.settingsChanged, { subagentStyle: style });
+      }
       await delegationSettingsWritten?.();
-      await liveCallService?.settingsWritten(result);
+      await liveCallService?.settingsWritten(prospectiveSettings);
     } finally {
       releaseSettingsWrite?.();
     }

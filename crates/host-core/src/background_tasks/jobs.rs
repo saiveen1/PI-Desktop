@@ -27,6 +27,14 @@ fn tail(text: String, limit: usize) -> (String, bool) {
 
 pub(crate) async fn snapshot(task: &BackgroundTask, output: bool) -> serde_json::Value {
     let shared = task.shared.lock().await;
+    snapshot_locked(task, &shared, output)
+}
+
+pub(super) fn snapshot_locked(
+    task: &BackgroundTask,
+    shared: &TaskShared,
+    output: bool,
+) -> serde_json::Value {
     // List results must also have a budget; commands may contain large scripts.
     let mut end = task.command.len().min(MODEL_COMMAND_BYTES);
     while !task.command.is_char_boundary(end) {

@@ -9,6 +9,7 @@ import { ProjectFolderReferences } from "../features/sessions/ProjectFolderRefer
 import { useSidebarProjectCatalog } from "../features/sessions/useSidebarProjectCatalog";
 import { RemoteProjectGroups } from "./remote/RemoteProjectGroups";
 import { groupRemoteProjectSessions, remoteProjectCollapseKey } from "../lib/remote-project-catalog";
+import { compareProjectGroups } from "../lib/project-order";
 import { isRemoteSession, sessionAllows } from "../lib/remote-session-safety";
 import {
   useCallback,
@@ -206,11 +207,6 @@ function projectName(path: string, fallback?: string) {
   return parts[parts.length - 1] || path;
 }
 
-function timestamp(value?: string) {
-  const parsed = value ? Date.parse(value) : 0;
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
 function optionalTimestamp(value?: string): number | null {
   const parsed = value ? Date.parse(value) : NaN;
   return Number.isFinite(parsed) ? parsed : null;
@@ -230,26 +226,6 @@ function projectDomId(path: string): string {
     hash = Math.imul(hash, 16777619);
   }
   return `sidebar-project-${(hash >>> 0).toString(36)}`;
-}
-
-function firstSessionDate(
-  sessions: SessionSummary[],
-  field: "createdAt" | "updatedAt",
-): number | null {
-  const values = sessions
-    .map((session) => timestamp(session[field]))
-    .filter((value) => value > 0);
-  return values.length ? Math.min(...values) : null;
-}
-
-function lastSessionDate(
-  sessions: SessionSummary[],
-  field: "createdAt" | "updatedAt",
-): number | null {
-  const values = sessions
-    .map((session) => timestamp(session[field]))
-    .filter((value) => value > 0);
-  return values.length ? Math.max(...values) : null;
 }
 
 function compareOptionalDate(
@@ -832,41 +808,27 @@ export function Sidebar({
       (entry) => showArchived || !entry.meta.archived,
     );
     for (const entry of result) entry.sessions.sort(compareSessions);
-    result.sort((a, b) => {
-      const archiveOrder = Number(!!a.meta.archived) - Number(!!b.meta.archived);
-      if (archiveOrder !== 0) return archiveOrder;
-      const pinOrder = Number(!!b.meta.pinned) - Number(!!a.meta.pinned);
-      if (pinOrder !== 0) return pinOrder;
-      if (displayProjectSort === "manual") {
-        const byOrder =
-          (a.meta.order ?? Number.MAX_SAFE_INTEGER) -
-          (b.meta.order ?? Number.MAX_SAFE_INTEGER);
-        if (byOrder !== 0) return byOrder;
-      } else if (displayProjectSort === "name") {
-        const byName = a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
-        if (byName !== 0) return byName;
-      } else if (
-        displayProjectSort === "oldest" ||
-        displayProjectSort === "created"
-      ) {
-        const dateForProject =
-          displayProjectSort === "oldest" ? firstSessionDate : lastSessionDate;
-        const aCreated = dateForProject(a.sessions, "createdAt");
-        const bCreated = dateForProject(b.sessions, "createdAt");
-        const byCreated = compareOptionalDate(
-          aCreated,
-          bCreated,
-          displayProjectSort === "created",
-        );
-        if (byCreated !== 0) return byCreated;
-      } else {
-        const aRecent = lastSessionDate(a.sessions, "updatedAt");
-        const bRecent = lastSessionDate(b.sessions, "updatedAt");
-        const byRecent = compareOptionalDate(aRecent, bRecent, true);
-        if (byRecent !== 0) return byRecent;
-      }
-      return a.key.localeCompare(b.key);
-    });
+    result.sort((a, b) =>
+      compareProjectGroups(
+        {
+          key: a.key,
+          name: a.name,
+          sessions: a.sessions,
+          archived: a.meta.archived,
+          pinned: a.meta.pinned,
+          manualOrder: a.meta.order,
+        },
+        {
+          key: b.key,
+          name: b.name,
+          sessions: b.sessions,
+          archived: b.meta.archived,
+          pinned: b.meta.pinned,
+          manualOrder: b.meta.order,
+        },
+        displayProjectSort,
+      ),
+    );
     return result;
   }, [
     filtered,
@@ -1104,7 +1066,8 @@ export function Sidebar({
   );
   const remoteProjectGroups = useMemo(() => groupRemoteProjectSessions(
     filtered.filter((session) => isRemoteSession(session) && !pinnedSessionIds.has(session.id)), compareSessions,
-  ), [filtered, pinnedSessionIds, compareSessions]);
+    displayProjectSort,
+  ), [filtered, pinnedSessionIds, compareSessions, displayProjectSort]);
   const sessionGroupsByScope = useMemo(() => {
     const groups = new Map<string, SidebarSessionGroup<SessionSummary>[]>();
     const add = (scope: string, rows: SessionSummary[], paged = false) => {
@@ -2004,7 +1967,10 @@ export function Sidebar({
       temporary?: boolean;
       projectPath?: string;
       global?: boolean;
+      recent?: boolean;
       showLastReplyDate?: boolean;
+      /** The `Remote` section heading already says these rows live on a host. */
+      insideRemoteSection?: boolean;
     },
   ) => items.map((session) => {
     const meta = sessionMeta[session.id] ?? {};
@@ -2029,7 +1995,7 @@ export function Sidebar({
     return (
       <div
         key={session.id}
-        className={`thread-item ${active ? "active" : ""} ${archived ? "archived" : ""} ${draggingSessionId === session.id ? "is-dragging" : ""} ${selectedIds.has(session.id) ? "selected" : ""} ${sessionDrop?.id === session.id ? sessionDrop.after ? "session-drop-after" : "session-drop-before" : ""}`}
+        className={`thread-item ${active ? "active" : ""} ${archived ? "archived" : ""} ${draggingSessionId === session.id ? "is-dragging" : ""} ${selectedIds.has(session.id) ? "selected" : ""} ${sessionDrop?.id === session.id ? sessionDrop.after ? "session-drop-after" : "session-drop-before" : ""} ${options?.recent && normalizedProjectPath ? "recent-project-session" : ""}`}
         data-sidebar-session-row={session.id}
         draggable={!selection.active && !running && !isRemoteSession(session)}
         onDragStart={(event) => {
@@ -2131,12 +2097,17 @@ export function Sidebar({
           {session.source === "pi-native" ? (
             <span className="thread-item-source" title="Native Pi session">Pi</span>
           ) : null}
-          {isRemoteSession(session) && <span className="thread-item-source" title={session.remoteHostLabel}>{t("remote:remote")}</span>}
+          {isRemoteSession(session) && !options?.insideRemoteSection ? (
+            <span className="thread-item-source" title={session.remoteHostLabel}>{t("remote:remote")}</span>
+          ) : null}
           <WorktreeBadge worktree={session.worktree} sessionId={session.id} />
           <SessionLabelChips labels={sessionOrganizationCatalog(sessionOrganization, sessionOrganizationScope(session, sidebarProjectGroups), sessionLabels).labels} meta={meta} />
           <span className="thread-item-title">{taskTitle(session.title)}</span>
           {options?.global ? (
-            <span className="thread-item-project">
+            <span
+              className="thread-item-project"
+              title={options?.recent && normalizedProjectPath ? owningProject : undefined}
+            >
               {owningProject}
             </span>
           ) : null}
@@ -2487,14 +2458,14 @@ export function Sidebar({
         </div>
       </div>
 
-      <div className="sidebar-body no-drag">
+      <div className="sidebar-body no-drag" onScroll={() => closeMenus(false)}>
         {selection.active && <SessionSelectionToolbar count={selectedIds.size} total={flatSessionOrder.length}
           busy={organizationBusy} onSelectAll={selection.selectAll} onExit={selection.exit}
           onArchive={hasUnarchivedSelection ? () => void runSessionAction("archive") : undefined}
           onUnarchive={hasArchivedSelection ? () => void runSessionAction("unarchive") : undefined}
           onTrash={() => void runSessionAction("trash")} />}
         <SidebarPrimaryNav onNewTask={onNewTask} onBeforeNavigate={() => closeMenus(false)} />
-        <div className="sidebar-sections">
+        <div className="sidebar-sections" onScroll={() => closeMenus(false)}>
           {pinnedSessions.length > 0 ? (
             <SidebarSection id="pinned" label={t("nav.pinnedSessions")} count={pinnedSessions.length}
               preference={sectionLayout.pinned} fill={!projectsExpanded && !recentExpanded}
@@ -2581,7 +2552,7 @@ export function Sidebar({
               }}>
               {visibleRecentSessions.length > 0 ? (
                 <>
-                  {renderSessionRows(visibleRecentSessions, { global: true, showLastReplyDate })}
+                  {renderSessionRows(visibleRecentSessions, { global: true, recent: true, showLastReplyDate })}
                   {recentNextPageCount > 0 ? (
                     <button
                       type="button"
@@ -2656,11 +2627,18 @@ export function Sidebar({
                   </div>
                 </section>
               )}
-              <RemoteProjectGroups groups={remoteProjectGroups} eligibleSessions={listableSessions(sessions).filter(session => showArchived || !sessionArchived(session, sessionMeta[session.id]))}
-                pendingSessionIds={pendingSessionIds} sessionOutcomes={sessionOutcomes}
-                catalogGroups={key => catalogGroups(`remote:${key}`)}
-                onCreate={showProjectNewTask ? (project, groupId) => createGroupedTask(`remote:${project.key}`, { remoteProject: project }, groupId) : undefined}
-                renderSessions={(key, create) => renderGroupedSessionRows(`remote:${key}`, { temporary: false, showLastReplyDate }, showProjectNewTask ? create : undefined)} />
+              {remoteProjectGroups.length > 0 ? (
+                <>
+                  <div className="sidebar-list-subheader" data-sidebar-section="remote">
+                    <span className="sidebar-list-label">{t("nav.remoteProjects", { defaultValue: "Remote" })}</span>
+                  </div>
+                  <RemoteProjectGroups groups={remoteProjectGroups} eligibleSessions={filtered}
+                    pendingSessionIds={pendingSessionIds} sessionOutcomes={sessionOutcomes}
+                    catalogGroups={key => catalogGroups(`remote:${key}`)}
+                    onCreate={showProjectNewTask ? (project, groupId) => createGroupedTask(`remote:${project.key}`, { remoteProject: project }, groupId) : undefined}
+                    renderSessions={(key, create) => renderGroupedSessionRows(`remote:${key}`, { temporary: false, showLastReplyDate, insideRemoteSection: true }, showProjectNewTask ? create : undefined)} />
+                </>
+              ) : null}
             </SidebarSection>
           ) : null}
         </div>

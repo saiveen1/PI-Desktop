@@ -77,6 +77,7 @@ async fn execute(
             timeout_ms: None,
             bash_options: None,
             allow_external_paths: false,
+            write_scope: None,
             hashline: Some(HashlineContext {
                 session_id: session,
                 store,

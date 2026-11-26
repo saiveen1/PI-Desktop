@@ -342,3 +342,116 @@ async fn approval_is_indefinite_but_accepted_bash_still_gets_its_full_execution_
     }
     assert_eq!(state.lock().await.tool_budget.snapshot().shell, 0);
 }
+
+#[tokio::test]
+async fn bash_yield_requires_opt_in_without_an_explicit_timeout_and_does_not_replay() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut st = AppState::open(dir.path()).unwrap();
+    st.handshook = true;
+    let shell = command_shell_catalog(&st).unwrap().effective.unwrap();
+    let session = sessions::create_session(
+        &st.db,
+        None,
+        Some("agent".into()),
+        None,
+        None,
+        Some(dir.path().to_string_lossy().into_owned()),
+    )
+    .unwrap();
+    sessions::configure_session_with_thinking(
+        &st.db,
+        &session.id,
+        "agent",
+        None,
+        None,
+        None,
+        Some("auto"),
+    )
+    .unwrap();
+    let state = Arc::new(Mutex::new(st));
+    let params = |id: &str| {
+        let command = if shell.dialect.as_str() == "powershell" {
+            format!("[IO.File]::AppendAllText((Join-Path (Get-Location) '{id}.txt'), 'x'); [Console]::WriteLine('started'); [System.Threading.ManualResetEvent]::new($false).WaitOne() | Out-Null")
+        } else {
+            format!("printf x >> {id}.txt; printf 'started\\n'; exec tail -f /dev/null")
+        };
+        json!({
+            "sessionId":session.id, "turnId":"turn", "toolCallId":id, "toolName":"Bash",
+            "mode":"agent", "args":{"command":command}, "expectedCommandShellId":shell.id,
+            "expectedCommandShellDialect":shell.dialect.as_str(), "yieldAfterInitialWait":true
+        })
+    };
+    let mut explicit_params = params("explicit");
+    explicit_params["timeoutMs"] = json!(60_000);
+    let (tx, mut rx) = mpsc::unbounded_channel();
+    let mut explicit = tokio::spawn(handle_request(
+        state.clone(),
+        "tools.execute",
+        explicit_params,
+        tx,
+    ));
+    // Start the explicit case first so its handoff deadline, if enabled, would
+    // pass before the implicit case hands off. No timing-only grace interval.
+    loop {
+        let event = tokio::select! {
+            result = &mut explicit => panic!("explicit Bash settled before start: {result:?}"),
+            event = message(&mut rx) => event,
+        };
+        if event["method"] == "tools.output"
+            && event["params"]["chunk"]
+                .as_str()
+                .is_some_and(|chunk| chunk.contains("started"))
+        {
+            break;
+        }
+    }
+    let yielded = tokio::time::timeout(
+        Duration::from_secs(20),
+        handle_request(
+            state.clone(),
+            "tools.execute",
+            params("yield"),
+            mpsc::unbounded_channel().0,
+        ),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert_eq!(yielded["content"]["state"], "running", "{yielded}");
+    assert!(yielded["content"].get("exitCode").is_none());
+    assert_eq!(state.lock().await.background_tasks.running_count(), 1);
+    let aborted = handle_request(
+        state.clone(),
+        "tools.abort",
+        json!({"sessionId":session.id, "toolCallId":"explicit", "toolName":"Bash"}),
+        mpsc::unbounded_channel().0,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        aborted["found"], true,
+        "explicit Bash should still be foreground"
+    );
+    let explicit = tokio::time::timeout(Duration::from_secs(5), explicit)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert_eq!(explicit["errorCode"], "TOOL_ABORTED", "{explicit}");
+    let stopped = handle_request(
+        state.clone(),
+        "backgroundJobs.stop",
+        json!({"sessionId":session.id, "id":yielded["content"]["job"]["id"], "timeoutMs":1000}),
+        mpsc::unbounded_channel().0,
+    )
+    .await
+    .unwrap();
+    assert_eq!(stopped["state"], "stopped", "{stopped}");
+    for id in ["explicit", "yield"] {
+        assert_eq!(
+            std::fs::read(dir.path().join(format!("{id}.txt"))).unwrap(),
+            b"x"
+        );
+    }
+    assert_eq!(state.lock().await.background_tasks.running_count(), 0);
+}

@@ -112,6 +112,16 @@ test("the detail combines shared reading components with explicit child input", 
   assert.match(composerSource, /<Button variant="primary"/);
   assert.doesNotMatch(composerSource, /onKeyDown|onKeyPress/);
   assert.doesNotMatch(tabSource, /<Textarea|aria-haspopup="listbox"|onSubmit|onSend|api\.send/);
+  assert.equal((tabSource.match(/<details className="subagent-task-report subagent-task-brief">/g) ?? []).length, 2);
+  assert.match(tabSource, /<CollapsibleUserText messageId=\{turn.call.id\}/);
+  assert.match(tabSource, /outcome=\{subagentTaskOutcome\(turn.call, statuses\)\}/);
+  const stopSource = await readFile(new URL("../src/features/chat/transcript/SubagentStopButton.tsx", import.meta.url), "utf8");
+  assert.match(stopSource, /requestSubagentStop\(sessionId, targets\)/);
+  assert.match(stopSource, /const targets = delegationId \? \[delegationId\] : delegationIds/);
+  const childSource = await readFile(new URL("../src/features/chat/transcript/SubagentTurnContent.tsx", import.meta.url), "utf8");
+  assert.match(childSource, /segmentTurnProcess\(summary.process, displayMode\)/);
+  assert.match(childSource, /<TurnToolImages parts=\{entry.parts\} \/>/);
+  assert.match(childSource, /stopped=\{outcome === "stopped" \|\| outcome === "aborted"\}/);
   assert.match(workPanelCss, /\.subagent-transcript-composer-controls \{/);
 });
 

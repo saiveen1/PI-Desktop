@@ -2741,7 +2741,7 @@ Drafts, queue entries and message attachments retain `localReference` and `size`
 On dispatch, main matches the id/path to the selection record and its owning
 project or session, rejects missing files or canonical-target changes, and refreshes size.
 The Agent receives path and byte size as reference context. No referenced file
-or image contents are read, hashed, snapshotted or uploaded by dispatch; normal
+contents are read, hashed, snapshotted or uploaded by dispatch; normal
 tool access policy governs subsequent reads, including outside-project approval.
 Version 1 project records remain unchanged and may be restored into another session
 in the same project. New projectless references use version 2 records with

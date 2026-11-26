@@ -17,6 +17,7 @@ async fn session_tool(
             timeout_ms: Some(5_000),
             bash_options: None,
             allow_external_paths: false,
+            write_scope: None,
             hashline: Some(HashlineContext {
                 session_id: session,
                 store,

@@ -4,6 +4,7 @@ import test from "node:test";
 import ts from "typescript";
 import * as shared from "@pi-desktop/shared";
 import { loadSubagentDefinitions } from "@pi-desktop/agent-runtime";
+import * as modeSubagents from "../electron/main/runtime/mode-subagents.ts";
 
 // Only shell/unused import services and the Host are external to this IPC path.
 const imports = {
@@ -11,6 +12,7 @@ const imports = {
   "../skill-folder-import": {},
   "../builtin-skills": {},
   "../skill-market-scan": {},
+  "../runtime/mode-subagents": modeSubagents,
   "@pi-desktop/shared": shared,
   "@pi-desktop/agent-runtime": { loadSubagentDefinitions },
 };

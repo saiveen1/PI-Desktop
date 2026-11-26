@@ -6,6 +6,10 @@ import { getCurrentTools, createAssistantMessageEventStream, type AssistantMessa
 import { Type } from "typebox";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { SubagentRun, type SubagentRunOptions } from "./subagent.js";
+import { readSubagentCheckpoint } from "./subagent-checkpoint.js";
+import { DesktopAgentRuntime, type AgentRuntimeOptions } from "./runtime.js";
+import { isRecord } from "./agent-messages.js";
+import type { UiMessage } from "@pi-desktop/shared";
 
 const transport = vi.hoisted(() => vi.fn<Models["streamSimple"]>());
 vi.mock("./provider-binding.js", async (original) => {
@@ -118,6 +122,119 @@ describe("subagent recovery through the real loop", { timeout: 60_000 }, () => {
       expect(readFileSync(result.checkpointPath!, "utf8")).toContain("B remains unchecked");
       expect(transport).toHaveBeenCalledTimes(1);
     } finally { controller.abort(); await running; }
+  });
+
+  it.each(["failed", "aborted"] as const)("retains a write-scoped child's report on disk when %s", async status => {
+    const location = { scratchDir, sessionId: "session", agentName: "worker", delegateSessionId: "chain", parentToolCallId: "task" };
+    const report = "Checked the first file; the second is still pending.";
+    const forbidden = join(scratchDir, "not-a-report.md");
+    const controller = new AbortController();
+    let runningCheckpoint: ReturnType<typeof readSubagentCheckpoint> | undefined;
+    let rejectedWrite = false;
+    transport.mockImplementationOnce(() => response([
+      call("progress", "TaskReport", { report, path: forbidden }),
+      call("outside", "Write", { path: forbidden, content: "must not be written" }),
+    ], "toolUse")).mockImplementationOnce((_model, context) => {
+      runningCheckpoint = readSubagentCheckpoint(location);
+      rejectedWrite = context.messages.some(m => m.role === "toolResult" && m.toolCallId === "outside" && m.isError);
+      if (status === "aborted") controller.abort();
+      return response([]);
+    });
+
+    const result = await fixture(async () => { throw new Error("Unexpected work tool"); }, {
+      writeScope: status === "aborted" ? [] : ["allowed/"], signal: controller.signal,
+    }).run();
+    expect(runningCheckpoint?.checkpoint).toMatchObject({ status: "running", partial: true, report: expect.stringContaining(report) });
+    expect(result).toMatchObject({ status, partial: true, checkpointPath: checkpointPath(),
+      scratchReportPath: join(scratchDir, "delegations", "chain", "report.md") });
+    const restored = readSubagentCheckpoint(location);
+    expect(restored.checkpoint).toMatchObject({ sessionId: "session", delegateSessionId: "chain", delegationId: "run",
+      task: "Check two files.", status, partial: true, report: expect.stringContaining(report) });
+    expect(readFileSync(result.scratchReportPath!, "utf8")).toBe(restored.checkpoint?.report);
+    expect(readSubagentCheckpoint({ ...location, sessionId: "other" })).toEqual({ error: "checkpoint-identity-mismatch" });
+    expect(rejectedWrite).toBe(true);
+    expect(existsSync(forbidden)).toBe(false);
+    expect(transport).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(["TaskWait", "Task"] as const)("recovers a scoped child's findings on cold %s without replaying its tools", async command => {
+    const task = { agent: "worker", task: "Check the first file.", scope: { write: [] } };
+    const report = "Verified the first file; remaining work is incomplete.";
+    const forbidden = join(scratchDir, "forbidden.md");
+    const receipts: UiMessage[] = [];
+    const executions: unknown[] = [];
+    const waits: unknown[] = [];
+    let id = "";
+    const options: AgentRuntimeOptions = {
+      sessionId: "session", scratchDir, mode: "agent", thinkingLevel: "off",
+      commandShell: { id: "bash", label: "Bash", dialect: "posix", available: true, isDefault: true },
+      provider: { id: "fixture", name: "Fixture", modelId: "fixture", authKind: "none", apiKey: "", supportsReasoning: false, supportedThinkingLevels: ["off"] },
+      subagents: [{ name: "worker", description: "Fixture", source: "builtin", prompt: "Check files.", tools: ["Read", "Write"] }],
+      host: { call: async <T>(method: string, params?: unknown): Promise<T> => {
+        if (method === "tools.execute") { executions.push(params); return { ok: true, content: "First file evidence." } as T; }
+        if (method === "tools.fileBatchCapabilities") return { version: 1, supported: false } as T;
+        if (method === "todos.get") return { sessionId: "session", todos: [] } as T;
+        if (method === "project.instructions.resolve") return { entries: [] } as T;
+        if (method === "provider.delegationSnapshot" || method === "session.appendMessage") return undefined as T;
+        throw new Error(`Unexpected host call ${method}`);
+      } },
+      onEvent: ({ event, ts }) => {
+        if (event.type !== "tool_end" || !isRecord(event.result) || !isRecord(event.result.details)) return;
+        if (event.toolCallId === "launch" && typeof event.result.details.delegationId === "string") {
+          id = event.result.details.delegationId;
+          receipts.push({ id: "launch", role: "tool", content: "", toolName: "Task", toolCallId: "launch",
+            toolArgs: task, toolResult: structuredClone(event.result), toolStatus: "success", createdAt: new Date(ts).toISOString() });
+        }
+        if (event.toolCallId === "recover") waits.push(event.result.details.delegations);
+      },
+    };
+    let parentRequests = 0, childRequests = 0;
+    transport.mockImplementation((_model, context) => {
+      if (getCurrentTools(context.messages).some(t => t.name === "TaskReport")) {
+        if (++childRequests === 1) return response([call("read", "Read", { path: "first.md" })], "toolUse");
+        if (childRequests === 2) return response([call("findings", "TaskReport", { report }),
+          call("forbidden", "Write", { path: forbidden, content: "denied" })], "toolUse");
+        return response([]); // An empty terminal response cannot promote the findings to a final report.
+      }
+      if (++parentRequests === 1) return response([call("launch", "Task", task)], "toolUse");
+      if (parentRequests === 2) return response([call("wait", "TaskWait", { delegationIds: [id] })], "toolUse");
+      return response([text("Done.")]);
+    });
+    const live = new DesktopAgentRuntime(options);
+    try { await live.prompt("Delegate the check."); } finally { await live.dispose(); }
+    expect(receipts).toHaveLength(1);
+    expect(executions).toEqual([expect.objectContaining({ toolName: "Read" })]);
+    expect(childRequests).toBe(3);
+    expect(existsSync(forbidden)).toBe(false);
+    expect(JSON.stringify(receipts)).not.toContain(report);
+
+    // Restart with just the persisted launch receipt, before any report reached the parent journal.
+    const resumed: string[] = [];
+    let coldParentRequests = 0;
+    transport.mockReset().mockImplementation((_model, context) => {
+      if (getCurrentTools(context.messages).some(t => t.name === "TaskReport")) {
+        resumed.push(JSON.stringify(context.messages));
+        return response([text("Finished the remaining work.")]);
+      }
+      if (++coldParentRequests === 1) return response([call("recover", command, command === "TaskWait"
+        ? { delegationIds: [id] } : { agent: task.agent, task: "Finish remaining work.", resume: id })], "toolUse");
+      if (command === "Task" && coldParentRequests === 2) return response([call("join", "TaskWait", {})], "toolUse");
+      return response([text("Result received.")]);
+    });
+    const cold = new DesktopAgentRuntime({ ...options, history: receipts });
+    try { await cold.prompt("Recover the partial result."); } finally { await cold.dispose(); }
+    if (command === "TaskWait") {
+      expect(resumed).toEqual([]);
+      expect(waits).toEqual([[expect.objectContaining({ delegationId: id, agent: "worker", status: "interrupted", partial: true,
+        report: expect.stringContaining(report) })]]);
+    } else {
+      expect(resumed).toHaveLength(1);
+      expect(resumed[0]).toContain(task.task);
+      expect(resumed[0]).toContain(report);
+      expect(readSubagentCheckpoint({ scratchDir, sessionId: "session", agentName: task.agent, delegateSessionId: id,
+        parentToolCallId: "launch" }).checkpoint).toMatchObject({ status: "completed", report: "Finished the remaining work." });
+    }
+    expect(executions).toHaveLength(1);
   });
 
   it("finishes the admitted tool then requests one report-only turn at the call budget", async () => {

@@ -3,9 +3,10 @@ import { backgroundContinuationOrigin, backgroundCompletionMessage } from "../ru
 import { TRUSTED_ENDLESS_CONTINUATION } from "@pi-desktop/agent-host";
 import { beginEndlessPrompt, cancelEndlessContinuation } from "../runtime/endless-continuations";
 import { expandMcpInvocation } from "../composer-mcp";
-import { IPC, ErrorCodes, compactionRecordId, composeMentionPrompt, findSkillMentions, isGlobalPermissionMode, isRpcTimeoutError, type AgentEventEnvelope, type AgentPromptRequest, type AgentSteerRequest, type UiMessage, type AgentQueuePushRequest, type AgentStopRequest, type AgentStopSubagentsRequest, type AskToolResolution, type GlobalPermissionMode, type MessageUsage, type PendingInteractiveRequests, type PlanExecutionFinishStatus, type PlanResolveRequest, type PlanResolutionResult, type VoiceOrigin } from "@pi-desktop/shared";
+import { IPC, ErrorCodes, compactionRecordId, composeMentionPrompt, findSkillMentions, isGlobalPermissionMode, isRpcTimeoutError, modePermissionFor, type AgentEventEnvelope, type AgentPromptRequest, type AgentSteerRequest, type UiMessage, type AgentQueuePushRequest, type AgentStopRequest, type AgentStopSubagentsRequest, type AskToolResolution, type GlobalPermissionMode, type MessageUsage, type PendingInteractiveRequests, type PlanExecutionFinishStatus, type PlanResolveRequest, type PlanResolutionResult, type VoiceOrigin } from "@pi-desktop/shared";
 import type { FinishTurn } from "../runtime/plans";
 import { modeContinuationOrigin, type ModeRunCoordinator, type PreparedModeTurn } from "../runtime/mode-runs";
+import { toSidecarModeDefinition } from "../runtime/mode-sidecar-definition";
 import { goalPromptMode, goalStartRequested } from "../runtime/goal-start";
 import { expandSlashInvocation, visionFromModelConfig, type ComposerTemplate } from "@pi-desktop/agent-runtime";
 import { appendPromptFallbackPaths, durableUserMessageId, preparePromptAttachments, type PreparedPromptAttachment } from "../prompt-attachments";
@@ -201,9 +202,10 @@ export function registerAgentIpc({
       sessionId: req.sessionId, expectedTurnId: req.expectedTurnId, message,
       content: appendPromptFallbackPaths(steerContent, prepared),
       ...(mcpExpansion ? { mcpServerIds: mcpExpansion.mcpServerIds, mcpToolNames: mcpExpansion.mcpToolNames } : {}),
-      attachments: prepared.filter((attachment) => attachment.inlineData).map((attachment) => ({
+      attachments: prepared.filter((attachment) => attachment.inlineData || attachment.message.lineRange).map((attachment) => ({
         path: attachment.message.ref, name: attachment.message.name, kind: attachment.message.kind,
         mimeType: attachment.message.mimeType, size: attachment.message.size, data: attachment.inlineData,
+        ...(attachment.message.lineRange ? { lineRange: attachment.message.lineRange } : {}),
         ...(attachment.message.inlinePath ? { inlinePath: attachment.message.inlinePath } : {}),
       })),
     });
@@ -471,6 +473,8 @@ export function registerAgentIpc({
         const foundAgents = await resolvePromptAgentMentions({
           content: req.content,
           mode: launch.sidecarParams?.mode,
+          bundleDelegation: !!modeDefinition?.bundle && modeDefinition.id === promptMode &&
+            modePermissionFor(modeDefinition, preparedMode?.modeTurn?.stageId) === "agent",
           subagentNames: Array.isArray(launch.sidecarParams?.subagents)
             ? launch.sidecarParams.subagents.map((definition: { name: string }) => definition.name)
             : [],
@@ -492,7 +496,9 @@ export function registerAgentIpc({
             : "";
           const commands = await composerCommandService.buildComposerCommands(
             session.remoteWorkspace ? null : launch.projectPath ?? root,
-            { remote: Boolean(session.remoteWorkspace) },
+            // The run's own definition wins over the session mode: a staged run
+            // keeps offering the skills of the mode it is executing.
+            { remote: Boolean(session.remoteWorkspace), mode: modeDefinition?.id ?? promptMode },
           );
           const command = commands.find((item) => item.name === commandName);
           const activeSkills = new Map(
@@ -691,11 +697,9 @@ export function registerAgentIpc({
           ...launch.sidecarParams,
           ...(enabled && chain ? { observerGuard: { ...launch.sidecarParams.observerGuard,
             endlessRemaining: chain.remainingForPrompt(automatic) } } : {}),
-          mode: promptMode,
-          ...(modeDefinition ? { modeDefinition } : {}),
-          ...(preparedMode?.modeTurn
-            ? { mode: preparedMode.definition.id, modeDefinition: preparedMode.definition, modeTurn: preparedMode.modeTurn }
-            : {}),
+          mode: preparedMode?.modeTurn ? preparedMode.definition.id : promptMode,
+          ...(modeDefinition ? { modeDefinition: toSidecarModeDefinition(modeDefinition) } : {}),
+          ...(preparedMode?.modeTurn ? { modeTurn: preparedMode.modeTurn } : {}),
           // The host-created durable turn is the approval identity used by
           // Rust. The runtime must not replace it with a provider-local UUID.
           turnId: durableTurnId,
@@ -705,7 +709,7 @@ export function registerAgentIpc({
           ...(sessionMessage ? { sessionMessage: sessionMessage.origin } : {}),
           attachments: [
             ...preparedAttachments
-              .filter((attachment) => attachment.inlineData)
+              .filter((attachment) => attachment.inlineData || attachment.message.lineRange)
               .map((attachment) => ({
                 path: attachment.message.ref,
                 name: attachment.message.name,
@@ -713,6 +717,7 @@ export function registerAgentIpc({
                 mimeType: attachment.message.mimeType,
                 size: attachment.message.size,
                 data: attachment.inlineData,
+                ...(attachment.message.lineRange ? { lineRange: attachment.message.lineRange } : {}),
                 ...(attachment.message.inlinePath
                   ? { inlinePath: attachment.message.inlinePath }
                   : {}),

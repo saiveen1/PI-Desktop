@@ -43,7 +43,7 @@ function fixture(options: { status?: string; holdChild?: boolean; holdParent?: b
   const read = deferred<unknown>(), readStarted = deferred<void>(), finished = deferred<void>();
   const authorization = deferred<unknown>(), authorizationStarted = deferred<void>();
   const parentStarted = deferred<void>(), parentGate = deferred<void>();
-  const worktreeGate = deferred<void>(), firstWorktree = deferred<void>(), bothWorktrees = deferred<void>();
+  const worktreeGate = deferred<void>(), firstWorktree = deferred<void>(), competingResume = deferred<boolean>();
   let worktreeCalls = 0, authorizationCalls = 0;
   const childRequests: string[] = [], parentRequests: string[] = [], tools: unknown[] = [], events: AgentEventEnvelope[] = [];
   transport.mockImplementation((model, context) => {
@@ -76,19 +76,23 @@ function fixture(options: { status?: string; holdChild?: boolean; holdParent?: b
       }
       if (method === "worktree.delegate.create") {
         firstWorktree.resolve();
-        if (++worktreeCalls === 2) bothWorktrees.resolve();
+        worktreeCalls++;
         await worktreeGate.promise; return {} as T;
       }
       if (method === "worktree.delegate.settle") return { settlement: { status: "kept" } } as T;
       if (method === "tools.execute") { tools.push(params); readStarted.resolve(); return await read.promise as T; }
       throw new Error(`Unexpected Host call ${method}`);
     } },
-    onEvent: event => { events.push(event); if (!event.parentToolCallId && event.event.type === "agent_end") finished.resolve(); },
+    onEvent: event => {
+      events.push(event);
+      if (!event.parentToolCallId && event.event.type === "tool_end" && event.event.toolCallId === "parent-resume") competingResume.resolve(event.event.isError === true);
+      if (!event.parentToolCallId && event.event.type === "agent_end") finished.resolve();
+    },
   });
   const send = (content: string, messageId = "input-1", turnId = "chat-turn", active = false) =>
     runtime.sendSubagentMessage({ sessionId: "session", delegationId: "original", messageId, content }, turnId, active);
   const dispose = async () => { worktreeGate.resolve(); parentGate.resolve(); authorization.resolve({ decision: "deny" }); read.resolve({ ok: true, content: "Current evidence" }); await runtime.abort(); await runtime.dispose(); };
-  return { runtime, send, history, read, readStarted, finished, authorization, authorizationStarted, childRequests, parentRequests, tools, events, dispose, parentStarted, parentGate, worktreeGate, firstWorktree, bothWorktrees };
+  return { runtime, send, history, read, readStarted, finished, authorization, authorizationStarted, childRequests, parentRequests, tools, events, dispose, parentStarted, parentGate, worktreeGate, firstWorktree, competingResume, worktreeCalls: () => worktreeCalls };
 }
 
 describe("direct child conversation user path", () => {
@@ -232,7 +236,9 @@ it("admits one writable worker when direct input and parent resume race across w
     sending = f.send("Direct follow-up.");
     await f.firstWorktree.promise;
     f.parentGate.resolve();
-    await f.bothWorktrees.promise;
+    // The same chain is reserved while the first create is still outstanding.
+    expect(await f.competingResume.promise).toBe(true);
+    expect(f.worktreeCalls()).toBe(1);
     f.worktreeGate.resolve();
     await sending;
     await f.readStarted.promise;

@@ -6,7 +6,7 @@
 
 /** Whether an activity group's detail starts open. */
 export function activityGroupStartsOpen(state: {
-  turnActive: boolean;
+  turnActive?: boolean;
   groupActive: boolean;
   collapseSettled: boolean;
 }): boolean {

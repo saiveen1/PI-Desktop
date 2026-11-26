@@ -7,6 +7,15 @@ Hold the first project's plugin view request, switch projects and complete the s
 > Part of the [E2E test plan](../04-e2e-test-plan.md). Plugins, MCP, trusted extensions, subagents, hooks, skills, and generated UI.
 > Scenario template, gates, and traceability live in the plan.
 
+## E2E-BROWSER-CAPTURE-window-manager-readiness
+
+On Linux/Xvfb, start the browser capture/resize suite through
+`sh scripts/e2e/with-openbox.sh node scripts/e2e-browser-capture-resize.mjs`.
+Delay Openbox startup and verify the suite waits for its EWMH root-window
+claim before requesting maximize/restore/fullscreen. All capture, viewport,
+and lifecycle assertions must still pass. A missing or failed window manager
+fails within ten seconds. A failed native probe prints its last progress stages.
+
 ## E2E-EXTENSION-thinking-request-state
 
 Set high thinking through the production extension bridge, send a prompt and
@@ -618,6 +627,10 @@ window; opening a normal panel afterward must still work.
 
 ## E2E-SUBAGENT-detail-tabs: Subagent details keep source-session tabs and task-index navigation
 
+Upstream scenario ID: `E2E-248`. This catalog uses the descriptive ID above
+because `E2E-248` also identifies a Responses completion scenario in the
+personal catalog; the two IDs must not be conflated.
+
 - **Preconditions:** Two Tasks including a resumed chain, a failed Task, another
   session and other work-panel resources; panel initially closed. Synthetic UI data.
 - **Steps:** Start delegates without opening tabs. Activate description-first task
@@ -635,6 +648,14 @@ window; opening a normal panel afterward must still work.
 - **Specs:** Component §§5.7/9.9; interaction patterns §9.1.
 - **Acceptance / milestone:** C / Quality; M6.
 - **Status:** Candidate journey; isolated acceptance in E2E-CHAT-task-first-reading.
+
+Also resize and maximize the detail panel with short and long Task prompts:
+verify reflow, no horizontal clipping, and a fold button only above six lines.
+Switch transcript layouts live and check search reveal and independent manual
+disclosures. The upstream `subagent-conversation-user-path.test.mjs` exercises
+the renderer path; full tab lifecycle remains a separate acceptance journey.
+Upstream's topology-node and read-only-footer expectations are historical where
+they conflict with the personal task-list and child-input contract above.
 
 ## E2E-119: Parallel subagents report back without entering the parent's context
 
@@ -3615,6 +3636,27 @@ plugin-form fixtures in an isolated temporary directory at runtime.
 - **Status**: Automated by `apps/desktop/test/plugin-mcp.test.mjs` (held-open
   reply case); no live app process required.
 
+## E2E-MCP-HTTP-legacy-SSE — An HTTP+SSE-only server connects through the compatibility path (issue #2528)
+
+- **Preconditions**: A local mock server speaks only the 2024-11-05 HTTP+SSE
+  transport: `GET /mcp` opens an event stream and announces
+  `/messages?session=…`; `POST /mcp` answers `405` (repeat with `404` and
+  `400`). No provider credentials needed.
+- **Steps**: Configure the server with the `http` transport and an
+  `authorization` header; connect, discover the tools, and call one. Close the
+  client. Repeat with an endpoint on another origin, with `401` from the POST,
+  and with a server that rejects both POST and GET.
+- **Expected**: Handshake, discovery, and the call succeed over the event
+  stream, every message goes to the announced endpoint with the configured
+  header, and closing the client ends the stream. A cross-origin endpoint is
+  refused before any message is posted, `401` does not fall back, and a server
+  speaking neither transport reports the original `HTTP_ERROR` status.
+- **Specs**: 07-plugins/01-plugin-system §12.2; ADR 0038.
+- **Acceptance**: HTTP transport integration and the main-process MCP handshake.
+- **Milestone**: Maintenance.
+- **Status**: Automated by `apps/desktop/test/mcp-legacy-sse.test.mjs`; no live
+  app process required.
+
 ## E2E-IME-escape: Composition cancellation preserves drafts
 
 - **Steps**: Edit a user message; type a draft; dispatch composing Escape and Cmd/Ctrl+Enter. Open global search and dispatch composing Escape from its input. Repeat with legacy keyCode 229, then ordinary Escape and retry shortcuts.
@@ -4248,12 +4290,18 @@ Load the actual bundled plugin in an isolated workspace. Create a file and Unico
   one-call budget and a controlled duration budget, cancel during finalization,
   and run past the former call/report thresholds without ever calling TaskReport.
   Also fail an optional report's scratch write and continue ordinary work.
+  Repeat with a write-scoped child, submit a report, and request a write outside
+  its scope. Inspect the fixed scratch checkpoint and the refused destination
+  after cancellation or failure. Restore only under the original identity.
 - **Expected**: Findings survive cancellation/restart, completed tools do not
   replay, explicit budgets are enforced, finalization offers zero tools and ends
   after one request/the configured deadline, and cancellation wins. Default work
   does not pause for reports or an implicit job budget; optional reporting errors
   remain observable without terminating work. Corrupt, cross-identity, oversized
   and escaping checkpoint paths are rejected; older trial metadata remains readable.
+  The scoped child's report survives without authorizing model-directed writes.
+  The refused path is unchanged; a changed role, widened scope or revoked
+  model binding cannot reuse the chain or dispatch a replacement child.
 - **Specs linked**: 03-runtime/02-agent-runtime.md §5f; ADR 0279 §14.
 - **Acceptance**: C, Quality. **Milestone**: M6+ maintenance.
 - **Status**: Automated runtime/provider-boundary integration in

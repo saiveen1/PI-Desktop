@@ -31,6 +31,7 @@ import { accountModelStream } from "./request-usage.js";
 import { modeToolDenial, retainModeToolDeclaration, withModeExecutionGuard } from "./mode-tool-access.js";
 import { restoreHostedSearchReplay } from "./hosted-search-replay.js";
 import { requestExtensionUi } from "./extensions/ui-request.js";
+import { waitForOperation } from "./extensions/operation.js";
 import { readLocalRequestErrorDetails } from "./local-request-errors.js";
 import { isValidToolCall, recoverMalformedToolCalls } from "./tool-call-recovery.js";
 import { textToolCallDiagnostic } from "./text-tool-call.js";
@@ -56,8 +57,14 @@ import {
   settledDelegationMessage,
   taskMessageSnapshot,
 } from "./delegation-message.js";
+import { composeDelegateBrief, delegationUserPrompt, literalDelegationUserPrompt, readDelegationUserPrompt, validateUserRequest, type DelegationUserPrompt } from "./delegation-brief.js";
+import { DelegationInbox, MAX_DELEGATE_INSTRUCTION_CHARS, type QueuedInstruction } from "./delegation-instructions.js";
+import { approveRoleModelChange } from "./delegation-model-approval.js";
+import { canResumeDelegation, delegationModelSelection, delegationPolicyHash, matchesDelegationModel, scopedWriteMetadata, selectDelegationTools, thinkingForDelegationModel, type DelegationModelSelection, type DelegationPolicy } from "./delegation-policy.js";
+import { parseWriteScope, sameWriteScope } from "./delegation-scope.js";
 import {
   Agent,
+  runToolCall,
   type AgentContext,
   type AgentEvent,
   type AgentLoopTurnUpdate,
@@ -274,6 +281,7 @@ import {
   MAX_SUBAGENT_REPORT_CHARS,
   SubagentRun,
   SUBAGENT_LIST_TOOL_NAME,
+  SUBAGENT_SEND_TOOL_NAME,
   SUBAGENT_STOP_TOOL_NAME,
   SUBAGENT_TOOL_NAME,
   SUBAGENT_WAIT_TOOL_NAME,
@@ -371,6 +379,8 @@ import {
   type ProviderTransportHealth,
 } from "./provider-transport-recovery.js";
 
+import { fileLineLabel, MAX_FILE_LINE_REFERENCES, parseFileLineRange } from "@pi-desktop/shared";
+
 export type { RuntimeProviderConfig } from "./provider-binding.js";
 
 export type RuntimePromptAttachment = Omit<AgentPromptAttachment, "kind"> & {
@@ -383,6 +393,8 @@ export type RuntimePromptAttachment = Omit<AgentPromptAttachment, "kind"> & {
   data?: string;
   /** Bounded excerpt of a referenced conversation (`kind: "session"`). */
   text?: string;
+  /** Set by the runtime when an explicit line reference could not be read. */
+  fileReferenceError?: "blocked" | "failed";
 };
 
 export type RuntimePrompt = {
@@ -408,9 +420,21 @@ export type RuntimePrompt = {
  * from the provider request would be context the user never got.
  */
 function promptText(input: RuntimePrompt): string {
-  const references = (input.attachments ?? [])
+  const attachments = input.attachments ?? [];
+  const sessions = attachments
+    .filter(attachment => attachment.kind === "session")
     .map((attachment) => sessionReferenceBlock(attachment))
     .filter((block): block is string => block !== null);
+  const fileLines = attachments.filter(attachment => attachment.lineRange && attachment.text !== undefined)
+    .slice(0, MAX_FILE_LINE_REFERENCES)
+    .map(attachment => {
+      const source = escapeAttribute(fileLineLabel(attachment.path, attachment.lineRange!));
+      const text = attachment.text!.replaceAll("<", "&lt;");
+      return attachment.fileReferenceError
+        ? `<file_reference_error source="${source}" status="${attachment.fileReferenceError}">\n${text}\n</file_reference_error>`
+        : `<file_lines source="${source}">\n${text}\n</file_lines>`;
+    });
+  const references = [...sessions, ...fileLines];
   const text = references.length
     ? `${input.text}\n\n${references.join("\n\n")}`.trim()
     : input.text;
@@ -475,6 +499,7 @@ function runtimeAttachmentFromMessage(
     // Recorded placement: the message content names this image at that spot, so
     // the restored prompt keeps the block there too.
     ...(attachment.inlinePath ? { inlinePath: attachment.inlinePath } : {}),
+    ...(attachment.lineRange ? { lineRange: attachment.lineRange } : {}),
     ...(data ? { data } : {}),
   };
 }
@@ -661,6 +686,10 @@ export type DelegationRecord = {
   /** `toolCallId`s of this run's calls that have not ended yet: dropped when the
    * run settles, so an aborted call cannot pin its captured arguments. */
   pendingToolCallIds?: Set<string>;
+  policy?: DelegationPolicy;
+  modelSelection?: DelegationModelSelection;
+  instructions?: DelegationInbox;
+  appendInstruction?: (instruction: QueuedInstruction) => boolean;
 };
 
 type ManualDelegationRetryResult = AgentRetrySubagentResponse;
@@ -709,7 +738,21 @@ function delegationSummary(record: DelegationRecord): Record<string, unknown> {
     ...(record.modelChangedFrom
       ? { modelChangedFrom: record.modelChangedFrom }
       : {}),
+    ...(record.policy ? { delegationPolicy: record.policy } : {}),
+    ...(record.modelSelection ? { delegationModel: record.modelSelection } : {}),
+    ...delegationInstructionDetails(record),
   };
+}
+
+function delegationInstructionDetails(record: DelegationRecord) {
+  const instructions = record.instructions?.snapshot();
+  // Details carry ids for the client; the tool's text tells the model what happened.
+  return instructions && Object.values(instructions).some((ids) => ids.length) ? { instructions } : {};
+}
+
+function delegationInstructionNote(record: DelegationRecord): string {
+  const { instructions } = delegationInstructionDetails(record);
+  return instructions ? `Instructions: ${instructions.queued.length} queued, ${instructions.delivered.length} delivered, ${instructions.undelivered.length} undelivered.` : "";
 }
 
 function elapsedSeconds(record: DelegationRecord, now = Date.now()): number {
@@ -1031,6 +1074,7 @@ const CODEMODE_EXCLUDED_TOOL_NAMES: ReadonlySet<string> = new Set([
   SUBAGENT_WAIT_TOOL_NAME,
   SUBAGENT_LIST_TOOL_NAME,
   SUBAGENT_STOP_TOOL_NAME,
+  SUBAGENT_SEND_TOOL_NAME,
 ]);
 /**
  * Two-tier budget reminder, matching Codex's `TokenBudgetReminder` and
@@ -1846,6 +1890,8 @@ export class DesktopAgentRuntime {
   private delegations = new Map<string, DelegationRecord>();
   /** Resumable chains rebuilt from the transcript and updated as Task settles. */
   private readonly delegationChains = new DelegationChainRegistry();
+  private readonly preparingDelegateWorktrees = new Set<string>();
+  private delegationPrompt?: () => Promise<DelegationUserPrompt | undefined>;
   /** Transcript rows used to rebuild a resumed delegate's context (ADR 0279):
    * the seed history at launch plus every row this session's delegates emit. */
   private readonly transcriptHistory: UiMessage[];
@@ -1863,14 +1909,11 @@ export class DesktopAgentRuntime {
   private composedSystemPrompt?: string;
   /** Set by `abort` / `dispose` so a finishing delegate cannot restart the parent. */
   private runCancelled = false;
-  /**
-   * Permission scope of the delegate currently executing one tool call,
-   * keyed by tool call id (ADR 0089). The host reads it on `tools.execute` and
-   * resolves the delegate's permission under it instead of the session mode.
-   */
-  private delegatePermissionScopes = new Map<string, SubagentPermission>();
-  /** Worktree key of the delegate executing one tool call (ADR 0329). */
-  private delegateWorktrees = new Map<string, string>();
+  /** Provider call ids are not unique across sibling agents. Keep all
+   * authorization metadata local to the executor, never keyed by such ids. */
+  private readonly delegateExecution = new AsyncLocalStorage<{
+    owner: string; permission: SubagentPermission; worktreeKey?: string; writeScope?: readonly string[];
+  }>();
   /** Serializes same-path mutations across the parent and its delegates. */
   private writeLocks = new PathMutex();
   /** Orders one parallel batch's calls by the resources they claim. */
@@ -2000,8 +2043,6 @@ export class DesktopAgentRuntime {
    * discarding the structured diagnostics returned in `details`. */
   private failedHostToolCalls = new Set<string>();
   private readonly mutationRecovery = new MutationRecoveryGuard();
-  /** Tool-call ownership keeps concurrent delegates' mutation budgets apart. */
-  private mutationOwners = new Map<string, string>();
   /** Why the recovery guard ended the turn, pending its visible error row. */
   private pendingMutationTermination?: MutationTermination;
   private terminatingToolCalls = new Set<string>();
@@ -2017,7 +2058,7 @@ export class DesktopAgentRuntime {
   private acceptingSteering = false;
   private steeringContinuation = false;
   private steeringWaitAbort?: AbortController;
-  private pendingSteering = new Map<AgentMessage, { id: string; toolNames: string[] }>();
+  private pendingSteering = new Map<AgentMessage, { id: string; toolNames: string[]; delegationPrompt?: DelegationUserPrompt }>();
   private pendingOverflow = false;
   private overflowRecoveryAttempted = false;
   private overflowRecoveryInProgress = false;
@@ -2052,6 +2093,7 @@ export class DesktopAgentRuntime {
    */
   private activeToolAborts = new Set<() => void>();
   private readonly steeringToolAborts = new Map<string, () => void>();
+  private fileLineReadCalls = new Map<string, { blocked: boolean }>();
   private hostCloseUnsubscribe?: () => void;
   private turnSubagentUsage?: MessageUsage;
   private compactionRequestShape?: CompactionRequestShape;
@@ -2154,6 +2196,7 @@ export class DesktopAgentRuntime {
             `## Delegation
 Do the work yourself by default. Delegate only bounded, independent tasks with a clear benefit over direct execution.
 No recursive delegation, duplicate work, or agent debates.
+If the user names an expert, use that exact role. Copy only the user's exact relevant words into Task.userRequest; put your additions in Task.task. Do not substitute a role or add conflicting instructions. If the role is unavailable or the relevant text is unclear, tell the user or ask for clarification.
 Allow at most one optional review pass unless the user requests more. Fix and retest concrete, in-scope defects without restarting broad reviews.
 Do not invent objections or turn speculative risks into blockers. Stop when the requested work is complete and relevant checks pass, or report a genuine blocker.`,
             "Inspect model descriptions with TaskModels only when preparing delegation.",
@@ -2534,12 +2577,14 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
   setMode(mode: Mode, definition?: ModeDefinition): void {
     if (this.disposed) throw new Error("runtime disposed");
     const kind = proposalKindForMode(mode);
+    const previousMode = this.mode;
     const planningState: PlanningState = kind ? "planning" : "inactive";
     const details = kind ? { kind } : {};
     if (!this.modeState.setMode(mode, definition)) {
       this.setPlanningState(planningState, details);
       return;
     }
+    if (this.mode !== previousMode || !this.modeState.isAgentLevel()) this.abortRunningDelegations();
     this.activeDeferredToolNames.clear();
     this.rebuildToolCatalog();
     this.restoreDeferredToolsFromContext();
@@ -2779,12 +2824,10 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     if (this.deferredToolNames.has(context.toolCall.name) && !this.activeDeferredToolNames.has(context.toolCall.name)) {
       return { block: true, reason: `Call ${TOOL_SEARCH_NAME} to activate ${context.toolCall.name} before using it. A tool declaration does not grant execution permission.` };
     }
-    const toolCalls = (context.assistantMessage.content as Array<{ type?: string }>).filter(
-      (block) => block.type === "toolCall",
-    );
+    const toolCalls = context.assistantMessage.content.filter((block) => block.type === "toolCall");
     const transition = MODE_TRANSITION_TOOL_NAMES.has(context.toolCall.name);
     const transitionInBatch = toolCalls.some((block) =>
-      MODE_TRANSITION_TOOL_NAMES.has((block as { name?: string }).name ?? ""),
+      MODE_TRANSITION_TOOL_NAMES.has(block.name),
     );
     if (transitionInBatch && toolCalls.length !== 1) {
       return {
@@ -2799,7 +2842,8 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       const blocked = await this.extensionToolCall(context);
       if (blocked?.block) return blocked;
       await this.preparePathToolCall(context);
-      await this.registerBatchCall(context);
+      // Composer prefetches run serially outside the assistant's tool batches.
+      if (!this.fileLineReadCalls.has(context.toolCall.id)) await this.registerBatchCall(context);
       return undefined;
     }
     const enterKind = enterToolKind(context.toolCall.name);
@@ -3796,6 +3840,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
             errorCode: "TOOL_ABORTED",
           });
         }
+        const delegate = this.delegateExecution.getStore();
         if (signal) {
           signal.addEventListener("abort", abort, { once: true });
         }
@@ -3803,7 +3848,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
         // Remote cancellation only acknowledges the request, not the remote
         // operation's settlement. Keep waiting for those calls instead.
         if (!this.remoteWorkspace && (isBash || canAbandonWait) &&
-            this.activeToolCalls.has(toolCallId) && !this.delegateToolCalls.has(toolCallId) &&
+            this.activeToolCalls.has(toolCallId) && !delegate &&
             !(isBash && isRecord(params) && params.runInBackground === true)) {
           this.steeringToolAborts.set(toolCallId, steeringAbort);
           if (this.pendingSteering.size) steeringAbort();
@@ -3831,6 +3876,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
               toolCallId,
               toolName,
               args: params,
+              ...(this.fileLineReadCalls.has(toolCallId) ? { workspaceOnly: true } : {}),
               ...(this.batchPlanner.ticket(toolCallId) ? { fileBatchTicket: this.batchPlanner.ticket(toolCallId) } : {}),
               mode: this.mode,
               // A staged mode's `run` exit gate (ADR mode-definitions): the
@@ -3865,17 +3911,9 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
                     };
                   })()
                 : {}),
-              // A delegate's tool call carries its definition's permission
-              // scope (ADR 0089); the host resolves the call under that scope
-              // instead of the session mode. Parent calls never carry it.
-              ...(this.delegatePermissionScopes.has(toolCallId)
-                ? { permissionScope: this.delegatePermissionScopes.get(toolCallId) }
-                : {}),
-              // A Write/Edit delegate of an isolated session runs in its own
-              // worktree; host-core resolves the key against its registry.
-              ...(this.delegateWorktrees.has(toolCallId)
-                ? { delegationId: this.delegateWorktrees.get(toolCallId) }
-                : {}),
+              ...(delegate && delegate.permission !== DEFAULT_SUBAGENT_PERMISSION ? { permissionScope: delegate.permission } : {}),
+              ...(delegate?.worktreeKey ? { delegationId: delegate.worktreeKey } : {}),
+              ...scopedWriteMetadata(toolName, delegate?.writeScope),
             });
           // #1767: read-only host work must not keep the user-facing turn open
           // indefinitely. Other tool classes deliberately wait for the Host
@@ -3891,7 +3929,6 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           executionFailed = true;
           executionError = error;
         } finally {
-          this.delegatePermissionScopes.delete(toolCallId);
           cleanup(true);
           // cleanup is a no-op once the abort path has run, so the grace timer
           // it armed is released here instead.
@@ -3928,7 +3965,9 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
         if (executionFailed) throw executionError;
         if (!result) throw new Error("tool execution returned no result");
         const recordParams = isRecord(params) ? params : undefined;
-        const mutationOwner = this.mutationOwners.get(toolCallId);
+        const fileLineRead = this.fileLineReadCalls.get(toolCallId);
+        if (fileLineRead && (result.denied || result.errorCode === "PERMISSION_DENIED")) fileLineRead.blocked = true;
+        const mutationOwner = delegate?.owner;
         const termination = this.mutationRecovery.observe({
           owner: mutationOwner ?? "parent", toolName,
           path: typeof recordParams?.path === "string" ? recordParams.path : undefined,
@@ -4020,13 +4059,13 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           if (!prepared) await this.loadPathInstructions(toolName, params, this.instructionExecution.getStore());
           if (!this.batchPlanner.supported && PATH_MUTATING_TOOLS.has(toolName)) {
             return this.writeLocks.run(
-              this.pathLockKey(toolCallId, params),
+              this.pathLockKey(params),
               () => run(toolCallId, params, signal, onUpdate),
             );
           }
           if (!this.batchPlanner.supported && toolName === "Read") {
             return this.writeLocks.read(
-              this.pathLockKey(toolCallId, params),
+              this.pathLockKey(params),
               () => run(toolCallId, params, signal, onUpdate),
             );
           }
@@ -4194,7 +4233,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           return policy;
         },
         legacyKeys: () => this.availableSubagentModelKeys(),
-      }), this.buildSubagentTool()] : []),
+      }), this.buildSubagentTool(), this.buildSubagentSendTool()] : []),
       ...buildJobTools({
         wait: this.buildSubagentWaitTool(),
         list: this.buildSubagentListTool(),
@@ -4286,7 +4325,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
   private guardSteeredTool(tool: AgentTool): AgentTool {
     return { ...tool, execute: async (id, args, signal, update) => {
       if (tool.name !== SUBAGENT_WAIT_TOOL_NAME && this.pendingSteering.size &&
-          this.activeToolCalls.has(id) && !this.delegateToolCalls.has(id)) {
+          this.activeToolCalls.has(id) && !this.delegateExecution.getStore()) {
         return { content: [{ type: "text", text: "Skipped because new user input is waiting." }], details: {}, isError: true };
       }
       return tool.execute(id, args, signal, update);
@@ -4397,6 +4436,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       name === SUBAGENT_WAIT_TOOL_NAME ||
       name === SUBAGENT_LIST_TOOL_NAME ||
       name === SUBAGENT_STOP_TOOL_NAME ||
+      name === SUBAGENT_SEND_TOOL_NAME ||
       // A stage's completion must never hide behind ToolSearch.
       name === COMPLETE_STAGE_TOOL_NAME ||
       // Codemode is opt-in; once enabled it is declared up front.
@@ -4719,17 +4759,14 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     fresh = false,
   ): Promise<RuntimeProviderConfig | undefined> {
     const grants = this.subagentOverrideProviders;
-    const cached = grants[key];
-    if (!fresh && cached) return cached;
+    const cached = !fresh && Object.hasOwn(grants, key) ? grants[key] : undefined;
+    if (cached) return cached;
     try {
-      const result = await this.host.call<RuntimeProviderConfig | undefined>(
-        "provider.resolveSubagentModel",
-        { key },
-      );
+      const result = await this.host.call<RuntimeProviderConfig | null>("provider.resolveSubagentModel", { key });
       // A late response cannot authorize work in a newer turn or after disposal.
-      if (this.disposed || grants !== this.subagentOverrideProviders) return undefined;
-      if (result && typeof result === "object" && "modelId" in result) {
-        const provider = result as RuntimeProviderConfig;
+      if (this.disposed || this.runCancelled || grants !== this.subagentOverrideProviders) return undefined;
+      if (result && typeof result.id === "string" && typeof result.modelId === "string") {
+        const provider = result;
         if (fresh && `${provider.id}/${provider.modelId}` !== key) return undefined;
         const pinned = this.subagentProviders[key];
         if (pinned && pinned.id !== provider.id) {
@@ -4747,7 +4784,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
               providerId: provider.id,
             });
         }
-        grants[key] = provider;
+        if (!fresh) grants[key] = provider;
         return provider;
       }
     } catch {
@@ -4780,10 +4817,8 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
    * collaboration rules are deliberately left out — a delegate has no user to
    * talk to, and its report format is set by `composeSubagentSystemPrompt`.
    */
-  private subagentGuidance(definition: SubagentDefinition, instructions: ProjectInstructions | null | undefined = this.projectInstructions, skills = resolveSubagentSkills(definition, this.pluginSkills)): string[] {
-    const tools = new Set(
-      resolveSubagentToolNames(definition, [...this.toolCatalog.keys()], skills.map((skill) => skill.id)),
-    );
+  private subagentGuidance(toolNames: readonly string[], instructions = this.projectInstructions ?? null, scoped = false, skills = this.pluginSkills): string[] {
+    const tools = new Set(toolNames);
     const blocks: string[] = [];
     if (tools.has("Read") || tools.has("Grep") || tools.has("Glob")) {
       blocks.push(
@@ -4798,7 +4833,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     if (tools.has("Bash")) {
       blocks.push(commandShellGuidance(this.commandShell, this.scratchDir));
     }
-    if (this.scratchDir && (tools.has("Bash") || tools.has("Write"))) {
+    if (!scoped && this.scratchDir && (tools.has("Bash") || tools.has("Write"))) {
       blocks.push(
         `Write temporary and intermediate files into the session scratch directory \`${formatScratchDirForShell(this.commandShell, this.scratchDir)}\` (in Bash: ${shellScratchVariable(this.commandShell)}) using absolute paths, never into the workspace.`,
       );
@@ -4861,7 +4896,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       case "running":
         return {
           ok: false,
-          message: `Delegation ${error.delegationId} is still running. Call TaskWait to converge with it first, or start a new delegation. Resuming a running delegation is not queued.`,
+          message: `Delegation ${error.delegationId} is still running. Use TaskSend to append a correction or TaskWait to converge. Resuming a running delegation is not queued.`,
         };
       case "not-resumable":
         return {
@@ -4937,19 +4972,42 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     ].find(matches);
   }
 
-  /** The delegation-model key a resolved binding is registered under, if any. */
-  private delegationModelKeyFor(
-    provider: RuntimeProviderConfig,
-  ): string | undefined {
-    for (const [key, candidate] of Object.entries(this.subagentProviders)) {
-      if (candidate === provider) return key;
+  private delegationOverrideProvider(key: string, fresh = false): Promise<RuntimeProviderConfig | undefined> {
+    return !fresh && this.subagentModelKeys.has(key) && Object.hasOwn(this.subagentProviders, key)
+      ? Promise.resolve(this.subagentProviders[key])
+      : this.resolveSubagentModel(key, fresh);
+  }
+
+  private async revalidateDelegationModel(model: DelegationModelSelection, role: SubagentDefinition): Promise<RuntimeProviderConfig | undefined> {
+    let provider: RuntimeProviderConfig | undefined;
+    if (model.source === "pin") {
+      if ([role.model, ...(role.fallbackModels ?? [])].some((pin) => pin && subagentModelKey(pin) === model.key)) {
+        provider = this.subagentProviders[model.key];
+      }
+    } else if (model.source === "session") {
+      provider = this.provider;
+    } else {
+      provider = await this.delegationOverrideProvider(model.key, true);
     }
-    for (const [key, candidate] of Object.entries(
-      this.subagentOverrideProviders,
-    )) {
-      if (candidate === provider) return key;
+    return matchesDelegationModel(provider, model) ? provider : undefined;
+  }
+
+  private delegationSelectionFor(provider: RuntimeProviderConfig, role: SubagentDefinition, override?: string): DelegationModelSelection {
+    const identity = { providerId: provider.id, modelId: provider.modelId };
+    const key = `${provider.id}/${provider.modelId}`;
+    if (override && !this.isDefinitionPinOverride(role, override)) {
+      if (this.isSessionModelOverride(override) && matchesDelegationModel(this.provider, identity)) return delegationModelSelection("session", key, provider);
+      if (override === key || matchesDelegationModel(this.subagentProviders[override] ?? this.subagentOverrideProviders[override], identity)) {
+        return delegationModelSelection("override", override, provider);
+      }
     }
-    return undefined;
+    for (const pin of [role.model, ...(role.fallbackModels ?? [])]) {
+      if (pin && matchesDelegationModel(this.subagentProviders[subagentModelKey(pin)], identity)) {
+        return delegationModelSelection("pin", subagentModelKey(pin), provider);
+      }
+    }
+    if (matchesDelegationModel(this.provider, identity)) return delegationModelSelection("session", key, provider);
+    return delegationModelSelection("override", key, provider);
   }
 
   private readDelegateCheckpoint(chain: DelegationChain): SubagentCheckpoint | undefined {
@@ -5043,36 +5101,34 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       executionMode: "parallel",
       execute: async (toolCallId, params, signal) => {
         const requested = isRecord(params) ? String(params.agent ?? "") : "";
-        const definition = this.subagents.find(
+        const role = this.subagents.find(
           (candidate) => candidate.name === normalizeSubagentName(requested),
         );
-        if (!definition) {
+        if (!role) {
           return this.subagentToolError(
             toolCallId,
             `Unknown subagent "${requested}". Available: ${names.join(", ")}.`,
           );
         }
-        const task =
-          isRecord(params) && typeof params.task === "string"
-            ? params.task.trim()
-            : "";
-        const resume =
-          isRecord(params) && typeof params.resume === "string"
-            ? params.resume.trim()
-            : "";
-        const requestedModel =
-          isRecord(params) && typeof params.model === "string"
-            ? params.model.trim()
-            : "";
-        // Resume resolves its own binding; a repeated model is validated below,
-        // never used to select or authorize a different provider.
+        const definition = structuredClone(role);
+        const args = isRecord(params) ? params : {};
+        const task = typeof args.task === "string" ? args.task.trim() : "";
+        const resume = typeof args.resume === "string" ? args.resume.trim() : "";
+        const requestedModel = typeof args.model === "string" ? args.model.trim() : "";
         const modelOverride = resume ? "" : requestedModel;
-        if (!task) {
-          return this.subagentToolError(
-            toolCallId,
-            `Delegating to ${definition.name} needs a non-empty \`task\` brief.`,
-          );
+        const fail = (message: string) => this.subagentToolError(toolCallId, message);
+        const launchEpoch = this.turnEpoch;
+        const launchMode = this.mode;
+        const promptSource = this.delegationPrompt;
+        const awaitAuthorization = <T>(work: Promise<T>) => signal ? waitForOperation(work, signal) : work;
+        const cancelled = () => signal?.aborted || this.disposed || this.runCancelled || this.turnHadError ||
+          launchEpoch !== this.turnEpoch || this.pendingSteering.size > 0 || this.delegationPrompt !== promptSource;
+        const parentEnded = "The parent turn ended or received new input before delegation could start.";
+        if (cancelled()) return fail(parentEnded);
+        if ((definition.catalogMode && definition.catalogMode !== launchMode) || (definition.modeOwner && definition.modeOwner !== launchMode)) {
+          return fail(`The ${definition.name} role does not belong to the active delegation catalog.`);
         }
+        if (!task) return fail(`Delegating to ${definition.name} needs a non-empty \`task\` brief.`);
         try {
           await this.delegationPolicy.refresh();
           signal?.throwIfAborted();
@@ -5080,7 +5136,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           return this.subagentToolError(toolCallId, error instanceof Error ? error.message : "Delegation policy is unavailable; no task started.");
         }
         let provider: RuntimeProviderConfig | undefined;
-        if (!this.delegationSettings && modelOverride) {
+        if (!resume && !this.delegationSettings && modelOverride) {
           if (this.isDefinitionPinOverride(definition, modelOverride)) {
             provider = this.subagentProvider(definition);
             if (!provider) {
@@ -5092,16 +5148,8 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           } else if (this.isSessionModelOverride(modelOverride)) {
             provider = this.provider;
           } else {
-            provider = this.subagentModelKeys.has(modelOverride)
-              ? this.subagentProviders[modelOverride]
-              : this.subagentOverrideProviders[modelOverride];
-            if (!provider) {
-              try {
-                provider = await this.resolveSubagentModel(modelOverride);
-              } catch {
-                // Resolution failed; fall through to the error below.
-              }
-            }
+            provider = await awaitAuthorization(this.delegationOverrideProvider(modelOverride, !!definition.modeOwner)).catch(() => undefined);
+            if (cancelled()) return fail(parentEnded);
           }
           if (!provider) {
             const available = this.availableSubagentModelKeys();
@@ -5113,7 +5161,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
               `Model "${modelOverride}" is not available for delegation.${hint}`,
             );
           }
-        } else if (!this.delegationSettings) {
+        } else if (!resume && !this.delegationSettings) {
           provider = this.subagentProvider(definition);
           if (!provider) {
             return this.subagentToolError(
@@ -5123,20 +5171,6 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           }
         }
         const skills = resolveSubagentSkills(definition, this.pluginSkills);
-        const declaredToolNames = resolveSubagentToolNames(
-          definition,
-          [...this.toolCatalog.keys()],
-          skills.map((skill) => skill.id),
-        );
-        const tools = declaredToolNames
-          .map((name) => this.toolCatalog.get(name))
-          .filter((tool): tool is AgentTool => tool !== undefined);
-        if (tools.length === 0) {
-          return this.subagentToolError(
-            toolCallId,
-            `The ${definition.name} subagent declares no tool available in this session.`,
-          );
-        }
         const startedAt = Date.now();
         // The delegate runs in the background (ADR 0089): `Task` returns
         // immediately with a delegation id, and TaskWait converges later.
@@ -5147,19 +5181,52 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           return this.subagentToolError(toolCallId, resumeLookup.message, resumeLookup.metadata);
         }
         const resumedChain = resumeLookup?.ok ? resumeLookup.chain : undefined;
+        const parsedScope = parseWriteScope(args.scope);
+        if (parsedScope.kind === "invalid") return fail(parsedScope.reason);
+        const prior = resumedChain?.policy;
+        if (resumedChain?.incompleteSnapshot || (resumedChain && !prior && (definition.catalogMode || definition.modeOwner))) {
+          return fail("This delegation has no verifiable role and scope snapshot. Start a new delegation instead.");
+        }
+        if (resume && parsedScope.kind === "scoped" && (!prior || !sameWriteScope(prior.writeScope, parsedScope.entries))) {
+          return fail("Resuming a delegation cannot change its write scope. Omit `scope` to keep its original limits.");
+        }
+        const writeScope = resume ? prior?.writeScope : parsedScope.kind === "scoped" ? parsedScope.entries : undefined;
+        const scoped = writeScope !== undefined || !!definition.catalogMode || !!definition.modeOwner;
+        const roleHash = delegationPolicyHash(definition);
+        const selectTools = () => selectDelegationTools({
+          names: resolveSubagentToolNames(definition, [...this.toolCatalog.keys()], skills.map(skill => skill.id)).filter(name => this.isToolAllowedInMode(name)),
+          catalog: this.toolCatalog, builtins: this.builtinTools, writeScope, scopedWritesSupported: !this.remoteWorkspace,
+        });
+        const { tools, withheld } = selectTools();
+        const declaredToolNames = tools.map(tool => tool.name);
+        const policy: DelegationPolicy = {
+          mode: launchMode, roleHash, toolNames: declaredToolNames,
+          workspaceHash: delegationPolicyHash([this.projectPath, this.workspaceRoot, this.remoteWorkspace]),
+          toolHash: delegationPolicyHash(tools.map(tool => [tool.name, this.builtinTools.has(tool), tool.parameters])),
+          ...(writeScope !== undefined ? { writeScope } : {}),
+        };
+        if (prior && !canResumeDelegation(prior, policy)) return fail("The original workspace, mode, role or tools have changed. Do not reuse its context; start a new delegation under the current permissions.");
+        if (!tools.length) return fail(`The ${definition.name} subagent declares no tool available in this session${writeScope ? " within this write scope" : ""}.`);
+        let currentPrompt: DelegationUserPrompt | undefined;
+        if (promptSource) {
+          try { currentPrompt = await awaitAuthorization(promptSource()); }
+          catch { return fail(cancelled() ? parentEnded : "Could not verify the current user's delegation request. No work was started."); }
+          if (cancelled()) return fail(parentEnded);
+          if (!currentPrompt) return fail("The current user's delegation request could not be found. No work was started.");
+        }
+        const quote = validateUserRequest({ value: args.userRequest, agent: definition.name, current: currentPrompt, history: this.transcriptHistory });
+        if (!quote.ok) return fail(quote.reason);
+        const brief = composeDelegateBrief({ task, userRequest: quote.userRequest });
         let childPersona: import("@pi-desktop/shared").SessionPersona | undefined;
         try { childPersona = delegationPersona(this.persona, resumedChain); }
         catch (error) { return this.subagentToolError(toolCallId, error instanceof Error ? error.message : "Invalid delegation persona snapshot."); }
-        // A resume keeps the chain's own binding (ADR 0279 §4): changing the
-        // parent's session model must not strand a chain, and a delegate must
-        // never swap models by accident. When the recorded binding is gone the
-        // run continues on the definition's current one and says so in its
-        // lifecycle details, because refusing would strand the chain forever.
-        const resumeEpoch = this.turnEpoch;
-        const resumedProvider = resumedChain
-          ? await this.resumedChainProvider(resumedChain, definition)
-          : undefined;
-        const resumeModelKey = resumedChain?.latestModelKey ?? (resumedProvider
+        const recorded = resumedChain?.latestModel;
+        const resumedProvider = resumedChain && await awaitAuthorization(scoped
+          ? recorded ? this.revalidateDelegationModel(recorded, definition) : Promise.resolve(undefined)
+          : this.resumedChainProvider(resumedChain, definition)).catch(() => undefined);
+        if (cancelled()) return fail(parentEnded);
+        if (resumedChain && scoped && !resumedProvider) return fail("The delegation's recorded model is no longer authorized or available. Start a new delegation to change models.");
+        const resumeModelKey = resumedChain?.latestModelKey ?? recorded?.key ?? (resumedProvider
           ? `${resumedProvider.id}/${resumedProvider.modelId}` : undefined);
         if (resume && requestedModel && requestedModel !== resumeModelKey) {
           return this.subagentToolError(toolCallId,
@@ -5175,7 +5242,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
         if (this.delegationPolicy.value.selectionMode === "task-fit" && !resume && (!modelOverride || !modelReason?.trim())) {
           return this.subagentToolError(toolCallId, "Call TaskModels when preparing delegation, then supply model and one concise modelReason for this task.");
         }
-        const selection = isRecord(params) && params.modelSelection === "require" ? "require" : "prefer";
+        const selection = (scoped && resume) || args.modelSelection === "require" ? "require" : "prefer";
         const rawEffort = isRecord(params) ? params.effort : undefined;
         const effort = THINKING_LEVELS.find(level => level === rawEffort);
         if (rawEffort !== undefined && effort === undefined) {
@@ -5198,7 +5265,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
             preferredKey: requestedBinding ? `${requestedBinding.id}/${requestedBinding.modelId}` : modelOverride || undefined,
             preferredProvider: resumedProvider ?? (this.delegationSettings
               ? definition.model && (!modelOverride || modelOverride === subagentModelKey(definition.model)) ? this.subagentProvider(definition) : undefined
-              : provider),
+              : provider ?? this.subagentProvider(definition)),
             legacyFallbacks: (definition.fallbackModels ?? []).map((pin) => ({ key: subagentModelKey(pin), provider: this.subagentProviders[subagentModelKey(pin)] })),
             resolve: async (key) => this.delegationPolicy.authoritative
               ? this.resolveSubagentModel(key, true) : this.subagentProviders[key] ?? await this.resolveSubagentModel(key),
@@ -5225,72 +5292,103 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
             error instanceof DelegationRequestError ? { code: error.code } : error instanceof DelegationAdmissionError ? { code: error.code,
               scheduling: { requestedModel: scheduler.requestedModel, modelReason: effectiveModelReason, decisions: error.decisions } } : undefined);
         }
-        if (this.disposed || this.runCancelled || this.turnHadError || resumeEpoch !== this.turnEpoch) {
-          return this.subagentToolError(toolCallId, "The parent turn ended before delegation could resume.");
-        }
-        // Authorization may yield while a parallel Task starts this chain.
-        if (resume) {
-          const current = this.resolveResumeChain(resume, definition.name);
-          if (!current.ok) return this.subagentToolError(toolCallId, current.message, current.metadata);
-        }
-        const { maxConcurrent } = resolveDelegationLimits(this.delegationPolicy.value.settings?.limits);
-        if (this.runningDelegations().length >= maxConcurrent) {
-          return this.subagentToolError(toolCallId,
-            `The session's subagent concurrency limit (${maxConcurrent}) is reached. Wait for some with TaskWait or stop them with TaskStop before delegating more.`,
-          );
-        }
+        if (cancelled()) return fail(parentEnded);
+        const selected = scoped && recorded ? recorded : this.delegationSelectionFor(provider, definition, modelOverride);
+        if (!matchesDelegationModel(provider, selected)) return fail("The delegation's recorded model is no longer authorized or available.");
         const modelChangedFrom = resumedChain?.latestModelId && resumedChain.latestModelId !== provider.modelId
           ? resumedChain.latestModelId : undefined;
         const checkpoint = resumedChain ? this.readDelegateCheckpoint(resumedChain) : undefined;
         const initialMessages = resumedChain
           ? this.seedResumedDelegate(resumedChain, provider, checkpoint)
           : undefined;
+        if (definition.modeOwner && definition.model &&
+            !matchesDelegationModel(this.subagentProvider(definition), selected)) {
+          const approved = await approveRoleModelChange({
+            role: definition, model: `${provider.id}/${provider.modelId}`, sessionId: this.sessionId, toolCallId,
+            ask: (request) => this.waitForAskTool(request, signal),
+          });
+          if (cancelled()) return fail(parentEnded);
+          if (!approved) return fail(`The user did not authorize a model change for ${definition.name}. Omit \`model\` on a new Task to keep its configured model.`);
+          // Opt-in may have changed while the confirmation was open. The
+          // user's one-shot consent only applies to the exact resolved binding.
+          if (selected.source === "override") {
+            provider = await awaitAuthorization(this.revalidateDelegationModel(selected, definition)).catch(() => undefined);
+            if (cancelled()) return fail(parentEnded);
+            if (!provider) return fail("The approved model is no longer available for delegation. No work was started.");
+          }
+        }
         if (resume && !initialMessages) {
-          // The chain resolved but has nothing left to replay. Drop it so it
-          // stops being advertised as reusable, and report the drop without
-          // listing that same id as reusable.
-          if (resumedChain) this.delegationChains.drop(resumedChain.delegateSessionId);
-          return this.subagentToolError(
-            toolCallId,
-            this.noHistoryResumeMessage(resume),
-          );
+          if (resumedChain && this.delegationChains.lookup(resume) === resumedChain) this.delegationChains.drop(resumedChain.delegateSessionId);
+          return fail(this.noHistoryResumeMessage(resume));
         }
+        const launchError = () => {
+          if (cancelled()) return parentEnded;
+          const current = this.subagents.find((role) => role.name === definition.name);
+          const currentTools = selectTools().tools;
+          if (this.mode !== launchMode || this.modeState.closingOut || !this.isToolAllowedInMode(SUBAGENT_TOOL_NAME) || !current ||
+              delegationPolicyHash(current) !== roleHash || currentTools.length !== tools.length ||
+              currentTools.some((tool, index) => tool !== tools[index])) {
+            return `The ${definition.name} role or its tool policy changed. No work was started.`;
+          }
+          if (resume) {
+            const currentChain = this.resolveResumeChain(resume, definition.name);
+            if (!currentChain.ok) return currentChain.message;
+            if (currentChain.chain !== resumedChain) return "The delegate's history changed while preparing the resume. Read TaskList before trying again.";
+          }
+          const { maxConcurrent } = resolveDelegationLimits(this.delegationPolicy.value.settings?.limits);
+          if (this.runningDelegations().length >= maxConcurrent) {
+            return `The session's subagent concurrency limit (${maxConcurrent}) is reached. Wait for some with TaskWait or stop them with TaskStop before delegating more.`;
+          }
+          return undefined;
+        };
+        const errorBeforePreparation = launchError();
+        if (errorBeforePreparation) return fail(errorBeforePreparation);
         const delegationId = randomUUID();
-        // ADR 0329: in an isolated session a delegate that can write files gets
-        // its own worktree, keyed by its chain so a resume reuses it.
-        const worktreeKey = this.delegateNeedsWorktree(declaredToolNames)
-          ? resumedChain?.delegateSessionId ?? delegationId
-          : undefined;
-        if (worktreeKey) {
-          try {
-            await this.host.call("worktree.delegate.create", {
-              sessionId: this.sessionId,
-              delegationId: worktreeKey,
-            });
-          } catch (error) {
-            return this.subagentToolError(
-              toolCallId,
-              `Could not prepare an isolated worktree for the ${definition.name} subagent: ${
-                error instanceof Error ? error.message : String(error)
-              }. No work was started.`,
-            );
+        const worktreeKey = this.delegateNeedsWorktree(declaredToolNames) ? resumedChain?.delegateSessionId ?? delegationId : undefined;
+        let preparedWorktree = false;
+        if (worktreeKey && this.preparingDelegateWorktrees.has(worktreeKey)) return fail("This delegate's worktree is already being prepared. Wait for the pending resume.");
+        if (worktreeKey) this.preparingDelegateWorktrees.add(worktreeKey);
+        try {
+          if (worktreeKey) {
+            await this.host.call("worktree.delegate.create", { sessionId: this.sessionId, delegationId: worktreeKey });
+            preparedWorktree = true;
+            const error = launchError();
+            if (error) return fail(error);
           }
-          if (this.disposed || this.runCancelled || this.turnHadError || resumeEpoch !== this.turnEpoch) {
-            void this.settleDelegateWorktree(worktreeKey, false, delegationId);
-            return this.subagentToolError(toolCallId, "The parent turn ended before delegation could start.");
+          // Do not cache role grants or validate before an approval/worktree
+          // await: either could have outlived a mode switch or a role edit.
+          const catalogMode = definition.catalogMode ?? definition.modeOwner;
+          if (catalogMode) {
+            const result = await awaitAuthorization(this.host.call<{ allowed?: boolean }>("delegation.validateRole", {
+              sessionId: this.sessionId, mode: catalogMode, role: definition,
+            }));
+            const error = launchError();
+            if (error) return fail(error);
+            if (result?.allowed !== true) return fail(`The ${definition.name} role is no longer authorized in this mode. No work was started.`);
           }
-        }
-        // Worktree preparation can yield after the first resume check. A competing
-        // Task or direct message may have claimed this chain while it awaited Host.
-        if (resume && resumedChain) {
-          const current = this.resolveResumeChain(resume, definition.name);
-          if (!current.ok) return this.subagentToolError(toolCallId, current.message, current.metadata);
-          if (current.chain.latestDelegationId !== resumedChain.latestDelegationId) {
-            return this.subagentToolError(toolCallId, "The delegation was already resumed while preparing its worktree. Inspect its latest result before sending another task.");
+          if (catalogMode || worktreeKey) {
+            // The approved model may have left the pool during worktree or role validation.
+            if (!await scheduler.authorize(provider, signal)) return fail("The approved model is no longer authorized. No work was started.");
+            const error = launchError();
+            if (error) return fail(error);
+          }
+          preparedWorktree = false; // ownership transfers to the run below
+        } catch (error) {
+          if (cancelled()) return fail(parentEnded);
+          if (worktreeKey && !preparedWorktree) {
+            return fail(`Could not prepare an isolated worktree for the ${definition.name} subagent: ${error instanceof Error ? error.message : String(error)}. No work was started.`);
+          }
+          return fail(`Could not revalidate the ${definition.name} role. No work was started.`);
+        } finally {
+          if (worktreeKey) {
+            if (preparedWorktree) void this.settleDelegateWorktree(worktreeKey, false, delegationId)
+              .finally(() => this.preparingDelegateWorktrees.delete(worktreeKey));
+            else this.preparingDelegateWorktrees.delete(worktreeKey);
           }
         }
         const controller = new AbortController();
-        const thinkingLevel = definition.thinkingLevel === "omit" ? "omit" : clampThinkingLevel(provider, requestedThinkingLevel);
+        const thinkingLevel = thinkingForDelegationModel({ role: definition, provider, model: selected, inherited: requestedThinkingLevel });
+        policy.inheritedThinkingLevel = requestedThinkingLevel;
         // Only TaskStop, user Stop, dispose, and a parent fatal error abort a
         // delegate (D328 / D352). The Task tool call returns immediately; tying
         // the background run to that call's signal would kill it when the parent
@@ -5300,28 +5398,27 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
         const completion = new Promise<void>((resolve) => {
           resolveCompletion = resolve;
         });
-        const objective =
-          isRecord(params) && typeof params.description === "string"
-            ? params.description.trim()
-            : task;
-        const providerKey = this.delegationModelKeyFor(provider);
+        const label = typeof args.description === "string" ? args.description.trim() : "";
         const chain = this.delegationChains.start({
           delegateSessionId: resumedChain?.delegateSessionId ?? delegationId,
           delegationId,
           toolCallId,
           agentName: definition.name,
-          originalTask: resumedChain?.originalTask ?? task,
-          objective,
+          originalTask: resumedChain?.originalTask ?? brief,
+          objective: label || task,
           latestModelId: provider.modelId,
-          ...(providerKey ? { latestModelKey: providerKey } : {}),
           requestedModel: scheduler.requestedModel,
           modelReason: effectiveModelReason,
           requestedThinkingLevel,
+          latestModelKey: selected.key,
+          policy,
+          latestModel: selected,
           resumedFrom: resumedChain,
           ...(childPersona ? { persona: childPersona } : {}),
         });
         const runPolicy = resolveDelegationRunPolicy(scheduler.settings?.runPolicy);
         const failurePolicy = Object.freeze({ ...(scheduler.settings?.failurePolicy ?? DEFAULT_DELEGATION_FAILURE_POLICY) });
+        const inbox = new DelegationInbox();
         const record: DelegationRecord = {
           ...(childPersona ? { persona: childPersona } : {}),
           runPolicy,
@@ -5338,7 +5435,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           startedAt,
           completion,
           resolveCompletion,
-          abort: () => controller.abort(),
+          abort: () => { inbox.close(); controller.abort(); },
           stopRequested: false,
           turns: 0,
           toolCalls: 0,
@@ -5347,6 +5444,9 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           startedEpoch: this.turnEpoch,
           reportDelivered: false,
           delegateSessionId: chain.delegateSessionId,
+          policy,
+          modelSelection: selected,
+          instructions: inbox,
           ...(worktreeKey ? { worktreeKey } : {}),
           ...(resumedChain ? { resumedFrom: resume } : {}),
           ...(modelChangedFrom ? { modelChangedFrom } : {}),
@@ -5356,17 +5456,18 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
         const initialApprovals = scheduler.approvals.map(row => ({ ...row }));
         let subagentRun: SubagentRun;
         try {
-          const delegatePrompt = (instructions: ProjectInstructions | undefined) => composeSubagentSystemPrompt({
+          const delegatePrompt = (instructions: ProjectInstructions | null | undefined) => composeSubagentSystemPrompt({
             definition,
             persona: childPersona,
-            guidance: this.subagentGuidance(definition, instructions ?? null, skills),
+            guidance: this.subagentGuidance(declaredToolNames, instructions ?? null, writeScope !== undefined, skills),
             toolNames: declaredToolNames,
+            writeScope,
           });
           const applyInstructions = (instructions: ProjectInstructions | undefined) => {
             subagentRun.setSystemPrompt(delegatePrompt(instructions));
           };
           const builtinToolNames = new Set(tools.filter((tool) => this.builtinTools.has(tool)).map((tool) => tool.name));
-          const scopedTools = this.scopeDelegateTools(tools, definition, delegationId, worktreeKey, applyInstructions, skills);
+          const scopedTools = this.scopeDelegateTools(tools, definition, delegationId, worktreeKey, applyInstructions, skills, writeScope);
           subagentRun = new SubagentRun({
             definition,
             persona: childPersona,
@@ -5389,7 +5490,8 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
               record.observation = withInitialDelegationApprovals(observation, initialApprovals);
               this.publishDelegationSettlement(record);
             },
-            task,
+            task: brief,
+            writeScope,
             provider,
             infiniteProviderRetry: this.infiniteProviderRetry,
             unknownUpstreamRetryLimit: this.unknownUpstreamRetryLimit,
@@ -5402,24 +5504,35 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
             },
             thinkingLevel,
             fallbackModels: scheduled.fallbacks,
-            refreshFallbackModels: () => scheduler.candidates(),
-            authorizeModel: async (candidate, candidateSignal) => await scheduler.admit(candidate, candidateSignal) ?? false,
+            refreshFallbackModels: async () => (await scheduler.candidates()).map(candidate => ({
+              ...candidate, thinkingLevel: definition.fallbackModels?.find(pin => subagentModelKey(pin) === candidate.key)?.thinkingLevel,
+            })),
+            authorizeModel: async (candidate, candidateSignal) => {
+              const admitted = await scheduler.admit(candidate, candidateSignal);
+              if (!admitted) return false;
+              // A private role's one-shot override approval never transfers to another pool model.
+              if (definition.modeOwner && definition.model && !matchesDelegationModel(admitted, selected) &&
+                  this.delegationSelectionFor(admitted, definition).source !== "pin") return false;
+              return admitted;
+            },
             inheritedThinkingLevel: requestedThinkingLevel,
             onModelChange: (next, level) => {
               record.modelId = next.modelId;
               record.thinkingLevel = level;
-              this.delegationChains.retarget(record.delegateSessionId, {
-                modelKey: this.delegationModelKeyFor(next),
-                modelId: next.modelId,
-              });
+              record.modelSelection = this.delegationSelectionFor(next, definition);
+              this.delegationChains.retarget(record.delegateSessionId, { modelKey: record.modelSelection.key, modelId: next.modelId, selection: record.modelSelection });
               this.publishDelegationSettlement(record);
             },
-            systemPrompt: composeSubagentSystemPrompt({
-              definition,
-              persona: childPersona,
-              guidance: this.subagentGuidance(definition, this.projectInstructions, skills),
-              toolNames: declaredToolNames,
-            }),
+            onInstructionDelivered: (id, content) => {
+              if (!inbox.markDelivered(id)) return;
+              // Keep the delivered correction in the same runtime's resume seed,
+              // never in the parent's model context or as a top-level user row.
+              this.transcriptHistory.push({
+                id, role: "user", content, createdAt: nowIso(), status: "complete",
+                parentToolCallId: toolCallId, agentName: definition.name,
+              });
+            },
+            systemPrompt: delegatePrompt(this.projectInstructions),
             tools: scopedTools,
             beforeToolCall: async (context) => {
               await this.preparePathToolCall(context, applyInstructions, builtinToolNames);
@@ -5439,6 +5552,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
             // A resumed run replays its chain before this turn's `task` (ADR 0276).
             ...(initialMessages ? { initialMessages } : {}),
           });
+          record.appendInstruction = (instruction) => subagentRun.appendInstruction(instruction);
         } catch {
           // A constructor/scope failure happens after registry allocation. Make
           // it terminal before returning or idle auto-resume will await a
@@ -5490,15 +5604,12 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
             });
           });
 
-        const label =
-          isRecord(params) && typeof params.description === "string"
-            ? params.description.trim()
-            : "";
+        const scopeNote = withheld.length ? ` Write scope withheld these tools: ${withheld.join(", ")}.` : "";
         return {
           content: [
             {
               type: "text",
-              text: `Delegation ${delegationId} started: the ${definition.name} subagent is working in the background${label ? ` (${label})` : ""}.${this.delegationSettings ? ` Model: ${provider.modelId}. ${scheduler.decisions.filter((row) => row.decision === "skipped").map((row) => `${row.model}: ${row.reason}.`).join(" ")}` : ""} Continue your own independent work, then call TaskWait with this delegationId to converge, or TaskStop to stop it. Job reference: ${JSON.stringify({ kind: "delegation", id: delegationId })}. ${describeDelegationRunPolicy(runPolicy)}`,
+              text: `Delegation ${delegationId} started: the ${definition.name} subagent is working in the background${label ? ` (${label})` : ""}.${this.delegationSettings ? ` Model: ${provider.modelId}. ${scheduler.decisions.filter((row) => row.decision === "skipped").map((row) => `${row.model}: ${row.reason}.`).join(" ")}` : ""} Continue your own independent work; use TaskSend for corrections, TaskWait to converge, or TaskStop to stop it.${scopeNote} Job reference: ${JSON.stringify({ kind: "delegation", id: delegationId })}. ${describeDelegationRunPolicy(runPolicy)}`,
             },
           ],
           details: {
@@ -5517,6 +5628,9 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
             requestedThinkingLevel,
             ...(record.scheduling ? { scheduling: record.scheduling } : {}),
             ...(record.observation ? { observation: record.observation } : {}),
+            delegationPolicy: policy,
+            delegationModel: selected,
+            ...(withheld.length ? { withheldTools: withheld } : {}),
             ...(resumedChain ? { resumedFrom: resume } : {}),
           },
         };
@@ -5532,6 +5646,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     worktreeKeyOrApply?: string | ((instructions: ProjectInstructions | undefined) => void),
     applyInstructions?: (instructions: ProjectInstructions | undefined) => void,
     skills = resolveSubagentSkills(definition, this.pluginSkills),
+    writeScope?: readonly string[],
   ): AgentTool[] {
     const worktreeKey = typeof worktreeKeyOrApply === "string" ? worktreeKeyOrApply : undefined;
     const apply = typeof worktreeKeyOrApply === "function" ? worktreeKeyOrApply : applyInstructions;
@@ -5540,25 +5655,12 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     return tools.map((tool) => ({
       ...tool,
       execute: async (toolCallId, args, signal, onUpdate) => {
-        this.mutationOwners.set(toolCallId, mutationOwner);
-        if (scope !== DEFAULT_SUBAGENT_PERMISSION) {
-          this.delegatePermissionScopes.set(toolCallId, scope);
+        if (tool.name === SKILL_TOOL_NAME && (!isRecord(args) || typeof args.id !== "string"
+          || !skillIds.has(args.id) || !this.pluginSkills.some(skill => skill.id === args.id))) {
+          return this.subagentToolError(toolCallId, "Skill is not available to this subagent.");
         }
-        if (worktreeKey) this.delegateWorktrees.set(toolCallId, worktreeKey);
-        try {
-          if (tool.name === SKILL_TOOL_NAME && (!isRecord(args) || typeof args.id !== "string"
-            || !skillIds.has(args.id) || !this.pluginSkills.some((skill) => skill.id === args.id))) {
-            return this.subagentToolError(toolCallId, "Skill is not available to this subagent.");
-          }
-          return await this.instructionExecution.run(
-            apply ?? (() => undefined),
-            () => tool.execute(toolCallId, args, signal, onUpdate),
-          );
-        } finally {
-          this.delegatePermissionScopes.delete(toolCallId);
-          this.delegateWorktrees.delete(toolCallId);
-          this.mutationOwners.delete(toolCallId);
-        }
+        return this.delegateExecution.run({ owner: mutationOwner, permission: scope, worktreeKey, writeScope },
+          () => this.instructionExecution.run(apply ?? (() => undefined), () => tool.execute(toolCallId, args, signal, onUpdate)));
       },
     }));
   }
@@ -5584,6 +5686,8 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     record: DelegationRecord,
     result: SubagentRunResult,
   ): Promise<void> {
+    record.instructions?.close();
+    record.appendInstruction = undefined;
     if (record.worktreeKey && record.status === "running") {
       const note = await this.settleDelegateWorktree(
         record.worktreeKey,
@@ -5592,6 +5696,8 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       );
       if (note) result = { ...result, report: result.report ? `${result.report}\n\n${note}` : note };
     }
+    const instructionNote = delegationInstructionNote(record);
+    if (instructionNote) result = { ...result, report: `${result.report}\n\n${instructionNote}`.trim() };
     this.settleDelegation(record, result);
   }
 
@@ -5621,6 +5727,8 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     result: SubagentRunResult,
   ): void {
     if (record.status !== "running") return;
+    record.instructions?.close();
+    record.appendInstruction = undefined;
     if (result.status === "aborted" && record.parentErrorInterrupted && !record.stopRequested) {
       const message = `The parent turn failed and interrupted this delegation. Continue it with Task(resume: "${record.delegationId}").`;
       result = {
@@ -6029,6 +6137,38 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     }
   }
 
+  private buildSubagentSendTool(): AgentTool {
+    return {
+      name: SUBAGENT_SEND_TOOL_NAME,
+      label: "Task Send",
+      description: "Queue a coordinator instruction for a running Task in this conversation. It can reach the same run only at the next model or tool boundary. A queued reply is not delivery confirmation; use TaskList or TaskWait for the instruction's status. This does not change the role, model, or write permissions.",
+      parameters: Type.Object({
+        delegationId: Type.String({ description: "The running delegationId returned by Task." }),
+        instruction: Type.String({ maxLength: MAX_DELEGATE_INSTRUCTION_CHARS, description: "The correction or additional context, not a new task or a user quote." }),
+      }),
+      execute: async (toolCallId, params, signal) => {
+        const args = isRecord(params) ? params : {};
+        const delegationId = typeof args.delegationId === "string" ? args.delegationId.trim() : "";
+        const record = this.delegations.get(delegationId);
+        if (signal?.aborted || this.disposed || this.runCancelled || this.turnHadError ||
+            record?.status !== "running" || !record.instructions || !record.appendInstruction || record.policy?.mode !== this.mode) {
+          return this.subagentToolError(toolCallId, "No matching delegate in this conversation is accepting instructions. For a settled delegation, use Task.resume if eligible.");
+        }
+        const id = randomUUID();
+        const accepted = record.instructions.accept({ id, text: typeof args.instruction === "string" ? args.instruction : "" });
+        if (!accepted.ok) return this.subagentToolError(toolCallId, accepted.reason);
+        if (!record.appendInstruction(accepted.instruction)) {
+          record.instructions.close();
+          return this.subagentToolError(toolCallId, "The delegation already ended. The instruction was not delivered.");
+        }
+        return {
+          content: [{ type: "text", text: `Instruction ${id} queued for ${delegationId}, not yet delivered. Check TaskList or TaskWait for delivery status.` }],
+          details: { delegationId, instructionId: id, status: "queued" },
+        };
+      },
+    };
+  }
+
   /** `TaskWait`: converge on running delegations (ADR 0089). */
   private buildSubagentWaitTool(): AgentTool {
     return {
@@ -6136,6 +6276,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           thinkingLevel: record.thinkingLevel,
           startedAt: record.startedAt,
           ...(record.completedAt ? { completedAt: record.completedAt } : {}),
+          ...delegationInstructionDetails(record),
           ...(record.result?.error ? { error: record.result.error } : {}),
           ...(record.result?.terminal ? { terminal: record.result.terminal } : {}),
           ...(record.result?.modelFailures ? { modelFailures: record.result.modelFailures } : {}),
@@ -6272,7 +6413,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           delegations.length === 0
             ? "No live delegation records in this runtime."
             : delegations
-                .map((record) => `- ${formatDelegationHeartbeat(record)}; delegationIds=${JSON.stringify([record.delegationId])}`)
+                .map((record) => `- ${formatDelegationHeartbeat(record)}; delegationIds=${JSON.stringify([record.delegationId])} ${delegationInstructionNote(record)}`.trimEnd())
                 .join("\n"),
           this.delegationChains.resumableBlock({ runningDelegationIds }) || "No currently resumable subagent chains.",
         ].join("\n\n");
@@ -6965,10 +7106,10 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     }
   }
 
-  private pathLockKey(toolCallId: string, params: unknown): string {
+  private pathLockKey(params: unknown): string {
     const rawPath = isRecord(params) ? String(params.path ?? "") : "";
     if (!rawPath) return "";
-    const worktreeKey = this.delegateWorktrees.get(toolCallId);
+    const worktreeKey = this.delegateExecution.getStore()?.worktreeKey;
     return worktreeKey ? `${worktreeKey}\0${rawPath}` : rawPath;
   }
 
@@ -6982,7 +7123,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     toolCallId: string,
     signal?: AbortSignal,
   ): Promise<void> {
-    if (!toolCallId || this.mutationOwners.has(toolCallId)) return;
+    if (!toolCallId || this.delegateExecution.getStore()) return;
     const messages = this.agent?.state.messages ?? [];
     for (let index = messages.length - 1; index >= 0; index -= 1) {
       const message = messages[index];
@@ -9117,6 +9258,8 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
               this.setAgentTools(this.activeTools());
             }
             this.pendingSteering.delete(event.message);
+            const prompt = steering.delegationPrompt;
+            this.delegationPrompt = prompt && (() => Promise.resolve(prompt));
             // User input is now part of the model context: whatever the model
             // says next answers the user, not a completion notice, so the
             // ordinary response contract applies again.
@@ -9785,6 +9928,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     this.startRunDiagnostics(durableTurnId, runStartedAt);
     this.acceptingSteering = true;
     this.pendingUserMessageId = undefined;
+    this.delegationPrompt = undefined;
     this.gracefulStopRequested = false;
     this.runCancelled = false;
     this.resetRunRecoveryState();
@@ -9898,13 +10042,71 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     });
   }
 
+  /** Execute the ordinary Host Read for explicit composer references before model input. */
+  async resolveFileLineReferences(input: RuntimePrompt): Promise<RuntimePrompt> {
+    if (!input.attachments?.some(attachment => attachment.lineRange !== undefined)) return input;
+    const references = input.attachments.filter(attachment => attachment.lineRange !== undefined);
+    if (references.length > MAX_FILE_LINE_REFERENCES) {
+      throw Object.assign(new Error("Too many file line references"), { errorCode: "INVALID_ARGUMENT" });
+    }
+    if (references.some(attachment => attachment.kind !== "file" || attachment.localReference !== undefined || !parseFileLineRange(attachment.lineRange))) {
+      throw Object.assign(new Error("Invalid file line reference"), { errorCode: "INVALID_ARGUMENT" });
+    }
+    const read = this.activeTools().find(tool => tool.name === "Read" && this.builtinTools.has(tool));
+    const turnId = this.turnId;
+    const attachments: RuntimePromptAttachment[] = [];
+    const seen = new Set<string>();
+    for (const attachment of input.attachments) {
+      if (attachment.lineRange === undefined) {
+        attachments.push(attachment);
+        continue;
+      }
+      const range = parseFileLineRange(attachment.lineRange)!;
+      const key = JSON.stringify([attachment.path, range.start, range.end]);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (this.runCancelled || this.disposed || turnId !== this.turnId) throw turnAbortedError("Turn ended during file reference reads");
+      const args = {
+        path: attachment.path,
+        offset: range.start - 1,
+        limit: range.end - range.start + 1,
+      };
+      const toolCall = { type: "toolCall" as const, id: randomUUID(), name: "Read", arguments: args };
+      const timestamp = Date.now();
+      const tools = read ? [read] : [];
+      const prefetch = { blocked: !read };
+      this.fileLineReadCalls.set(toolCall.id, prefetch);
+      const { result, isError } = await runToolCall(toolCall, {
+        tools,
+        assistantMessage: {
+          role: "assistant", content: [toolCall], api: this.model.api, provider: this.model.provider,
+          model: this.model.id, usage: usageToPi(undefined), stopReason: "toolUse", timestamp,
+        },
+        context: { messages: this.agent.state.messages, tools },
+        beforeToolCall: async context => {
+          const decision = await this.beforeToolCall(context);
+          if (decision?.block) prefetch.blocked = true;
+          return decision;
+        },
+        afterToolCall: context => this.afterToolCall(context),
+      }).finally(() => this.fileLineReadCalls.delete(toolCall.id));
+      const text = result.content.flatMap(part => part.type === "text" ? [part.text] : []).join("\n");
+      if (this.runCancelled || this.disposed || turnId !== this.turnId) throw turnAbortedError("Turn ended during file reference reads");
+      attachments.push({
+        ...attachment, lineRange: range, text,
+        fileReferenceError: isError ? (prefetch.blocked ? "blocked" : "failed") : undefined,
+      });
+    }
+    return { ...input, attachments };
+  }
+
   private async promptTurn(
     input: string | RuntimePrompt,
     userMessageId: string | undefined,
     durableTurnId: string,
   ): Promise<{ turnId: string }> {
     const selectedTools = this.selectedMcpTools(input);
-    const modelInput = typeof input !== "string" && input.sessionMessage
+    let modelInput = typeof input !== "string" && input.sessionMessage
       ? { ...input, text: formatSessionMessage(input.text, input.sessionMessage), sessionMessage: undefined }
       : input;
     this.retainPendingSteering();
@@ -9920,6 +10122,14 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     this.subagentOverrideProviders = {};
     this.pathInstructionClaims.clear();
     this.pendingUserMessageId = userMessageId;
+    this.delegationPrompt = undefined;
+    if (typeof input === "string") {
+      const prompt = literalDelegationUserPrompt(input, this.subagents.map((role) => role.name));
+      this.delegationPrompt = () => Promise.resolve(prompt);
+    } else if (userMessageId && !input.sessionMessage) {
+      let source: Promise<DelegationUserPrompt | undefined> | undefined;
+      this.delegationPrompt = () => source ??= readDelegationUserPrompt(this.host, this.sessionId, userMessageId);
+    }
     this.resetRunRecoveryState();
     this.turnCorrections.setTask(typeof input === "string" ? input :
       input.sessionMessage || input.backgroundCompletion || (input.modeTurn && input.modeTurn.origin !== "user") ? undefined : input.text);
@@ -9953,6 +10163,9 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       if (modePromptChanged) this.setAgentSystemPrompt(this.composeSystemPrompt());
       const completion = typeof input === "string" ? undefined : input.backgroundCompletion;
       const completionEntries = completion ? this.historyToEntries([completion]) : [];
+      if (typeof modelInput !== "string" && modelInput.attachments?.some(attachment => attachment.lineRange !== undefined)) {
+        modelInput = await this.resolveFileLineReferences(modelInput);
+      }
       const content = promptContent(modelInput);
       const incomingUserMessage: AgentMessage = {
         role: "user",
@@ -10149,7 +10362,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     this.steeringContext(expectedTurnId);
     const queued: AgentMessage = { role: "user", content: promptContent(input), timestamp: Date.now() };
     const toolNames = this.selectedMcpTools(input);
-    this.pendingSteering.set(queued, { id: message.id, toolNames });
+    this.pendingSteering.set(queued, { id: message.id, toolNames, delegationPrompt: delegationUserPrompt(message) });
     this.agent.steer(queued);
     this.steeringWaitAbort?.abort();
     for (const abortTool of this.steeringToolAborts.values()) abortTool();
@@ -10360,7 +10573,6 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     this.pathInstructionClaims.clear();
     this.failedHostToolCalls.clear();
     this.mutationRecovery.clear();
-    this.mutationOwners.clear();
     this.delegateMutationTerminations.clear();
     this.pendingMutationTermination = undefined;
     this.terminatingToolCalls.clear();

@@ -1,4 +1,6 @@
 import { join } from "node:path";
+import { isDeepStrictEqual } from "node:util";
+import { sessionSubagents } from "./mode-subagents";
 import {
   capabilitiesFromModelConfig,
   clampThinkingLevel,
@@ -28,6 +30,7 @@ import {
   JEV_API_KEY_SECRET_REF,
   type McpServerRecord,
   type Mode,
+  type ModeDefinition,
   type ModelBinding,
   type ModelInfo,
   modelWireIdsEqual,
@@ -73,6 +76,13 @@ export type SessionLaunchRuntimeDependencies = {
   vendorOAuth: VendorOAuth;
   modelsDevCatalog: ModelsDevCatalog;
   getWorkspacePath: () => string | null;
+  getModeBundle?: (mode: string) => Promise<ModeDefinition["bundle"]>;
+  /** The mode's private skills, advertised to the model under scoped ids. */
+  getModeSkills?: (mode: string) => Promise<Array<{
+    id: string;
+    name: string;
+    description?: string;
+  }>>;
   pluginActiveInProject: (
     pluginId: string,
     projectPath: string | null | undefined,
@@ -102,6 +112,8 @@ export function createSessionLaunchRuntime({
   vendorOAuth,
   modelsDevCatalog,
   getWorkspacePath,
+  getModeBundle,
+  getModeSkills,
   pluginActiveInProject,
   bindingForModel,
   effectiveSubagentModelConfig,
@@ -605,6 +617,11 @@ export function createSessionLaunchRuntime({
       await disabledBuiltinSkills(),
       settings.inlineVisualizations === true,
     );
+    // A mode-private skill is scoped by the session's mode: its id carries the
+    // mode prefix, so a same-named global or plugin skill stays a different
+    // entry and a disabled or moved document is simply absent (issue #2544 §3).
+    const mode = normalizeMode(overrides.mode ?? session.mode ?? settings.defaultMode ?? "agent");
+    const modeSkillEntries = await getModeSkills?.(mode).catch(() => []) ?? [];
     const pluginSkills = [
       ...builtinSkills({
         workspacePath: projectPath,
@@ -625,18 +642,36 @@ export function createSessionLaunchRuntime({
         name: skill.name,
         description: skill.description,
       })),
+      ...modeSkillEntries,
     ];
     // Subagents (ADR 0062): definitions are re-read per launch so editing
     // `~/.agents/subagents` or the registry takes effect on the next prompt, and every
     // pinned model is resolved here because credentials and the models.dev catalog
     // live on this side. The user's own definitions (D202) are scope-filtered like the
     // skills above; a delegate the model can see is one it will try to call.
-    const subagentCatalog = await loadSubagentDefinitions(localInstructionRoot, {
-      limits: settings.delegation?.limits,
-      userDocuments: await activeUserSubagentDocuments(projectPath),
-      // A switched-off builtin is dropped from what this prompt may delegate to.
-      disabledBuiltins: await disabledBuiltinSubagents(),
-    });
+    const bundle = await getModeBundle?.(mode);
+    const catalogFor = (policy: ModeDefinition["bundle"], project: string | undefined, root: string | undefined, id: string, limits: NonNullable<Parameters<typeof loadSubagentDefinitions>[1]>["limits"]) =>
+      sessionSubagents(policy, async () => loadSubagentDefinitions(root, {
+        limits,
+        userDocuments: await activeUserSubagentDocuments(project),
+        disabledBuiltins: await disabledBuiltinSubagents(),
+      }), id);
+    const subagentCatalog = await catalogFor(bundle, projectPath, localInstructionRoot, mode, settings.delegation?.limits);
+    if (getModeBundle) {
+      runtimeState.sidecar?.setRoleValidator(async (sessionId, expectedMode, role) => {
+        const host = runtimeState.host;
+        if (!host) return false;
+        const detail = await host.call<{ session?: { mode?: string; projectPath?: string; remoteWorkspace?: unknown } }>(
+          "session.get", { id: sessionId, messageLimit: 1 },
+        );
+        if (!detail?.session || normalizeMode(detail.session.mode) !== expectedMode) return false;
+        const currentSettings = await host.call<{ delegation?: { limits?: NonNullable<Parameters<typeof loadSubagentDefinitions>[1]>["limits"] } }>("settings.get");
+        const project = detail.session.projectPath;
+        const current = await catalogFor(await getModeBundle(expectedMode), project,
+          detail.session.remoteWorkspace ? undefined : project, expectedMode, currentSettings.delegation?.limits);
+        return runtimeState.host === host && current.definitions.some(candidate => isDeepStrictEqual(candidate, role));
+      });
+    }
     const subagentBindings = await resolveSubagentProviders({
       definitions: subagentCatalog.definitions,
       providers: providers.providers,
@@ -791,9 +826,6 @@ export function createSessionLaunchRuntime({
             ? [{ providerId: row.id }]
             : [],
         ),
-    );
-    const mode = normalizeMode(
-      overrides.mode ?? session.mode ?? settings.defaultMode ?? "agent",
     );
     let jevApiKey: string | undefined;
     if (mode === "agent" && settings.jevEnabled === true) {

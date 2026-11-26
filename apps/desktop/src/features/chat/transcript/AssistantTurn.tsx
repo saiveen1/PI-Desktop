@@ -16,19 +16,15 @@ import {
   type AssistantTurnEntry,
   type TranscriptEntry,
 } from "../../../lib/assistant-turns";
-import {
-  collectDelegationStatuses,
-  collectDelegationTimings,
-} from "../../../lib/subagent-topology";
-import {
-  segmentTurnProcess,
-  type TurnProcessRunSegment,
-} from "../../../lib/turn-process";
-import { sessionAllows } from "../../../lib/remote-session-safety";
+import { collectDelegationStatuses, collectDelegationTimings } from "../../../lib/subagent-topology";
+import { segmentTurnProcess, type TurnProcessRunSegment } from "../../../lib/turn-process";
 import { resolveShowThinking } from "../../../lib/thinking-visibility";
 import { resolveTranscriptDisplayMode } from "../../../lib/transcript-display-mode";
 import { reviewChangeFromMessage } from "../../../lib/workspace-review";
 import { cachedVisibleProcessSteps } from "../../../lib/transcript-activity-summary";
+import { ReviewChangeCard } from "../../../components/ReviewChangeCard";
+import { ToolRow } from "./ToolRow";
+import { sessionAllows } from "../../../lib/remote-session-safety";
 import { useSlotSessionId } from "../../../plugins/renderer-slots/use-slots";
 import { useAppStore } from "../../../stores/app-store";
 import { IconBranch, IconPencil, IconReview } from "../../../components/icons";
@@ -41,8 +37,6 @@ import {
 import { activityItemsEqual } from "./ActivityGroup";
 import { TurnToolImages } from "./ToolResultImages";
 import { MessageRow } from "./MessageRow";
-import { ReviewChangeCard } from "../../../components/ReviewChangeCard";
-import { ToolRow } from "./ToolRow";
 import { assistantTurnMenuItems } from "./menu-items";
 import {
   useChatTextActions,
@@ -261,29 +255,11 @@ export const TranscriptTail = memo(function TranscriptTail({
   transcriptEntryEqual(previous.entry, next.entry)
 );
 
-/**
- * A `Bash`/run call rendered on its own, outside every process and activity
- * disclosure. It stays visible with all disclosures collapsed, and its own
- * detail stays closed until the user opens it.
- */
-const StandaloneRunRow = memo(function StandaloneRunRow({
-  segment,
-}: {
-  segment: TurnProcessRunSegment;
-}) {
-  // A review-backed edit is one tool-level row. It cannot become a run row
-  // today, but keeping the branch here prevents a future alias from rendering
-  // both the file header and the generic tool header.
+const StandaloneRunRow = memo(function StandaloneRunRow({ segment }: { segment: TurnProcessRunSegment }) {
   const reviewed = reviewChangeFromMessage(segment.item.message) !== null;
-  return (
-    <div className="turn-run-row" data-run-row="true">
-      {reviewed ? (
-        <ReviewChangeCard message={segment.item.message} asToolRow />
-      ) : (
-        <ToolRow imagesInTurn message={segment.item.message} />
-      )}
-    </div>
-  );
+  return <div className="turn-run-row" data-run-row="true">
+    {reviewed ? <ReviewChangeCard message={segment.item.message} asToolRow /> : <ToolRow imagesInTurn message={segment.item.message} />}
+  </div>;
 });
 
 export const AssistantTurn = memo(function AssistantTurn({
@@ -323,8 +299,6 @@ export const AssistantTurn = memo(function AssistantTurn({
     ? slotMessage("assistant", { ...actionMessage, content: recordedContent }) : undefined,
   [complete, actionMessage, recordedContent]);
   const streaming = isActive && summary.streaming;
-  // The same preference the nested levels read: hidden reasoning is not a
-  // visible step of the turn's process.
   const showThinking = useAppStore((state) => resolveShowThinking(state.settings));
   const hideThinking = !showThinking;
   /*
@@ -358,8 +332,6 @@ export const AssistantTurn = memo(function AssistantTurn({
     });
   };
 
-  // Collect delegation statuses across ALL activity parts of this turn so that
-  // a TaskWait in one part can inform the Task cards in a different part.
   const toolsRef = useRef(summary.tools);
   const tools = reuseReferences(toolsRef.current, summary.tools);
   toolsRef.current = tools;

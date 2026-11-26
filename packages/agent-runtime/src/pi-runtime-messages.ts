@@ -7,6 +7,7 @@ import { truncateTextWithMarker } from "./agent-messages.js";
 export type CompactionSummaryMessage = {
   role: "compactionSummary";
   summary: string;
+  resumeActiveTurn?: true;
   tokensBefore: number;
   timestamp: number;
 };
@@ -45,6 +46,10 @@ type RuntimeMessage =
 
 export const COMPACTION_SUMMARY_PREFIX =
   "The conversation history before this point was compacted into the following summary:\n\n<summary>\n";
+const ACTIVE_TURN_SUMMARY_PREFIX =
+  "This harness-generated checkpoint is newer than the original request above. " +
+  "That request defines the goal, not the current state. Continue from the first unchecked step below; " +
+  "do not restart completed work. Follow any newer user message that comes after this checkpoint.\n\n<summary>\n";
 export const COMPACTION_SUMMARY_SUFFIX = `\n</summary>
 
 This is a context checkpoint, not a new task. The summary and any retained messages describe work already performed. Continue only unfinished work from the latest execution state; do not restart setup, reload skills, or repeat completed operations merely because context was compacted. Use recorded results and receipts to distinguish completed, failed, and unknown outcomes. Reconcile unknown outcomes before retrying side effects. Re-read or revalidate only when a specific missing fact, changed condition, or new instruction requires it; the latest user instruction still controls the task.`;
@@ -60,10 +65,12 @@ export function createCompactionSummaryMessage(
   summary: string,
   tokensBefore: number,
   timestamp: string | number,
+  resumeActiveTurn = false,
 ): CompactionSummaryMessage {
   return {
     role: "compactionSummary",
     summary,
+    ...(resumeActiveTurn ? { resumeActiveTurn: true } : {}),
     tokensBefore,
     timestamp: normalizeTimestamp(timestamp),
   };
@@ -132,16 +139,19 @@ export function convertToLlm(
           timestamp: runtimeMessage.timestamp,
         }));
         break;
-      case "compactionSummary":
+      case "compactionSummary": {
+        const prefix = "resumeActiveTurn" in runtimeMessage && runtimeMessage.resumeActiveTurn
+          ? ACTIVE_TURN_SUMMARY_PREFIX : COMPACTION_SUMMARY_PREFIX;
         converted.push(asProviderMessage({
           role: "user",
           content: [{
             type: "text",
-            text: `${COMPACTION_SUMMARY_PREFIX}${runtimeMessage.summary}${COMPACTION_SUMMARY_SUFFIX}`,
+            text: `${prefix}${runtimeMessage.summary}${COMPACTION_SUMMARY_SUFFIX}`,
           }],
           timestamp: runtimeMessage.timestamp,
         }));
         break;
+      }
       case "system":
       case "user":
       case "assistant":

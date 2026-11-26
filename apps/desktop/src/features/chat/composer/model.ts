@@ -13,7 +13,7 @@ import {
   sessionThinkingMenuLevels,
 } from "@pi-desktop/shared";
 import { sameComposerModelId } from "../../../lib/composer-models.ts";
-import type { ComposerPluginPart } from "../../../lib/composer-smart-stop";
+import type { ComposerDraftFileReference, ComposerPluginPart } from "../../../lib/composer-smart-stop";
 import { providerThinkingLevels } from "../../../lib/session-thinking.ts";
 
 export const COMPOSER_MIN_HEIGHT_PX = 28;
@@ -61,11 +61,12 @@ export type ComposerPrefill = {
 export type ComposerFileReference = {
   size?: number;
   localReference?: string;
+  lineRange?: import("@pi-desktop/shared").FileLineRange;
   id: string;
   sessionId: string;
   path: string;
   name: string;
-  kind: "image" | "file" | "session" | "directory" | "agent";
+  kind: NonNullable<ComposerDraftFileReference["kind"]>;
   mimeType?: string;
   token?: string;
   plugin?: ComposerPluginPart;

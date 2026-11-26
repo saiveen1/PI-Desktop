@@ -1302,6 +1302,11 @@ not chain into the surrounding shell.
 
 ### 5.2.2 File manager plugin surface
 
+Opening the bundled File Manager opts its local project into a default tab for
+other eligible sessions, without sharing dock open/closed state or active-tab
+selection. Local closure remains local; temporary, remote and other-project
+sessions do not inherit it. See [work-panel interactions](09-interaction-patterns.md#18-work-panel-entry-and-resources-d128-d142-d154-d173-d179-d207-d221).
+
 The vendored `pi.file-manager` view browses, opens, and edits the project
 entirely inside the plugin's isolated page:
 
@@ -1319,8 +1324,10 @@ entirely inside the plugin's isolated page:
   choices remain available. The Browser action opens a new Browser resource tab
   and requires the bundled Browser plugin to be enabled. **Show in folder**
   remains a file action. The host refuses directory paths for file actions.
-- Selecting a file replaces the tree with a focused viewer: syntax-highlighted
-  editing with save, a Markdown preview toggle, image and audio/video viewing,
+- Selecting a file opens a document tab in the viewer. Tabs retain independent
+  drafts and reuse an existing tab for the same document. Save acts on that
+  document, and closing a dirty tab asks whether to save, discard, or cancel.
+  Viewers include syntax-highlighted editing, Markdown, image and media viewing,
   CSV/TSV tables with paging and sorting, a JSON tree, and read-only SQLite
   browsing with a SQL query box. The editor's CodeMirror find/replace fields
   and buttons use the plugin theme surfaces and foreground in both light and
@@ -1328,11 +1335,16 @@ entirely inside the plugin's isolated page:
   being decoded, and every viewer names its own bound — 2 MiB for text, 8 MiB
   for images, 24 MiB for media, none for databases, whose bytes stay out of
   the page.
+- The local Git sidebar shows changes, diffs and history. Repository setup,
+  staging, commits, fetch, pull and push are explicit user actions; force push
+  requires confirmation and a lease for the reviewed remote commit. Remote SSH
+  workspaces remain read-only and do not run local Git.
 - Saving is atomic and refuses to overwrite a file that changed on disk since it
   was opened until the user confirms. Loading, read failures, unsupported
   binaries, oversized files, empty folders, and folders that fail to load each
-  have a distinct localized state, and a failed directory can be retried in
-  place.
+  have a distinct localized state. Initial reads can show skeletons that respect
+  reduced motion, while a same-target refresh keeps the current content visible.
+  A failed directory can be retried in place.
 - The view chooses which folder of the open project it browses from a control in
   its own top-left area: the project's primary folder by default, its other
   folders after that in group order (ADR 0249), remembered per project and
@@ -1888,11 +1900,19 @@ near-zero duration. A folded group keeps its rows mounted, `aria-hidden`, and
   cap is 291px (ten compact rows, their gaps, and the label inset); it scrolls
   internally when more rows are loaded. Projects defaults to filling the
   remaining height. Both can be resized as described in §3.1. List scrollbars
-  use the same global 6px,
+  remaining height. Both can be resized as described in §3.1. Zoom and resize
+  preserve loaded rows; minimum-height overflow keeps navigation reachable. List
+  scrollbars use the same global 6px,
   trackless, transparent-at-rest rule as the conversation and work-panel
   scrollbars; the semantic-ink thumb appears when its list is hovered, focused,
   or scrolling and remains visible while dragging, so the independent regions
   stay available without becoming persistent visual rails.
+
+  Project-bound rows in Recent keep their project label ahead of an
+  ellipsizing session title, so long titles cannot consume the label's width.
+  The label retains its full name on hover. This sizing applies only to
+  unpinned project rows in Recent; pinned rows, path-less sessions, and rows
+  inside project groups keep their existing layout and session semantics.
 
 ---
 
@@ -2312,6 +2332,9 @@ Single message render — either user (plaintext) or assistant (markdown streami
   default-ignorable characters alone (such as U+200B) do not create a thinking
   disclosure. Real thinking retains its original characters, including joiners;
   context-excluded history and later newly generated thinking remain displayable.
+- Long user messages default to a six-line preview measured at rendered width
+  and font, with a fade and a centered show/hide button when longer. Search
+  reveals matching messages; copy and edit retain the complete original text.
 - Hover actions: quiet icon-only action chips under the bubble — Copy on idle
   assistant turns; Fork and Regenerate on completed assistant turns; Edit and
   Delete on user turns. A streaming assistant turn omits its Copy action until
@@ -3081,6 +3104,12 @@ long task text, paths, and controls without horizontal page overflow.
 A Task preempted by new parent input remains visible as Not started, without
 a running duration or active-task count. It has no invented worker handle and
 never redispatches automatically. Other skipped tools retain their own status.
+
+Each child Task brief is closed by default. After the reader opens it, long
+prompts use the same six-line preview as main user messages. Prompts and
+replies reflow with panel resizing and maximize. The source session
+and its detail controls remain authoritative; upstream topology-card and
+read-only-footer behavior is historical where it conflicts with §5.7.
 
 ### 9.10 A run row's command lives in its head (D226)
 
@@ -3922,8 +3951,8 @@ Anatomy:
   not support Desktop-managed MCP selections. Existing command aliases win
   collisions. See `docs/adr/composer-mcp-invocations.md`.
 - Active Skill commands use `/skill:<id>` for builtin, plugin, and user Skills.
-  Completion inserts this explicit prefix; sending resolves it to the unchanged
-  Skill ID. Unprefixed names are not Skill aliases; existing app commands and
+  Completion displays the Skill as a chip; sending resolves its explicit slash
+  token to the unchanged Skill ID. Unprefixed names are not Skill aliases; existing app commands and
   prompt templates keep their names. Saved Skill mentions remain unchanged.
 - A whitespace-delimited `/` later in the draft offers active Skills only.
   Completion replaces only the token under the cursor, so several Skills and
@@ -3966,7 +3995,9 @@ Anatomy:
   each mention. Skill and agent mentions combine; a leading template or app
   command is not rewritten. Stop restores the typed `command`, never the
   rewritten `content`.
-- Accepting commands and directories inserts text (`/name ` / `@dir/`);
+- Accepting a Skill inserts an atomic inline chip with its catalog title and an
+  editable space for arguments; it serializes to `/skill:<id>`, not a file.
+  Accepting other commands and directories inserts text (`/name ` / `@dir/`);
   accepting a completed file inserts the inline chip rather than deleting the
   trigger. Immediately
   before dispatch, ordinary references serialize in stable order after the
@@ -4979,13 +5010,20 @@ as well as its DOM, so submission and draft caching retain the path. Deleted
 reference history is local to the current draft/workspace and is cleared on send;
 pasting a private-use character alone must not restore an attachment. The input owns and disposes the native event listeners.
 
-An empty last line keeps its own caret. Chromium has no box for a line that holds
-nothing, so a caret left after the final line break types the next keystroke onto
-the line above. The editor paints a placeholder break on that line, places an
-end-of-draft caret before it when the draft ends in a newline, and restores it
-after every commit; the draft string, its indices and the caret's position in it
-are unchanged, and the placeholder disappears as soon as the line holds text. A
-middle empty line needs none: the break that ends it already gives it a box.
+An empty last line keeps its own caret. Chromium drops the last break of a block:
+a draft that ends in a newline paints no line of its own, and a caret left there
+resolves to the line above and types the next keystroke there. The editor paints a
+placeholder break — `<br data-composer-tail>` — after that newline, and every read,
+index and caret path counts it as zero characters. The placeholder carries no
+text, so it cannot be selected, copied or typed, never merges into a neighbouring
+text node, and the draft string and its indices are unchanged; the end-of-draft
+caret sits before the placeholder, on the empty line, and the placeholder is
+inert after ordinary text. A terminal placeholder can remain as the browser's
+undo anchor: undoing Backspace restores both the empty line and its caret.
+At the draft end a single native edit inserts the real break and the layout
+placeholder, so undo and redo cover both. Elsewhere Shift+Enter stays native;
+plain Enter in multiline mode uses the same native line-break command instead
+of introducing block wrappers with different caret offsets.
 
 ### Dialog long-text containment
 
@@ -5118,3 +5156,28 @@ and file/image references, and returns to chat without sending. Repeated clicks
 do not duplicate the same reference. Query/ownership changes discard stale reads
 and selection. No automatic model analysis, retry or transcript read occurs.
 See [logging](../03-runtime/09-logging-and-observability.md#10-local-tool-observer).
+### File Manager line references
+
+Select a saved range in the local File Manager's source editor. **Add to chat**
+and copying then pasting into the Composer insert the same removable
+`gpt.py (85:86)` chip. A single selected line displays as `gpt.py (85)`.
+Only the file path and inclusive source line numbers enter the draft. Other
+clipboard consumers still receive the original plain text. Unsaved edits allow
+plain-text copy and suppress line references until the file is saved or reloaded.
+At the four-reference limit, another paste shows the limit warning and inserts
+the plain text instead of consuming it without changing the draft.
+Selections longer than 4,000 lines or outside positive signed 32-bit line
+coordinates use plain-text paste. Main applies the same workspace spelling
+normalization as Composer (separators and trailing slash), while retaining
+the lexical and real-path project containment checks.
+
+At turn execution the Agent calls the existing Host Read for each distinct
+range and adds its bounded result to the model request. Read uses the saved
+file at execution time, including for queued sends. Source views with no
+project file identity and clipboard data from another project use normal text
+copy/paste. See [File Manager line references ADR](../../adr/file-manager-line-references.md).
+
+Line ranges coexist with native disk-file references in one prompt and input
+history. Each attachment has one reference kind: line selections retain their
+scoped Read path, while registered disk files retain metadata-only dispatch.
+Combining `lineRange` and `localReference` on one attachment is invalid.

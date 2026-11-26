@@ -25,9 +25,10 @@ export type ComposerPluginPart =
 export type ComposerDraftFileReference = {
   size?: number;
   localReference?: string;
+  lineRange?: import("@pi-desktop/shared").FileLineRange;
   path: string;
   name: string;
-  kind?: "image" | "file" | "session" | "directory" | "agent";
+  kind?: "image" | "file" | "session" | "directory" | "agent" | "skill";
   mimeType?: string;
   /** Visible inline token for a generated large-text paste reference. */
   token?: string;

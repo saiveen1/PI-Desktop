@@ -147,7 +147,7 @@ test("sidebar shows a bounded Recent session list before retained projects", () 
   assert.match(standaloneSessions, /data-action="new-standalone-session"/);
   assert.match(standaloneSessions, /createSession\(\{ projectPath: null \}\)/);
   assert.match(standaloneSessions, /renderGroupedSessionRows\("temporary"/);
-  assert.match(standaloneSessions, /renderSessionRows\(visibleRecentSessions, \{ global: true, showLastReplyDate \}\)/);
+  assert.match(standaloneSessions, /renderSessionRows\(visibleRecentSessions, \{ global: true, recent: true, showLastReplyDate \}\)/);
   assert.match(standaloneSessions, /data-action="recent-sessions-load-more"/);
   assert.ok(
     sidebarSource.indexOf('<SidebarSection id="recent"') <
@@ -156,6 +156,39 @@ test("sidebar shows a bounded Recent session list before retained projects", () 
   assert.match(globalStyles, /\.sidebar-section-scroll\.standalone\s*\{[^}]*max-height:\s*var\(--sidebar-section-height, 291px\);/);
   assert.match(globalStyles, /\.sidebar-section-scroll\s*\{[^}]*overflow-x:\s*hidden;[^}]*overflow-y:\s*auto;/);
   assert.doesNotMatch(sidebarSource, /data-sidebar-project-group="temporary"/);
+});
+
+test("sidebar high zoom retains a reachable section viewport and closes menus on outer scroll", () => {
+  assert.match(globalStyles, /\.sidebar-body\s*\{[^}]*overflow:\s*hidden auto;/);
+  assert.match(globalStyles, /\.sidebar-sections\s*\{[^}]*min-height:\s*70px;[^}]*overflow-y:\s*auto;/);
+  assert.match(sidebarSource, /className="sidebar-body no-drag" onScroll=\{\(\) => closeMenus\(false\)\}/);
+  assert.match(sidebarSource, /className="sidebar-sections" onScroll=\{\(\) => closeMenus\(false\)\}/);
+});
+
+test("Recent project labels keep their width ahead of long session titles", () => {
+  const recentRows = sidebarSource.match(
+    /renderSessionRows\(visibleRecentSessions, \{[^}]*\}\)/,
+  )?.[0] ?? "";
+  const rowClass = sidebarSource.match(
+    /className=\{`thread-item \$\{active[\s\S]*?\n        data-sidebar-session-row/,
+  )?.[0] ?? "";
+  const projectLabel = sidebarSource.match(
+    /<span\s+className="thread-item-project"\s+title=\{options\?\.recent && normalizedProjectPath \? owningProject : undefined\}/,
+  )?.[0] ?? "";
+
+  assert.match(recentRows, /recent:\s*true/);
+  assert.match(rowClass, /options\?\.recent && normalizedProjectPath/);
+  assert.match(projectLabel, /title=\{options\?\.recent && normalizedProjectPath \? owningProject : undefined\}/);
+  assert.match(
+    globalStyles,
+    /\.thread-item\.recent-project-session \.thread-item-project\s*\{[^}]*flex:\s*0 0 auto;/,
+  );
+  assert.match(
+    sidebarSource,
+    /renderSessionRows\(pinnedSessions, \{ global: true \}\)/,
+    "pinned rows keep their existing presentation path",
+  );
+  assert.doesNotMatch(recentRows, /temporary:\s*false/);
 });
 
 test("sidebar project and session lists stay coordinated with the global type scale", () => {

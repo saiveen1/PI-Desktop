@@ -655,6 +655,26 @@ describe("rebuildChainsFromTranscript", () => {
     });
   });
 
+  it("retains local scheduling and upstream scoped policy together on restart", () => {
+    const row = taskRow("call-1", "d1", "explore");
+    const policy = {
+      mode: "agent", roleHash: "a".repeat(64), workspaceHash: "b".repeat(64),
+      toolHash: "c".repeat(64), toolNames: ["Read", "Edit"], writeScope: ["src"],
+      inheritedThinkingLevel: "medium",
+    };
+    const model = { source: "pin", key: "account/specialist", providerId: "account", modelId: "specialist" };
+    row.toolResult = { details: {
+      delegationId: "d1", agent: "explorer", status: "completed", modelId: "specialist",
+      delegationPolicy: policy, delegationModel: model, requestedThinkingLevel: "high",
+      scheduling: { requestedModel: "account/specialist", modelReason: "review", decisions: [{ model: "account/specialist", decision: "selected" }] },
+    } };
+    expect(rebuildChainsFromTranscript([row])[0]).toMatchObject({
+      policy, latestModel: model, incompleteSnapshot: false,
+      latestModelKey: "account/specialist", latestRequestedModel: "account/specialist",
+      latestModelReason: "review", latestRequestedThinkingLevel: "high",
+    });
+  });
+
   it("starts a new chain when a Task call carries no resume link", () => {
     const transcript: UiMessage[] = [
       taskRow("call-1", "d1", "first"),
