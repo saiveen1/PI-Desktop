@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createAssistantMessageEventStream, type AssistantMessage, type Models } from "@earendil-works/pi-ai";
-import type { AgentEventEnvelope, DelegationApprovalDecision, DelegationApprovalRequest, DelegationPolicySnapshot, DelegationSettings } from "@pi-desktop/shared";
+import type { AgentEventEnvelope, DelegationApprovalDecision, DelegationApprovalRequest, DelegationPolicySnapshot, DelegationSettings, UiMessage } from "@pi-desktop/shared";
 import { DesktopAgentRuntime, type RuntimeProviderConfig } from "./runtime.js";
 import { genericModelConfig } from "./model-capabilities.js";
 import { isRecord } from "./agent-messages.js";
@@ -52,6 +52,7 @@ beforeEach(() => { transport.mockReset(); });
 
 function fixture(options: { parent: (index: number) => ReturnType<typeof reply>; oldRead?: boolean;
   roleLevel?: "off" | "omit"; parentLevel?: "off" | "high";
+  history?: UiMessage[]; sessionId?: string;
   authorize?: (request: DelegationApprovalRequest) => Promise<DelegationApprovalDecision>; selectionMode?: "task-fit" } ) {
   const events: AgentEventEnvelope[] = [];
   const parentRequests: string[] = [];
@@ -78,7 +79,7 @@ function fixture(options: { parent: (index: number) => ReturnType<typeof reply>;
     return result.stream;
   });
   const config = {
-    sessionId: "hot-policy", mode: "agent" as const, provider: provider("parent"), thinkingLevel: options.parentLevel ?? "high" as const,
+    sessionId: options.sessionId ?? "hot-policy", history: options.history, mode: "agent" as const, provider: provider("parent"), thinkingLevel: options.parentLevel ?? "high" as const,
     commandShell: { id: "bash" as const, label: "Bash", dialect: "posix" as const, available: true, isDefault: true },
     subagents: [{ name: "worker", description: "Independent check", tools: ["Read"], prompt: "Check fixture.", source: "user" as const, thinkingLevel: options.roleLevel }],
     subagentProviders: { "fixture/old": provider("old"), "fixture/new": provider("new") },
@@ -98,8 +99,8 @@ function fixture(options: { parent: (index: number) => ReturnType<typeof reply>;
         return (options.authorize ? await options.authorize(request) : { decision: "allow", reason: "Auto policy" }) as T;
       }
       if (method === "provider.cancelDelegationApproval" || method === "session.appendMessage") return undefined as T;
-      if (method === "todos.get") return { sessionId: "hot-policy", todos: [] } as T;
-      if (method === "tools.fileBatchCapabilities") return { version: 1, supported: false } as T;
+      if (method === "todos.get") return { sessionId: config.sessionId, todos: [] } as T;
+      if (method === "tools.fileBatchCapabilities" || method === "backgroundJobs.capabilities") return { version: 1, supported: false } as T;
       if (method === "project.instructions.resolve") return { entries: [] } as T;
       if (method === "tools.execute") { readStarted.resolve(); return await read.promise as T; }
       throw new Error(`Unexpected host call ${method}`);
@@ -126,6 +127,47 @@ function details(events: AgentEventEnvelope[]) {
 }
 
 describe("hot delegation policy through the real parent and child agent loops", () => {
+  it("distinguishes retired chains from unknown resume ids without executing a delegate", async () => {
+    const ids = ["old-a", "old-b", "old-c", "old-stopped", "recent-a", "recent-b"];
+    const history: UiMessage[] = ids.map((id, i) => ({
+      id, role: "tool", toolName: "Task", toolCallId: `task-${id}`, content: "", createdAt: new Date(1000 * (i + 1)).toISOString(),
+      toolArgs: { agent: "worker", task: "Prior check." }, toolStatus: "success",
+      toolResult: { details: { delegationId: id, agent: "worker", status: i === 3 ? "stopped" : "completed" } },
+    }));
+    history.push({ ...history[0], id: "rejected", toolCallId: "rejected", toolStatus: "error",
+      toolArgs: { agent: "worker", task: "Continue.", resume: "guessed" }, toolResult: { details: { error: "Unknown delegation guessed" } } });
+    const f = fixture({ history, parent: index => immediate(index === 1 ? call("TaskList", {}) : index === 2
+      ? [...ids.slice(0, 4), "guessed"].flatMap(resume => task({ resume })) : text("Use previous reports.")) });
+    try {
+      await f.prompt();
+      const list = f.events.flatMap(({ event }) => event.type === "tool_end" && isRecord(event.result) && isRecord(event.result.details)
+        && Array.isArray(event.result.details.resumable) ? event.result.details.resumable.filter(isRecord) : []);
+      expect(list.map(row => row.delegationId)).toEqual(["recent-b", "recent-a"]);
+      const errors = details(f.events);
+      expect(errors).toHaveLength(5);
+      const retired = errors.filter(row => row.code === "DELEGATION_RESUME_NOT_RETAINED");
+      expect(retired).toHaveLength(4);
+      for (const row of retired) expect(row.error).toMatch(/was recorded in this session.*no longer retained/);
+      expect(f.parentRequests.at(-1)).toContain("no longer retained for resume");
+      expect(errors).toContainEqual(expect.objectContaining({ code: "DELEGATION_RESUME_UNKNOWN", error: expect.stringContaining("Unknown delegation") }));
+      for (const row of errors) {
+        expect(row.error).toContain("TaskList");
+        expect(row).not.toHaveProperty("delegationId");
+      }
+      expect(f.approvals).toEqual([]);
+      expect(f.childRequests).toEqual([]);
+    } finally { await f.close(); }
+
+    const other = fixture({ sessionId: "another-session", parent: index => immediate(index === 1 ? task({ resume: ids[0] }) : text("Not in this session.")) });
+    try {
+      await other.prompt();
+      expect(details(other.events)).toMatchObject([{ code: "DELEGATION_RESUME_UNKNOWN" }]);
+      expect(details(other.events)[0]?.error).not.toContain("recent-a");
+      expect(other.approvals).toEqual([]);
+      expect(other.childRequests).toEqual([]);
+    } finally { await other.close(); }
+  });
+
   it.each([
     { parentLevel: "off", effort: "high", expected: "high" },
     { parentLevel: "high", effort: "off", expected: "off" },

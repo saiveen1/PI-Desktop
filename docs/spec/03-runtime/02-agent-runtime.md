@@ -1849,7 +1849,19 @@ trims old call/result pairs together to fit the selected model. The registry kee
 `MAX_RESUMABLE_CHAINS_PER_AGENT` (2) reusable chains per definition name and
 evicts least-recently-active ones whenever a delegation settles; a chain that is
 still working is never evicted, so the bound counts reusable chains and a live
-chain may sit above it until it settles.
+chain may sit above it until it settles. `TaskList.details.resumable` lists current
+candidates (latest ID per chain); historical Task results alone do not. A
+retained chain still accepts its earlier IDs and must pass normal admission.
+
+When the chain lookup misses, an issued ID in this runtime's delegation records
+or a parent `Task` result in this session's transcript proves prior existence,
+not why the chain is missing. The failed `Task` returns the existing
+`details.error` plus `details.code: "DELEGATION_RESUME_NOT_RETAINED"`. Without
+that evidence it returns `DELEGATION_RESUME_UNKNOWN`, including for foreign IDs;
+requested IDs in tool arguments or error text are not evidence. Neither result
+issues a `delegationId`, starts a replacement, or replays tools. Check current
+candidates for the intended objective or use prior findings. Legacy errors
+without a code remain valid; a failed child run keeps its own ID and outcome.
 
 Resume is strictly same-session and never queues: resuming a running
 delegation is a tool error telling the parent to converge with `TaskWait`

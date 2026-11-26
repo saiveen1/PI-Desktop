@@ -39,12 +39,13 @@ fn stamp(v: &Value) -> Option<String> {
         return chrono::DateTime::from_timestamp_millis(ms)
             .map(|d| d.to_rfc3339_opts(chrono::SecondsFormat::Millis, true));
     }
-    v.as_str()
-        .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
-        .map(|d| {
-            d.to_utc()
-                .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
-        })
+    v.as_str().and_then(normalize_stamp)
+}
+fn normalize_stamp(value: &str) -> Option<String> {
+    chrono::DateTime::parse_from_rfc3339(value).ok().map(|d| {
+        d.to_utc()
+            .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+    })
 }
 /// Match JavaScript string-length bounds without splitting a surrogate pair.
 fn truncate_utf16(value: &str, limit: usize) -> String {
@@ -71,7 +72,7 @@ fn bounded(out: &mut Value, key: &str, value: &str, flag: Option<&str>) {
     }
     out[key] = json!(text);
 }
-fn project(c: &Candidate, message: sessions::UiMessage) -> Option<Value> {
+fn project(c: &Candidate, message: &sessions::UiMessage) -> Option<Value> {
     let result = message.tool_result.as_ref()?;
     let parsed;
     let result = if let Some(s) = result.as_str() {
@@ -96,10 +97,11 @@ fn project(c: &Candidate, message: sessions::UiMessage) -> Option<Value> {
         original
     };
     let args = message.tool_args.as_ref().unwrap_or(&Value::Null);
+    let started = stamp(&details["startedAt"]);
     let mut out = json!({"id":format!("{}:{}",c.session,c.id),"sessionId":c.session,"sessionTitle":c.title,
         "projectPath":c.path,"delegationId":delegation,"messageId":c.id,"status":status,
-        "createdAt":stamp(&details["startedAt"]).unwrap_or(message.created_at)});
-    if let Some(started) = stamp(&details["startedAt"]) {
+        "createdAt":started.as_deref().unwrap_or(&message.created_at)});
+    if let Some(started) = started {
         out["startedAt"] = json!(started);
     }
     let count = |v: &Value| v.as_u64().filter(|n| *n <= 9_007_199_254_740_991);
@@ -199,6 +201,132 @@ fn project(c: &Candidate, message: sessions::UiMessage) -> Option<Value> {
     }
     Some(out)
 }
+
+const STEERING_SKIP: &str = "Skipped because new user input is waiting.";
+
+fn trim_js(value: &str) -> &str {
+    value.trim_matches(|c: char| (c.is_whitespace() && c != '\u{85}') || c == '\u{feff}')
+}
+
+fn identity(value: &str) -> bool {
+    !value.is_empty() && trim_js(value) == value && value.encode_utf16().count() <= 256
+}
+
+fn attempt_result(result: &Value) -> Option<(&str, Option<&str>)> {
+    if let Some(text) = result.as_str() {
+        return Some((text, None));
+    }
+    let envelope = result.as_object()?;
+    if !envelope
+        .keys()
+        .all(|key| matches!(key.as_str(), "content" | "details" | "isError"))
+    {
+        return None;
+    }
+    let Some(content) = envelope.get("content") else {
+        let details = envelope.get("details")?.as_object()?;
+        let error = details.get("error")?.as_str()?;
+        // Only the old details-only unknown-resume result; the caller checks the target.
+        return (envelope.len() == 1
+            && details.len() == 1
+            && error.starts_with("Unknown delegation \""))
+        .then_some((error, None));
+    };
+    let [block] = content.as_array()?.as_slice() else {
+        return None;
+    };
+    let text = block["text"].as_str()?;
+    if block["type"] != "text" || text.is_empty() {
+        return None;
+    }
+    let Some(details) = envelope.get("details") else {
+        return Some((text, None));
+    };
+    let details = details.as_object()?;
+    if details.is_empty() {
+        return Some((text, None));
+    }
+    // Runtime duplicates the error text in details and spreads metadata.code
+    // beside it. Any other field (including delegationId) is not this receipt.
+    if details.get("error").and_then(Value::as_str) != Some(text) {
+        return None;
+    }
+    match (details.len(), details.get("code")) {
+        (1, None) => Some((text, None)),
+        (2, Some(code)) => Some((text, Some(code.as_str()?))),
+        _ => None,
+    }
+}
+
+fn project_attempt(message: &sessions::UiMessage) -> Option<Value> {
+    let failed = match message.tool_status.as_deref() {
+        Some("error") => true,
+        None => message.is_error == Some(true),
+        _ => false,
+    };
+    if !failed
+        || message.role != "tool"
+        || message.tool_name.as_deref() != Some("Task")
+        || message.parent_tool_call_id.is_some()
+        || message.nested_parent_tool_call_id.is_some()
+        || !identity(&message.id)
+        || !matches!(message.status.as_deref(), None | Some("complete" | "error"))
+    {
+        return None;
+    }
+    let (text, code) = attempt_result(message.tool_result.as_ref()?)?;
+    let args = message.tool_args.as_ref().unwrap_or(&Value::Null);
+    let resume = args["resume"]
+        .as_str()
+        .map(trim_js)
+        .filter(|id| !id.is_empty());
+    let (outcome, reason) = match code {
+        Some("DELEGATION_RESUME_NOT_RETAINED") if resume.is_some() => {
+            ("rejected", "Resume chain no longer retained.")
+        }
+        Some("DELEGATION_RESUME_UNKNOWN") if resume.is_some() => {
+            ("rejected", "Unknown delegation.")
+        }
+        Some(_) => return None,
+        None if text == STEERING_SKIP => ("skipped", STEERING_SKIP),
+        None => {
+            let suffix = text
+                .strip_prefix("Unknown delegation \"")?
+                .strip_prefix(resume?)?
+                .strip_prefix("\".")?;
+            if !matches!(
+                suffix,
+                "" | " No reusable subagent sessions in this conversation."
+            ) && !suffix.starts_with(" Reusable: ")
+            {
+                return None;
+            }
+            // Do not forward the reusable-chain list or interpolate arbitrary text.
+            ("rejected", "Unknown delegation.")
+        }
+    };
+    let mut out = json!({
+        "messageId": message.id, "createdAt": normalize_stamp(&message.created_at)?,
+        "outcome": outcome, "reason": reason,
+    });
+    if let Some(call) = message.tool_call_id.as_deref().filter(|id| identity(id)) {
+        out["toolCallId"] = json!(call);
+    }
+    if let Some(resume) = resume.filter(|id| identity(id)) {
+        out["resume"] = json!(resume);
+    }
+    for (key, source, limit) in [
+        ("agentName", "agent", 1024),
+        ("description", "description", 4096),
+        ("task", "task", 4096),
+    ] {
+        if let Some(text) = args[source].as_str() {
+            out[key] = json!(truncate_utf16(text, limit));
+        }
+    }
+    Some(out)
+}
+
 /// Renderer-supplied filters are rejected before any query work begins.
 pub fn check(query: &Query) -> std::result::Result<(), &'static str> {
     if query.offset.unwrap_or(0) > 9_007_199_254_740_991
@@ -217,12 +345,7 @@ pub fn check(query: &Query) -> std::result::Result<(), &'static str> {
     {
         return Err("Invalid project path");
     }
-    if query.session_id.as_ref().is_some_and(|id| {
-        id.is_empty()
-            || id.trim_matches(|c: char| (c.is_whitespace() && c != '\u{85}') || c == '\u{feff}')
-                != id
-            || id.encode_utf16().count() > 256
-    }) {
+    if query.session_id.as_deref().is_some_and(|id| !identity(id)) {
         return Err("Invalid session id");
     }
     Ok(())
@@ -263,7 +386,9 @@ pub fn list(db: &Database, query: Query) -> Result<Value> {
         )?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     let more = rows.len() > limit as usize;
+    let include_attempts = query.session_id.is_some() && status != "running";
     let mut entries = Vec::new();
+    let mut attempts = Vec::new();
     for c in rows.into_iter().take(limit as usize) {
         let visible: bool = db.conn().query_row(
             "SELECT deleted_at IS NULL FROM sessions WHERE id=?1",
@@ -287,14 +412,21 @@ pub fn list(db: &Database, query: Query) -> Result<Value> {
             Some(1),
         )?;
         if let Some(record) = read.messages.into_iter().find(|r| r.id == c.id) {
-            if let Some(entry) = project(&c, sessions::record_to_ui(record)) {
+            let message = sessions::record_to_ui(record);
+            if let Some(entry) = project(&c, &message) {
                 if status == "all" || (status == "running") == (entry["status"] == "running") {
                     entries.push(entry);
                 }
+            } else if include_attempts {
+                attempts.extend(project_attempt(&message));
             }
         }
     }
-    Ok(json!({"entries":entries,"nextOffset":if more { Some(offset + limit) } else { None }}))
+    let mut page = json!({"entries":entries,"nextOffset":more.then_some(offset + limit)});
+    if !attempts.is_empty() {
+        page["attempts"] = json!(attempts);
+    }
+    Ok(page)
 }
 #[cfg(test)]
 #[path = "delegation_history_tests.rs"]

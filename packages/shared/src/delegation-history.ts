@@ -26,8 +26,17 @@ export type DelegationRunHistoryEntry = {
   task: string; report?: string; error?: { code: string; message: string };
   taskTruncated?: boolean; reportTruncated?: boolean;
 };
-/** nextOffset is a candidate cursor; a filtered page can be empty with more candidates. */
-export type DelegationRunHistoryPage = { entries: DelegationRunHistoryEntry[]; nextOffset: number | null };
+export type DelegationAttemptHistoryEntry = {
+  messageId: string; toolCallId?: string; createdAt: string;
+  agentName?: string; description?: string; task?: string;
+  outcome: "rejected" | "skipped"; reason?: string; resume?: string;
+};
+/** nextOffset counts candidates, including candidates absent from both arrays. */
+export type DelegationRunHistoryPage = {
+  entries: DelegationRunHistoryEntry[]; nextOffset: number | null;
+  /** Terminal pre-start Task results, only on session-scoped all/ended pages. */
+  attempts?: DelegationAttemptHistoryEntry[];
+};
 export type DelegationApprovalHistoryEntry = { request: DelegationApprovalPrompt; settledAt: string; readAt?: string | null };
 export type DelegationApprovalHistory = { entries: DelegationApprovalHistoryEntry[] };
 export type DelegationApprovalHistoryMarkRead = { sessionId?: string; requestId?: string };
@@ -91,14 +100,29 @@ export function isDelegationRunHistoryEntry(v: unknown): v is DelegationRunHisto
   }
   return true;
 }
+function isDelegationAttemptHistoryEntry(v: unknown): v is DelegationAttemptHistoryEntry {
+  return record(v) && Object.keys(v).every(key =>
+    ["messageId", "toolCallId", "createdAt", "outcome", "agentName", "description", "task", "reason", "resume"].includes(key)) &&
+    identity(v.messageId) && timestamp(v.createdAt) && (v.outcome === "rejected" || v.outcome === "skipped") &&
+    (v.toolCallId === undefined || identity(v.toolCallId)) && (v.resume === undefined || identity(v.resume)) &&
+    (v.agentName === undefined || text(v.agentName, 1024)) &&
+    [v.description, v.task, v.reason].every(value => value === undefined || text(value, 4096));
+}
 export function isDelegationRunHistoryPage(v: unknown): v is DelegationRunHistoryPage {
   if (!record(v) || !Array.isArray(v.entries) || v.entries.length > 100) return false;
   if (v.nextOffset !== null && !(Number.isSafeInteger(v.nextOffset) && Number(v.nextOffset) >= 0)) return false;
   const seen = new Set<string>();
-  return v.entries.every(entry => {
+  if (!v.entries.every(entry => {
     if (!isDelegationRunHistoryEntry(entry)) return false;
     const key = JSON.stringify([entry.sessionId, entry.messageId]);
     if (seen.has(key)) return false;
     seen.add(key); return true;
+  })) return false;
+  if (v.attempts === undefined) return true;
+  if (!Array.isArray(v.attempts) || v.entries.length + v.attempts.length > 100) return false;
+  const messageIds = new Set(v.entries.map(entry => entry.messageId));
+  return v.attempts.every(attempt => {
+    if (!isDelegationAttemptHistoryEntry(attempt) || messageIds.has(attempt.messageId)) return false;
+    messageIds.add(attempt.messageId); return true;
   });
 }

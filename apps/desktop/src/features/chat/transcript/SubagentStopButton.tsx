@@ -16,11 +16,13 @@ const useStops = create<{
 
 export function SubagentStopButton({
   delegationId,
+  delegationIds,
   running,
   name,
   compact = false,
 }: {
   delegationId?: string;
+  delegationIds?: string[];
   running: boolean;
   name?: string;
   compact?: boolean;
@@ -41,13 +43,14 @@ export function SubagentStopButton({
       [sessionId]: (state.pending[sessionId] ?? []).filter(id => id !== delegationId),
     } }));
   }, [running, sessionId, delegationId, stopping]);
-  if (!running || !localToolsAllowed || !sessionId || source === "remote" || source === "pi-native") return null;
+  const targets = delegationId ? [delegationId] : delegationIds;
+  if (!targets?.length || !running || !localToolsAllowed || !sessionId || source === "remote" || source === "pi-native") return null;
 
   const stop = async () => {
     if (useStops.getState().busy[sessionId]) return;
     useStops.setState(state => ({ busy: { ...state.busy, [sessionId]: { delegationId } } }));
     try {
-      const result = await api.stopSubagents({ sessionId, ...(delegationId ? { delegationIds: [delegationId] } : {}) });
+      const result = await api.stopSubagents({ sessionId, delegationIds: targets });
       if (result.pending.length > 0) {
         useStops.setState(state => ({ pending: {
           ...state.pending,

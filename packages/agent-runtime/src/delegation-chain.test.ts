@@ -416,7 +416,7 @@ describe("resume error messages", () => {
 
   it("says there is nothing to reuse when the list is empty", () => {
     const registry = new DelegationChainRegistry();
-    const unknown = registry.unknownResumeError("missing", []);
+    const { message: unknown } = registry.missingResumeError("missing", [], false);
     expect(unknown).toContain('Unknown delegation "missing".');
     expect(unknown).toContain("No reusable subagent sessions in this conversation.");
     expect(unknown).not.toContain("Reusable:");
@@ -431,9 +431,13 @@ describe("resume error messages", () => {
     const registry = registryWithChain();
     const list = registry.resumableList({ runningDelegationIds: NONE });
     expect(list).toHaveLength(1);
-    expect(registry.unknownResumeError("missing", list)).toContain(
+    expect(registry.missingResumeError("missing", list, false).message).toContain(
       "Reusable: explorer / del-a.",
     );
+    const oversized = "x".repeat(1024);
+    const bounded = registry.missingResumeError(oversized, [...list, { ...list[0], latestDelegationId: oversized }], false);
+    expect(bounded.message).not.toContain(oversized);
+    expect(bounded.message).toContain("explorer / del-a, see TaskList for more");
   });
 
   it("never advertises the dropped id as reusable", () => {

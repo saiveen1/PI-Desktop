@@ -1,7 +1,14 @@
 import type { UiMessage } from "@pi-desktop/shared";
-import { delegationIdForMessage } from "./subagent-panel";
+import { delegationIdForMessage, type TaskAttempt } from "./subagent-panel";
 import { getToolStatus, TOOL_STATUS_LABEL_KEYS } from "./tool-status";
 import { delegationIsCreating, subagentOutcome, type DelegationActivityItem, type SubagentOutcome } from "./subagent-topology";
+
+export function subagentAttemptReason(attempt: TaskAttempt, t: (key: string) => string): string {
+  if (attempt.outcome === "skipped" && (!attempt.reason || attempt.reason === "Skipped because new user input is waiting.")) return t("chat.toolSkippedReason");
+  const reason = attempt.reason === "Unknown delegation." ? t("subagentControls.unknownResume")
+    : attempt.reason === "Resume chain no longer retained." ? t("subagentControls.expiredResume") : attempt.reason;
+  return [reason, attempt.resume].filter(Boolean).join(" · ");
+}
 
 /** A task's short brief is more useful in a list than its implementation role. */
 export function subagentTaskTitle(message: UiMessage, fallback = ""): string {
@@ -22,10 +29,16 @@ export function subagentTaskTone(message: UiMessage): number {
   return hash % 4;
 }
 
+function taskGroup(outcome: SubagentOutcome) {
+  if (outcome === "running") return "active";
+  if (outcome === "completed") return "completed";
+  return outcome === "failed" || outcome === "timed_out" || outcome === "denied" || outcome === "rejected" ? "attention" : "history";
+}
+
 export function subagentTaskOutcome(message: UiMessage, statuses?: ReadonlyMap<string, SubagentOutcome>): SubagentOutcome {
   let outcome = subagentOutcome(message, statuses);
   if (outcome === "running" && delegationIsCreating(message)) outcome = statuses?.get(delegationIdForMessage(message)) ?? outcome;
-  if (outcome === "not_started") return outcome;
+  if (outcome === "not_started" || taskGroup(outcome) === "attention") return outcome;
   const status = getToolStatus(message).kind;
   if (status === "skipped" || status === "interrupted" || status === "context-required") return "aborted";
   return outcome;
@@ -35,22 +48,23 @@ export function subagentTaskOutcome(message: UiMessage, statuses?: ReadonlyMap<s
 export function groupSubagentTasks(items: readonly DelegationActivityItem[], statuses?: ReadonlyMap<string, SubagentOutcome>) {
   const unique = new Map<string, DelegationActivityItem>();
   for (const item of items) unique.set(delegationIdForMessage(item.message), item);
-  const active: DelegationActivityItem[] = [];
-  const completed: DelegationActivityItem[] = [];
-  const attention: DelegationActivityItem[] = [];
+  const groups: Record<"active" | "completed" | "attention" | "history", DelegationActivityItem[]> = {
+    active: [], completed: [], attention: [], history: [],
+  };
   for (const item of unique.values()) {
     const outcome = subagentTaskOutcome(item.message, statuses);
-    (outcome === "running" ? active : outcome === "completed" ? completed : attention).push(item);
+    groups[taskGroup(outcome)].push(item);
   }
-  return { active, attention, completed };
+  return groups;
 }
 
 /** Shared status wording for task activity, index and detail. */
 export function subagentTaskStatusKey(message: UiMessage, statuses?: ReadonlyMap<string, SubagentOutcome>): string {
   const outcome = subagentTaskOutcome(message, statuses);
   if (outcome === "not_started") return "subagentControls.notStarted";
+  if (outcome === "rejected") return "subagentControls.rejected";
   const kind = getToolStatus(message).kind;
-  if (kind === "skipped" || kind === "interrupted" || kind === "context-required") return TOOL_STATUS_LABEL_KEYS[kind];
+  if (outcome === "aborted" && (kind === "skipped" || kind === "interrupted" || kind === "context-required")) return TOOL_STATUS_LABEL_KEYS[kind];
   return outcome === "running" && delegationIsCreating(message)
     ? "chat.subagentCreating" : `chat.subagentStatus.${outcome}`;
 }

@@ -13,11 +13,11 @@ import { delegateModelId, delegateThinkingLevel } from "../../features/chat/tran
 import { SubagentModelInfo } from "../../features/chat/transcript/SubagentModelInfo";
 import { SlotSessionProvider } from "../../plugins/renderer-slots/use-slots";
 import { collectDelegationFailures, collectDelegationStatuses, delegationIsCreating } from "../../lib/subagent-topology";
-import { delegationIdForMessage } from "../../lib/subagent-panel";
-import { subagentTaskOutcome, subagentTaskStatusKey, subagentTaskTitle, subagentTaskTone } from "../../lib/subagent-task-presentation";
+import { delegationAttempt, recordedDelegationId } from "../../lib/subagent-panel";
+import { subagentAttemptReason, subagentTaskOutcome, subagentTaskStatusKey, subagentTaskTitle, subagentTaskTone } from "../../lib/subagent-task-presentation";
 import { subagentsWorkPanelTab } from "../../lib/work-panel-tabs";
 import { toolResultPayload } from "../../lib/tool-presentation";
-import { buildSubagentTranscript } from "../../lib/subagent-transcript";
+import { buildSubagentTranscript, delegateTaskDescription } from "../../lib/subagent-transcript";
 import { DisclosureAnchorContext } from "../../lib/disclosure-anchor-context";
 import { TranscriptSearchContext } from "../../lib/transcript-search-context";
 import { useAppStore } from "../../stores/app-store";
@@ -50,18 +50,18 @@ function SubagentTranscriptSurface({ delegationId, sessionId }: { delegationId: 
   const sessionRunning = useAppStore((state) => state.runningSessions[sessionId] === true);
   const statuses = useMemo(() => new Map([...collectDelegationStatuses(items, { turnLive: sessionRunning }), ...history.statuses]), [items, sessionRunning, history.statuses]);
   const transcriptResult = useMemo(() => buildSubagentTranscript(messages, delegationId), [messages, delegationId]);
-  const selectedCall = transcriptResult?.latestCall;
+  const selectedCall = history.attemptMessage ?? transcriptResult?.latestCall;
   const selected = selectedCall ? { kind: "tool" as const, message: selectedCall } : undefined;
   const outcome = selected ? subagentTaskOutcome(selected.message, statuses) : undefined;
   const delegateRunning = outcome === "running" && Boolean(selected && !delegationIsCreating(selected.message));
-  const selectedId = selected ? delegationIdForMessage(selected.message) : delegationId;
+  const attempt = selected && delegationAttempt(selected.message);
+  const attemptTask = attempt && selectedCall ? delegateTaskDescription(selectedCall) : "";
   const payload = selected ? toolResultPayload(selected.message) : undefined;
-  const recordedId = payload && typeof payload === "object" && "delegationId" in payload &&
-    typeof payload.delegationId === "string" ? payload.delegationId : undefined;
+  const recordedId = selected && recordedDelegationId(selected.message);
   const modelId = selected ? delegateModelId(selected.message) : "";
   const thinkingLevel = selected ? delegateThinkingLevel(selected.message) : undefined;
   const title = selected ? subagentTaskTitle(selected.message, t("chat.subagentUnnamed")) : t("panel.subagent");
-  const failure = useMemo(() => collectDelegationFailures(items).get(selectedId), [items, selectedId]);
+  const failure = useMemo(() => recordedId ? collectDelegationFailures(items).get(recordedId) : undefined, [items, recordedId]);
   const {
     scrollRef, contentRef, showJump, handleScroll, jumpToLatest, scheduleFollowScroll,
     releaseFollow, disclosureAnchorNotifier,
@@ -92,10 +92,12 @@ function SubagentTranscriptSurface({ delegationId, sessionId }: { delegationId: 
         <span className="subagent-task-icon" aria-hidden><IconBot size={17} /></span>
         <span className="subagent-task-kind">{t("subagentControls.taskLabel")}</span>
         <strong className="subagent-task-title">{title}</strong>
-        {selected ? <span className="subagent-transcript-model"><SubagentModelInfo modelId={modelId} thinkingLevel={thinkingLevel} /></span> : null}
+        {recordedId ? <span className="subagent-transcript-model"><SubagentModelInfo modelId={modelId} thinkingLevel={thinkingLevel} /></span> : null}
         {selected ? <span className="subagent-task-status" role="status">{t(subagentTaskStatusKey(selected.message, statuses))}</span> : null}
-          <SubagentStopButton delegationId={selectedId} running={delegateRunning} name={title} compact />
-          <SubagentRetryButton delegationId={selectedId} failed={outcome === "failed"} compact />
+        {recordedId ? <>
+          <SubagentStopButton delegationId={recordedId} running={delegateRunning} name={title} compact />
+          <SubagentRetryButton delegationId={recordedId} failed={outcome === "failed"} compact />
+        </> : null}
       </header>
       <div ref={scrollRef} data-scroll-owner="follow" className="subagent-transcript-scroll"
         onScroll={handleScroll} role="log" aria-live="polite" aria-label={t("panel.subagent")} tabIndex={0}>
@@ -105,13 +107,14 @@ function SubagentTranscriptSurface({ delegationId, sessionId }: { delegationId: 
             onClick={() => { releaseFollow(); void history.loadMore("before"); }}>{t("chat.showEarlierMessages")}</Button> : null}
           {history.error ? <p role="alert">{t("delegationHistory.loadFailed")} <Button size="sm" variant="ghost" onClick={history.retry}>{t("delegationHistory.retry")}</Button></p> : null}
           {failure && outcome !== "running" && outcome !== "completed" ? <p className="tool-row-status error" role="alert">{failure.message || failure.code}</p> : null}
-          <details className="subagent-task-report">
+          {attempt ? <p className="subagent-attempt-reason">{subagentAttemptReason(attempt, t)}</p> : null}
+          {recordedId || history.entry ? <details className="subagent-task-report">
             <summary>{t("chat.runDetails.title")}</summary>
             <DelegationSelectionSummary payload={payload} />
             <SubagentRunPolicySummary payload={payload} />
             <SubagentFailurePolicySummary payload={payload} />
             <SubagentDiagnosticsSummary payload={payload ?? (history.entry ? delegationHistoryDiagnostics(history.entry) : undefined)} />
-          </details>
+          </details> : null}
           {transcriptResult ? transcriptResult.turns.map((turn, index) => (
             <Fragment key={`${delegationId}:${index}`}>
               <details className="subagent-task-report">
@@ -121,7 +124,9 @@ function SubagentTranscriptSurface({ delegationId, sessionId }: { delegationId: 
               <SubagentTurnContent id={`${delegationId}:${index}`} rows={turn.rows}
                 active={delegateRunning && index === transcriptResult.turns.length - 1} />
             </Fragment>
-          )) : !history.loading && !history.error ? <div className="subagent-transcript-empty" role="status">{t("panel.subagentEmpty")}</div> : null}
+          )) : attemptTask ? <details className="subagent-task-report">
+            <summary>{t("chat.taskGroups.brief")}</summary><div className="message-user-text selectable">{attemptTask}</div>
+          </details> : !attempt && !history.loading && !history.error ? <div className="subagent-transcript-empty" role="status">{t("panel.subagentEmpty")}</div> : null}
           {history.entry?.report && !transcriptResult?.turns.some(turn => turn.rows.some(row => row.kind === "answer" && row.message.content.trim() === history.entry?.report?.trim())) ? <section className="subagent-task-report">
             <h3>{t("delegationHistory.report")}</h3>
             {history.entry.reportTruncated ? <p role="note">{t("delegationHistory.truncated")}</p> : null}
@@ -136,8 +141,8 @@ function SubagentTranscriptSurface({ delegationId, sessionId }: { delegationId: 
           tooltip={t("chat.scrollToBottom")} ariaLabel={t("chat.scrollToBottom")} onClick={jumpToLatest}>
           <IconArrowDown size={14} />
         </TooltipButton> : null}
-        <SubagentChildComposer sessionId={sessionId} chainId={transcriptResult?.chainId ?? delegationId}
-          delegationId={recordedId} outcome={outcome}>{null}</SubagentChildComposer>
+        {recordedId ? <SubagentChildComposer sessionId={sessionId} chainId={transcriptResult?.chainId ?? delegationId}
+          delegationId={recordedId} outcome={outcome}>{null}</SubagentChildComposer> : null}
       </div>
     </div>
   </DisclosureAnchorContext.Provider></TranscriptSearchContext.Provider>;

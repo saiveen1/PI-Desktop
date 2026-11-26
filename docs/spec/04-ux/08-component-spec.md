@@ -1553,8 +1553,8 @@ other delegates and retain normal activate/reorder/close behavior. No task tab
 opens automatically. A second row activation does not close the tab.
 
 - **All tasks** back navigation shows the same session's task index, using the
-  same Active / Needs attention / Completed list as the parent process. Choosing
-  a task activates its detail through the existing tab architecture; this is
+  the same outcome classification as the topbar: Active, Needs attention,
+  Stopped or skipped, and Completed. Choosing a task activates its detail; this is
   not a replacement single-dock routing system.
 - The conversation topbar has a permanent text **Subagents** entry for local
   sessions, including an empty state before the first call. It shows actual
@@ -1566,8 +1566,9 @@ opens automatically. A second row activation does not close the tab.
   **All tasks** action opens that same index; per-task detail tabs still coexist.
   The global clock entry remains a separate all-session history surface.
 - The index combines paginated Host history filtered by `sessionId` with live
-  Task snapshots, deduplicated by message/delegation identity. It is independent
-  of the parent's visible history/search range. Lifecycle tools, nested child
+  Task snapshots. Session-only, pre-start `attempts` are deduplicated by original
+  message identity across pages and the live window; older Hosts may omit them.
+  The index is independent of the parent's visible history/search range. Lifecycle tools, nested child
   tools and background Bash jobs never inflate counts. The shared subscription
   releases on unmount; stale requests cannot publish after refresh or switching.
   First-load feedback appears only before a successful read and without usable
@@ -1577,6 +1578,14 @@ opens automatically. A second row activation does not close the tab.
   retain prior information and a stale-status warning until a successful read;
   retries alone never clear that warning. Topbar history counts also stay visible
   during background refresh.
+- A refused resume is an unstarted request needing attention, not an execution
+  failure. Show its own reason and requested target as text. Stopped/interrupted
+  work and requests skipped for new input remain in neutral history. Real
+  failures, denials and timeouts retain their distinct statuses in Needs attention.
+  A read-only attempt opens even outside the transcript window. It cannot link
+  its requested target into a resume chain, show actual model/effort placeholders,
+  or expose retry, stop or direct input. Only a recorded run ID authorizes these
+  controls; a navigation key, message ID or tool-call ID never substitutes for it.
 - The index uses existing task rows and authorized controls, plus this session's
   live approvals targeting their exact request/revision. Missing historical
   details use a bounded, local session read without moving the parent transcript.

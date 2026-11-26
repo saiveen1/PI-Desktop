@@ -8,6 +8,7 @@ import {
 } from "./tool-display";
 import { toolResultPayload } from "./tool-presentation";
 import { getToolStatus } from "./tool-status";
+import { delegationAttempt, recordedDelegationId } from "./subagent-panel";
 
 export type DelegationActivityItem = Extract<
   AssistantActivityItem,
@@ -22,6 +23,7 @@ export type SubagentOutcome =
   | "failed"
   | "stopped"
   | "denied"
+  | "rejected"
   | "not_started";
 
 export type SubagentTiming = {
@@ -416,7 +418,8 @@ export function subagentOutcome(
   message: UiMessage,
   statuses?: ReadonlyMap<string, SubagentOutcome>,
 ): SubagentOutcome {
-  if (delegationWasPreempted(message)) return "not_started";
+  const attempt = delegationAttempt(message);
+  if (attempt) return attempt.outcome === "skipped" ? "not_started" : "rejected";
   const payload = asRecord(toolResultPayload(message));
   if (payload) {
     const delegationId = payload.delegationId;
@@ -435,7 +438,7 @@ export function subagentOutcome(
 }
 /** Preempted Task calls have no child runtime; keep their historical row. */
 export function delegationWasPreempted(message: UiMessage): boolean {
-  return isDelegationStartTool(message.toolName) && getToolStatus(message).kind === "skipped";
+  return delegationAttempt(message)?.outcome === "skipped";
 }
 
 /**
@@ -452,9 +455,7 @@ export function delegationWasPreempted(message: UiMessage): boolean {
  */
 export function delegationIsCreating(message: UiMessage): boolean {
   if (message.toolStatus !== "running") return false;
-  const payload = asRecord(toolResultPayload(message));
-  if (payload && typeof payload.delegationId === "string") return false;
-  return true;
+  return !recordedDelegationId(message);
 }
 
 export function summarizeSubagentActivity(
@@ -467,7 +468,7 @@ export function summarizeSubagentActivity(
     finished: outcomes.filter((outcome) => outcome !== "running").length,
     running: outcomes.filter((outcome) => outcome === "running").length,
     issues: outcomes.filter(
-      (outcome) => outcome === "failed" || outcome === "denied",
+      (outcome) => outcome === "failed" || outcome === "denied" || outcome === "rejected",
     ).length,
     warnings: outcomes.filter(
       (outcome) =>

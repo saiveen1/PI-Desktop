@@ -1,15 +1,16 @@
-import type { AgentEventEnvelope, DelegationRunHistoryEntry, DelegationRunHistoryPage, DelegationRunHistoryQuery } from "@pi-desktop/shared";
+import type { AgentEventEnvelope, DelegationAttemptHistoryEntry, DelegationRunHistoryEntry, DelegationRunHistoryPage, DelegationRunHistoryQuery } from "@pi-desktop/shared";
 import { delegationLifecycleKind, isDelegationStartTool } from "../../lib/tool-display";
 
 export type SessionDelegationsClient = {
   listDelegationHistory: (query: DelegationRunHistoryQuery) => Promise<DelegationRunHistoryPage>;
   onAgentEvent: (listener: (event: AgentEventEnvelope) => void) => () => void;
 };
-type Snapshot = { entries: readonly DelegationRunHistoryEntry[]; loading: boolean; loaded: boolean; error: boolean };
+type Snapshot = { entries: readonly DelegationRunHistoryEntry[]; attempts: readonly DelegationAttemptHistoryEntry[]; loading: boolean; loaded: boolean; error: boolean };
+const EMPTY: Snapshot = { entries: [], attempts: [], loading: true, loaded: false, error: false };
 
 /** Shared by the session header and index, independent of the chat reading window. */
 export function createSessionDelegationsSource(client: SessionDelegationsClient, sessionId: string) {
-  let snapshot: Snapshot = { entries: [], loading: true, loaded: false, error: false };
+  let snapshot = EMPTY;
   let references = 0;
   let generation = 0;
   let off: (() => void) | undefined;
@@ -22,6 +23,7 @@ export function createSessionDelegationsSource(client: SessionDelegationsClient,
     // Keep the last successful snapshot and any stale-state warning while syncing.
     publish({ ...snapshot, loading: true });
     const entries = new Map<string, DelegationRunHistoryEntry>();
+    const attempts = new Map<string, DelegationAttemptHistoryEntry>();
     let offset = 0;
     try {
       for (;;) {
@@ -30,11 +32,12 @@ export function createSessionDelegationsSource(client: SessionDelegationsClient,
         for (const entry of page.entries) {
           if (entry.sessionId === sessionId) entries.set(entry.messageId, entry);
         }
+        for (const attempt of page.attempts ?? []) attempts.set(attempt.messageId, attempt);
         if (page.nextOffset === null) break;
         if (!Number.isSafeInteger(page.nextOffset) || page.nextOffset <= offset) throw new Error("Invalid delegation history cursor");
         offset = page.nextOffset;
       }
-      publish({ entries: [...entries.values()], loading: false, loaded: true, error: false });
+      publish({ entries: [...entries.values()], attempts: [...attempts.values()], loading: false, loaded: true, error: false });
     } catch {
       if (references && request === generation) publish({ ...snapshot, loading: false, error: true });
     }
@@ -71,7 +74,7 @@ export function createSessionDelegationsSource(client: SessionDelegationsClient,
           off?.(); off = undefined;
           if (timer !== undefined) clearTimeout(timer);
           calls.clear();
-          snapshot = { entries: [], loading: true, loaded: false, error: false };
+          snapshot = EMPTY;
           timer = undefined;
         }
       };

@@ -5,7 +5,7 @@ import {
   type SubagentRunItem,
 } from "./assistant-turns";
 import { isDelegationStartTool } from "./tool-display";
-import { delegationIdForMessage } from "./subagent-panel";
+import { delegationAttempt, delegationIdForMessage, taskMessageKey } from "./subagent-panel";
 
 /** One user/assistant exchange of a delegate session. */
 export type SubagentTranscriptTurn = {
@@ -28,7 +28,7 @@ export type SubagentTranscript = {
   chainId: string;
 };
 
-function delegateTaskDescription(call: UiMessage): string {
+export function delegateTaskDescription(call: UiMessage): string {
   const args = call.toolArgs;
   if (!args || typeof args !== "object" || Array.isArray(args)) return "";
   const task = (args as { task?: unknown }).task;
@@ -42,38 +42,13 @@ function requestedAgentName(call: UiMessage): string {
   return typeof agent === "string" ? agent : "";
 }
 
-/** Task calls whose `resume` argument resolves to one of `priorCallIds`. */
-function resumedCalls(
-  messages: readonly UiMessage[],
-  priorCallIds: ReadonlySet<string>,
-  callByDelegationId: ReadonlyMap<string, string>,
-): Set<string> {
-  const next = new Set<string>();
-  for (const message of messages) {
-    if (message.role !== "tool" || !isDelegationStartTool(message.toolName)) {
-      continue;
-    }
-    const args = message.toolArgs;
-    const resume =
-      args && typeof args === "object" && !Array.isArray(args)
-        ? (args as { resume?: unknown }).resume
-        : undefined;
-    if (typeof resume !== "string" || !resume.trim()) continue;
-    // The runtime records `resume` as a prior delegation id; a bare call id
-    // is accepted too, so the chain stays legible before any result lands.
-    const target = callByDelegationId.get(resume.trim()) ?? resume.trim();
-    if (priorCallIds.has(target) && message.toolCallId) next.add(message.toolCallId);
-  }
-  return next;
-}
-
 /**
  * Build the delegate's transcript from the session messages.
  *
  * A Task call belongs to the delegation of `delegationId` when the call
- * identifies itself by that id — via its result payload, or via its own call
- * id when the runtime recorded none — or when it resumed another call of that
- * chain. Turns appear in session order; each turn's rows are the messages
+ * identifies itself by its recorded handle or original message identity, or
+ * when it returned a handle while resuming a call in that chain. Old call-id
+ * selections still resolve. Turns appear in session order; their rows are the messages
  * whose `parentToolCallId` names that call, mapped exactly like the
  * delegation card's run grouping. Returns null when no Task call matches, so
  * the tab can show its unavailable state instead of an empty conversation.
@@ -83,56 +58,27 @@ export function buildSubagentTranscript(
   delegationId: string,
 ): SubagentTranscript | null {
   const target = delegationId.trim();
-  const { childOf, callByDelegationId } = delegationChainMaps(messages);
-  // A resumed call may cite the prior delegation id (the runtime's shape) or
-  // a bare prior call id. `childOf` covers the delegation-id form; the bare
-  // form is resolved here so the chain still closes before results land.
-  const resumeLink = new Map(childOf);
-  for (const message of messages) {
-    if (message.role !== "tool" || !isDelegationStartTool(message.toolName)) {
-      continue;
-    }
-    const args = message.toolArgs;
-    const resume =
-      args && typeof args === "object" && !Array.isArray(args)
-        ? (args as { resume?: unknown }).resume
-        : undefined;
-    if (typeof resume !== "string" || !resume.trim()) continue;
-    const priorId = callByDelegationId.get(resume.trim()) ?? resume.trim();
-    if (message.toolCallId && !resumeLink.has(priorId)) {
-      resumeLink.set(priorId, message.toolCallId);
-    }
-  }
+  const { parentOf } = delegationChainMaps(messages);
   const calls = messages.filter(
     (message) =>
       message.role === "tool" &&
       isDelegationStartTool(message.toolName) &&
+      !delegationAttempt(message) &&
       Boolean(message.toolCallId),
   );
   // The chain is the connected component of resumed calls around the call
   // this delegation id names; forward and backward walks share that set.
-  let chain = new Set(
-    calls
-      .filter((call) => delegationIdForMessage(call) === target || call.toolCallId === target)
-      .map((call) => call.toolCallId as string),
-  );
+  const matches = calls.filter(call => delegationIdForMessage(call) === target || taskMessageKey(call.id) === target);
+  const selected = matches.length ? matches : calls.filter(call => call.toolCallId === target);
+  const chain = new Set(selected.map(call => call.toolCallId as string));
   if (chain.size === 0) return null;
   for (;;) {
-    const forward = resumedCalls(messages, chain, callByDelegationId);
-    const backward = new Set(
-      [...chain].flatMap((callId) => {
-        const prior = [...resumeLink.entries()]
-          .filter(([, next]) => next === callId)
-          .map(([priorId]) => priorId);
-        return prior;
-      }),
-    );
-    const grown = new Set([
-      ...chain,
-      ...[...forward, ...backward].filter((id) => !chain.has(id)),
-    ]);
-    if (grown.size === chain.size) break;
-    chain = grown;
+    const size = chain.size;
+    for (const [child, parent] of parentOf) {
+      if (chain.has(child)) chain.add(parent);
+      if (chain.has(parent)) chain.add(child);
+    }
+    if (chain.size === size) break;
   }
 
   // Attribution prefers what the delegate's own rows carried; a chain whose

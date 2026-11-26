@@ -22,7 +22,8 @@ test("preempted Task history says not started without a runtime or false coordin
   assert.match(mixed, /Not started · New input received/);
   assert.match(mixed, /aria-label="Active"/);
   assert.match(mixed, /Active<span aria-hidden="true"> · 1<\/span>/);
-  assert.match(mixed, /Needs attention<span aria-hidden="true"> · 1<\/span>/);
+  assert.doesNotMatch(mixed, /aria-label="Needs attention"/);
+  assert.match(mixed, /Stopped or skipped<span aria-hidden="true"> · 1<\/span>/);
   assert.match(mixed, /data-outcome="not_started"/);
   const settled = render([{ ...active, toolResult: { details: { delegationId: "active-delegate", status: "failed" } } }, skipped]);
   assert.doesNotMatch(settled, /Coordinating|0s/);

@@ -29,7 +29,8 @@ test("task grouping deduplicates snapshots and never calls interrupted work comp
   const groups = groupSubagentTasks([task("a"), task("b", "failed"), latest, task("c"), task("d", "stopped")]);
   assert.deepEqual(groups.active.map(item => item.message.toolCallId), ["call-c"]);
   assert.deepEqual(groups.completed, [latest]);
-  assert.equal(groups.attention.length, 2);
+  assert.deepEqual(groups.attention.map(item => item.message.toolCallId), ["call-b"]);
+  assert.deepEqual(groups.history.map(item => item.message.toolCallId), ["call-d"]);
   assert.equal(groupSubagentTasks([task("a")], new Map([["a", "failed"]])).attention.length, 1);
 });
 
@@ -79,7 +80,8 @@ test("task lists retain not-started history outside active and completed groups"
   const groups = groupSubagentTasks([skipped, task("live"), task("done", "completed")]);
   assert.equal(groups.active.length, 1);
   assert.equal(groups.completed.length, 1);
-  assert.deepEqual(groups.attention, [skipped]);
+  assert.deepEqual(groups.attention, []);
+  assert.deepEqual(groups.history, [skipped]);
   assert.equal(cachedActivityIssues([skipped]), 0);
 });
 

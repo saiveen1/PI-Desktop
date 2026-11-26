@@ -43,6 +43,29 @@ describe("delegation history boundary", () => {
     expect(isDelegationRunHistoryPage({ entries: [entry(), entry()], nextOffset: null })).toBe(false);
   });
 
+  it("accepts additive session attempts but rejects overlap, invalid outcomes and oversized previews", () => {
+    const rejected = {
+      messageId: "attempt", toolCallId: "call", createdAt: "2026-11-05T12:00:00.000Z",
+      agentName: "reviewer", description: "Resume review", task: "Continue", outcome: "rejected",
+      reason: "Unknown delegation.", resume: "missing",
+    };
+    const notRetained = { ...rejected, messageId: "retention", reason: "Resume chain no longer retained." };
+    const skipped = { messageId: "skip", createdAt: rejected.createdAt, outcome: "skipped" };
+    const page = (attempts: unknown, entries: unknown[] = [entry()]) => ({ entries, nextOffset: 100, attempts });
+    expect(isDelegationRunHistoryPage(page([rejected, notRetained, skipped]))).toBe(true);
+    expect(isDelegationRunHistoryPage(page([{ ...notRetained, code: "DELEGATION_RESUME_NOT_RETAINED" }]))).toBe(false);
+    expect(isDelegationRunHistoryPage(page([skipped], []))).toBe(true);
+    for (const attempts of [null, {}, [rejected, rejected], [{ ...skipped, messageId: "m" }],
+      ...[{ outcome: "failed" }, { delegationId: "d" }, { sessionId: "other" }, { createdAt: "yesterday" },
+        { toolCallId: " " }, { resume: "x".repeat(257) }, { agentName: "x".repeat(1025) },
+        { task: "😀".repeat(2049) }, { description: {} }, { reason: null }]
+        .map(extra => [{ ...rejected, ...extra }]),
+      Array.from({ length: 100 }, (_, index) => ({ ...skipped, messageId: `a${index}` })),
+    ]) {
+      expect(isDelegationRunHistoryPage(page(attempts)), JSON.stringify(attempts).slice(0, 300)).toBe(false);
+    }
+  });
+
   it("keeps a recorded effective thinking level optional and strictly typed", () => {
     // Legacy rows recorded none: the property must stay missing, not defaulted.
     expect(isDelegationRunHistoryEntry(entry())).toBe(true);

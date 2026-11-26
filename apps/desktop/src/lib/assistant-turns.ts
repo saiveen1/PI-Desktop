@@ -10,6 +10,7 @@ import {
   withoutReasoningReplayPlaceholder,
 } from "@pi-desktop/shared";
 import { getToolAction, isDelegationStartTool } from "./tool-display";
+import { delegationAttempt, recordedDelegationId } from "./subagent-panel";
 import { messageContentFacts } from "./transcript-summary";
 
 export type AssistantActivityItem =
@@ -141,47 +142,34 @@ function collectSubagentRuns(
 /**
  * The delegation-chain structure of one transcript (ADR 0279).
  *
- * `callByDelegationId` maps each Task result's `delegationId` to the call that
- * returned it; `childOf` links a resumed call to the call it resumed. Shared
- * by the delegation card grouping and the subagent transcript tab so both read
- * the same chain semantics from one place.
+ * Only a Task that returned a real handle can continue a prior call. `childOf`
+ * resolves the latest inline activity card; `parentOf` retains every admitted
+ * edge for detail navigation in either direction.
  */
 export function delegationChainMaps(messages: readonly UiMessage[]): {
-  callByDelegationId: Map<string, string>;
   childOf: Map<string, string>;
+  parentOf: Map<string, string>;
 } {
   const callByDelegationId = new Map<string, string>();
   const childOf = new Map<string, string>();
-  for (const message of messages) {
-    if (message.role !== "tool" || !isDelegationStartTool(message.toolName)) {
-      continue;
+  const parentOf = new Map<string, string>();
+  const callIds = new Set<string>();
+  for (const call of messages) {
+    if (call.role !== "tool" || !isDelegationStartTool(call.toolName) || !call.toolCallId || delegationAttempt(call)) continue;
+    const id = recordedDelegationId(call);
+    if (id) {
+      const args = call.toolArgs;
+      const resume = args && typeof args === "object" && "resume" in args && typeof args.resume === "string" ? args.resume.trim() : "";
+      const prior = callByDelegationId.get(resume) ?? (callIds.has(resume) ? resume : undefined);
+      if (prior && prior !== call.toolCallId) {
+        childOf.set(prior, call.toolCallId);
+        parentOf.set(call.toolCallId, prior);
+      }
+      callByDelegationId.set(id, call.toolCallId);
     }
-    const toolCallId = message.toolCallId;
-    if (!toolCallId) continue;
-    const result = message.toolResult;
-    const details =
-      result && typeof result === "object" && !Array.isArray(result)
-        ? (result as { details?: unknown }).details
-        : undefined;
-    const delegationId =
-      details && typeof details === "object" && !Array.isArray(details)
-        ? (details as { delegationId?: unknown }).delegationId
-        : undefined;
-    if (typeof delegationId === "string" && delegationId) {
-      callByDelegationId.set(delegationId, toolCallId);
-    }
-    const args = message.toolArgs;
-    const resume =
-      args && typeof args === "object" && !Array.isArray(args)
-        ? (args as { resume?: unknown }).resume
-        : undefined;
-    const prior =
-      typeof resume === "string" && resume.trim()
-        ? callByDelegationId.get(resume.trim())
-        : undefined;
-    if (prior) childOf.set(prior, toolCallId);
+    callIds.add(call.toolCallId);
   }
-  return { callByDelegationId, childOf };
+  return { childOf, parentOf };
 }
 
 // Map each Task call to the last call of its chain (ADR 0279): a resumed

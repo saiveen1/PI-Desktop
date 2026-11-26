@@ -12,7 +12,7 @@ export function useSessionDelegations(sessionId: string) {
   const messages = useAppStore(state => state.activeSessionId === sessionId
     ? state.messages : state.retainedTranscripts[sessionId] ?? EMPTY_TRANSCRIPT);
   const running = useAppStore(state => state.runningSessions[sessionId] === true);
-  const projection = useMemo(() => sessionDelegationTasks(sessionId, history.entries, messages, running),
-    [sessionId, history.entries, messages, running]);
+  const projection = useMemo(() => sessionDelegationTasks(sessionId, history.entries, messages, running, history.attempts),
+    [sessionId, history.entries, history.attempts, messages, running]);
   return { ...history, ...projection, reload: source.reload };
 }

@@ -101,6 +101,8 @@ test("session subagents: keyboard entry, scoped history, detail controls, switch
     await send("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
     console.log("SESSION_DELEGATIONS_STAGE navigation");
     assert.deepEqual(await evaluate("window.sessionDelegationsProbe('navigate')"), { stage: "navigate", passed: true });
+    console.log("SESSION_DELEGATIONS_STAGE attempts: full and history-only");
+    assert.deepEqual(await evaluate("window.sessionDelegationsProbe('attempts')"), { stage: "attempts", passed: true });
     for (const [width, theme, language] of [[1280, "light", "en"], [1280, "light", "zh-CN"], [1280, "dark", "zh-CN"], [800, "dark", "en"], [360, "light", "zh-CN"], [360, "dark", "de"]]) {
       await send("Emulation.setDeviceMetricsOverride", { width, height: 800, deviceScaleFactor: 1, mobile: false });
       console.log("SESSION_DELEGATIONS_LAYOUT", await evaluate(`window.sessionDelegationsLayout('${theme}', '${language}')`));

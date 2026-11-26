@@ -572,6 +572,19 @@ delegation/message identity, recorded task/model/result/status/timestamps and
 explicit task/report truncation flags. Details are a projection, never live
 authorization. Sender and shared payload validation remain mandatory.
 
+Exact session queries with `status: all | ended` may also return
+`attempts?: DelegationAttemptHistoryEntry[]` from the same candidate window.
+An attempt has `messageId`, `createdAt`, `outcome: rejected | skipped`, and
+optional `toolCallId`, `agentName`, `description`, `task`, `reason`, and `resume`.
+It is a terminal parent `Task` request that never started a run, not a run or
+approval. There is no `delegationId`. Global and `running` queries omit
+`attempts`, as may older hosts and pages without matches. Consumers must walk
+`nextOffset` even when both arrays are empty; run lists and statistics still
+use `entries` alone. The `reason` for a rejected resume is the same fixed
+summary as the live Task view: `Unknown delegation.` or
+`Resume chain no longer retained.` The raw result and error code are not part
+of this DTO. See the [session attempt ADR](../../adr/session-delegation-attempt-history.md).
+
 Run entries may include optional `thinkingLevel: SessionThinkingLevel`, copied
 only from the selected Task result's recorded effective value. Canonical levels
 including `off` and `omit` stay distinct. Host projection omits unknown/malformed

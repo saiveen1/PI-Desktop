@@ -170,7 +170,7 @@ fn terminal_turn_interrupts_running_snapshot_and_preserves_other_terminal_states
         ended: Some(1000),
     };
     assert_eq!(
-        project(&c, task("m", "running")).unwrap()["status"],
+        project(&c, &task("m", "running")).unwrap()["status"],
         "interrupted"
     );
     for status in [
@@ -181,14 +181,14 @@ fn terminal_turn_interrupts_running_snapshot_and_preserves_other_terminal_states
         "timed_out",
         "interrupted",
     ] {
-        assert_eq!(project(&c, task("m", status)).unwrap()["status"], status);
+        assert_eq!(project(&c, &task("m", status)).unwrap()["status"], status);
     }
     let active = Candidate {
         turn_status: Some("running".into()),
         ..c
     };
     assert_eq!(
-        project(&active, task("m", "running")).unwrap()["status"],
+        project(&active, &task("m", "running")).unwrap()["status"],
         "running"
     );
 }
@@ -415,4 +415,372 @@ fn history_uses_recorded_scheduling_metadata_when_resume_args_omit_selection() {
     assert_eq!(entry["requestedModel"], "account/specialist");
     assert_eq!(entry["modelReason"], "The specialist owns this review.");
     assert_eq!(entry["thinkingLevel"], "low");
+}
+
+const STEERED_RESULT: &str = "Skipped because new user input is waiting.";
+const UNKNOWN_RESULT: &str =
+    "Unknown delegation \"missing\". No reusable subagent sessions in this conversation.";
+
+fn failed_task(id: &str, result: Value) -> sessions::UiMessage {
+    serde_json::from_value(json!({
+        "id": id, "role": "tool", "toolName": "Task", "toolStatus": "error",
+        "content": "not a source of attempt evidence", "status": "complete", "isError": true,
+        "createdAt": "2026-11-05T12:00:00.000Z",
+        "toolArgs": {"agent": "reviewer", "description": "Resume review", "task": "Continue", "resume": "missing"},
+        "toolResult": result,
+    }))
+    .unwrap()
+}
+
+#[test]
+fn session_attempts_share_the_candidate_cursor_without_becoming_runs() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = Database::open_in_dir(dir.path()).unwrap();
+    let a = sessions::create_session(&db, None, None, None, None, None).unwrap();
+    let b = sessions::create_session(&db, None, None, None, None, None).unwrap();
+    let old = failed_task(
+        "legacy",
+        json!("Unknown delegation \"missing\". Reusable: reviewer / hidden-reference."),
+    );
+    let mut skipped = failed_task(
+        "skip",
+        json!({"content":[{"type":"text","text":STEERED_RESULT}],"details":{}}),
+    );
+    skipped.tool_call_id = Some("call-skip".into());
+    skipped.tool_args = Some(json!({"agent":"reviewer","task":"Review"}));
+    let not_projected = failed_task("other-error", json!("Operation aborted"));
+    let mut run = task("actual-run", "failed");
+    run.tool_status = Some("error".into());
+    run.is_error = Some(true);
+    run.tool_result.as_mut().unwrap()["details"]["error"] =
+        json!({"code":"FAILED","message":STEERED_RESULT});
+    for row in [&old, &run, &skipped, &not_projected] {
+        sessions::append_message(&db, &a.id, row, None).unwrap();
+    }
+    sessions::append_message(
+        &db,
+        &b.id,
+        &failed_task("other-session", json!(UNKNOWN_RESULT)),
+        None,
+    )
+    .unwrap();
+    drop(db);
+    let db = Database::open_in_dir(dir.path()).unwrap();
+    let scoped = |offset, status, path| Query {
+        session_id: Some(a.id.clone()),
+        ..query(offset, 1, status, path)
+    };
+    let first = list(&db, scoped(0, "ended", None)).unwrap();
+    assert_eq!(first, json!({"entries":[],"nextOffset":1}));
+    let second = list(
+        &db,
+        scoped(first["nextOffset"].as_u64().unwrap(), "ended", None),
+    )
+    .unwrap();
+    assert_eq!(
+        second,
+        json!({"entries":[],"nextOffset":2,"attempts":[{
+            "messageId":"skip","toolCallId":"call-skip","createdAt":"2026-11-05T12:00:00.000Z",
+            "agentName":"reviewer","task":"Review","outcome":"skipped","reason":STEERED_RESULT
+        }]})
+    );
+    let third = list(
+        &db,
+        scoped(second["nextOffset"].as_u64().unwrap(), "ended", None),
+    )
+    .unwrap();
+    assert_eq!(third["entries"][0]["messageId"], "actual-run");
+    assert_eq!(third["entries"][0]["status"], "failed");
+    assert!(third.get("attempts").is_none());
+    let fourth = list(
+        &db,
+        scoped(third["nextOffset"].as_u64().unwrap(), "ended", None),
+    )
+    .unwrap();
+    assert_eq!(
+        fourth,
+        json!({"entries":[],"nextOffset":null,"attempts":[{
+            "messageId":"legacy","createdAt":"2026-11-05T12:00:00.000Z","agentName":"reviewer",
+            "description":"Resume review","task":"Continue","resume":"missing","outcome":"rejected",
+            "reason":"Unknown delegation."
+        }]})
+    );
+    let empty = json!({"entries":[],"nextOffset":2});
+    assert_eq!(list(&db, scoped(1, "running", None)).unwrap(), empty);
+    assert_eq!(
+        list(&db, scoped(1, "all", Some("/other-project"))).unwrap(),
+        empty
+    );
+    let global = list(&db, Query::default()).unwrap();
+    assert_eq!(global["entries"].as_array().unwrap().len(), 1);
+    assert!(global.get("attempts").is_none());
+    let other = list(
+        &db,
+        Query {
+            session_id: Some(b.id),
+            ..Query::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(other["attempts"].as_array().unwrap().len(), 1);
+    assert_eq!(other["attempts"][0]["messageId"], "other-session");
+    db.conn()
+        .execute("UPDATE sessions SET deleted_at=1 WHERE id=?1", [&a.id])
+        .unwrap();
+    assert_eq!(list(&db, scoped(1, "all", None)).unwrap(), empty);
+}
+
+#[test]
+fn only_known_terminal_parent_task_results_project_bounded_attempts() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = Database::open_in_dir(dir.path()).unwrap();
+    let s = sessions::create_session(&db, None, None, None, None, None).unwrap();
+    let mut canonical = failed_task(
+        "canonical",
+        json!({"content":[{"type":"text","text":UNKNOWN_RESULT}],"details":{"error":UNKNOWN_RESULT}}),
+    );
+    canonical.tool_args.as_mut().unwrap()["description"] = json!("😀".repeat(3000));
+    canonical.tool_args.as_mut().unwrap()["task"] = json!("😀".repeat(3000));
+    canonical.tool_args.as_mut().unwrap()["agent"] = json!("😀".repeat(600));
+    canonical.tool_args.as_mut().unwrap()["private"] = json!("must not escape");
+    sessions::append_message(&db, &s.id, &canonical, None).unwrap();
+
+    let mut unfinished = failed_task("unfinished", json!(UNKNOWN_RESULT));
+    unfinished.tool_status = Some("running".into());
+    unfinished.status = Some("streaming".into());
+    let mut nested = failed_task("nested", json!(STEERED_RESULT));
+    nested.parent_tool_call_id = Some("parent".into());
+    let mut nested_tool = failed_task("nested-tool", json!(STEERED_RESULT));
+    nested_tool.nested_parent_tool_call_id = Some("parent".into());
+    let mut mismatch = failed_task("different-resume", json!(UNKNOWN_RESULT));
+    mismatch.tool_args.as_mut().unwrap()["resume"] = json!("other");
+    let mut content_only = failed_task("content-only", json!("unrecognized result"));
+    content_only.content = STEERED_RESULT.into();
+    let mut successful = failed_task("successful", json!(STEERED_RESULT));
+    successful.tool_status = Some("success".into());
+    successful.is_error = None;
+    let denied = failed_task(
+        "approval",
+        json!({"details":{"error":UNKNOWN_RESULT,"code":"approval_denied"}}),
+    );
+    let malformed = failed_task(
+        "malformed",
+        json!({"content":[{"type":"text","text":STEERED_RESULT}],"details":{"delegationId":"existing"}}),
+    );
+    for row in [
+        unfinished,
+        nested,
+        nested_tool,
+        mismatch,
+        content_only,
+        successful,
+        denied,
+        malformed,
+    ] {
+        sessions::append_message(&db, &s.id, &row, None).unwrap();
+    }
+    let page = list(
+        &db,
+        Query {
+            session_id: Some(s.id),
+            ..Query::default()
+        },
+    )
+    .unwrap();
+    let attempts = page["attempts"].as_array().unwrap();
+    assert_eq!(attempts.len(), 1);
+    let attempt = &attempts[0];
+    assert_eq!(attempt["messageId"], "canonical");
+    assert_eq!(attempt["outcome"], "rejected");
+    assert_eq!(attempt["reason"], "Unknown delegation.");
+    assert!(attempt.get("private").is_none());
+    assert!(attempt.get("toolResult").is_none());
+    for (field, limit) in [("agentName", 1024), ("description", 4096), ("task", 4096)] {
+        assert_eq!(
+            attempt[field].as_str().unwrap().encode_utf16().count(),
+            limit
+        );
+    }
+}
+
+#[test]
+fn runtime_resume_error_envelopes_project_the_live_reason_after_reload() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = Database::open_in_dir(dir.path()).unwrap();
+    let session = sessions::create_session(&db, None, None, None, None, None).unwrap();
+    // delegation-chain.ts builds the diagnostic; runtime.ts writes the same
+    // text to content and details.error, spreading metadata into details.code.
+    let hint = "At most 2 settled chains per agent are retained. Check TaskList's resumable entries for the intended task, or use its recorded report; do not substitute another chain or repeat completed work.";
+    let retained_error = format!("Delegation \"missing\" was recorded in this session but its chain is no longer retained for resume. {hint} Reusable: reviewer / hidden-reference.");
+    let unknown_error = format!("Unknown delegation \"missing\". No matching Task record is available in this session. {hint} No reusable subagent sessions in this conversation.");
+    let runtime_result = |text: &str, code: &str| {
+        json!({
+            "content": [{"type":"text", "text":text}], "details": {"error":text, "code":code}
+        })
+    };
+    let not_retained = runtime_result(&retained_error, "DELEGATION_RESUME_NOT_RETAINED");
+    let unknown = runtime_result(&unknown_error, "DELEGATION_RESUME_UNKNOWN");
+    let valid = [
+        failed_task("coded-not-retained", not_retained.clone()),
+        failed_task("coded-unknown", unknown.clone()),
+        failed_task("legacy-unknown", json!(UNKNOWN_RESULT)),
+    ];
+    let mut no_target = failed_task("no-resume", not_retained.clone());
+    no_target
+        .tool_args
+        .as_mut()
+        .unwrap()
+        .as_object_mut()
+        .unwrap()
+        .remove("resume");
+    let mut blank_target = failed_task("blank-resume", not_retained.clone());
+    blank_target.tool_args.as_mut().unwrap()["resume"] = json!("  ");
+    let mut running = failed_task("running", not_retained.clone());
+    running.tool_status = Some("running".into());
+    let mut nested = failed_task("nested", not_retained.clone());
+    nested.parent_tool_call_id = Some("parent".into());
+    let mut denied = failed_task("denied", not_retained.clone());
+    denied.tool_status = Some("denied".into());
+    let mut existing_id = not_retained.clone();
+    existing_id["details"]["delegationId"] = json!("real-run");
+    let mut conflicting_text = not_retained.clone();
+    conflicting_text["details"]["error"] = json!("Different error");
+    let invalid = [
+        no_target,
+        blank_target,
+        running,
+        nested,
+        denied,
+        failed_task("existing-id", existing_id),
+        failed_task("conflicting-text", conflicting_text),
+        failed_task(
+            "arbitrary-code",
+            runtime_result(UNKNOWN_RESULT, "PROVIDER_ERROR"),
+        ),
+        failed_task("uncoded-not-retained", json!(retained_error)),
+        failed_task(
+            "metadata-object",
+            json!({"content":[{"type":"text","text":unknown_error}],"details":{"error":unknown_error,"metadata":{"code":"DELEGATION_RESUME_UNKNOWN"}}}),
+        ),
+    ];
+    for row in valid.iter().chain(invalid.iter()) {
+        sessions::append_message(&db, &session.id, row, None).unwrap();
+    }
+    drop(db);
+    let db = Database::open_in_dir(dir.path()).unwrap();
+    let page = list(
+        &db,
+        Query {
+            session_id: Some(session.id),
+            ..Query::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(page["entries"], json!([]));
+    let attempts = page["attempts"].as_array().unwrap();
+    assert_eq!(
+        attempts
+            .iter()
+            .map(|attempt| (
+                attempt["messageId"].as_str().unwrap(),
+                attempt["reason"].as_str().unwrap()
+            ))
+            .collect::<Vec<_>>(),
+        [
+            ("legacy-unknown", "Unknown delegation."),
+            ("coded-unknown", "Unknown delegation."),
+            ("coded-not-retained", "Resume chain no longer retained."),
+        ]
+    );
+    for entry in attempts {
+        assert_eq!(entry["outcome"], "rejected");
+        assert_eq!(entry["resume"], "missing");
+        assert!(entry.get("delegationId").is_none());
+        assert!(entry.get("code").is_none());
+    }
+    assert!(!page.to_string().contains("hidden-reference"));
+}
+
+#[test]
+fn legacy_details_only_resume_rejection_survives_reload_without_bypassing_guards() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = Database::open_in_dir(dir.path()).unwrap();
+    let session = sessions::create_session(&db, None, None, None, None, None).unwrap();
+    let error = "Unknown delegation \"old\". Reusable: reviewer / hidden-reference.";
+    let legacy = |id, result| {
+        let mut row = failed_task(id, result);
+        row.tool_args.as_mut().unwrap()["resume"] = json!("old");
+        row
+    };
+    let result = json!({"details":{"error":error}});
+    let valid = legacy("legacy-details-only", result.clone());
+    let mut denied = legacy("denied", result.clone());
+    denied.tool_status = Some("denied".into());
+    let mut running = legacy("running", result.clone());
+    running.tool_status = Some("running".into());
+    let mut nested = legacy("nested", result.clone());
+    nested.parent_tool_call_id = Some("parent".into());
+    let mut nested_tool = legacy("nested-tool", result.clone());
+    nested_tool.nested_parent_tool_call_id = Some("parent".into());
+    let invalid = [
+        denied,
+        running,
+        nested,
+        nested_tool,
+        legacy("wrong-target", json!({"details":{"error":UNKNOWN_RESULT}})),
+        legacy(
+            "arbitrary-error",
+            json!({"details":{"error":"Permission denied"}}),
+        ),
+        legacy("uncoded-skip", json!({"details":{"error":STEERED_RESULT}})),
+        legacy(
+            "existing-id",
+            json!({"details":{"error":error,"delegationId":"real-run"}}),
+        ),
+        legacy(
+            "unrelated-field",
+            json!({"details":{"error":error,"approval":true}}),
+        ),
+        legacy(
+            "unsupported-code-shape",
+            json!({"details":{"error":error,"code":"DELEGATION_RESUME_UNKNOWN"}}),
+        ),
+        legacy(
+            "conflict",
+            json!({"content":[{"type":"text","text":"Permission denied"}],"details":{"error":error}}),
+        ),
+        legacy(
+            "null-content",
+            json!({"content":null,"details":{"error":error}}),
+        ),
+        legacy(
+            "extra-envelope-field",
+            json!({"details":{"error":error},"metadata":{}}),
+        ),
+        legacy(
+            "wrong-error-type",
+            json!({"details":{"error":{"message":error}}}),
+        ),
+    ];
+    for row in std::iter::once(&valid).chain(invalid.iter()) {
+        sessions::append_message(&db, &session.id, row, None).unwrap();
+    }
+    drop(db);
+    let db = Database::open_in_dir(dir.path()).unwrap();
+    let page = list(
+        &db,
+        Query {
+            session_id: Some(session.id),
+            ..Query::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        page,
+        json!({"entries":[],"nextOffset":null,"attempts":[{
+            "messageId":"legacy-details-only","createdAt":"2026-11-05T12:00:00.000Z",
+            "agentName":"reviewer","description":"Resume review","task":"Continue",
+            "resume":"old","outcome":"rejected","reason":"Unknown delegation."
+        }]})
+    );
 }

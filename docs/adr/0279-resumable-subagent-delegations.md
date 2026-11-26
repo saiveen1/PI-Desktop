@@ -5,6 +5,7 @@
 - Amended: 2026-11-04 — durable progress reports and explicit recovery after cancellation
 - Amended: 2026-11-05 — visible scheduling run policy and immutable task snapshots
 - Amended: 2026-11-07 — user continuation rejoins parent-interrupted chains; retry can join an active turn
+- Amended: 2026-11-26 — distinguish proven same-session unretained chains from unknown IDs
 - Deciders: PI-Desktop core
 - Related: [ADR 0062](0062-bounded-subagents-behind-a-task-tool.md) ·
   [ADR 0089](0089-proactive-background-subagent-delegation.md) ·
@@ -60,7 +61,8 @@ model can act on:
 
 | Condition | Outcome |
 |---|---|
-| unknown or evicted id | `Unknown delegation "<id>"` plus the current resumable list |
+| known in reliable same-session history but no longer retained for resume | Report that the chain is no longer retained for resume, plus the current resumable list; do not start a new delegation |
+| unknown id, including an id from another session | `Unknown delegation "<id>"` plus the current session's resumable list |
 | still running | `Delegation <id> is still running`, call TaskWait first — a resume is never queued |
 | `stopped` / `aborted` | explicit resume permitted after retirement; never automatic |
 | `interrupted` (the app closed mid-run) | explicit resume from retained transcript/checkpoint |
@@ -69,8 +71,13 @@ model can act on:
 | large retained history | existing model-context seeding bounds call/result pairs; read volume alone does not reject resume |
 | the chain resolves but has neither rows nor a validated checkpoint | the chain is dropped and reported as having no recorded history; the same id is never listed as reusable |
 
-No new error codes for "evicted" versus "never existed": both resolve to the
-same unknown-id error, because the model's only correct action is identical.
+The distinction requires reliable evidence that the ID belongs to a previously
+existing chain in the current session. An arbitrary ID, an ID from another
+session, or an ID whose same-session history cannot establish that fact remains
+unknown. History lookup must not disclose whether another session contains the
+ID. Recognition is limited by available reliable history; it is not a promise
+to identify every formerly retained chain. Neither refusal automatically
+redispatches work.
 
 A resume keeps the chain's own model binding. The `providerId/modelId` key the
 chain recorded is preferred; a chain rebuilt from the transcript only knows the
@@ -99,9 +106,10 @@ storage or protocol-version change.
 ### 5. Cancellation ends execution without destroying explicit resume
 
 Completed, failed, stopped, aborted, interrupted and legacy timed_out chains
-can be continued explicitly after they retire. Stop still cancels current work
-and never triggers a new provider request. This separates permission to run now
-from the ability to use saved findings in a later authorized Task invocation.
+can be continued explicitly after they retire while they remain retained and
+eligible for resume. Stop still cancels current work and never triggers a new
+provider request. This separates permission to run now from the ability to use
+saved findings in a later authorized Task invocation.
 Model authorization and tool permissions are rechecked on that new invocation.
 A parent failure keeps SUBAGENT_PARENT_FAILED; user Stop keeps its aborted or
 stopped status. Recovery does not relabel cancellation as a provider failure.
@@ -119,8 +127,11 @@ run after settlement. It never forks a chain or creates overlapping workers.
 `MAX_RESUMABLE_CHAINS_PER_AGENT = 2`, chains are exempt from
 `pruneFinishedDelegations`, and exceeding the bound evicts the least-recently-used
 whole chain at settlement, registry entry and reverse-map entries together. A
-chain whose latest run still works is never evicted, and no tombstones are needed
-because `delegationId` is a random UUID.
+chain whose latest run still works is never evicted and does not count against
+the two settled-chain limit. Eviction removes resumability, not necessarily the
+historical report. Reliable same-session history may still establish that an
+ID was previously known without retaining the chain for resume; it need not
+recognize every evicted ID.
 
 ### 8. Bound the replay context rather than rejecting large chains
 
@@ -133,10 +144,13 @@ file lists remain telemetry, and the two-chain LRU retention limit is unchanged.
 
 ### 9. The parent discovers a resumable list through `TaskList`
 
-`TaskList` reports agent name, delegation id, objective, and files read, listing
-only settled reusable chains. The list stays out of the system prompt because it
-changes on every settlement and would invalidate the cached request prefix
-(ADR 0337), and a failed resume names the reusable ids in its own error.
+`TaskList` reports delegation status and includes a current resumable list with
+agent name, delegation id, objective, and files read. That list contains only
+settled reusable chains, not every historical report. A report remaining readable
+does not make its chain resumable. The list stays out of the system prompt
+because it changes on every settlement and would invalidate the cached request
+prefix (ADR 0337); a failed resume names the currently reusable IDs in its own
+error.
 
 ### 10. Same session only
 
@@ -243,7 +257,8 @@ on failure/boot. Wire shapes and storage versions are unchanged.
   `modelChangedFrom` ride the existing lifecycle details projection.
 - A resumed run is billed and bounded exactly like a fresh one — same concurrency
   slot, same permission scope, same fallback models, same abort sources.
-- Large histories use bounded seeding; partial results remain explicit and resumable.
+- Large histories use bounded seeding; partial results remain explicit and can be
+  resumed only while their chains are retained and eligible.
 
 ## Out of scope
 

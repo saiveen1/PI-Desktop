@@ -4928,6 +4928,33 @@ renderer's durable transcript reads. No real model or provider is contacted.
   `session-delegations-ui.test.mjs` uses the production detail/hook in an isolated
   browser fixture for truthful controls, prepared clicks and read retry.
 
+## E2E-CHAT-subagent-resume-retention-and-rejections
+
+- **Setup:** Use an isolated session and controlled Host/runtime fixtures. Create
+  at least three settled chains for one role, plus a running chain for that role
+  and settled chains for another role. Keep historical reports and arrange both
+  in-window and out-of-window parent transcript positions. Include an actually
+  unknown ID, a real runtime failure, and an older Host response.
+- **Steps:** Attempt explicit resumes for the two most recent settled chains,
+  an older known chain and the unknown ID. Inspect the running chain and the
+  other role independently. Produce four separate refused resume requests with
+  no started delegate, one steering-skipped request and five stopped delegates.
+  Inspect the topbar and task page, both inside and outside the loaded transcript
+  window. Open the refused request details and exercise available controls while
+  recording Host calls; repeat with a real runtime failure and an older Host.
+- **Expected:** Each role retains its two most recent settled resumable chains;
+  running chains do not consume those slots. Old reports remain readable without
+  implying resumability. Known unavailable and genuinely unknown IDs are distinct;
+  neither refusal automatically redispatches work. The four refusals are separate
+  unstarted requests and each needs attention; the skipped steering request and
+  five stopped delegates are neutral history. Both topbar and task page show
+  Needs attention = 4, consistently inside and outside the transcript window.
+  Without a real delegation ID, no retry, stop or send is sent to the backend and
+  no model is presented as having run. Real runtime failure and older Host behavior
+  remain unchanged.
+- **Status:** Expected acceptance scenario only; not executed or claimed as
+  automated coverage by this documentation change.
+
 ## E2E-CHAT-subagent-parent-error-resume
 
 - **Preconditions**: Built agent runtime and a loopback provider fixture; real

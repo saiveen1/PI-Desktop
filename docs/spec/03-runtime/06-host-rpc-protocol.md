@@ -1087,16 +1087,26 @@ activation-scope filtering (`CAPABILITY_INVALID` for an unknown scope).
 ### Delegation history (additive, protocol v11)
 
 - `delegation.history.list({ offset?, limit?, status?, projectPath?, sessionId? })` returns
-  `{ entries, nextOffset }` across non-deleted sessions. Default scope is all
-  projects and sessions; `limit` is 1–100 and `status` is `all | running | ended`.
+  `{ entries, nextOffset, attempts? }` across non-deleted sessions. Default scope
+  is all projects and sessions; `limit` is 1–100 and `status` is `all | running | ended`.
   An optional exact `sessionId` must be nonempty, trimmed, and at most 256 UTF-16
   units. Session selection occurs before pagination; status, project, and deleted
   session filtering remain after candidate selection. Offset counts indexed Task
   candidates within the selected session, not matches, so a filtered empty page
   may have a continuation. Canonical JSONL supplies task, report, model,
-  status and source metadata. Text is bounded at 32,768 UTF-16 units with
+  status and source metadata. Run text is bounded at 32,768 UTF-16 units with
   task/report truncation flags. A recorded running row without a live owning
   turn projects as `interrupted`; reads never mutate execution.
+  Only an explicit session query with `all` or `ended` can return `attempts`.
+  Host reads terminal parent Task results without a run ID. For a `resume`
+  target, only `toolResult.details.code` values `DELEGATION_RESUME_UNKNOWN`
+  and `DELEGATION_RESUME_NOT_RETAINED`, or a matching legacy unknown-target
+  result, produce a rejection. The explicit new-user-input result produces a
+  skip. An attempt carries a message identity, never a run ID; its fixed reason
+  omits raw errors, codes and reusable-session lists. `entries` and `attempts` partition
+  matches in the same window; neither array changes the candidate cursor. No
+  new storage, migration, or authority is introduced. See the
+  [session attempt ADR](../../adr/session-delegation-attempt-history.md).
 - `delegation.approvalHistory.list({})` returns `{ entries }`, at most 200
   terminal prompt receipts with `settledAt` and optional `readAt`.
 - `delegation.approvalHistory.record({ request, settledAt })` is internal to Electron

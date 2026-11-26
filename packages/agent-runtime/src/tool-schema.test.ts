@@ -292,4 +292,6 @@ it("keeps resume model repetition optional without advertising a model switch", 
   expect(declaration.parameters.properties.model).toHaveProperty("description", expect.stringContaining("exact repeat of the retained provider/model key"));
   expect(declaration.parameters.properties.model).toHaveProperty("description", expect.stringContaining("not a model or account change"));
   expect(declaration.parameters.properties.resume).toHaveProperty("description", expect.stringContaining("omit model"));
+  expect(declaration.description).toContain("2 settled chains per agent");
+  expect(declaration.parameters.properties.resume).toHaveProperty("description", expect.stringContaining("TaskList"));
 });

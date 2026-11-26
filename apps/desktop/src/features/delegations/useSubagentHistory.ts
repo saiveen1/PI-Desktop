@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { SessionDetail, UiMessage } from "@pi-desktop/shared";
 import { api } from "../../lib/api";
 import { buildSubagentTranscript } from "../../lib/subagent-transcript";
+import { delegationAttempt, taskMessageKey } from "../../lib/subagent-panel";
 import { EMPTY_TRANSCRIPT, transcriptViewFromSession, TRANSCRIPT_CONTENT_LIMIT, TRANSCRIPT_SEARCH_PAGE_SIZE, type TranscriptView } from "../../lib/transcript-reading";
 import { useAppStore } from "../../stores/app-store";
 import { useSessionDelegations } from "./useSessionDelegations";
@@ -20,7 +21,11 @@ const EMPTY_READ: ReadState = { view: null, before: null, after: null, loading: 
 export function useSubagentHistory(sessionId: string, delegationId: string, visible: UiMessage[], incomplete: boolean) {
   const history = useSessionDelegations(sessionId);
   const live = useAppStore(state => state.activeSessionId === sessionId ? state.messages : state.retainedTranscripts[sessionId] ?? EMPTY_TRANSCRIPT);
-  const entry = history.entries.find(item => item.delegationId === delegationId);
+  const entry = history.entries.find(item => item.delegationId === delegationId || taskMessageKey(item.messageId) === delegationId);
+  const attemptMessage = useMemo(() => {
+    const matches = (message: UiMessage) => taskMessageKey(message.id) === delegationId && delegationAttempt(message);
+    return history.tasks.find(item => matches(item.message))?.message ?? visible.find(matches);
+  }, [history.tasks, visible, delegationId]);
   const messageId = entry?.messageId;
   const available = useMemo(() => Boolean(buildSubagentTranscript(live, delegationId) || buildSubagentTranscript(visible, delegationId)), [live, visible, delegationId]);
   const needsRead = Boolean(messageId && (!available || incomplete));
@@ -105,7 +110,7 @@ export function useSubagentHistory(sessionId: string, delegationId: string, visi
     }
     publish({ ...EMPTY_READ, view: candidate, loading: true });
   };
-  return { messages, entry, statuses: history.statuses, loading: (!available && history.loading) || read.loading,
+  return { messages, entry, attemptMessage, statuses: history.statuses, loading: (!available && !attemptMessage && history.loading) || read.loading,
     error: (!available && history.error) || read.error,
     hasMoreBefore, hasMoreAfter, loadMore,
     retry: () => {

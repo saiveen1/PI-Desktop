@@ -4847,7 +4847,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     agentName: string,
   ):
     | { ok: true; chain: DelegationChain }
-    | { ok: false; message: string } {
+    | { ok: false; message: string; metadata?: { code: string } } {
     const lookup = this.delegationChains.resolveResume({
       resume,
       agentName,
@@ -4857,7 +4857,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     const error = lookup.error;
     switch (error.kind) {
       case "unknown":
-        return { ok: false, message: this.unknownResumeMessage(resume) };
+        return { ok: false, ...this.missingResumeError(resume) };
       case "running":
         return {
           ok: false,
@@ -4877,13 +4877,17 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     }
   }
 
-  private unknownResumeMessage(resume: string): string {
-    return this.delegationChains.unknownResumeError(
-      resume,
-      this.delegationChains.resumableList({
-        runningDelegationIds: this.runningDelegationIds(),
-      }),
-    );
+  private recordedTaskDetails(id: string) {
+    for (const row of this.transcriptHistory) {
+      if (row.role !== "tool" || row.parentToolCallId || row.nestedParentToolCallId || !row.toolCallId || row.toolName !== SUBAGENT_TOOL_NAME) continue;
+      if (isRecord(row.toolResult) && isRecord(row.toolResult.details) && row.toolResult.details.delegationId === id) return row.toolResult.details;
+    }
+  }
+
+  private missingResumeError(resume: string) {
+    return this.delegationChains.missingResumeError(resume,
+      this.delegationChains.resumableList({ runningDelegationIds: this.runningDelegationIds() }),
+      this.delegations.has(resume) || !!this.recordedTaskDetails(resume));
   }
 
   /**
@@ -4965,9 +4969,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       const chain = this.delegationChains.lookup(delegationId);
       if (!chain) return [];
       const checkpoint = this.readDelegateCheckpoint(chain);
-      const task = this.transcriptHistory.find(row => row.toolName === SUBAGENT_TOOL_NAME &&
-        isRecord(row.toolResult) && isRecord(row.toolResult.details) && row.toolResult.details.delegationId === delegationId);
-      const details = isRecord(task?.toolResult) && isRecord(task.toolResult.details) ? task.toolResult.details : undefined;
+      const details = this.recordedTaskDetails(delegationId);
       const report = typeof details?.report === "string" ? details.report
         : checkpoint?.delegationId === delegationId ? checkpoint.report : undefined;
       if (!report) return [];
@@ -5142,7 +5144,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           ? this.resolveResumeChain(resume, definition.name)
           : undefined;
         if (resume && resumeLookup && !resumeLookup.ok) {
-          return this.subagentToolError(toolCallId, resumeLookup.message);
+          return this.subagentToolError(toolCallId, resumeLookup.message, resumeLookup.metadata);
         }
         const resumedChain = resumeLookup?.ok ? resumeLookup.chain : undefined;
         let childPersona: import("@pi-desktop/shared").SessionPersona | undefined;
@@ -5229,7 +5231,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
         // Authorization may yield while a parallel Task starts this chain.
         if (resume) {
           const current = this.resolveResumeChain(resume, definition.name);
-          if (!current.ok) return this.subagentToolError(toolCallId, current.message);
+          if (!current.ok) return this.subagentToolError(toolCallId, current.message, current.metadata);
         }
         const { maxConcurrent } = resolveDelegationLimits(this.delegationPolicy.value.settings?.limits);
         if (this.runningDelegations().length >= maxConcurrent) {
@@ -5282,7 +5284,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
         // Task or direct message may have claimed this chain while it awaited Host.
         if (resume && resumedChain) {
           const current = this.resolveResumeChain(resume, definition.name);
-          if (!current.ok) return this.subagentToolError(toolCallId, current.message);
+          if (!current.ok) return this.subagentToolError(toolCallId, current.message, current.metadata);
           if (current.chain.latestDelegationId !== resumedChain.latestDelegationId) {
             return this.subagentToolError(toolCallId, "The delegation was already resumed while preparing its worktree. Inspect its latest result before sending another task.");
           }
@@ -6251,7 +6253,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       name: SUBAGENT_LIST_TOOL_NAME,
       label: "Task List",
       description:
-        "List the subagents started by Task in this session with their status, plus the subagent sessions that `Task(resume: ...)` can continue. Use it to check progress without waiting, to find a resumable delegation id, or before TaskStop to choose what to stop.",
+        "List this session's subagents and their status. Only the resumable entries are current candidates for Task(resume); a completed or stopped status alone does not mean a chain is retained. Use TaskWait for reports or TaskStop to cancel running work.",
       parameters: Type.Object({}),
       executionMode: "sequential",
       execute: async () => {
@@ -6268,14 +6270,12 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
         });
         const text = [
           delegations.length === 0
-            ? "No subagents have been started in this session."
+            ? "No live delegation records in this runtime."
             : delegations
                 .map((record) => `- ${formatDelegationHeartbeat(record)}; delegationIds=${JSON.stringify([record.delegationId])}`)
                 .join("\n"),
-          this.delegationChains.resumableBlock({ runningDelegationIds }),
-        ]
-          .filter((part) => part.trim())
-          .join("\n\n");
+          this.delegationChains.resumableBlock({ runningDelegationIds }) || "No currently resumable subagent chains.",
+        ].join("\n\n");
         return {
           content: [{ type: "text", text }],
           details: {
@@ -6366,7 +6366,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       return this.requestDelegationRecovery(resume, turnId);
     }
     const chain = this.delegationChains.lookup(resume);
-    if (!chain) throw new Error(this.unknownResumeMessage(resume));
+    if (!chain) throw new Error(this.missingResumeError(resume).message);
     if (chain.latestStatus !== "failed") throw new Error(`Delegation ${resume} is not failed and cannot be force-retried.`);
     return this.startManualDelegationTurn(turnId, signal => this.requestDelegationRecovery(resume, turnId, signal));
   }
@@ -6380,7 +6380,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     const request = { ...input, delegationId: input.delegationId.trim(), messageId: input.messageId.trim(), content: input.content.trim() };
     const turnId = durableTurnId.trim();
     const chain = this.delegationChains.lookup(request.delegationId);
-    if (!chain) throw new Error(this.unknownResumeMessage(request.delegationId));
+    if (!chain) throw new Error(this.missingResumeError(request.delegationId).message);
     const deliver = () => this.delegationMessages.send(chain.delegateSessionId, request, () => this.deliverSubagentMessage(request, turnId));
     if (this.getStatus().isRunning || requireActiveTurn) {
       this.steeringContext(turnId);
@@ -6392,7 +6392,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
   private async deliverSubagentMessage(request: AgentSendSubagentMessageRequest, turnId: string): Promise<AgentSendSubagentMessageResponse> {
     this.steeringContext(turnId);
     const chain = this.delegationChains.lookup(request.delegationId);
-    if (!chain) throw new Error(this.unknownResumeMessage(request.delegationId));
+    if (!chain) throw new Error(this.missingResumeError(request.delegationId).message);
     const rows = [...this.transcriptHistory, ...[...this.delegations.values()].flatMap(record => record.taskMessage ? [record.taskMessage] : [])];
     const receipt = subagentMessageReceipt(rows, chain, request, turnId);
     if (receipt) return receipt;
@@ -6486,7 +6486,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
 
   private requestDelegationRecovery(resume: string, turnId: string, parentSignal?: AbortSignal, onlyInterruptedRun = false, message?: AgentSendSubagentMessageRequest): Promise<ManualDelegationRetryResult> {
     const chain = this.delegationChains.lookup(resume);
-    if (!chain) throw new Error(this.unknownResumeMessage(resume));
+    if (!chain) throw new Error(this.missingResumeError(resume).message);
     return this.delegationRecovery.admit(chain.delegateSessionId, turnId, async recoverySignal => {
       const signal = parentSignal ? AbortSignal.any([parentSignal, recoverySignal]) : recoverySignal;
       const previous = chain.latestDelegationId ? this.delegations.get(chain.latestDelegationId) : undefined;

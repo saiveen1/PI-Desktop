@@ -2696,6 +2696,7 @@
   overflow-wrap: anywhere;
 }
 
+.subagent-attempt-reason,
 .subagent-task-status {
   color: var(--ds-text-muted);
   font-size: var(--text-xs-plus);
@@ -2708,6 +2709,7 @@
   color: var(--ds-error);
 }
 
+.subagent-task-row[data-outcome="rejected"] .subagent-task-status,
 .subagent-task-row[data-outcome="timed_out"] .subagent-task-status {
   color: var(--ds-warning);
 }

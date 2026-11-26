@@ -135,8 +135,10 @@ The [023ed8688 integration record](upstream-integration-023ed8688.md) records
 how the personal beta release line, Responses settlement, runtime compaction and
 sidebar behavior were preserved while adopting upstream's source changes.
 
-The post-merge local recovery fix on `9ba56d329` preserves the requested model,
-selection rationale and pre-clamp effort in the resumable delegation chain. Host
+The post-merge local recovery fix in `241808f7d5` preserves the requested model,
+selection rationale and pre-clamp effort in the resumable delegation chain. The
+locally recorded upstream `95df2e0f9` already has bounded resumable chains; its
+`delegation-chain.ts` lacks these retained selection fields. Host
 history now falls back to settled scheduling metadata when `Task(resume)` omits
 those fields, and the renderer labels the continuation instead of presenting it
 as a new task. The subagent history probe also suppresses stale earlier-message

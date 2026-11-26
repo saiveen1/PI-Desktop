@@ -1,7 +1,7 @@
-import type { DelegationRunHistoryEntry, UiMessage } from "@pi-desktop/shared";
-import { delegationIdForMessage } from "../../lib/subagent-panel";
+import type { DelegationAttemptHistoryEntry, DelegationRunHistoryEntry, UiMessage } from "@pi-desktop/shared";
+import { delegationIdForMessage, recordedDelegationId, type AttemptMessage } from "../../lib/subagent-panel";
 import { collectDelegationStatuses, delegationIsCreating, isDelegationActivityItem, type DelegationActivityItem } from "../../lib/subagent-topology";
-import { subagentTaskOutcome } from "../../lib/subagent-task-presentation";
+import { groupSubagentTasks, subagentTaskOutcome } from "../../lib/subagent-task-presentation";
 
 /**
  * Project only recorded start/end values; createdAt may be a Task-row fallback.
@@ -28,17 +28,28 @@ export function delegationHistoryTask(entry: DelegationRunHistoryEntry): Delegat
   } };
 }
 
+function delegationHistoryAttempt(entry: DelegationAttemptHistoryEntry): DelegationActivityItem {
+  const message: AttemptMessage = { id: entry.messageId, role: "tool", content: "", createdAt: entry.createdAt,
+    toolName: "Task", toolCallId: entry.toolCallId, toolStatus: "error", status: "complete", historyAttempt: entry,
+    toolArgs: { agent: entry.agentName, description: entry.description, task: entry.task, resume: entry.resume },
+  };
+  return { kind: "tool", message };
+}
+
 /** A stale running/creation snapshot cannot erase a recorded terminal result or handle. */
-export function preferRecordedTask(previous: UiMessage | undefined, incoming: UiMessage): UiMessage {
+export function preferRecordedTask(previous: AttemptMessage | undefined, incoming: UiMessage): UiMessage {
   if (!previous || !isDelegationActivityItem({ kind: "tool", message: previous })) return incoming;
+  if (previous.historyAttempt) return recordedDelegationId(incoming) ? incoming : previous;
+  if (recordedDelegationId(previous) && !recordedDelegationId(incoming)) return previous;
   if (subagentTaskOutcome(incoming) !== "running") return incoming;
   return subagentTaskOutcome(previous) !== "running" ||
     (delegationIsCreating(incoming) && !delegationIsCreating(previous)) ? previous : incoming;
 }
 
-export function sessionDelegationTasks(sessionId: string, entries: readonly DelegationRunHistoryEntry[], messages: readonly UiMessage[], running: boolean) {
-  const history = entries.filter(entry => entry.sessionId === sessionId).map(delegationHistoryTask);
-  const live = messages.filter(message => message.role === "tool" && !message.parentToolCallId)
+export function sessionDelegationTasks(sessionId: string, entries: readonly DelegationRunHistoryEntry[], messages: readonly UiMessage[], running: boolean,
+  attempts: readonly DelegationAttemptHistoryEntry[] = []) {
+  const history = [...attempts.map(delegationHistoryAttempt), ...entries.filter(entry => entry.sessionId === sessionId).map(delegationHistoryTask)];
+  const live = messages.filter(message => message.role === "tool" && !message.parentToolCallId && !message.nestedParentToolCallId)
     .map(message => ({ kind: "tool" as const, message }));
   const unique = new Map(history.map(item => [item.message.id, item]));
   for (const item of live.filter(isDelegationActivityItem)) {
@@ -54,13 +65,7 @@ export function sessionDelegationTasks(sessionId: string, entries: readonly Dele
       if (delegationIsCreating(item.message)) statuses.set(delegationIdForMessage(item.message), "aborted");
     }
   }
-  let active = 0, starting = 0, attention = 0;
-  for (const item of tasks) {
-    const outcome = subagentTaskOutcome(item.message, statuses);
-    if (outcome === "running") {
-      if (delegationIsCreating(item.message)) { if (running) starting++; }
-      else active++;
-    } else if (outcome === "failed" || outcome === "denied" || outcome === "timed_out") attention++;
-  }
-  return { tasks, statuses, active, starting, attention, total: tasks.length };
+  const groups = groupSubagentTasks(tasks, statuses);
+  const starting = groups.active.filter(item => delegationIsCreating(item.message)).length;
+  return { tasks, statuses, active: groups.active.length - starting, starting, attention: groups.attention.length, total: tasks.length };
 }

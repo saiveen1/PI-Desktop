@@ -1,5 +1,5 @@
 import { Type } from "typebox";
-import { THINKING_LEVELS, DELEGATION_CONTEXT_WINDOW_MAX, describeDelegationRunPolicy, resolveDelegationLimits, resolveDelegationRunPolicy, subagentToolsLabel, type DelegationSettings, type SubagentDefinition } from "@pi-desktop/shared";
+import { THINKING_LEVELS, MAX_RESUMABLE_CHAINS_PER_AGENT, DELEGATION_CONTEXT_WINDOW_MAX, describeDelegationRunPolicy, resolveDelegationLimits, resolveDelegationRunPolicy, subagentToolsLabel, type DelegationSettings, type SubagentDefinition } from "@pi-desktop/shared";
 
 /** Stable tool metadata is supplied on every request, including after compaction. */
 export function subagentTaskDeclaration(options: {
@@ -29,8 +29,8 @@ export function subagentTaskDeclaration(options: {
         : "Omit model to retain configured role/session defaults, or choose an available model from TaskModels. Supply a short modelReason for an intentional specialist choice.",
       "`task` is the delegate's only instruction. It cannot see this conversation, and you cannot correct it while it runs, so state the goal, the paths and facts it cannot infer, and exactly what to report back.",
       "To run delegates concurrently, emit several Task calls in one assistant message. A message that mixes Task with any other tool runs one call at a time. You may keep working or talk to the user while they run; the runtime delivers their reports when they finish. Call TaskStop only to cancel.",
-      "To continue a previous subagent, pass its `resume` id (the `delegationId` returned by Task). Saying \"reuse\" in prose is not enough. Omit `model` when resuming; repeating the exact retained provider/model key is tolerated but never changes model selection or authorization. Start a new delegation to change models.",
-      "Stopped, aborted, interrupted and budget-exhausted delegates retain reports and can be explicitly resumed once settled. Use TaskWait to read their partial results before deciding to continue; a cancellation never resumes automatically.",
+      `To continue the same work, use TaskList's resumable entries to match the agent and objective, then pass its delegationId as \`resume\`. At most ${MAX_RESUMABLE_CHAINS_PER_AGENT} settled chains per agent are retained; an old Task result is not proof of current resumability. Omit \`model\` when resuming; repeating the exact retained provider/model key is tolerated but never changes selection or authorization.`,
+      "Stopped, aborted, interrupted and budget-exhausted delegates may be explicitly resumed while retained. Read the previous report before deciding to continue. If the intended chain is unavailable, use its findings rather than starting a replacement or repeating completed work.",
       "When the parent has skills, delegates receive Skill and the skill catalog by default, restricted by each role's skills selection. An empty effective selection provides neither. This does not grant other plugin or MCP tools; those still require tools: inherit.",
       `Available subagents:\n${catalog}`,
     ].join("\n\n"),
@@ -39,7 +39,7 @@ export function subagentTaskDeclaration(options: {
       task: Type.String({ description: "The complete brief: goal, context the delegate cannot infer, and the exact report you want back." }),
       description: Type.Optional(Type.String({ description: "Short label for this delegation (3-6 words), shown to the user." })),
       model: Type.Optional(Type.String({ description: "Override the delegate's model for a new task, e.g. 'anthropic/claude-sonnet-4-20250514'. Omit to use the subagent's default. Repeating the definition's own Default model key is the same as omitting this parameter. Only choose a different override from the available delegation model catalog. When resuming, omit this field; only an exact repeat of the retained provider/model key is tolerated, not a model or account change." })),
-      resume: Type.Optional(Type.String({ description: "delegationId of a settled subagent in this conversation to continue. Omit to start a new session. Resume retains its model binding; omit model rather than selecting it again." })),
+      resume: Type.Optional(Type.String({ description: "Same-session delegationId to continue; check TaskList's resumable entries for the matching agent and objective. Omit only for a new task. Resume retains its model binding; omit model rather than selecting it again." })),
       effort: Type.Optional(Type.String({ enum: [...THINKING_LEVELS], description: "Choose reasoning effort for this invocation, including resume, based on task difficulty. An explicit role thinking level wins; otherwise omit to inherit the parent. Each selected model uses a supported level." })),
       modelReason: Type.Optional(Type.String({ maxLength: 1000, description: "One concise sentence explaining why the selected model fits this task. Required for new tasks in a custom session pool. This never grants approval." })),
       ...(settings ? {

@@ -224,11 +224,18 @@ export class DelegationChainRegistry {
     return formatResumableList(this.resumableList(options));
   }
 
-  unknownResumeError(resume: string, list: readonly ResumableChain[]): string {
+  missingResumeError(resume: string, list: readonly ResumableChain[], recorded: boolean) {
     const available = resumableSummary(list);
-    return available
-      ? `Unknown delegation "${resume}". Reusable: ${available}.`
-      : `Unknown delegation "${resume}". No reusable subagent sessions in this conversation.`;
+    // A result is diagnostic, not a receipt for a new run. Never echo an unbounded argument.
+    const id = resume.length <= 128 ? resume : `${resume.slice(0, 127)}…`;
+    const reason = recorded
+      ? `Delegation "${id}" was recorded in this session but its chain is no longer retained for resume.`
+      : `Unknown delegation "${id}". No matching Task record is available in this session.`;
+    const hint = `At most ${MAX_RESUMABLE_CHAINS_PER_AGENT} settled chains per agent are retained. Check TaskList's resumable entries for the intended task, or use its recorded report; do not substitute another chain or repeat completed work.`;
+    return {
+      message: `${reason} ${hint} ${available ? `Reusable: ${available}.` : "No reusable subagent sessions in this conversation."}`,
+      metadata: { code: recorded ? "DELEGATION_RESUME_NOT_RETAINED" : "DELEGATION_RESUME_UNKNOWN" },
+    };
   }
 
   /**
@@ -275,7 +282,12 @@ export class DelegationChainRegistry {
 
 /** `<agent> / <delegationId>` pairs for an error message's hint. */
 function resumableSummary(list: readonly ResumableChain[]): string {
-  return list
-    .map((chain) => `${chain.agentName} / ${chain.latestDelegationId}`)
-    .join(", ");
+  let summary = "";
+  for (const { agentName, latestDelegationId } of list) {
+    if (summary.length + agentName.length + latestDelegationId.length + 5 > 512) {
+      return `${summary ? `${summary}, ` : ""}see TaskList for more`;
+    }
+    summary += `${summary ? ", " : ""}${agentName} / ${latestDelegationId}`;
+  }
+  return summary;
 }

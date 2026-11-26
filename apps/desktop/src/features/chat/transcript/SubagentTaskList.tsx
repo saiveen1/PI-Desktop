@@ -3,10 +3,9 @@ import { useTranslation } from "react-i18next";
 import { IconArrowUpRight, IconBot } from "../../../components/icons";
 import { Button } from "../../../components/ui";
 import { useChatSessionCapability } from "../../../hooks/use-chat-session-capability";
-import { delegationIdForMessage } from "../../../lib/subagent-panel";
-import { groupSubagentTasks, subagentTaskOutcome, subagentTaskStatusKey, subagentTaskTitle, subagentTaskTone } from "../../../lib/subagent-task-presentation";
+import { delegationAttempt, delegationIdForMessage, recordedDelegationId } from "../../../lib/subagent-panel";
+import { groupSubagentTasks, subagentAttemptReason, subagentTaskOutcome, subagentTaskStatusKey, subagentTaskTitle, subagentTaskTone } from "../../../lib/subagent-task-presentation";
 import { delegationIsCreating, type DelegationActivityItem, type SubagentOutcome } from "../../../lib/subagent-topology";
-import { toolResultPayload } from "../../../lib/tool-presentation";
 import { subagentWorkPanelTab } from "../../../lib/work-panel-tabs";
 import { useSlotSessionId } from "../../../plugins/renderer-slots/use-slots";
 import { useAppStore } from "../../../stores/app-store";
@@ -31,9 +30,8 @@ export function SubagentTaskRow({ item, statuses, onOpen }: {
   const outcome = subagentTaskOutcome(message, statuses);
   const creating = outcome === "running" && delegationIsCreating(message);
   const status = t(subagentTaskStatusKey(message, statuses));
-  const payload = toolResultPayload(message);
-  const recordedId = payload && typeof payload === "object" && "delegationId" in payload &&
-    typeof payload.delegationId === "string" ? payload.delegationId : undefined;
+  const recordedId = recordedDelegationId(message);
+  const attempt = delegationAttempt(message);
   const open = () => {
     if (!localToolsAllowed) return;
     if (onOpen) onOpen(id, title);
@@ -50,7 +48,8 @@ export function SubagentTaskRow({ item, statuses, onOpen }: {
             <span className="subagent-task-title">{title}</span>
             <span className="subagent-task-status" role="status">{status}</span>
           </span>
-          <SubagentModelInfo modelId={delegateModelId(message)} thinkingLevel={delegateThinkingLevel(message)} />
+          {recordedId ? <SubagentModelInfo modelId={delegateModelId(message)} thinkingLevel={delegateThinkingLevel(message)} /> : null}
+          {attempt?.outcome === "rejected" ? <span className="subagent-attempt-reason">{subagentAttemptReason(attempt, t)}</span> : null}
         </span>
         <span className="subagent-task-navigation" aria-hidden><IconArrowUpRight size={14} /></span>
       </Button>
@@ -72,17 +71,20 @@ export function SubagentTaskList({ items, delegationStatuses, onOpen, grouped = 
 }) {
   const { t } = useTranslation();
   const groups = useMemo(() => groupSubagentTasks(items, delegationStatuses), [items, delegationStatuses]);
-  const labels = { active: "chat.taskGroups.active", attention: "chat.taskGroups.attention", completed: "chat.taskGroups.completed" } as const;
+  const labels = { active: "chat.taskGroups.active", attention: "chat.taskGroups.attention", history: "subagentControls.inactiveHistory", completed: "chat.taskGroups.completed" } as const;
   if (!grouped) return (
     <div className="subagent-task-list is-inline" role="list" aria-label={t("chat.subagentTopology")}>
       {items.map((item) => <SubagentTaskRow key={item.message.id} item={item} statuses={delegationStatuses} onOpen={onOpen} />)}
     </div>
   );
+  const runningIds = groups.active.map(item => recordedDelegationId(item.message)).filter(id => id !== undefined);
   return (
     <div className="subagent-task-list" aria-label={t("chat.subagentTopology")}>
       {(Object.keys(labels) as Array<keyof typeof labels>).map((key) => groups[key].length > 0 ? (
         <section className="subagent-task-group" key={key} aria-label={t(labels[key])}>
-          <h3 className="subagent-task-group-label">{t(labels[key])}<span aria-hidden> · {groups[key].length}</span>{key === "active" ? <SubagentStopButton running compact /> : null}</h3>
+          <h3 className="subagent-task-group-label">{t(labels[key])}<span aria-hidden> · {groups[key].length}</span>
+            {key === "active" ? <SubagentStopButton running compact delegationIds={runningIds} /> : null}
+          </h3>
           <div role="list" aria-label={t(labels[key])}>
             {groups[key].map((item) => <SubagentTaskRow key={item.message.id} item={item} statuses={delegationStatuses} onOpen={onOpen} />)}
           </div>

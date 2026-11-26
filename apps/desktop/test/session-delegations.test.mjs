@@ -65,12 +65,15 @@ test("an older request cannot replace a newer refresh or publish after disposal"
   }, "one");
   const release = source.retain();
   const refresh = source.reload();
-  requests[1].resolve({ entries: [entry("a", "completed")], nextOffset: null }); await refresh;
-  requests[0].resolve({ entries: [entry("a")], nextOffset: null }); await tick();
+  const attempt = { messageId: "own", createdAt: entry("a").createdAt, outcome: "skipped" };
+  requests[1].resolve({ entries: [entry("a", "completed")], attempts: [attempt], nextOffset: null }); await refresh;
+  requests[0].resolve({ entries: [entry("a")], attempts: [{ ...attempt, messageId: "stale" }], nextOffset: null }); await tick();
+  assert.deepEqual(source.getSnapshot().attempts, [attempt]);
   assert.equal(source.getSnapshot().entries[0].status, "completed");
   const late = source.reload(); release();
   const snapshot = source.getSnapshot();
-  requests[2].resolve({ entries: [entry("late")], nextOffset: null }); await late;
+  requests[2].resolve({ entries: [entry("late")], attempts: [attempt], nextOffset: null }); await late;
+  assert.deepEqual(snapshot.attempts, []);
   assert.equal(source.getSnapshot(), snapshot);
 });
 
@@ -123,7 +126,7 @@ test("session index uses its own singleton tab without replacing detail or other
 test("all shipped locales translate the session index and its explicit counts", async () => {
   const { catalogs } = await import("../../../packages/i18n/src/index.ts");
   for (const [locale, catalog] of Object.entries(catalogs)) {
-    for (const key of ["indexLabel", "indexTitle", "runningCount", "pendingCount", "startingCount", "historyCount", "statusUnavailable", "loading", "emptySession"]) {
+    for (const key of ["indexLabel", "indexTitle", "runningCount", "pendingCount", "startingCount", "historyCount", "statusUnavailable", "loading", "emptySession", "inactiveHistory", "rejected", "unknownResume", "expiredResume"]) {
       assert.equal(typeof catalog.subagentControls[key], "string", `${locale}: ${key}`);
     }
   }
@@ -175,5 +178,45 @@ test("live and historical task metadata agree without filling legacy gaps from a
     assert.equal(stale.status, "completed");
     assert.equal(stale.modelId, "effective-model");
     assert.equal(stale.thinkingLevel, thinkingLevel);
+  }
+});
+
+test("header and index count four rejections, not stopped/skipped history", async () => {
+  const { groupSubagentTasks } = await import("../src/lib/subagent-task-presentation.ts");
+  const result = sessionDelegationTasks("one", [], [
+    ...Array.from({ length: 67 }, (_, i) => task(`complete-${i}`, "completed")), task("a"), task("b"),
+    ...Array.from({ length: 5 }, (_, i) => task(`stop-${i}`, "stopped")),
+    ...Array.from({ length: 4 }, (_, i) => ({ ...task(`reject-${i}`), toolStatus: "error", toolArgs: { resume: "a" }, toolResult: { details: { error: 'Unknown delegation "a".' } } })),
+    { ...task("skip"), toolStatus: "error", toolResult: { content: [{ type: "text", text: "Skipped because new user input is waiting." }], details: {} } },
+  ], true);
+  const groups = groupSubagentTasks(result.tasks, result.statuses);
+  assert.deepEqual([result.attention, groups.attention.length], [4, 4]);
+  assert.deepEqual([result.total, result.active, groups.completed.length, groups.history.length], [79, 2, 67, 6]);
+});
+
+test("a rejected resume's display identity neither authorizes a run nor joins its target", async () => {
+  const { delegationAttempt, delegationIdForMessage, recordedDelegationId } = await import("../src/lib/subagent-panel.ts");
+  const { buildSubagentTranscript } = await import("../src/lib/subagent-transcript.ts");
+  const prior = task("prior", "completed");
+  const refused = { ...task("refusal"), toolCallId: "prior", toolStatus: "error", toolArgs: { resume: "prior" }, toolResult: { details: { error: 'Unknown delegation "prior". Reusable: private.' } } };
+  for (const [details, reason] of [[refused.toolResult.details, "Unknown delegation."], [{ code: "DELEGATION_RESUME_UNKNOWN", error: "Unknown" }, "Unknown delegation."], [{ code: "DELEGATION_RESUME_NOT_RETAINED", error: "Not retained" }, "Resume chain no longer retained."]]) {
+    const attempt = { ...refused, toolResult: { details } };
+    assert.deepEqual(delegationAttempt(attempt), { outcome: "rejected", reason, resume: "prior" });
+    assert.equal(recordedDelegationId(attempt), undefined);
+    assert.equal(buildSubagentTranscript([prior, attempt], delegationIdForMessage(attempt)), null);
+    assert.deepEqual(buildSubagentTranscript([prior, attempt], "prior").calls, [prior]);
+  }
+  assert.equal(delegationAttempt({ ...refused, toolArgs: { resume: "another" } }), undefined);
+  assert.equal(delegationAttempt({ ...refused, toolStatus: "success" }), undefined);
+  assert.equal(delegationAttempt({ ...refused, toolResult: { details: { ...refused.toolResult.details, delegationId: "real", status: "failed" } } }), undefined);
+});
+
+test("a recorded runtime failure or timeout outranks an interrupted tool envelope", async () => {
+  const { subagentTaskStatusKey } = await import("../src/lib/subagent-task-presentation.ts");
+  for (const outcome of ["failed", "timed_out"]) {
+    const message = { ...task("real", outcome), status: "aborted", toolStatus: "error" };
+    const model = sessionDelegationTasks("one", [], [message], false);
+    assert.equal(model.attention, 1);
+    assert.equal(subagentTaskStatusKey(message, model.statuses), `chat.subagentStatus.${outcome}`);
   }
 });

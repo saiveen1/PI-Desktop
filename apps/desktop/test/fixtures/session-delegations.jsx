@@ -26,6 +26,7 @@ window.piDesktop = { platform: "win32", invoke: async () => ({ ok: true, data: {
 const events = new Set(), approvalEvents = new Set(), calls = [];
 let rows = [], messages = [], approvals = [], failure = false, detailFailure = false, pageFailure = false, delayed, delayedApproval;
 let delayedDetail, delayedPage;
+let attemptPages;
 const stamp = "2026-11-12T10:00:00.000Z";
 const task = (id, status = "running") => ({ id: `task-${id}`, role: "tool", content: "", createdAt: stamp,
   toolName: "Task", toolCallId: `call-${id}`, toolStatus: "success", status: "complete",
@@ -46,6 +47,9 @@ api.listDelegationHistory = async query => {
   if (delayed && query.sessionId === "alpha") { const read = delayed; delayed = null; read.onRead?.(); return read.promise; }
   if (failure) throw Error("Fixture read failure");
   const selected = rows.filter(item => item.sessionId === query.sessionId);
+  if (attemptPages && query.sessionId === "alpha") return query.offset === 0
+    ? { entries: selected, attempts: attemptPages.slice(0, 2), nextOffset: 100 }
+    : { entries: [], attempts: attemptPages.slice(1), nextOffset: null };
   return query.offset === 0 ? { entries: selected.filter(item => item.delegationId !== "old"), nextOffset: selected.some(item => item.delegationId === "old") ? 100 : null }
     : { entries: selected.filter(item => item.delegationId === "old"), nextOffset: null };
 };
@@ -69,6 +73,7 @@ api.getSession = async (sessionId, options) => {
 };
 api.stopSubagents = async request => { calls.push({ kind: "stop", request }); return { pending: request.delegationIds ?? [] }; };
 api.retrySubagent = async request => { calls.push({ kind: "retry", request }); return { accepted: true }; };
+api.sendSubagentMessage = async request => { calls.push({ kind: "send", request }); return { accepted: true }; };
 let approvalTarget, globalHistory = 0;
 window.addEventListener("pi-desktop:notification-target", event => { approvalTarget = event.detail; });
 useAppStore.setState({ activeSessionId: "alpha", sessions: [{ id: "alpha", title: "Verify current-session delegation visibility", source: "local" }, { id: "beta", title: "Other session", source: "local" }],
@@ -127,6 +132,61 @@ function heldRead() {
   const promise = new Promise(done => { resolve = done; });
   const started = new Promise(done => { onRead = done; });
   return { promise, resolve, onRead, started };
+}
+async function attemptIndex() {
+  const runs = [...Array(67).fill("completed"), "running", "running", ...Array(5).fill("stopped")];
+  rows = runs.map((status, index) => row(`run-${index}`, status));
+  const skipReason = "Skipped because new user input is waiting.";
+  attemptPages = Array.from({ length: 5 }, (_, i) => ({
+    messageId: `attempt-${i}`, ...(i === 4 ? {} : { toolCallId: `attempt-call-${i}` }), createdAt: stamp,
+    description: `Attempt ${i}`, task: `Follow-up ${i}`, ...(i === 4 ? {} : { resume: `run-${i}` }), outcome: i === 4 ? 'skipped' : 'rejected',
+    reason: i === 4 ? skipReason : 'Unknown delegation.',
+  }));
+  const attempts = attemptPages.map(entry => ({ id: entry.messageId, role: 'tool', toolName: 'Task',
+    toolCallId: entry.toolCallId, status: 'complete', toolStatus: 'error', content: '', createdAt: stamp,
+    toolArgs: { task: entry.task, description: entry.description, resume: entry.resume, model: 'request-only-model', thinkingLevel: 'max' },
+    toolResult: entry.outcome === 'rejected' ? { details: { error: `Unknown delegation "${entry.resume}". Reusable: private-list.` } } : { content: [{ type: 'text', text: skipReason }], details: {} },
+  }));
+  await click('.session-subagents-button');
+  const recorded = attemptPages;
+  for (const mode of ['legacy-live', 'merged', 'history-only']) {
+    const full = mode !== 'history-only';
+    attemptPages = mode === 'legacy-live' ? undefined : recorded;
+    flushSync(() => useAppStore.setState({ messages: full ? [...runs.map((status, i) => task(`run-${i}`, status)), ...attempts] : [], runningSessions: { alpha: true } }));
+    await sessionDelegationsSource(api, 'alpha').reload(); await settle();
+    const panel = query('.session-subagents-panel');
+    const groupSize = label => panel.querySelector(`section[aria-label="${label}"]`)?.querySelectorAll('[role=listitem]').length ?? 0;
+    const header = query('.session-subagents-button').getAttribute('aria-label');
+    check(header.includes('Needs attention 4') && groupSize('Needs attention') === 4,
+      `${full ? 'full' : 'history-only'}: header ${header}; index attention ${groupSize('Needs attention')}; expected 4/4`);
+    check(header.includes('2 running') && groupSize('Active') === 2 && groupSize('Completed') === 67 && groupSize(i18n.t('subagentControls.inactiveHistory')) === 6, 'Wrong outcome groups');
+    check(panel.querySelectorAll('[role=listitem]').length === 79, 'Duplicate or missing original Task message');
+    for (const [index, entry] of recorded.entries()) {
+      const row = query(`[data-message-id="${entry.messageId}"]`);
+      check(!row.querySelector('.subagent-task-actions, .subagent-model-info'), 'No-handle row offers runtime metadata/actions');
+      const mutations = () => calls.filter(call => ['stop', 'retry', 'send'].includes(call.kind)).length;
+      const before = mutations();
+      await click(`[data-message-id="${entry.messageId}"] .subagent-task-open`);
+      const detail = query('.subagent-transcript-tab');
+      const reason = index === 4 ? i18n.t('chat.toolSkippedReason') : `${i18n.t('subagentControls.unknownResume')} · ${entry.resume}`;
+      check(detail.querySelector('.subagent-attempt-reason')?.textContent === reason && detail.textContent.includes(entry.task), `Missing attempt-specific reason/brief ${index}`);
+      check(!detail.textContent.includes('private-list'), 'Attempt exposed another reusable chain');
+      check(detail.querySelector('.subagent-task-status')?.textContent === i18n.t(index === 4 ? 'subagentControls.notStarted' : 'subagentControls.rejected'), 'Attempt called a run failure');
+      check(!detail.querySelector('.subagent-model-info, .stop-btn, .subagent-transcript-composer, [aria-label="Retry"]') && !detail.textContent.includes('request-only-model'), 'Non-run detail offers runtime metadata/actions');
+      await click('[aria-label="All tasks"]');
+      check(mutations() === before, 'Navigating a non-run sent a mutation');
+    }
+    if (full) {
+      await click('[data-message-id="task-run-0"] .subagent-task-open');
+      check(query('.subagent-transcript-heading .subagent-task-status').textContent === 'Completed' && !query('.subagent-transcript-tab').textContent.includes('Follow-up'), 'Rejected resume contaminated its target');
+      await click('[aria-label="All tasks"]');
+    }
+    if (mode === 'history-only') {
+      await click('.session-subagents-panel section[aria-label="Active"] h3 .stop-btn');
+      check(calls.at(-1)?.kind === 'stop' && calls.at(-1).request.delegationIds?.sort().join(',') === 'run-67,run-68', 'Group stop did not target exactly the two recorded runs');
+    }
+  }
+  attemptPages = undefined;
 }
 window.sessionDelegationsProbe = async stage => {
   if (stage === "prepare") {
@@ -278,6 +338,8 @@ window.sessionDelegationsProbe = async stage => {
     check(query('.session-subagents-button').textContent.includes('History 5'), 'Background refresh replaced settled count with loading');
     settledRead.resolve({ entries: rows, nextOffset: null }); await settling; await settle();
     await click('.ct-actions [aria-label="Global delegations"]'); check(globalHistory === 1, "Global history is no longer reachable");
+  } else if (stage === 'attempts') {
+    await attemptIndex();
   }
   return { stage, passed: true };
 };
