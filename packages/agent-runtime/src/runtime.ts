@@ -5134,6 +5134,10 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
         } catch (error) {
           return this.subagentToolError(toolCallId, error instanceof Error ? error.message : "Delegation policy is unavailable; no task started.");
         }
+        const modelReason = typeof args.modelReason === "string" ? args.modelReason.trim() : "";
+        if (!resume && (this.delegationPolicy.value.selectionMode === "task-fit" || this.availableSubagentModelKeys().length > 1) && (!requestedModel || !modelReason)) {
+          return fail("Call TaskModels when preparing delegation, then supply model and one concise modelReason for this task.");
+        }
         let provider: RuntimeProviderConfig | undefined;
         if (!resume && !this.delegationSettings && modelOverride) {
           if (this.isDefinitionPinOverride(definition, modelOverride)) {
@@ -5231,15 +5235,10 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           return this.subagentToolError(toolCallId,
             `Resuming a subagent cannot change its model or provider. Omit \`model\` to continue ${resume}, or start a new delegation to pick a different model.`);
         }
-        const modelReason = isRecord(params) && typeof params.modelReason === "string" ? params.modelReason : undefined;
-        const inheritedModelReason = resume ? resumedChain?.latestModelReason : undefined;
-        const effectiveModelReason = modelReason?.trim() || inheritedModelReason;
+        const effectiveModelReason = modelReason || (resume ? resumedChain?.latestModelReason : undefined);
         if (this.delegationPolicy.value.selectionMode === "task-fit" && !resume &&
           this.delegationModelsReadKey !== safeJson(this.delegationPolicy.value)) {
           return this.subagentToolError(toolCallId, "Read the current model descriptions with TaskModels before selecting a model. The conversation's model policy is new or changed.");
-        }
-        if (this.delegationPolicy.value.selectionMode === "task-fit" && !resume && (!modelOverride || !modelReason?.trim())) {
-          return this.subagentToolError(toolCallId, "Call TaskModels when preparing delegation, then supply model and one concise modelReason for this task.");
         }
         const selection = (scoped && resume) || args.modelSelection === "require" ? "require" : "prefer";
         const rawEffort = isRecord(params) ? params.effort : undefined;

@@ -21,7 +21,7 @@ export function buildDelegationModelTool(options: {
       };
       const guidance = policy.selectionMode === "task-fit"
         ? "Match each task to model descriptions first. Choose an explicit model and a concise modelReason for each new Task. Priority is only a tie-breaker or fallback. An empty pool disables delegation."
-        : "Use the configured model policy. When no override models exist, omit model to retain the role or session default.";
+        : "For a new Task with multiple available models, supply model and a concise modelReason. With at most one candidate, model selection is optional.";
       return {
         content: [{ type: "text", text: [guidance, settings ? describeDelegationModels(settings, policy.selectionMode) :
           JSON.stringify({ modelKeys: keys })].join("\n\n") }],

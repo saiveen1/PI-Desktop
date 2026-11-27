@@ -15,7 +15,8 @@ async function fixture(options: {
   const rows: UiMessage[] = [];
   const errors: unknown[] = [];
   const cancellations: string[] = [];
-  let nextTask: Record<string, unknown> | undefined = { agent: "worker", task: "Review the isolated fixture.", ...options.args };
+  let nextTask: Record<string, unknown> | undefined = { agent: "worker", task: "Review the isolated fixture.",
+    model: "fixture/expensive", modelReason: "Its concurrency review guidance fits this task.", ...options.args };
   const server = createServer(async (req, res) => {
     const chunks: Buffer[] = [];
     for await (const chunk of req) chunks.push(Buffer.from(chunk));
@@ -83,12 +84,13 @@ async function fixture(options: {
 
 const allow = async (): Promise<DelegationApprovalDecision> => ({ decision: "allow", reason: "Approved once" });
 describe("delegation user path through real parent and child transports", () => {
-  it.each([undefined, "fixture/expensive"])("preserves a lower-tier role pin when model is %s", async (model) => {
-    const f = await fixture({ pin: true, pinPriority: 2, authorize: allow, args: model ? { model } : {} });
+  it.each([undefined, "fixture/expensive"])("requires explicit selection even for a lower-tier role pin: %s", async (model) => {
+    const f = await fixture({ pin: true, pinPriority: 2, authorize: allow, args: { model } });
     try {
       await f.prompt();
       expect(f.errors).toEqual([]);
-      expect(f.requests.filter((row) => row.model !== "parent").map((row) => row.model)).toEqual(["expensive"]);
+      expect(f.requests.filter((row) => row.model !== "parent").map((row) => row.model)).toEqual(model ? ["expensive"] : []);
+      if (!model) expect(JSON.stringify(f.rows.find(row => row.toolName === "Task")?.toolResult)).toContain("modelReason");
     } finally { await f.close(); }
   });
 

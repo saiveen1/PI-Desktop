@@ -5336,6 +5336,9 @@ Build two actual runtimes with identical configuration and different scratch dir
   cancel edits, inject a failed save and retry. Restore global inheritance
   and separately save an empty custom pool. Query TaskModels only when preparing
   a delegation; choose a lower numeric-priority specialist by description.
+  With multiple inherited candidates, omit the model or its reason: expect a
+  tool error without an approval or child. Supply both and verify the recorded
+  rationale. A single inherited candidate and a resume need no new rationale.
   Request higher and lower `Task.effort` than the parent, repeat without it,
   and try a role with fixed effort or `omit`. Verify approval and the effective
   recorded level respect role precedence and each selected model's capabilities.

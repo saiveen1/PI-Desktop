@@ -1438,8 +1438,10 @@ saving settings neither interrupts/recreates them nor forces a model switch.
 Task's declaration carries the role catalog and a short instruction to query
 TaskModels as needed. A batch may reuse the retrieved descriptions. A custom
 session pool requires an explicit model and concise `modelReason` for each new
-Task, and honors task fit ahead of numeric priority. Missing session overrides
-retain global/legacy ordering. `modelSelection: prefer | require` defaults to prefer; require never
+Task, and honors task fit ahead of numeric priority. An inherited pool with more
+than one available model also requires both fields for a new Task, before approval
+or launch. With zero or one inherited candidate the existing defaults apply.
+Resume retains its recorded selection; global ordering and approval are unchanged. `modelSelection: prefer | require` defaults to prefer; require never
 substitutes another model. Optional `minContextWindow` and `requiresImages` filter
 candidates before approval. These model-authored fields do not grant permission.
 `minContextWindow` accepts an integer from 0 to 10000000: zero and omission

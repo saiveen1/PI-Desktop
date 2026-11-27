@@ -189,11 +189,27 @@ describe("hot delegation policy through the real parent and child agent loops", 
   });
 
   it("rejects an invalid Task effort before approval or execution", async () => {
-    const f = fixture({ parent: index => immediate(index === 1 ? task({ effort: "turbo" }) : text("Rejected.")) });
+    const f = fixture({ parent: index => immediate(index === 1 ? task({ model: "fixture/old", modelReason: "A text-only check.", effort: "turbo" }) : text("Rejected.")) });
     try {
       await f.prompt();
       expect(f.approvals).toEqual([]);
       expect(f.childRequests).toEqual([]);
+    } finally { await f.close(); }
+  });
+
+  it("requires explicit model selection and rationale for a new Task with multiple global candidates", async () => {
+    const reason = "The new model fits this review.";
+    const steps = [call("TaskModels", {}), task(), task({ modelReason: reason }), task({ model: "fixture/old", modelReason: " " }),
+      task({ model: "fixture/new", modelReason: reason }), call("TaskWait", {})];
+    const f = fixture({ parent: index => immediate(steps[index - 1] ?? text("Checked.")) });
+    try {
+      await f.prompt();
+      const rows = details(f.events);
+      expect(rows).toHaveLength(4);
+      for (const row of rows.slice(0, 3)) expect(row.error).toMatch(/model.*modelReason/);
+      expect(rows[3]).toMatchObject({ modelId: "new", scheduling: { requestedModel: "fixture/new", modelReason: reason } });
+      expect(f.approvals).toHaveLength(1);
+      expect(f.childRequests).toEqual(["new"]);
     } finally { await f.close(); }
   });
 
@@ -218,7 +234,7 @@ describe("hot delegation policy through the real parent and child agent loops", 
     const waitingParent = deferred<void>();
     const held = reply(task());
     const f = fixture({ oldRead: true, parent: index => {
-      if (index === 1) return immediate(task());
+      if (index === 1) return immediate(task({ model: "fixture/old", modelReason: "Use the text reader for the first check." }));
       if (index === 2) { waitingParent.resolve(); return held; }
       return immediate(index === 3 ? call("TaskWait", {}) : text("All checks incorporated."));
     } });
@@ -248,7 +264,7 @@ describe("hot delegation policy through the real parent and child agent loops", 
   });
 
   it("uses a host-selected alternate once and publishes the exact model and clamped thinking", async () => {
-    const f = fixture({ parent: index => immediate(index === 1 ? task({ model: "fixture/old", requiresImages: false, minContextWindow: 4096 }) : text("Checked.")),
+    const f = fixture({ parent: index => immediate(index === 1 ? task({ model: "fixture/old", modelReason: "A text-only check.", requiresImages: false, minContextWindow: 4096 }) : text("Checked.")),
       authorize: async () => ({ decision: "allow", reason: "User chose alternate", code: "selected", selectedModel: { providerId: "fixture", modelId: "new" } }) });
     try {
       await f.prompt();
@@ -275,7 +291,7 @@ describe("hot delegation policy through the real parent and child agent loops", 
     let f: ReturnType<typeof fixture>;
     let resumed = false;
     f = fixture({ parent: index => {
-      if (index === 1) return immediate(task());
+      if (index === 1) return immediate(task({ model: "fixture/old", modelReason: "Use the original text reviewer." }));
       const started = details(f.events)[0];
       const settled = f.events.some(({ event }) => event.type === "message_end" && event.message.toolName === "Task" &&
         isRecord(event.message.toolResult) && isRecord(event.message.toolResult.details) && event.message.toolResult.details.status === "completed");
@@ -395,7 +411,7 @@ describe("hot delegation policy through the real parent and child agent loops", 
   it("refreshes a pending Task after settings save without restarting the parent", async () => {
     const entered = deferred<void>();
     const consent = deferred<DelegationApprovalDecision>();
-    const f = fixture({ parent: index => immediate(index === 1 ? task() : text("Checked.")), authorize: async request => {
+    const f = fixture({ parent: index => immediate(index === 1 ? task({ model: "fixture/old", modelReason: "The text reviewer fits." }) : text("Checked.")), authorize: async request => {
       if (request.modelId === "old") { entered.resolve(); return consent.promise; }
       return { decision: "allow", reason: "Current automatic model" };
     } });
@@ -412,7 +428,7 @@ describe("hot delegation policy through the real parent and child agent loops", 
   });
 
   it("turns a coded approval timeout into automatic fallback with no second ask in the real loop", async () => {
-    const f = fixture({ parent: index => immediate(index === 1 ? task() : text("Checked.")), authorize: async request => request.modelId === "old"
+    const f = fixture({ parent: index => immediate(index === 1 ? task({ model: "fixture/old", modelReason: "The text reviewer fits." }) : text("Checked.")), authorize: async request => request.modelId === "old"
       ? { decision: "skip", reason: "Deadline elapsed", code: "timeout" } : { decision: "allow", reason: "Automatic policy" } });
     try {
       const settings = policy(["old", "another-ask", "new"]);
@@ -426,7 +442,7 @@ describe("hot delegation policy through the real parent and child agent loops", 
   });
 
   it.each(["require", "unavailable", "incompatible"])("starts no substitute for a %s selected target", async mode => {
-    const f = fixture({ parent: index => immediate(index === 1 ? task({ model: "fixture/new",
+    const f = fixture({ parent: index => immediate(index === 1 ? task({ model: "fixture/new", modelReason: "Use the multimodal reviewer.",
       ...(mode === "require" ? { modelSelection: "require" } : {}), ...(mode === "incompatible" ? { requiresImages: true } : {}) }) : text("No delegate started.")),
       authorize: async () => ({ decision: "allow", reason: "One exact selection", selectedModel: { providerId: "fixture", modelId: mode === "unavailable" ? "missing" : "old" } }) });
     try {

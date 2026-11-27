@@ -56,7 +56,9 @@ tool when delegation is needed. The full directory is absent from the system
 prompt and the ordinary Task declaration. A parent can reuse one query across
 a batch and refresh after policy changes. Custom session pools use task fit
 before numeric priority; an explicit compatible selection is not demoted by
-the old priority-promotion gate. Inherited pools retain their legacy ordering.
+the old priority-promotion gate. Inherited pools retain their legacy ordering,
+but new tasks must name a model and explain its fit when more than one is available.
+This leaves single-candidate defaults, resume, and approval decisions unchanged.
 This adds no separate model-routing service or role/model binding system.
 
 Retain the parent's concise `modelReason` in each delegation's historical
