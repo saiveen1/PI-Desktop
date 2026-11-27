@@ -1516,11 +1516,12 @@ the durable project/provider/model/mode/thinking/permission configuration but
 does not copy turns, notifications, artifacts, scratch data, permission
 grants, or regenerate revisions. The source session remains unchanged.
 Message-scoped Fork uses this option so the child receives its own session id
-and cannot mutate the source runtime. To change an older reply, fork through
-that reply first. `session/getTurnContext({ sessionId, anchorMessageId })` returns
-an original/effective current-turn snapshot. `session/editTurnContext` accepts
-its `expectedRevision` and per-row overrides (or a whole-turn restore), returning
-the new snapshot and authoritative updates. It shares the strict persistence
+and cannot mutate the source runtime. `session/getTurnContext({ sessionId,
+anchorMessageId })` returns the selected completed turn's original/effective
+context. `session/editTurnContext` accepts its `expectedRevision`, per-row
+overrides or restore, and independent `excludePreviousTurns?` and
+`excludeHistoryThinking?` choices, returning the new snapshot and authoritative
+updates. The Host derives the prompt boundary. It shares the strict persistence
 and runtime-disposal fence below; reads are data-only. The UI never submits a
 full history array. See the [Host contract](06-host-rpc-protocol.md#whole-turn-model-context-overlays).
 The legacy `session/editAssistantReply({ sessionId, messageId,

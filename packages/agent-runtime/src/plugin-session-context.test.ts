@@ -15,6 +15,13 @@ function msg(partial: Partial<UiMessage> & Pick<UiMessage, "id" | "role">): UiMe
 }
 
 describe("pluginLlmContextFromTranscript", () => {
+  it("applies the retained boundary before considering a stored summary", () => {
+    const rows = [msg({ id: "old", role: "assistant", content: "old answer" }),
+      msg({ id: "start", role: "user", content: "new prompt", contextOverride: { version: 1, excludePreviousTurns: true } }),
+      msg({ id: "read", role: "tool", toolName: "Read", content: "excluded receipt", contextOverride: { version: 1, excludeTool: true } })];
+    const checkpoint = { id: "c", throughMessageId: "start", summary: "old answer", tokensBefore: 1, createdAt: "now" };
+    expect(pluginLlmContextFromTranscript(rows, { compaction: checkpoint }).messages).toEqual([{ role: "user", content: "new prompt" }]);
+  });
   it("omits subagent rows, aborted assistants, and empty user turns", () => {
     const { messages, truncated } = pluginLlmContextFromTranscript([
       msg({ id: "u1", role: "user", content: "Build it" }),

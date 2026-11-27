@@ -20,6 +20,25 @@
   overflow-clip-margin: 34px;
 }
 
+.message-row[data-excluded-by-context-boundary] {
+  box-shadow: inset 2px 0 var(--ds-border-default);
+}
+
+.message-row[data-excluded-by-context-boundary] :is(.message-bubble, .prose-chat),
+.tool-row[data-excluded-by-context-boundary] .tool-row-body {
+  color: var(--ds-text-secondary);
+}
+
+.message-row[data-context-boundary-start] {
+  border-block-start: 1px dashed var(--ds-border-default);
+}
+
+.context-boundary-label {
+  color: var(--ds-text-secondary);
+  font-size: var(--text-2xs);
+  padding-inline-start: 8px;
+}
+
 .message-row.user {
   justify-content: flex-end;
 }

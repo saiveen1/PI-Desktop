@@ -441,6 +441,15 @@ memory. Context overrides survive fork, revision activation and restart. Restore
 removes this turn's overlays and legacy thinking flags. Any affected compaction
 and its dependent chain is invalidated atomically with the overlays. This extends
 open metadata in schema 2, with no SQLite migration; older runtimes may ignore it.
+Historical edits preserve the later transcript. The optional history-wide
+thinking exclusion on the latest turn sets per-message exclusions only on
+existing eligible assistant reasoning; it is not a persistent session policy.
+Restoring an older turn affects that turn only.
+An opening user prompt may have `meta.contextOverride.excludePreviousTurns`
+set to true. No message IDs or positions are stored in the marker: copying
+the prefix into a fork or restoring an archived revision carries exactly the
+markers in that history. Clearing a marker never deletes or rewrites the old
+conversation. Display-only exclusion indicators are not source records.
 
 Assistant rows may carry optional `meta.excludeThinkingFromContext`, projected
 as the same optional `UiMessage` boolean. `true` excludes this row's reasoning

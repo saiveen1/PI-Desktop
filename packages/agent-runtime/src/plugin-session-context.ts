@@ -6,7 +6,8 @@
  * replace pre-checkpoint history, and tool results plus total size are capped.
  */
 
-import type { ContextCompactionRecord, UiMessage } from "@pi-desktop/shared";
+import { messageForModelContext, type ContextCompactionRecord, type UiMessage } from "@pi-desktop/shared";
+import { runtimeHistorySeed } from "./runtime-history-seed.js";
 
 export const PLUGIN_LLM_CONTEXT_MAX_CHARS = 200_000;
 export const PLUGIN_TOOL_RESULT_MAX_CHARS = 8_000;
@@ -77,10 +78,11 @@ export function pluginLlmContextFromTranscript(
 ): { messages: PluginLlmMessage[]; truncated: boolean } {
   const maxChars = options.maxChars ?? PLUGIN_LLM_CONTEXT_MAX_CHARS;
   const maxToolResultChars = options.maxToolResultChars ?? PLUGIN_TOOL_RESULT_MAX_CHARS;
-  let source = messages.filter((message) => !message.parentToolCallId);
+  const { history, compaction, boundaryMessageId } = runtimeHistorySeed(messages, options.compaction);
+  let source = history.filter((message) => !message.parentToolCallId);
 
-  const throughId = options.compaction?.throughMessageId;
-  const summary = options.compaction?.summary?.trim();
+  const throughId = compaction?.throughMessageId;
+  const summary = compaction?.summary?.trim();
   if (summary && throughId) {
     const index = source.findIndex((message) => message.id === throughId);
     if (index >= 0) {
@@ -101,7 +103,7 @@ export function pluginLlmContextFromTranscript(
 
   const projected: PluginLlmMessage[] = [];
   if (summary) {
-    const tokens = options.compaction?.tokensBefore;
+    const tokens = compaction?.tokensBefore;
     projected.push({
       role: "system",
       content:
@@ -111,7 +113,8 @@ export function pluginLlmContextFromTranscript(
     });
   }
   for (const message of source) {
-    const next = toPluginMessage(message, maxToolResultChars);
+    const row = boundaryMessageId === undefined ? message : messageForModelContext(message);
+    const next = row && toPluginMessage(row, maxToolResultChars);
     if (next) projected.push(next);
   }
 

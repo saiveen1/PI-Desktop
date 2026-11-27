@@ -45,7 +45,7 @@ export function isIncludedContextBlock(source: TurnContextMessage, block: Contex
   return !block.excluded && (block.kind === "tool" || Boolean(block.value) || hasOpaqueThinking(source, block));
 }
 
-export function proposeContextEdits(rows: ContextRow[], restoreAll: boolean) {
+export function proposeContextEdits(rows: ContextRow[], restoreAll: boolean, allowWholeTurnRestore: boolean) {
   const edits: TurnContextEdit[] = [];
   const modified = rows.some(({ source }) => source.override || source.legacyExcludeThinking);
   let matchesOriginals = true;
@@ -86,6 +86,6 @@ export function proposeContextEdits(rows: ContextRow[], restoreAll: boolean) {
     if (!hasOverride && !restoreAll && source.legacyExcludeThinking && next.excludeThinking === undefined) next.excludeThinking = true;
     edits.push({ messageId: source.messageId, contextOverride: hasOverride || next.excludeThinking === true ? next : null });
   }
-  const restore = restoreAll && matchesOriginals && modified;
+  const restore = allowWholeTurnRestore && restoreAll && matchesOriginals && modified;
   return { edits: restore ? [] : edits, restore, invalid };
 }

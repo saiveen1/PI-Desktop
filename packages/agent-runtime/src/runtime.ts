@@ -13,6 +13,7 @@ import { parseSubagentTerminalDiagnostics } from "./subagent-terminal.js";
 import { buildDelegationModelTool } from "./delegation-model-tool.js";
 import { resolveDelegationRunPolicy, describeDelegationRunPolicy, isDelegationRunPolicySnapshot, type DelegationRunPolicy, type DelegationSettings, type DelegationApprovalDecision, DelegationRequestError, resolveUnknownUpstreamRetryLimit } from "@pi-desktop/shared";
 import { appendLocalFileReferenceContext, historyForModelContext } from "@pi-desktop/shared";
+import { runtimeHistorySeed } from "./runtime-history-seed.js";
 import { buildJobTools } from "./background-job-tools.js";
 import {
   mutationFailureKey, mutationTerminationAdvice, mutationTerminationMessage, mutationTerminationCode,
@@ -1895,6 +1896,7 @@ export class DesktopAgentRuntime {
   /** Transcript rows used to rebuild a resumed delegate's context (ADR 0279):
    * the seed history at launch plus every row this session's delegates emit. */
   private readonly transcriptHistory: UiMessage[];
+  private readonly contextBoundaryMessageId?: string;
   /** Row ids already in `transcriptHistory` from live delegate events, so a
    * retried stream appends once. */
   private readonly appendedDelegationRowIds = new Set<string>();
@@ -2107,9 +2109,10 @@ export class DesktopAgentRuntime {
   constructor(opts: AgentRuntimeOptions) {
     this.sessionId = opts.sessionId;
     this.turnId = opts.turnId;
-    // A restored checkpoint already compacted the window: stage
-    // `on.compaction` injects apply from the first run turn.
-    this.modeState = new RuntimeModeState(opts.mode, opts.modeDefinition, { compacted: Boolean(opts.compaction) });
+    const seed = runtimeHistorySeed(opts.history, opts.compaction);
+    this.contextBoundaryMessageId = seed.boundaryMessageId;
+    this.activeCompaction = seed.compaction;
+    this.modeState = new RuntimeModeState(opts.mode, opts.modeDefinition, { compacted: Boolean(seed.compaction) });
     this.planningState = proposalKindForMode(this.mode) ? "planning" : "inactive";
     this.provider = opts.provider;
     this.thinkingLevel = clampThinkingLevel(opts.provider, opts.thinkingLevel);
@@ -2171,17 +2174,13 @@ export class DesktopAgentRuntime {
     this.models = models;
     const runtimeApiKey = providerRequestKey(this.provider);
 
-    this.transcriptHistory = [...(opts.history ?? [])];
+    this.transcriptHistory = seed.history;
     this.delegationRecovery = new DelegationRecovery(this.transcriptHistory);
-    this.fullEntries = this.historyToEntries(this.transcriptHistory, opts.compaction?.throughMessageId);
+    this.fullEntries = this.historyToEntries(this.transcriptHistory, seed.compaction?.throughMessageId);
     this.uniqueToolCalls = createToolCallIdentity(this.fullEntries.map((entry) => entry.message));
-    this.activeCompaction = opts.compaction;
-    this.delegationChains.hydrate(
-      rebuildChainsFromTranscript(this.transcriptHistory),
-    );
+    this.delegationChains.hydrate(rebuildChainsFromTranscript(this.transcriptHistory));
     // Parts: [0] is the product persona; [1:] are operational rules a custom
     // SYSTEM.md must not remove (tool guidance, delegation, scratch, skills).
-
     const defaultSystemPromptParts = [
       DEFAULT_RUNTIME_SYSTEM_PROMPT,
       // Workflow rules.
@@ -8292,6 +8291,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
           : { value: details };
     return {
       ...base,
+      ...(this.contextBoundaryMessageId ? { contextBoundaryMessageId: this.contextBoundaryMessageId } : {}),
       generation: this.activeCompaction
         ? checkpointGeneration(this.activeCompaction.details) + 1
         : 1,

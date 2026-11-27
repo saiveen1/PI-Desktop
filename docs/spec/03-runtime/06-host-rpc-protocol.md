@@ -23,17 +23,29 @@ or retraction does not delete another prompt. No history array is required.
 ### Whole-turn model-context overlays
 
 `session.getTurnContext({ sessionId, anchorMessageId }) -> { snapshot }` reads
-the latest eligible completed turn under the Host lock. The snapshot contains
+the eligible completed turn ending at that anchor under the Host lock. The
+snapshot identifies whether it is the latest turn (`isLatestTurn`) and contains
 original, uncapped top-level assistant/tool rows, their existing context overrides,
 and an opaque revision. Recognized binary image/audio payloads in result text
 use explicit editor placeholders; canonical results remain complete. Ordinary
 prose is not truncated. Native/remote/imported/scheduled/busy histories are rejected.
 
 `session.editTurnContext({ sessionId, anchorMessageId, expectedRevision, edits,
-restore? }) -> { snapshot, updates }` applies a sparse list of desired per-row
+restore?, excludeHistoryThinking?, excludePreviousTurns? }) -> { snapshot, updates }` applies a sparse list of desired per-row
 `contextOverride` objects (or null to restore a row). `restore: true` requires
 an empty edit list and clears this turn's overrides and legacy thinking exclusions.
 The revision covers source content and current overlays; stale edits fail atomically.
+An explicit `excludeHistoryThinking: true` on the latest turn excludes all
+existing top-level assistant thinking across the active conversation, including
+that turn, in the same save. It does not suppress future thinking, rewrite raw
+messages, or drop later turns when editing a historical anchor. The response
+remains scoped to the selected turn; it never ships the entire history.
+`excludePreviousTurns` is a separate optional boolean: omission preserves the
+selected turn's boundary, true sets it and false clears it. The snapshot reports
+that turn's own setting, not whether a later boundary currently excludes it.
+The Host resolves the opening prompt from the assistant anchor; clients cannot
+designate an arbitrary user or tool row. A changed boundary returns the prompt
+overlay in `updates`. Restoring answer/process blocks alone preserves the boundary.
 The final answer may be excluded; when included its text must be nonblank.
 Tools preserve their names/IDs/status;
 only context arguments/result text or paired inclusion can change. Unknown fields,

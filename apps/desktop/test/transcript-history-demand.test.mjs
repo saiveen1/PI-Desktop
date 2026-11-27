@@ -86,16 +86,19 @@ test('transcript history demand and turn context editing', { timeout: 30000, ski
       return result.value;
     };
     await send('Page.enable');
-    const loaded = new Promise(resolve => {
-      const onMessage = ({ data }) => {
-        if (JSON.parse(data).method !== 'Page.loadEventFired') return;
-        socket.removeEventListener('message', onMessage);
-        resolve();
-      };
-      socket.addEventListener('message', onMessage);
-    });
-    await send('Page.navigate', { url });
-    await loaded;
+    const loadFixture = async () => {
+      const loaded = new Promise(resolve => {
+        const onMessage = ({ data }) => {
+          if (JSON.parse(data).method !== 'Page.loadEventFired') return;
+          socket.removeEventListener('message', onMessage);
+          resolve();
+        };
+        socket.addEventListener('message', onMessage);
+      });
+      await send('Page.navigate', { url });
+      await loaded;
+    };
+    await loadFixture();
     assert.equal(await evaluate('typeof historyDemand'), 'object', 'production fixture must mount');
     const probe = expr => evaluate('historyDemand.' + expr);
 
@@ -246,12 +249,12 @@ test('transcript history demand and turn context editing', { timeout: 30000, ski
         assert.deepEqual(await probe(`finishBoundedTurn("${action}")`), { ...expected, calls });
       }
     });
-    await t.test('Edit context previews and saves only the latest turn’s model overlays', async () => {
+    await t.test('Edit context previews and saves model overlays on the selected turn', async () => {
       const result = await evaluate('exerciseTurnContext()');
       assert.deepEqual({ ...result.confirmed, focus: result.initialFocus }, {
         body: 'Edited final answer', bold: true, disclosure: 'Edited · View original', focus: 'Final answer',
       });
-      assert.equal(result.actionCount, 1);
+      assert.equal(result.actionCount, 2);
       assert.equal(result.forkCount, 2);
       assert.deepEqual(result.collapsed, { kinds: ['final'], expanded: 'false', label: 'Thinking, intermediate text and tools (4)', focusedFinal: true });
       assert.deepEqual(result.defaults, { kinds: ['final', 'thinking', 'text', 'tool', 'thinking'],
@@ -278,7 +281,7 @@ test('transcript history demand and turn context editing', { timeout: 30000, ski
       assert.equal(result.originalClosed, true);
       assert.equal(result.revealed, 'Original final answer');
       assert.deepEqual(result.receipt, { middle: 'Original intermediate text', path: 'notes.md', result: 'File content\nOriginal tool result', hasOverlay: false });
-      assert.deepEqual(result.historical, { body: 'Edited final answer', closed: true, pencil: false });
+      assert.deepEqual(result.historical, { body: 'Edited final answer', closed: true, pencil: true });
       assert.deepEqual(result.reopened, ['**Edited final answer**', 'Edited middle text', 'Edited result']);
       assert.deepEqual(result.excluded, { label: 'Not sent to model', copy: false, originalHidden: true, noProse: true, original: 'Original final answer' });
       assert.equal(result.originalDetails, 'Original intermediate text');
@@ -326,6 +329,68 @@ test('transcript history demand and turn context editing', { timeout: 30000, ski
         { ...target, expectedRevision: '3', edits: [], restore: true },
         { ...target, expectedRevision: '4', edits: [{ messageId: 'answer', contextOverride: { version: 1, content: 'Edited final answer' } }] },
       ]);
+    });
+    await t.test('a paged historical turn edits in place; the tail-only option excludes existing thinking without touching a new turn', async () => {
+      const result = await evaluate('exerciseHistoricalTurnContext()');
+      assert.equal(result.paged, true);
+      assert.equal(result.historicalOption, false);
+      assert.equal(result.suffixIntact, true);
+      assert.equal(result.sameFocus, true);
+      assert.equal(result.defaultOff, true);
+      assert.deepEqual(result.preview.blocks, ['final']);
+      assert.equal(result.preview.count, 'Included: 1 / Omitted: 1');
+      assert.match(result.preview.scope, /including this turn.*unloaded history.*Preview shows only this turn.*Future turns are unaffected/);
+      assert.deepEqual(result.undone, { count: 'Included: 2 / Omitted: 0', disabled: true, writes: 1 });
+      assert.equal(result.restored, true);
+      assert.equal(result.canceled, 1);
+      assert.equal(result.reopenedOff, true);
+      const oldOverlay = { version: 1, thinking: 'Edited old reasoning', excludeThinking: false, content: 'Edited historical answer' };
+      assert.deepEqual(result.visible, {
+        'old-context-answer': { ...oldOverlay, excludeThinking: true }, 'opaque-context-answer': { version: 1, excludeThinking: true },
+        'nested-context-row': null, 'old-tool-row': null, 'plain-context-answer': null,
+      });
+      assert.deepEqual(result.savedLatest, { version: 1, excludeThinking: true });
+      assert.equal(result.followup, true);
+      const sessionId = 'historical-context-edit';
+      assert.deepEqual(result.writes, [
+        { sessionId, anchorMessageId: 'old-context-answer', expectedRevision: '0', edits: [{ messageId: 'old-context-answer', contextOverride: oldOverlay }] },
+        { sessionId, anchorMessageId: 'latest-context-answer', expectedRevision: '1', edits: [], excludeHistoryThinking: true },
+      ]);
+      assert.equal(result.historyReads.length, 3, 'one bounded refresh covers the loaded older page');
+      assert.deepEqual(result.historyReads[2], { id: sessionId, messageAround: 'old-context-answer', messageLimit: 100, contentLimit: 65536 });
+    });
+    await t.test('historical context boundary preserves the transcript and Fork, across renderer reload', async () => {
+      const result = await evaluate('exerciseContextBoundary()');
+      for (const key of ['initiallyOff', 'historicalOption', 'localThinkingIndependent', 'finalOnlyIndependent', 'stalePageIgnored',
+        'suffix', 'unrelatedUntouched', 'reopened', 'restoreIndependent', 'restoredStillExcluded']) assert.equal(result[key], true, key);
+      assert.deepEqual(result.windows, [
+        ['first-answer', 'prior-prompt', 'prior-answer'],
+        ['prefix', 'first-prompt', 'first-tool', 'first-answer', 'prior-prompt', 'prior-answer'],
+        ['first-prompt', 'first-tool', 'first-answer', 'prior-prompt', 'prior-answer'],
+      ]);
+      assert.deepEqual(result.marker, { tool: true, oldPrompt: true, oldReply: true, toolLabel: 'Not sent to model',
+        text: 'Not sent to model', divider: 'dashed', subdued: true });
+      const sessionId = 'boundary-edit';
+      assert.deepEqual(result.writes, [
+        { sessionId, anchorMessageId: 'prior-answer', expectedRevision: '0', edits: [], excludePreviousTurns: true },
+        { sessionId, anchorMessageId: 'cut-answer', expectedRevision: '1', edits: [
+          { messageId: 'cut-answer', contextOverride: { version: 1, excludeThinking: true } },
+        ], excludePreviousTurns: true },
+        { sessionId, anchorMessageId: 'cut-answer', expectedRevision: '2', edits: [], restore: true },
+      ]);
+      assert.equal(result.reads.length, 4, 'one bounded refresh per boundary change, plus search and the held page');
+      assert.ok(result.reads.every(read => read.messageLimit <= 100));
+      assert.deepEqual(result.forks, [{ sessionId, title: 'Source conversation (branch)', throughMessageId: 'first-answer' }]);
+      assert.deepEqual(result.branch, { ids: ['prefix', 'first-prompt', 'first-tool', 'first-answer'], marked: [] });
+
+      await loadFixture();
+      const restored = await evaluate('exerciseContextBoundary(true)');
+      const ids = ['first-prompt', 'first-tool', 'first-answer', 'prior-prompt'];
+      assert.deepEqual(restored.oldPage, { ids, marked: ids, labels: Array(3).fill('Not sent to model') });
+      assert.equal(restored.persisted, true);
+      assert.deepEqual(restored.earlierCut, { prior: true, kept: true, old: true });
+      assert.equal(restored.cleared, true);
+      assert.deepEqual(restored.writes.map(write => write.excludePreviousTurns), [false, false]);
     });
   } finally {
     if (socket?.readyState === WebSocket.OPEN) {

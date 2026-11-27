@@ -250,7 +250,9 @@ function HostToolRow({
       className={`tool-row ${open ? "open" : ""} status-${toolStatus.kind === "failed" ? "error" : toolStatus.kind}`}
       role="region"
       data-message-id={message.id}
+      data-excluded-by-context-boundary={message.excludedByContextBoundary || undefined}
       aria-label={`${t("chat.toolCall")}: ${rawName}${agentName ? `, ${agentName}` : ""}${statusLabel ? `, ${statusLabel}` : ""}`}
+      aria-description={message.excludedByContextBoundary ? t("turnContext.notSent") : undefined}
     >
         <div className={`tool-row-head${runHead ? " is-run" : ""}`}>
           <button

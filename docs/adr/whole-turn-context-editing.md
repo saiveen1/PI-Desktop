@@ -13,9 +13,22 @@ removing call/result halves separately would produce invalid model requests.
 
 ## Decision
 
-- The completed, idle local turn offers **Edit context**. Older turns require
-  the existing explicit Fork action first. Running, native, remote, imported,
+- Any eligible completed assistant turn in an idle local conversation offers
+  **Edit context**. Historical edits keep the later transcript in place; Fork
+  remains available when a separate conversation is wanted. Only the latest turn
+  offers a separate, opt-in save operation to exclude all top-level assistant
+  thinking in the active history through that turn. This includes reasoning
+  outside the loaded window, not future turns. It preserves answers, existing
+  non-thinking edits, and tool receipts. Neither action reverses conclusions
+  already expressed in later prose. Running, native, remote, imported,
   scheduled or otherwise read-only histories are not editable through this path.
+- **Exclude previous turns** is independent of all per-turn edits. Store a
+  reversible boundary on the selected turn's opening user message, rather than
+  marking each earlier row as removed. The last boundary present on a branch
+  wins. The model keeps that prompt and the subsequent conversation; excluded
+  messages, tool receipts, and old summaries must not re-enter rebuilt history.
+  Forking before the boundary therefore needs no special undo or source mutation.
+  Clearing it reveals the previous boundary, or all history if none remains.
 - Rust supplies the canonical current-turn snapshot and its opaque revision.
   Save checks that revision under the Host lock, including turn membership and
   prior overlays. A stale save fails without changing the conversation.

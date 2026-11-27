@@ -2,6 +2,7 @@ import { flushSync } from 'react-dom';
 import { I18nextProvider } from 'react-i18next';
 import { IPC } from '@pi-desktop/shared';
 import { ChatTranscript } from '../../src/features/chat/transcript/ChatTranscript';
+import { useTranscriptView } from '../../src/hooks/use-transcript-view';
 import { useAppStore } from '../../src/stores/app-store';
 
 export async function exerciseTurnContext({ root, i18n, message, frame, until }) {
@@ -16,7 +17,7 @@ export async function exerciseTurnContext({ root, i18n, message, frame, until })
     toolName: row.toolName, toolArgs: row.toolArgs, toolResultText: row.role === 'tool' ? row.content : undefined }));
   const writes = [], reads = [], errors = [], persisted = new Map();
   let revision = 0, heldRead, heldWrite;
-  const readSnapshot = () => ({ sessionId: id, anchorMessageId: answer.id, revision: String(revision),
+  const readSnapshot = () => ({ sessionId: id, anchorMessageId: answer.id, revision: String(revision), isLatestTurn: true,
     messages: snapshotRows.map(row => ({ ...row, override: persisted.get(row.messageId) })) });
   const reloaded = () => rows.map(row => ({ ...row, contextOverride: persisted.get(row.id) }));
   window.piDesktop = { invoke: async (channel, input) => {
@@ -67,7 +68,11 @@ export async function exerciseTurnContext({ root, i18n, message, frame, until })
   const press = async (text, parent) => { button(text, parent).click(); await frame(); };
   const processToggle = () => form().querySelector('button[aria-controls]');
   const expand = async () => { processToggle().click(); await frame(); };
-  const open = async () => { actions()[0].click(); await until(form, 'context editor did not open'); };
+  const open = async () => {
+    document.querySelector('[data-message-id="answer"].message-bubble').closest('[role=article]')
+      .querySelector('button[aria-label="Edit context"]').click();
+    await until(form, 'context editor did not open');
+  };
   const change = async (field, value) => {
     Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(field, value);
     field.dispatchEvent(new Event('input', { bubbles: true }));
@@ -97,7 +102,7 @@ export async function exerciseTurnContext({ root, i18n, message, frame, until })
   await frame();
   const finalExclusionAllowed = !button('Save').disabled && !button('Preview').disabled;
   await press('Restore block', block('final'));
-  await press('Exclude all thinking');
+  await press(i18n.t('turnContext.excludeThinking'));
   const noThinking = count();
   await press('Preview');
   const noThinkingKinds = blocks().map(row => row.dataset.contextKind);
@@ -197,7 +202,7 @@ export async function exerciseTurnContext({ root, i18n, message, frame, until })
   const clearAfterReload = !notice() && !bubble().querySelector('details') && bubble().querySelector('.prose-chat')?.innerText === 'Original final answer';
 
   heldRead = Promise.withResolvers();
-  actions()[0].click();
+  actions().at(-1).click();
   const staleReadStarted = reads.length;
   hydrate('other', [message('other-prompt')]);
   hydrate();
@@ -244,4 +249,281 @@ export async function exerciseTurnContext({ root, i18n, message, frame, until })
     initialFocus, confirmed, collapsed, copied, originalClosed, revealed, receipt, historical, excluded,
     blankFinalBlocked, finalExclusionAllowed, invalidArgs, preview, pending, afterFailure, windows, original, editedAfterReload, reopened, originalDetails,
     restoration, clearAfterReload, staleReadStarted, staleReadIgnored, staleSaveIgnored, busyDisabled, busyWrites, reads, writes, errors };
+}
+
+export async function exerciseHistoricalTurnContext({ root, i18n, message, frame, until }) {
+  await i18n.changeLanguage('en');
+  const id = 'historical-context-edit';
+  const reply = (id, extra = {}) => ({ ...message(id), role: 'assistant', ...extra });
+  const old = reply('old-context-answer', { contextOverride: { version: 1, thinking: 'Edited old reasoning', excludeThinking: false } });
+  const opaque = reply('opaque-context-answer', { providerReplay: { version: 1, blocks: [{ type: 'thinking', length: 0, signature: 'fixture' }] } });
+  const nested = reply('nested-context-row', { thinking: 'Nested reasoning', parentToolCallId: 'old-task' });
+  const tool = { ...message('old-tool-row'), role: 'tool', toolName: 'Task', toolCallId: 'old-task', thinking: 'Not assistant reasoning' };
+  const plain = reply('plain-context-answer');
+  const latest = reply('latest-context-answer', { thinking: 'Recent reasoning' });
+  const future = reply('future-context-answer', { thinking: 'Future reasoning' });
+  let rows = [message('old-context-prompt'), old, message('opaque-context-prompt'), tool, nested, opaque,
+    message('plain-context-prompt'), plain, message('latest-context-prompt'), latest];
+  let revision = 0;
+  const writes = [], historyReads = [];
+  const persisted = new Map([[old.id, old.contextOverride]]);
+  const canonical = (row) => ({ ...row, contextOverride: persisted.get(row.id) });
+  const snapshot = (row) => ({ sessionId: id, anchorMessageId: row.id, revision: String(revision),
+    isLatestTurn: rows.at(-1) === row, messages: [{ messageId: row.id, role: row.role, final: true,
+      content: row.content, thinking: row.thinking, hasThinking: Boolean(row.thinking), override: persisted.get(row.id) }] });
+  const allowRefresh = Promise.withResolvers();
+  window.piDesktop = { invoke: async (channel, input) => {
+    if (channel === IPC.invoke.sessionGet) {
+      historyReads.push(input);
+      if (revision === 2) await allowRefresh.promise;
+      const end = revision === 0 && input.messageAround === old.id ? rows.length - 2 : Math.min(input.messageBefore ?? rows.length, rows.length);
+      const start = Math.max(0, end - input.messageLimit);
+      return { ok: true, data: { session: { id, source: 'desktop', messages: rows.slice(start, end).map(canonical),
+        messageStart: start, messageEnd: end, hasMoreBefore: start > 0, hasMoreAfter: end < rows.length } } };
+    }
+    const anchor = rows.find(row => row.id === input.anchorMessageId);
+    if (channel === IPC.invoke.sessionGetTurnContext) return { ok: true, data: { snapshot: snapshot(anchor) } };
+    if (channel !== IPC.invoke.sessionEditTurnContext) throw Error(`Unexpected ${channel}`);
+    writes.push(input);
+    if (input.expectedRevision !== String(revision) || (input.excludeHistoryThinking && anchor !== latest)) throw Error('Invalid fixture edit');
+    for (const { messageId, contextOverride } of input.edits) persisted.set(messageId, contextOverride);
+    if (input.excludeHistoryThinking) {
+      for (const row of [old, opaque, latest]) persisted.set(row.id, { version: 1, ...persisted.get(row.id), excludeThinking: true });
+    }
+    // Like the real Host, never return older rows in a bulk mutation response.
+    const updates = [{ messageId: anchor.id, contextOverride: persisted.get(anchor.id) }];
+    revision++;
+    return { ok: true, data: { updates, snapshot: snapshot(anchor) } };
+  } };
+  const tail = rows.slice(-2);
+  useAppStore.setState({ page: 'chat', activeSessionId: id, isRunning: false, messages: tail,
+    sessions: [{ id, source: 'desktop' }], retainedSessionIds: [id], retainedTranscripts: { [id]: tail }, transcriptViews: {},
+    sessionHistory: { [id]: { messageStart: rows.length - tail.length, hasMoreBefore: true } } });
+  function Conversation() {
+    const view = useTranscriptView(id);
+    return <ChatTranscript sessionId={id} messages={view.messages} searchTarget={view.focus} isRunning={false}
+      hasMoreAfter={view.hasMoreAfter} readingWindow={view.historical} liveTail={view.liveTail} />;
+  }
+  flushSync(() => root.render(<I18nextProvider i18n={i18n}><Conversation /></I18nextProvider>));
+  const state = () => useAppStore.getState();
+  const bubble = (id) => document.querySelector(`.message-bubble[data-message-id="${id}"]`);
+  const form = () => document.querySelector('.turn-context-editor');
+  const button = (label) => [...form().querySelectorAll('button')].find(element => element.textContent === label);
+  const press = async (label) => { button(label).click(); await frame(); };
+  const checkbox = () => form().querySelector('header input[aria-describedby$="-history-thinking"]');
+  const toggle = async () => { checkbox().click(); await frame(); };
+  const count = () => form().querySelector('.turn-context-count').textContent;
+  const open = async (id) => {
+    await until(() => {
+      const edit = bubble(id)?.closest('[role=article]').querySelector('button[aria-label="Edit context"]');
+      if (!edit || edit.disabled) return false;
+      edit.click();
+      return true;
+    }, `edit action for ${id} did not appear`);
+    await until(form, `context editor for ${id} did not open`);
+  };
+
+  await state().navigateTranscript({ sessionId: id, messageId: old.id, query: old.content });
+  const paged = state().transcriptViews[id].hasMoreAfter && !state().messages.some(row => row.id === old.id);
+  await open(old.id);
+  const historicalOption = Boolean(checkbox());
+  const field = form().querySelector('[data-context-kind=final] textarea');
+  Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(field, 'Edited historical answer');
+  field.dispatchEvent(new Event('input', { bubbles: true }));
+  await frame();
+  await press('Save');
+  await until(() => !form() && bubble(old.id)?.querySelector('.prose-chat')?.textContent === 'Edited historical answer', 'historical edit did not render');
+  const suffixIntact = state().messages === tail && state().activeSessionId === id;
+  const sameFocus = state().transcriptViews[id].focus?.messageId === old.id;
+  await state().loadTranscriptPage(id, 'after');
+  // Returning from the search window moves the answer between transcript regions.
+  // Commit that transition before opening an editor tied to the mounted row.
+  flushSync(() => state().returnToLatestTranscript(id));
+  await frame();
+  await open(latest.id);
+  const defaultOff = !checkbox().checked && button('Save').disabled;
+  await toggle();
+  await press('Preview');
+  const preview = { blocks: [...form().querySelectorAll('[data-context-kind]')].map(row => row.dataset.contextKind), count: count(),
+    scope: document.getElementById(checkbox().getAttribute('aria-describedby')).textContent };
+  await toggle();
+  const undone = { count: count(), disabled: button('Save').disabled, writes: writes.length };
+  await toggle();
+  await press('Restore originals');
+  const restored = !checkbox().checked && button('Save').disabled;
+  await toggle();
+  await press('Cancel');
+  const canceled = writes.length;
+  await open(latest.id);
+  const reopenedOff = !checkbox().checked;
+  await toggle();
+  await press('Save');
+  await until(() => historyReads.length === 3, 'confirmed bulk save did not request a bounded history refresh');
+  // A fresh turn can arrive once Host commits, even if the UI's read is still pending.
+  const futurePrompt = message('future-context-prompt');
+  rows = [...rows, futurePrompt, future];
+  useAppStore.setState({ messages: [...state().messages, futurePrompt, future] });
+  allowRefresh.resolve();
+  const loaded = () => state().transcriptViews[id].messages;
+  await until(() => loaded().find(row => row.id === opaque.id)?.contextOverride?.excludeThinking === true, 'older flags did not refresh');
+  const visible = Object.fromEntries([old, opaque, nested, tool, plain].map(({ id }) => [id, loaded().find(row => row.id === id).contextOverride ?? null]));
+  const followup = state().messages.at(-1) === future && !state().messages.at(-1).contextOverride;
+  const savedLatest = state().messages.find(row => row.id === latest.id).contextOverride;
+  return { paged, historicalOption, suffixIntact, sameFocus, defaultOff, preview, undone, restored, canceled, reopenedOff,
+    visible, followup, savedLatest, writes, historyReads };
+}
+
+export async function exerciseContextBoundary({ root, i18n, message, frame, until }, restarting = false) {
+  await i18n.changeLanguage('en');
+  const id = 'boundary-edit';
+  const answer = (id) => ({ ...message(id), role: 'assistant', thinking: 'Recorded reasoning' });
+  const rows = [message('prefix'), message('first-prompt'),
+    { ...message('first-tool'), role: 'tool', toolCallId: 'call-old', toolName: 'Read', toolStatus: 'success', toolArgs: { path: 'first.md' } },
+    answer('first-answer'), message('prior-prompt'), answer('prior-answer'),
+    message('cut-prompt'), answer('cut-answer'), message('suffix-prompt'), answer('suffix-answer')];
+  const other = [message('unrelated-pane')];
+  const journal = restarting ? JSON.parse(sessionStorage.getItem(id)) : { revision: 0, overrides: {} };
+  const overrides = journal.overrides;
+  const source = { id, title: 'Source conversation', source: 'desktop' };
+  const reads = [], writes = [], forks = [];
+  const canonical = (branch = rows) => {
+    const cut = branch.findLastIndex(row => overrides[row.id]?.excludePreviousTurns === true);
+    return branch.map((row, i) => ({ ...row, contextOverride: overrides[row.id], excludedByContextBoundary: i < cut || undefined }));
+  };
+  const snapshot = index => ({ sessionId: id, anchorMessageId: rows[index].id, revision: String(journal.revision),
+    isLatestTurn: index === rows.length - 1, excludePreviousTurns: overrides[rows[index - 1].id]?.excludePreviousTurns === true,
+    messages: [{ messageId: rows[index].id, role: 'assistant', final: true, content: rows[index].content,
+      thinking: rows[index].thinking, hasThinking: true, override: overrides[rows[index].id] }] });
+  const ok = data => ({ ok: true, data });
+  let holdBefore;
+  window.piDesktop = { invoke: async (channel, input) => {
+    if (channel === IPC.invoke.sessionGet) {
+      reads.push(input);
+      if (input.messageLimit === undefined) throw Error('Unexpected full hydration');
+      const oldPage = input.messageAround === 'first-answer' && input.messageLimit === 60;
+      const start = oldPage ? 1 : input.messageAround === 'cut-answer' && input.messageLimit === 60 ? 1 : 0;
+      const end = oldPage ? 5 : Math.min(input.messageBefore ?? rows.length, rows.length);
+      const response = ok({ session: { ...source, messages: canonical().slice(start, end),
+        messageStart: start, messageEnd: end, hasMoreBefore: start > 0, hasMoreAfter: end < rows.length } });
+      if (holdBefore && input.messageBefore === 1) await holdBefore.promise;
+      return response;
+    }
+    if (channel === IPC.invoke.sessionFork) {
+      forks.push(input);
+      return ok({ session: { ...source, id: 'excluded-fork', messages: canonical(rows.slice(0, 4)) } });
+    }
+    if (channel === IPC.invoke.plansPending) return ok({ plans: [] });
+    if (channel === IPC.invoke.pendingInteractive) return ok({ asks: [], permissions: [] });
+    const index = rows.findIndex(row => row.id === input.anchorMessageId);
+    if (channel === IPC.invoke.sessionGetTurnContext) return ok({ snapshot: snapshot(index) });
+    if (channel !== IPC.invoke.sessionEditTurnContext || input.expectedRevision !== String(journal.revision)) throw Error('Unexpected edit');
+    writes.push(input);
+    const updates = input.restore ? [{ messageId: rows[index].id, contextOverride: null }] : [...input.edits];
+    if (input.excludePreviousTurns !== undefined) updates.push({ messageId: rows[index - 1].id,
+      contextOverride: input.excludePreviousTurns ? { version: 1, excludePreviousTurns: true } : null });
+    for (const { messageId, contextOverride } of updates) {
+      if (contextOverride) overrides[messageId] = contextOverride;
+      else delete overrides[messageId];
+    }
+    journal.revision++;
+    return ok({ updates, snapshot: snapshot(index) });
+  } };
+  const state = useAppStore.getState;
+  const tailStart = restarting ? 6 : 3;
+  useAppStore.setState(state => ({ page: 'chat', activeSessionId: id, isRunning: false, messages: canonical().slice(tailStart),
+    sessions: [source, { id: 'other-boundary-pane', source: 'desktop' }], retainedSessionIds: [id, 'other-boundary-pane'],
+    sessionHistory: { [id]: { messageStart: tailStart, hasMoreBefore: true } }, transcriptViews: {},
+    settings: { ...state.settings, transcriptDisplayMode: 'flat' } }));
+  useAppStore.setState({ retainedTranscripts: { [id]: canonical().slice(0, 7), 'other-boundary-pane': other } });
+  function Conversation() {
+    const active = useAppStore(state => state.activeSessionId);
+    const view = useTranscriptView(active);
+    return <ChatTranscript key={active} sessionId={active} messages={view.messages} searchTarget={view.focus} isRunning={false}
+      hasMoreAfter={view.hasMoreAfter} readingWindow={view.historical} liveTail={view.liveTail} />;
+  }
+  flushSync(() => root.render(<I18nextProvider i18n={i18n}><Conversation /></I18nextProvider>));
+  const marked = '[data-excluded-by-context-boundary]';
+  const row = messageId => document.querySelector(`[data-message-id="${messageId}"]`);
+  const article = messageId => row(messageId)?.closest('[role=article]');
+  const form = () => document.querySelector('.turn-context-editor');
+  const boundary = () => form().querySelector('input[aria-describedby$="-previous-turns"]');
+  const button = label => [...form().querySelectorAll('button')].find(element => element.textContent === label);
+  const navigate = messageId => state().navigateTranscript({ sessionId: id, messageId, query: '' });
+  const open = async messageId => {
+    await until(() => article(messageId)?.querySelector('button[aria-label="Edit context"]'), `missing edit action for ${messageId}`);
+    article(messageId).querySelector('button[aria-label="Edit context"]').click();
+    await until(form, `missing editor for ${messageId}`);
+  };
+  const save = async () => {
+    button('Save').click();
+    await until(() => !form(), 'boundary save did not settle');
+  };
+  const toggle = async () => { boundary().click(); await frame(); };
+  const flags = messages => messages.filter(row => row.excludedByContextBoundary).map(row => row.id);
+
+  if (restarting) {
+    await navigate('first-answer');
+    await until(() => article('first-answer')?.matches(marked), 'old page did not show its host-derived exclusion after reload');
+    const oldPage = { ids: state().transcriptViews[id].messages.map(row => row.id),
+      marked: flags(state().transcriptViews[id].messages), labels: [...document.querySelectorAll('.context-boundary-label')].map(label => label.textContent) };
+    await navigate('cut-answer');
+    await open('cut-answer');
+    const persisted = boundary().checked && button('Save').disabled;
+    await toggle();
+    await save();
+    const earlierCut = { prior: row('prior-prompt').matches('[data-context-boundary-start]'),
+      kept: !row('prior-prompt').matches(marked) && !article('prior-answer').matches(marked), old: article('first-answer').matches(marked) };
+    await open('prior-answer');
+    await toggle();
+    await save();
+    return { oldPage, persisted, earlierCut, writes, cleared: document.querySelectorAll(`${marked}, [data-context-boundary-start]`).length === 0 };
+  }
+
+  await navigate('cut-answer');
+  await open('prior-answer');
+  const initiallyOff = !boundary().checked && button('Save').disabled;
+  await toggle();
+  await save();
+  await open('cut-answer');
+  const historicalOption = [...form().querySelectorAll('header input')].length === 1 && !boundary().checked;
+  await toggle();
+  button(i18n.t('turnContext.excludeThinking')).click();
+  await frame();
+  const localThinkingIndependent = boundary().checked;
+  button('Keep only final answer').click();
+  await frame();
+  const finalOnlyIndependent = boundary().checked;
+  const focus = state().transcriptViews[id].focus;
+  holdBefore = Promise.withResolvers();
+  const stalePage = state().loadTranscriptPage(id, 'before');
+  await save();
+  holdBefore.resolve();
+  await stalePage;
+  const view = state().transcriptViews[id];
+  const stalePageIgnored = !view.loading && view.focus === focus && view.messageStart === 1 && !view.messages.some(row => row.id === 'prefix');
+  const windows = [state().messages, state().retainedTranscripts[id], view.messages].map(flags);
+  const suffix = !article('suffix-answer').matches(marked) && !row('cut-prompt').matches(marked) &&
+    row('cut-prompt').matches('[data-context-boundary-start]') && !article('cut-answer').matches(marked);
+  const unrelatedUntouched = state().retainedTranscripts['other-boundary-pane'] === other;
+  const earlier = article('first-answer');
+  earlier.querySelector('.turn-process > button[aria-expanded="false"]')?.click();
+  await until(() => row('first-tool'), 'excluded tool row did not render');
+  const tool = row('first-tool');
+  const marker = { tool: tool.matches(marked), oldPrompt: row('first-prompt').matches(marked), oldReply: earlier.matches(marked),
+    toolLabel: tool.getAttribute('aria-description'), text: earlier.querySelector('.context-boundary-label')?.textContent,
+    divider: getComputedStyle(row('cut-prompt')).borderBlockStartStyle, subdued: getComputedStyle(earlier).boxShadow !== 'none' };
+  await open('cut-answer');
+  const reopened = boundary().checked && button('Save').disabled;
+  button('Restore originals').click();
+  const restoreIndependent = boundary().checked;
+  await frame();
+  await save();
+  const restoredStillExcluded = row('cut-prompt').matches('[data-context-boundary-start]') && article('prior-answer').matches(marked);
+  earlier.querySelector(`button[aria-label="${i18n.t('chat.forkResponse')}"]`).click();
+  await until(() => state().activeSessionId === 'excluded-fork', 'Fork from the excluded prefix did not open the branch');
+  const forkMessages = state().messages;
+  sessionStorage.setItem(id, JSON.stringify(journal));
+  return { initiallyOff, historicalOption, localThinkingIndependent, finalOnlyIndependent, stalePageIgnored, windows, suffix, unrelatedUntouched,
+    marker, reopened, restoreIndependent, restoredStillExcluded, writes, reads, forks,
+    branch: { ids: forkMessages.map(row => row.id), marked: flags(forkMessages) } };
 }

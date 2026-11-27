@@ -5,7 +5,7 @@ import { Button, Checkbox, Field, Textarea } from "../../../components/ui";
 import { IconChevronDown, IconChevronRight } from "../../../components/icons";
 import { api } from "../../../lib/api";
 import { useAppStore } from "../../../stores/app-store";
-import { getEditableAssistantReply } from "../../../stores/runtime/transcript-action";
+import { canEditTurnContext, getTurnContextAnchor } from "../../../stores/runtime/transcript-action";
 import { createContextRows, hasOpaqueThinking, isIncludedContextBlock, parseContextArgs, proposeContextEdits, type ContextBlock } from "./turn-context-draft";
 
 function contextError(error: unknown, fallback: "loadFailed" | "saveFailed") {
@@ -15,15 +15,14 @@ function contextError(error: unknown, fallback: "loadFailed" | "saveFailed") {
 
 export function useTurnContextEditor(sessionId: string, anchorMessageId?: string) {
   const { t } = useTranslation();
-  const editable = useAppStore((state) => anchorMessageId !== undefined &&
-    getEditableAssistantReply(state, sessionId)?.id === anchorMessageId);
+  const editable = useAppStore((state) => anchorMessageId !== undefined && canEditTurnContext(state, sessionId, anchorMessageId));
   const [loading, setLoading] = useState(false);
   const [snapshot, setSnapshot] = useState<TurnContextSnapshot | null>(null);
   const owner = useRef<AbortController | null>(null);
   useEffect(() => () => owner.current?.abort(), [sessionId, anchorMessageId]);
 
   const begin = async () => {
-    if (!anchorMessageId || owner.current || getEditableAssistantReply(useAppStore.getState(), sessionId)?.id !== anchorMessageId) return;
+    if (!anchorMessageId || owner.current || !canEditTurnContext(useAppStore.getState(), sessionId, anchorMessageId)) return;
     const request = new AbortController();
     owner.current = request;
     setLoading(true);
@@ -31,7 +30,10 @@ export function useTurnContextEditor(sessionId: string, anchorMessageId?: string
     const unsubscribe = useAppStore.subscribe((state, previous) => {
       if (state.activeSessionId !== previous.activeSessionId ||
         state.selectingSessionId !== previous.selectingSessionId || state.page !== previous.page ||
-        (state.messages !== previous.messages && state.messages.findLast((message) => message.role !== "system")?.id !== anchorMessageId)) {
+        state.transcriptViews[sessionId]?.focus !== previous.transcriptViews[sessionId]?.focus ||
+        !getTurnContextAnchor(state, sessionId, anchorMessageId) ||
+        (state.messages !== previous.messages && state.messages.findLast((message) => message.role !== "system")?.id !==
+          previous.messages.findLast((message) => message.role !== "system")?.id)) {
         request.abort();
       }
     });
@@ -44,7 +46,7 @@ export function useTurnContextEditor(sessionId: string, anchorMessageId?: string
     try {
       const result = await api.getTurnContext({ sessionId, anchorMessageId });
       if (request.signal.aborted) return;
-      if (getEditableAssistantReply(useAppStore.getState(), sessionId)?.id !== anchorMessageId) {
+      if (!canEditTurnContext(useAppStore.getState(), sessionId, anchorMessageId)) {
         request.abort();
         return;
       }
@@ -82,6 +84,8 @@ export function TurnContextEditor({ snapshot, editable, signal, cancel }: {
   const [preview, setPreview] = useState(false);
   const [processOpen, setProcessOpen] = useState(false);
   const [restoreAll, setRestoreAll] = useState(false);
+  const [excludeHistoryThinking, setExcludeHistoryThinking] = useState(false);
+  const [excludePreviousTurns, setExcludePreviousTurns] = useState(snapshot.excludePreviousTurns === true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<ReturnType<typeof contextError> | null>(null);
   const inFlight = useRef(false);
@@ -90,11 +94,13 @@ export function TurnContextEditor({ snapshot, editable, signal, cancel }: {
   const blockList = rows.flatMap(({ source, blocks, originals }, rowIndex) => blocks.map((block, index) => ({
     source, block, original: originals[index], rowIndex, index, key: `${source.messageId}:${block.kind}`,
   })));
-  const included = blockList.filter(({ source, block }) => isIncludedContextBlock(source, block));
+  const bulkExclude = snapshot.isLatestTurn && excludeHistoryThinking;
+  const included = blockList.filter(({ source, block }) => !(bulkExclude && block.kind === "thinking") && isIncludedContextBlock(source, block));
   const final = blockList.find(({ block }) => block.kind === "final");
   const process = blockList.filter(({ block }) => block.kind !== "final");
-  const { edits, restore, invalid } = proposeContextEdits(rows, restoreAll);
-  const canSave = editable && !saving && !invalid && (edits.length > 0 || restore);
+  const { edits, restore, invalid } = proposeContextEdits(rows, restoreAll, !bulkExclude);
+  const boundaryChanged = excludePreviousTurns !== (snapshot.excludePreviousTurns === true);
+  const canSave = editable && !saving && !invalid && (edits.length > 0 || restore || bulkExclude || boundaryChanged);
   const save = async () => {
     if (!canSave || inFlight.current || signal.aborted) return;
     inFlight.current = true;
@@ -104,6 +110,8 @@ export function TurnContextEditor({ snapshot, editable, signal, cancel }: {
     try {
       const saved = await useAppStore.getState().editTurnContext({
         sessionId, anchorMessageId, expectedRevision: revision, edits, ...(restore ? { restore } : {}),
+        ...(bulkExclude ? { excludeHistoryThinking: true } : {}),
+        ...(boundaryChanged ? { excludePreviousTurns } : {}),
       }, signal);
       if (signal.aborted) return;
       if (saved) cancel();
@@ -120,7 +128,10 @@ export function TurnContextEditor({ snapshot, editable, signal, cancel }: {
   const change = (rowIndex: number, index: number, block: ContextBlock) => setRows((previous) => previous.map((row, i) =>
     i === rowIndex ? { ...row, blocks: row.blocks.map((item, j) => j === index ? block : item) } : row));
   const shortcut = (mode: "thinking" | "final" | "restore") => {
-    if (mode === "restore") setRestoreAll(true);
+    if (mode === "restore") {
+      setRestoreAll(true);
+      setExcludeHistoryThinking(false);
+    }
     setRows((previous) => previous.map((row) => ({
       ...row, blocks: mode === "restore" ? row.originals : row.blocks.map((block) => ({
         ...block, excluded: mode === "final" ? block.kind !== "final" : block.kind === "thinking" || block.excluded,
@@ -131,12 +142,14 @@ export function TurnContextEditor({ snapshot, editable, signal, cancel }: {
   const renderBlock = ({ source, block, original, rowIndex, index, key }: (typeof blockList)[number]) => {
     const label = block.kind === "tool" ? source.toolName || t("turnContext.tool") : t(`turnContext.${block.kind}`);
     const argsInvalid = block.kind === "tool" && !parseContextArgs(block.args);
+    const excludedByHistory = bulkExclude && block.kind === "thinking";
     const argsErrorId = `${titleId}-${rowIndex}-args-error`;
     return <li key={key} className="turn-context-block" data-context-kind={block.kind}>
       <div className="turn-context-row">
         <h4>{label}</h4>
         {!preview && <Checkbox label={t("turnContext.include")} aria-label={t("turnContext.includeBlock", { label })}
-          checked={!block.excluded} disabled={saving} onChange={(event) => change(rowIndex, index, { ...block, excluded: !event.currentTarget.checked })} />}
+          checked={!excludedByHistory && !block.excluded} disabled={saving || excludedByHistory}
+          onChange={(event) => change(rowIndex, index, { ...block, excluded: !event.currentTarget.checked })} />}
       </div>
       {preview ? <ContextValues source={source} block={block} /> : <>
         {block.kind === "tool" && <Field label={t("turnContext.args")}>
@@ -174,6 +187,14 @@ export function TurnContextEditor({ snapshot, editable, signal, cancel }: {
       <h3 id={titleId}>{t("turnContext.edit")}</h3>
       <p>{t("turnContext.description")}</p>
       <p>{t("turnContext.warning")}</p>
+      <Checkbox label={t("turnContext.excludePreviousTurns")} aria-describedby={`${titleId}-previous-turns`}
+        checked={excludePreviousTurns} disabled={saving} onChange={(event) => setExcludePreviousTurns(event.currentTarget.checked)} />
+      <p id={`${titleId}-previous-turns`}>{t("turnContext.previousTurnsScope")}</p>
+      {snapshot.isLatestTurn && <>
+        <Checkbox label={t("turnContext.excludeHistoryThinking")} aria-describedby={`${titleId}-history-thinking`}
+          checked={bulkExclude} disabled={saving} onChange={(event) => setExcludeHistoryThinking(event.currentTarget.checked)} />
+        <p id={`${titleId}-history-thinking`}>{t("turnContext.historyThinkingScope")}</p>
+      </>}
       <div className="turn-context-toolbar">
         <Button type="button" size="sm" variant="ghost" aria-pressed={preview} disabled={saving || (!preview && invalid)} onClick={() => {
           setPreview(!preview);

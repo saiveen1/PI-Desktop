@@ -105,4 +105,44 @@ try {
   await ipc.editTurnContext({ sessionId: id, anchorMessageId: "a2", expectedRevision: snapshot.revision, edits: [], restore: true });
   assert.ok((await get(id)).messages.every(m => !m.contextOverride));
   console.log("Explicit final-answer exclusion survives restart and restores without deleting the original");
+  // Reuse the final-only fork. Cut at its second prompt, then fork on each side.
+  const forkRows = (await get(child.id)).messages;
+  const before = forkRows.find(m => m.content === "Earlier answer").id;
+  const after = forkRows.find(m => m.content === "Original final").id;
+  const changeCut = async (excludePreviousTurns) => {
+    const target = { sessionId: child.id, anchorMessageId: after };
+    const { snapshot } = await ipc.getTurnContext(target);
+    return ipc.editTurnContext({ ...target, expectedRevision: snapshot.revision, edits: [], excludePreviousTurns });
+  };
+  await host.call("session.appendCompaction", { sessionId: child.id, compaction: {
+    id: "before-cut", throughMessageId: before, summary: "Obsolete summary sentinel", tokensBefore: 1000, createdAt: at,
+  } });
+  await changeCut(true);
+  await host.restart();
+  const cut = await get(child.id);
+  assert.ok(!cut.compaction, "even a checkpoint ending before the boundary must be discarded");
+  assert.equal(cut.messages.find(m => m.id === before).excludedByContextBoundary, true);
+  assert.ok(!cut.messages.find(m => m.content === "Inspect one file").excludedByContextBoundary);
+  const assertFinalOnly = async (session) => {
+    const messages = await request(session);
+    assert.deepEqual(messages.filter(m => m.role === "user").map(m => m.content), [
+      "Inspect one file", [{ type: "text", text: "Continue with the reviewed context." }],
+    ]);
+    assert.deepEqual(messages.filter(m => m.role === "assistant").map(m => m.content), ["Only final"]);
+    assert.equal(messages.filter(m => m.role === "tool" || m.tool_calls?.length).length, 0);
+    // This strict DeepSeek-compatible relay requires a sentinel, never the original reasoning.
+    assert.deepEqual(messages.filter(m => m.reasoning_content).map(m => m.reasoning_content), ["[reasoning not retained for this turn]"]);
+    assert.ok(!JSON.stringify(messages).includes("Obsolete summary sentinel"));
+  };
+  await assertFinalOnly(cut);
+  const earlyFork = (await host.call("session.fork", { sessionId: child.id, throughMessageId: before })).session;
+  const lateFork = (await host.call("session.fork", { sessionId: child.id, throughMessageId: after })).session;
+  assert.deepEqual((await request(earlyFork)).filter(m => m.role === "assistant").map(m => m.content), ["Earlier answer"]);
+  await assertFinalOnly(lateFork);
+  await changeCut(false);
+  await host.restart();
+  const restoredWire = await request(await get(child.id));
+  assert.deepEqual(restoredWire.filter(m => m.role === "assistant").map(m => m.content), ["Earlier answer", "Only final"]);
+  await assertFinalOnly(await get(lateFork.id));
+  console.log("Cutoff retained the question and final answer, invalidated the old summary, and remained branch-local after undo");
 } finally { await host.stop(); await rm(data, { recursive: true, force: true }); }

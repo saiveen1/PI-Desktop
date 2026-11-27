@@ -130,6 +130,22 @@ for (const thinkingContext of ["reply", "turn", "keep"]) {
     assert.deepEqual(h.events.find(([method]) => method === "session.editAssistantReply"), ["session.editAssistantReply", input]);
   });
 }
+test("history context options are separately validated and forwarded without changing defaults", async () => {
+  const input = { sessionId: "s", anchorMessageId: "a2", expectedRevision: "v1", edits: [] };
+  const h = ipcHarness();
+  for (const key of ["excludeHistoryThinking", "excludePreviousTurns"]) {
+    for (const value of [null, "true", 1, []]) {
+      await assert.rejects(h.invoke("sessionEditTurnContext", { ...input, [key]: value }), { errorCode: "INVALID_ARGUMENT" });
+    }
+  }
+  assert.deepEqual(h.events, [], "malformed options must not discard the warm runtime");
+  for (const fields of [{}, { excludeHistoryThinking: false }, { excludeHistoryThinking: true },
+    { excludePreviousTurns: false }, { excludePreviousTurns: true }, { excludePreviousTurns: true, excludeHistoryThinking: true }]) {
+    const request = { ...input, ...fields };
+    await h.invoke("sessionEditTurnContext", request);
+    assert.deepEqual(h.events.findLast(([method]) => method === "session.editTurnContext"), ["session.editTurnContext", request]);
+  }
+});
 test("reply edit rejects malformed thinking context choices before draining or writing", async () => {
   const h = ipcHarness();
   for (const thinkingContext of [null, 1, [], "all", ""]) {

@@ -156,9 +156,14 @@ This edition strengthens the existing framework rather than replacing it.
   keep only the final answer, or restore originals. The pencil opens on the
   final answer; expand the process to edit other blocks. After Save, the chat
   shows the edited answer with its original one click away. Excluded answers
-  are labeled. Tool receipts stay original; edits never rerun or undo tools. Earlier
-  turns are unchanged; fork an older answer first. Oversized editing snapshots
-  are refused instead of silently truncated.
+  are labeled. Tool receipts stay original; edits never rerun or undo tools. Edit
+  any completed turn in place without losing later messages. On the latest turn,
+  an optional checkbox excludes thinking from all turns so far, not from future
+  turns. To start model context at the selected question, choose **Exclude previous
+  turns**. Combine it with **Keep only final answer** to keep that question and
+  answer without its process. Earlier messages are labeled, not deleted; they
+  remain available for reading and forking. Oversized editing snapshots are
+  refused instead of silently truncated.
 
 - **Project-scoped groups, colored labels, and deliberate ordering.** Groups
   control placement; multiple labels do not duplicate conversations. Local project

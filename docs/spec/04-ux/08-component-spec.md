@@ -2338,8 +2338,8 @@ Single message render — either user (plaintext) or assistant (markdown streami
 - Hover actions: quiet icon-only action chips under the bubble — Copy on idle
   assistant turns; Fork and Regenerate on completed assistant turns; Edit and
   Delete on user turns. A streaming assistant turn omits its Copy action until
-  the response settles. The last completed text reply in an idle, editable local
-  Desktop conversation offers **Edit context** for its entire current turn.
+  the response settles. Each eligible completed text reply in an idle, editable
+  local Desktop conversation offers **Edit context** for that turn.
   Opening the editor focuses the final-answer field. Thinking, intermediate
   prose and tools are available under one initially collapsed process section.
   Preview follows replay order. Each block has inclusion, editing and
@@ -2355,7 +2355,15 @@ Single message render — either user (plaintext) or assistant (markdown streami
   as not sent to the model. Tool receipts always show actual results, not
   replacements from the editor. Restore removes overrides without executing
   anything. Save/cancel, errors, stale reads and narrow layouts remain guarded;
-  older turns require Fork first. See [whole-turn editor](../../adr/whole-turn-context-editing.md).
+  later turns remain intact when editing history. Only the latest turn offers a
+  separate unchecked option to exclude thinking across the entire history up to
+  and including that turn. It does not change how future turns handle thinking.
+  Independently, a completed turn can exclude everything before its opening
+  prompt. The selected prompt and later messages stay in context. Excluded
+  history is visually distinct and labeled as not sent to the model, even
+  while paging through it. It remains readable and forkable. Cancel does not
+  change the boundary; clearing and saving it restores the prior context.
+  See [whole-turn editor](../../adr/whole-turn-context-editing.md).
   Neither action retries the prompt. Assistant rows never offer Delete. Chips
   render the glyph
   alone: the label is carried by `aria-label` plus a themed hover/focus

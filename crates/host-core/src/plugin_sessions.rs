@@ -316,6 +316,7 @@ fn parse_message(
         provider_replay: None,
         exclude_thinking_from_context: None,
         context_override: None,
+        excluded_by_context_boundary: false,
         session_message: None,
     })
 }

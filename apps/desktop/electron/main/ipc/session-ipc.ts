@@ -701,7 +701,10 @@ export function registerSessionIpc({
     turnContextTarget(input);
     if (typeof input.expectedRevision !== "string" || !input.expectedRevision.trim() ||
         !Array.isArray(input.edits) || input.edits.length > 1024 ||
-        (input.restore !== undefined && typeof input.restore !== "boolean")) {
+        (input.restore !== undefined && typeof input.restore !== "boolean") ||
+        (input.excludeHistoryThinking !== undefined && typeof input.excludeHistoryThinking !== "boolean") ||
+        (input.excludePreviousTurns !== undefined && typeof input.excludePreviousTurns !== "boolean") ||
+        (input.restore && (input.excludeHistoryThinking || input.edits.length > 0))) {
       throw Object.assign(new Error("Invalid turn context edit"), { errorCode: ErrorCodes.INVALID_ARGUMENT });
     }
     if (Buffer.byteLength(JSON.stringify(input), "utf8") > 8 * 1024 * 1024) {

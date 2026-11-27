@@ -10,6 +10,7 @@ import type { ModelAuth } from "@earendil-works/pi-ai";
 import { ParentHostProxy } from "./parent-host-proxy.js";
 import { visionFromModelConfig } from "./model-capabilities.js";
 import { hydrateAttachmentHistory } from "./attachment-history.js";
+import { runtimeHistorySeed } from "./runtime-history-seed.js";
 import { classifyAgentError } from "./agent-errors.js";
 import { readLocalRequestErrorDetails } from "./local-request-errors.js";
 import {
@@ -333,7 +334,8 @@ async function runtimeFor(
       errorCode: "SESSION_NOT_FOUND",
     });
   }
-  let restoredMessages = detail.session.messages ?? [];
+  const seed = runtimeHistorySeed(detail.session.messages, detail.session.compaction);
+  let restoredMessages = seed.history;
   if (params.backgroundCompletion) restoredMessages = restoredMessages.filter(message => message.id !== params.backgroundCompletion!.id);
   // The current prompt is sent separately below. Exclude its persisted row
   // before attachment hydration so it cannot consume the history byte budget.
@@ -349,7 +351,6 @@ async function runtimeFor(
     attachmentsDir: params.attachmentsDir,
     supportsVision,
   });
-  const compaction = detail.session.compaction;
   // Older callers without a stable message id retain the previous content match.
   // A Host-started mode turn has no user row at all (its content is a fixed
   // continuation notice), so nothing in the history is its prompt.
@@ -382,7 +383,7 @@ async function runtimeFor(
     computerUseEnabled: config.computerUseEnabled,
     codemodeEnabled: config.codemodeEnabled,
     history,
-    compaction,
+    compaction: seed.compaction,
     compactionSettings: params.compactionSettings,
     pluginTools,
     pluginSkills,

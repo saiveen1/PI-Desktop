@@ -140,6 +140,8 @@ export type UiMessage = {
   excludeThinkingFromContext?: boolean;
   /** Human-authored model-context overlay; original text and execution facts stay intact. */
   contextOverride?: import("../turn-context.js").MessageContextOverride;
+  /** Derived Host display annotation only; never used to select model context. */
+  excludedByContextBoundary?: boolean;
   createdAt: string;
   status?: "streaming" | "complete" | "error" | "aborted";
   /** The provider cut off this text response at its output-token limit. */

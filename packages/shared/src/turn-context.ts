@@ -10,6 +10,8 @@ export type MessageContextOverride = {
   toolArgs?: Record<string, unknown>;
   toolResultText?: string;
   excludeTool?: boolean;
+  /** Valid only on the genuine top-level user prompt that starts a turn. */
+  excludePreviousTurns?: boolean;
 };
 
 export type TurnContextMessage = {
@@ -29,6 +31,9 @@ export type TurnContextMessage = {
 export type GetTurnContextRequest = { sessionId: string; anchorMessageId: string };
 export type TurnContextSnapshot = GetTurnContextRequest & {
   revision: string;
+  isLatestTurn: boolean;
+  /** This turn's own user marker, independent of markers on other turns. */
+  excludePreviousTurns: boolean;
   messages: TurnContextMessage[];
 };
 export type TurnContextEdit = { messageId: string; contextOverride: MessageContextOverride | null };
@@ -36,6 +41,10 @@ export type EditTurnContextRequest = GetTurnContextRequest & {
   expectedRevision: string;
   edits: TurnContextEdit[];
   restore?: boolean;
+  /** Set or clear this turn's user marker; omitted preserves it. */
+  excludePreviousTurns?: boolean;
+  /** Save-time operation on existing history, not a policy for future turns. */
+  excludeHistoryThinking?: boolean;
 };
 export type TurnContextUpdate = TurnContextEdit & { excludeThinkingFromContext?: boolean };
 export type EditTurnContextResult = { snapshot: TurnContextSnapshot; updates: TurnContextUpdate[] };
@@ -86,8 +95,20 @@ export function messageForModelContext(message: UiMessage): UiMessage | null {
   };
 }
 
+/** Never infer a boundary from a display annotation, turnId or message content. */
+export function contextBoundaryIndex(messages: readonly UiMessage[]): number {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m.contextOverride?.version === 1 && m.contextOverride.excludePreviousTurns === true &&
+        m.role === "user" && m.steering !== true && m.toolName == null && m.parentToolCallId == null &&
+        m.nestedParentToolCallId == null && m.agentName == null && m.modelSystem == null && m.sessionMessage == null) return i;
+  }
+  return -1;
+}
+
 export function historyForModelContext(messages: readonly UiMessage[]): UiMessage[] {
-  return messages.flatMap(message => {
+  const boundary = contextBoundaryIndex(messages);
+  return (boundary < 0 ? messages : messages.slice(boundary)).flatMap(message => {
     const projected = messageForModelContext(message);
     return projected ? [projected] : [];
   });

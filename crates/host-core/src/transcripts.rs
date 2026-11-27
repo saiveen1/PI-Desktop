@@ -44,6 +44,7 @@ mod review_state_tests;
 mod suffix;
 #[cfg(test)]
 mod suffix_tests;
+pub(crate) use binary_integrity::history_generation;
 #[cfg(test)]
 use layout::refresh_layout;
 pub use layout::TranscriptLayout;
@@ -70,6 +71,38 @@ pub struct MessageRecord {
     pub meta: Option<Value>,
     /// RFC3339; storage keeps the wire spelling so files stay human-readable.
     pub created_at: String,
+}
+impl MessageRecord {
+    pub(crate) fn top_level(&self) -> bool {
+        let meta = self.meta.as_ref().unwrap_or(&Value::Null);
+        (self.role == "tool" || self.tool_name.is_none())
+            && [
+                "parentToolCallId",
+                "nestedParentToolCallId",
+                "agentName",
+                "modelSystem",
+                "sessionMessage",
+            ]
+            .iter()
+            .all(|key| meta[*key].is_null())
+    }
+
+    pub(crate) fn user_prompt(&self) -> bool {
+        self.role == "user"
+            && self.top_level()
+            && self
+                .meta
+                .as_ref()
+                .is_none_or(|meta| meta["steering"] != true)
+    }
+
+    pub(crate) fn marks_context_boundary(&self) -> bool {
+        self.user_prompt()
+            && self.meta.as_ref().is_some_and(|meta| {
+                let overlay = &meta["contextOverride"];
+                overlay["version"].as_u64() == Some(1) && overlay["excludePreviousTurns"] == true
+            })
+    }
 }
 
 /// Append-only metadata update for a review snapshot owned by a tool message.
@@ -1402,7 +1435,7 @@ pub(crate) fn update_messages_lines(
     records: &[&MessageRecord],
     changed_suffix: Option<&std::collections::HashSet<&str>>,
 ) -> Result<bool> {
-    splice_message_lines(data_dir, session_id, records, changed_suffix, false)
+    splice_message_lines(data_dir, session_id, records, changed_suffix, false, false)
 }
 
 /// Patch only context keys, including on duplicate physical rows with different originals.
@@ -1411,29 +1444,38 @@ pub(crate) fn update_message_context_lines(
     session_id: &str,
     records: &[&MessageRecord],
     changed_suffix: &std::collections::HashSet<&str>,
+    invalidate_all_compactions: bool,
 ) -> Result<bool> {
-    splice_message_lines(data_dir, session_id, records, Some(changed_suffix), true)
+    splice_message_lines(
+        data_dir,
+        session_id,
+        records,
+        Some(changed_suffix),
+        true,
+        invalidate_all_compactions,
+    )
 }
 
 fn splice_context_meta(
     fields: &mut serde_json::Map<String, Value>,
     record: &MessageRecord,
 ) -> Result<()> {
-    const OVERRIDE: &str = "contextOverride";
-    if let Some(overlay) = record.meta.as_ref().and_then(|meta| meta.get(OVERRIDE)) {
-        let current = fields.entry("meta").or_insert(Value::Null);
-        if current.is_null() {
-            *current = Value::Object(serde_json::Map::new());
-        }
-        current
-            .as_object_mut()
-            .context("invalid message metadata")?
-            .insert(OVERRIDE.to_owned(), overlay.clone());
-    } else if let Some(current) = fields.get_mut("meta").and_then(Value::as_object_mut) {
-        let had_override = current.remove(OVERRIDE).is_some();
-        let had_legacy = current.remove("excludeThinkingFromContext").is_some();
-        if current.is_empty() && (had_override || had_legacy) {
-            fields.remove("meta");
+    // A row reset and bulk exclusion can clear the legacy flag while setting
+    // a new overlay. Splice the two context keys independently in each copy.
+    for key in ["contextOverride", "excludeThinkingFromContext"] {
+        if let Some(value) = record.meta.as_ref().and_then(|meta| meta.get(key)) {
+            let current = fields.entry("meta").or_insert(Value::Null);
+            if current.is_null() {
+                *current = Value::Object(serde_json::Map::new());
+            }
+            current
+                .as_object_mut()
+                .context("invalid message metadata")?
+                .insert(key.to_owned(), value.clone());
+        } else if let Some(current) = fields.get_mut("meta").and_then(Value::as_object_mut) {
+            if current.remove(key).is_some() && current.is_empty() {
+                fields.remove("meta");
+            }
         }
     }
     Ok(())
@@ -1445,6 +1487,7 @@ fn splice_message_lines(
     records: &[&MessageRecord],
     changed_suffix: Option<&std::collections::HashSet<&str>>,
     context_metadata_only: bool,
+    invalidate_all_compactions: bool,
 ) -> Result<bool> {
     let Some(record) = records.first() else {
         return Ok(false);
@@ -1495,7 +1538,7 @@ fn splice_message_lines(
             through_message_id: Option<String>,
         }
         let mut line = Vec::new();
-        let mut invalidated = false;
+        let mut invalidated = invalidate_all_compactions;
         loop {
             line.clear();
             if reader.read_until(b'\n', &mut line)? == 0 {

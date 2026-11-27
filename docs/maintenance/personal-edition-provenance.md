@@ -35,7 +35,13 @@ Locally recorded upstream `95df2e0f9` has no `session.getTurnContext`,
 `session.editTurnContext` or `contextOverride` contract. The local increment
 is an original-preserving context overlay, per-block editor, paired tool
 exclusion and reset; existing transcript storage/fork and Pi adapters remain
-inherited foundations. See [the ADR](../adr/whole-turn-context-editing.md).
+inherited foundations. The current checkout extends the editor introduced by
+`8e5ef31bc` to historical turns and adds independent history-wide reasoning
+exclusion and prompt-anchored context boundaries. Fork itself is inherited;
+labeling the excluded prefix and retaining only boundaries present in each
+fork are the local editing behavior. Locally recorded upstream `c2042ae0f`
+has no `editTurnContext` path.
+See [the ADR](../adr/whole-turn-context-editing.md).
 
 Local `20fe2008a` displayed the saved answer in chat. Local `8e5ef31bc`
 introduced reversible overlays but displayed the original instead. The answer

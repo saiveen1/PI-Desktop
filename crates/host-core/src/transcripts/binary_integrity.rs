@@ -8,7 +8,7 @@ use std::{
     time::SystemTime,
 };
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Serialize)]
 struct Generation {
     identity: layout::FileIdentity,
     length: u64,
@@ -48,6 +48,29 @@ impl Generation {
         );
         Ok(())
     }
+}
+
+/// Guard a draft that can affect rows outside its bounded editor window.
+/// If identity is unavailable, hash the file rather than trusting mtime alone.
+pub(crate) fn history_generation(data_dir: &Path, session_id: &str) -> Result<Vec<u8>> {
+    use sha2::{Digest, Sha256};
+    let file = File::open(transcript_path(data_dir, session_id)?)?;
+    let generation = Generation::from_file(&file)?;
+    if generation.can_cache() {
+        return Ok(serde_json::to_vec(&generation)?);
+    }
+    let mut reader = BufReader::new(file);
+    let mut digest = Sha256::new();
+    loop {
+        let chunk = reader.fill_buf()?;
+        let len = chunk.len();
+        if len == 0 {
+            break;
+        }
+        digest.update(chunk);
+        reader.consume(len);
+    }
+    Ok(digest.finalize().to_vec())
 }
 
 #[cfg(windows)]

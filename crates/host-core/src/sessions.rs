@@ -10,6 +10,7 @@ use std::collections::HashMap;
 
 use crate::transcripts::{self, CompactionRecord, MessageRecord, RevisionRecord};
 
+mod context_boundary;
 mod display_preview;
 use display_preview::{preview_tool_result, preview_value, truncate_display_text};
 #[cfg(test)]
@@ -278,6 +279,9 @@ pub struct UiMessage {
     /// Optional model-context overlay; visible text and execution receipts remain original.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_override: Option<Value>,
+    /// Read projection only; never accept or store a caller's exclusion flag.
+    #[serde(skip_deserializing, skip_serializing_if = "std::ops::Not::not")]
+    pub excluded_by_context_boundary: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<String>,
     /// Additive transcript metadata; older records have no truncation marker.
@@ -834,6 +838,7 @@ pub(crate) fn record_to_ui(record: MessageRecord) -> UiMessage {
             thinking,
             exclude_thinking_from_context,
             context_override,
+            excluded_by_context_boundary: false,
             status,
             model_id,
             provider_id,
@@ -895,6 +900,7 @@ pub(crate) fn record_to_ui(record: MessageRecord) -> UiMessage {
             thinking,
             exclude_thinking_from_context,
             context_override,
+            excluded_by_context_boundary: false,
             status,
             model_id,
             provider_id,
@@ -1169,6 +1175,13 @@ fn clone_compaction_for_fork(
         .as_ref()
         .and_then(|id| message_ids.get(id).cloned());
     compaction.through_message_id = message_ids.get(&compaction.through_message_id)?.clone();
+    if let Some(stamp) = compaction
+        .details
+        .as_mut()
+        .and_then(|v| v.get_mut("contextBoundaryMessageId"))
+    {
+        *stamp = json!(message_ids.get(stamp.as_str()?)?);
+    }
     compaction.id = Uuid::new_v4().to_string();
     if let Some(tail) = compaction.retained_tail.as_mut() {
         remap_value_strings(tail, tool_call_ids);
@@ -1756,7 +1769,7 @@ pub(crate) fn get_session_with_history_navigation(
                     }
                 }
                 Ok(Some((
-                    dedupe_records(records),
+                    context_boundary::project(dedupe_records(records), &options, Some(layout)),
                     read.compactions,
                     Some(start as i64),
                     Some(start > 0),
@@ -1768,14 +1781,14 @@ pub(crate) fn get_session_with_history_navigation(
     } else {
         None
     };
-    let (records, compactions, message_start, has_more_before, message_end, has_more_after) =
+    let (messages, compactions, message_start, has_more_before, message_end, has_more_after) =
         match bounded {
             Some(Some(window)) => window,
             Some(None) => return Ok(None),
             None => {
                 let read = transcripts::read_transcript_with_compactions(db.data_dir(), id)?;
                 (
-                    dedupe_records(read.messages),
+                    context_boundary::project(dedupe_records(read.messages), &options, None),
                     read.compactions,
                     None,
                     None,
@@ -1784,29 +1797,6 @@ pub(crate) fn get_session_with_history_navigation(
                 )
             }
         };
-    // Content comes from the transcript file; SQLite only indexes it. A
-    // renderer window may additionally request a display cap so a single
-    // pasted or tool-produced multi-megabyte message never crosses the UI IPC
-    // boundary. The uncapped path remains lossless for model reconstruction.
-    let messages: Vec<UiMessage> = match options.content_limit {
-        Some(limit) => records
-            .into_iter()
-            .map(|record| {
-                // An explicit search jump must retain the focused message's
-                // original text, including hits beyond the normal display cap.
-                // Neighbors and tool payloads keep their presentation limits.
-                let focused = options.message_around.as_deref() == Some(record.id.as_str())
-                    && matches!(record.role.as_str(), "user" | "assistant");
-                let content = focused.then(|| record_index_text(&record)).flatten();
-                let mut message = record_to_ui_for_display(record, limit);
-                if let Some(content) = content {
-                    message.content = content;
-                }
-                message
-            })
-            .collect(),
-        None => records.into_iter().map(record_to_ui).collect(),
-    };
     let plan_calls: Vec<&str> = messages
         .iter()
         .filter(|message| {
@@ -1826,12 +1816,17 @@ pub(crate) fn get_session_with_history_navigation(
     });
     let navigation_parent = match parent_call_id {
         Some(call_id) => transcripts::layout::with_layout_recovery(db.data_dir(), id, |layout| {
-            transcripts::read_tool_call(db.data_dir(), id, layout, call_id)
-        })?
-        .map(|record| match options.content_limit {
-            Some(limit) => record_to_ui_for_display(record, limit),
-            None => record_to_ui(record),
-        }),
+            Ok(
+                transcripts::read_tool_call(db.data_dir(), id, layout, call_id)?.map(|record| {
+                    let mut message = match options.content_limit {
+                        Some(limit) => record_to_ui_for_display(record, limit),
+                        None => record_to_ui(record),
+                    };
+                    context_boundary::mark_window(std::slice::from_mut(&mut message), layout);
+                    message
+                }),
+            )
+        })?,
         None => None,
     };
     Ok(Some(SessionDetail {
@@ -2045,7 +2040,7 @@ pub fn fork_session_through(
         // A new or forked session starts without a worktree (ADR 0329).
         worktree: None,
     };
-    let messages = records.into_iter().map(record_to_ui).collect();
+    let messages = context_boundary::project(records, &SessionReadOptions::default(), None);
     Ok(ForkSessionResult::Created(Box::new(SessionDetail {
         summary,
         plan_history: Vec::new(),
@@ -3186,6 +3181,7 @@ pub fn append_compaction(
         return Err(anyhow!("invalid compaction record"));
     }
     let session_created = session_created_at(db, session_id)?;
+    context_boundary::validate_checkpoint(db, session_id, compaction)?;
     transcripts::append_compaction(db.data_dir(), session_id, &session_created, compaction)
 }
 
@@ -3297,11 +3293,7 @@ fn rewrite_transcript_body(db: &Database, session_id: &str, messages: &[UiMessag
     let session_created = session_created_at(db, session_id)?;
     crate::session_collaboration::validate_replacement(db, session_id, messages)?;
     let (records, texts) = records_and_texts(messages);
-    let compactions: Vec<CompactionRecord> =
-        transcripts::read_compactions(db.data_dir(), session_id)?
-            .into_iter()
-            .filter(|record| compaction_valid_for_records(record, &records))
-            .collect();
+    let compactions = context_boundary::surviving_compactions(db, session_id, &records)?;
     transcripts::write_transcript_with_compactions(
         db.data_dir(),
         session_id,
@@ -4193,13 +4185,8 @@ fn activate_message_revision_with_prefix(
     }
 
     let (records, texts) = records_and_texts(&combined);
-    // A checkpoint whose anchors survive the switch stays valid; the rest is
-    // dropped with the branch it summarised, exactly as on truncation.
-    let compactions: Vec<CompactionRecord> =
-        transcripts::read_compactions(db.data_dir(), session_id)?
-            .into_iter()
-            .filter(|record| compaction_valid_for_records(record, &records))
-            .collect();
+    let compactions = context_boundary::surviving_compactions(db, session_id, &records)?;
+    context_boundary::mark_prefix(&mut combined, context_boundary::start(&records));
     // The switch drops everything the restored variant does not contain. Any
     // other family whose root is in that prefix was referenced rather than
     // copied while it was live, so it has to be stored in full before the
@@ -5000,6 +4987,7 @@ mod tests {
             provider_replay: None,
             exclude_thinking_from_context: None,
             context_override: None,
+            excluded_by_context_boundary: false,
             session_message: None,
         }
     }
@@ -5999,6 +5987,7 @@ mod tests {
             provider_replay: None,
             exclude_thinking_from_context: None,
             context_override: None,
+            excluded_by_context_boundary: false,
             session_message: None,
         };
         append_message(&db, &session.id, &tool, None).unwrap();
@@ -6887,6 +6876,7 @@ mod tests {
             provider_replay: None,
             exclude_thinking_from_context: None,
             context_override: None,
+            excluded_by_context_boundary: false,
             session_message: None,
         };
         append_message(&db, &session.id, &assistant, None).unwrap();
@@ -7036,6 +7026,7 @@ mod tests {
             provider_replay: None,
             exclude_thinking_from_context: None,
             context_override: None,
+            excluded_by_context_boundary: false,
             hosted_search: Some(json!({
                 "status": "completed",
                 "rounds": [

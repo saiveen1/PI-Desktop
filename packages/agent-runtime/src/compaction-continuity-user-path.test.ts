@@ -5,7 +5,7 @@ import {
   type Context,
 } from "@earendil-works/pi-ai";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import type { ContextCompactionRecord } from "@pi-desktop/shared";
+import type { ContextCompactionRecord, UiMessage } from "@pi-desktop/shared";
 import { DesktopAgentRuntime } from "./runtime.js";
 import { convertToLlm, serializeConversation } from "./pi-runtime-messages.js";
 import { reduceSummaryInput } from "./compaction-summary-input.js";
@@ -20,7 +20,7 @@ function reply(content: AssistantMessage["content"], input = 1_024): AssistantMe
   };
 }
 
-function fixture(compaction?: ContextCompactionRecord, withSteering = false) {
+function fixture(compaction?: ContextCompactionRecord, withSteering = false, history: UiMessage[] = []) {
   let checkpoint: ContextCompactionRecord | undefined;
   let steeringSent = false;
   const dispatch = vi.fn(async (method: string, params?: unknown): Promise<unknown> => {
@@ -56,9 +56,9 @@ function fixture(compaction?: ContextCompactionRecord, withSteering = false) {
         });
       }
     },
-    ...(compaction ? { compaction, history: [{ id: compaction.throughMessageId,
+    compaction, history: [...history, ...(compaction ? [{ id: compaction.throughMessageId,
       role: "assistant" as const, content: "Fixture checkpoint boundary", status: "complete" as const,
-      createdAt: compaction.createdAt }] } : {}),
+      createdAt: compaction.createdAt }] : [])],
   });
   const requests: Context[] = [];
   const summaryRequests: Context[] = [];
@@ -111,6 +111,26 @@ function assertReceipt(context: Context) {
 }
 
 describe("successful compaction execution continuity", () => {
+  it("summarizes only the cut window and reinstalls its new checkpoint after restart", async () => {
+    const history: UiMessage[] = [
+      { id: "old", role: "user", content: "PREFIX_PAYLOAD", createdAt: "now" },
+      { id: "cut", role: "user", content: "Selected request", createdAt: "now", contextOverride: { version: 1, excludePreviousTurns: true } },
+    ];
+    const f = fixture(undefined, false, history);
+    try {
+      await f.runtime.prompt("Apply the fixture once, then publish.");
+      expect(f.summaryRequests).toHaveLength(1);
+      expect(JSON.stringify([...f.summaryRequests, ...f.requests])).not.toContain("PREFIX_PAYLOAD");
+      const checkpoint = f.checkpoint();
+      expect(checkpoint?.details).toMatchObject({ contextBoundaryMessageId: "cut" });
+      const restored = fixture(checkpoint, false, history);
+      try {
+        await restored.runtime.prompt("Continue.");
+        assertReceipt(restored.requests[0]!);
+        expect(JSON.stringify(restored.requests)).not.toContain("PREFIX_PAYLOAD");
+      } finally { await restored.runtime.dispose(); }
+    } finally { await f.runtime.dispose(); }
+  });
   it("carries a completed operation into the next real Agent request and restores it without replay", async () => {
     const f = fixture();
     try {

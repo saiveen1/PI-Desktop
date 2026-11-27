@@ -1,4 +1,4 @@
-//! Model-context overlays for the current settled turn; the execution journal is read-only.
+//! Model-context overlays for settled turns; the execution journal is read-only.
 use super::assistant_edit::{load_editable_turn, top_level, EditableTurn, MissingAnchor};
 use super::*;
 use sha2::{Digest, Sha256};
@@ -32,6 +32,9 @@ pub struct EditTurnContext {
     edits: Vec<ContextEdit>,
     #[serde(default)]
     restore: bool,
+    #[serde(default)]
+    exclude_history_thinking: bool,
+    exclude_previous_turns: Option<bool>,
 }
 
 fn invalid(message: &str) -> anyhow::Error {
@@ -67,6 +70,18 @@ fn content(row: &MessageRecord) -> String {
 
 fn meta(row: &MessageRecord) -> &Value {
     row.meta.as_ref().unwrap_or(&Value::Null)
+}
+
+fn source_thinking(row: &MessageRecord) -> bool {
+    blocks(&row.blocks)
+        .chain(blocks(&meta(row)["providerReplay"]["blocks"]))
+        .any(|block| block["type"] == "thinking")
+}
+
+fn history_thinking(row: &MessageRecord, overlay: &Value) -> bool {
+    row.role == "assistant"
+        && top_level(row)
+        && (source_thinking(row) || overlay["thinking"].is_string())
 }
 
 fn validate_override(row: &MessageRecord, overlay: &Value) -> Result<()> {
@@ -107,9 +122,19 @@ fn validate_override(row: &MessageRecord, overlay: &Value) -> Result<()> {
     Ok(())
 }
 
-fn revision(turn: &EditableTurn, session: &str, anchor: &str) -> Result<String> {
+fn revision(db: &Database, turn: &EditableTurn, session: &str, anchor: &str) -> Result<String> {
     let mut digest = Sha256::new();
-    digest.update(serde_json::to_vec(&(session, anchor, &turn.owner))?);
+    digest.update(serde_json::to_vec(&(
+        session,
+        anchor,
+        &turn.owner,
+        turn.is_latest,
+    ))?);
+    // A tail draft can opt into a wider write. Bind it to the live file's
+    // generation without decoding prior turns just to open the editor.
+    if turn.is_latest {
+        digest.update(transcripts::history_generation(db.data_dir(), session)?);
+    }
     // Include every owned row, even those not editable, and its original blocks and open metadata.
     for &i in &turn.members {
         digest.update(b"\n");
@@ -204,8 +229,7 @@ fn project(row: &MessageRecord, final_answer: bool) -> Result<Value> {
     let metadata = meta(row);
     let mut message = json!({
         "messageId": row.id, "role": row.role, "final": final_answer, "content": content(row),
-        "hasThinking": !thinking_blocks.is_empty() || blocks(&metadata["providerReplay"]["blocks"])
-            .any(|block| block["type"] == "thinking"),
+        "hasThinking": source_thinking(row),
     });
     let visible: Vec<_> = thinking_blocks
         .iter()
@@ -243,15 +267,45 @@ fn load_turn(db: &Database, session: &str, anchor: &str) -> Result<EditableTurn>
     let turn = load_editable_turn(db, session, anchor, false)?;
     if content(&turn.records[turn.anchor]).trim().is_empty() {
         return Err(anyhow!(
-            "CONFLICT: the latest assistant reply has no final text"
+            "CONFLICT: the selected assistant reply has no final text"
         ));
     }
     Ok(turn)
 }
 
+/// The bounded loader returns an id-closed suffix of the canonical records.
+/// Only expand that suffix once a bulk save has passed its revision check.
+fn include_history(db: &Database, session: &str, turn: &mut EditableTurn) -> Result<()> {
+    let records = dedupe_records(transcripts::read_transcript(db.data_dir(), session)?);
+    let prefix = records
+        .len()
+        .checked_sub(turn.records.len())
+        .filter(|&n| {
+            records[n..]
+                .iter()
+                .zip(&turn.records)
+                .all(|(a, b)| a.id == b.id)
+        })
+        .ok_or_else(|| anyhow!("CONFLICT: canonical history changed"))?;
+    turn.anchor += prefix;
+    for index in &mut turn.members {
+        *index += prefix;
+    }
+    turn.records = records;
+    Ok(())
+}
+fn prompt(turn: &EditableTurn) -> Option<usize> {
+    turn.members
+        .iter()
+        .copied()
+        .find(|&i| i < turn.anchor && turn.records[i].user_prompt())
+}
+
 fn snapshot(turn: &EditableTurn, session: &str, anchor: &str, revision: &str) -> Result<Value> {
     let mut snapshot = json!({
         "sessionId": session, "anchorMessageId": anchor, "revision": revision, "messages": [],
+        "isLatestTurn": turn.is_latest,
+        "excludePreviousTurns": prompt(turn).is_some_and(|i| turn.records[i].marks_context_boundary()),
     });
     let mut size = serde_json::to_vec(&snapshot)?.len();
     let mut messages = Vec::new();
@@ -278,15 +332,16 @@ pub fn get_turn_context(db: &Database, request: &GetTurnContext) -> Result<Value
     let session = &request.session_id;
     let anchor = &request.anchor_message_id;
     let turn = load_turn(db, session, anchor)?;
-    let revision = revision(&turn, session, anchor)?;
+    let revision = revision(db, &turn, session, anchor)?;
     Ok(json!({"snapshot": snapshot(&turn, session, anchor, &revision)?}))
 }
 
 pub fn edit_turn_context(db: &Database, request: &EditTurnContext) -> Result<Value> {
-    if request.expected_revision.trim().is_empty() || (request.restore && !request.edits.is_empty())
+    if request.expected_revision.trim().is_empty()
+        || (request.restore && (!request.edits.is_empty() || request.exclude_history_thinking))
     {
         return Err(invalid(
-            "expectedRevision is required and restore requires empty edits",
+            "expectedRevision is required and restore cannot be combined with edits or history exclusion",
         ));
     }
     if request.edits.len() > MAX_MESSAGES {
@@ -301,13 +356,21 @@ pub fn edit_turn_context(db: &Database, request: &EditTurnContext) -> Result<Val
             error
         }
     })?;
-    let prior_revision = revision(&turn, session, anchor)?;
+    if request.exclude_history_thinking && !turn.is_latest {
+        return Err(anyhow!(
+            "CONFLICT: history thinking exclusion requires the latest turn"
+        ));
+    }
+    let prior_revision = revision(db, &turn, session, anchor)?;
     if prior_revision != request.expected_revision {
         return Err(anyhow!(
             "CONFLICT: turn context changed since it was opened"
         ));
     }
 
+    if request.exclude_history_thinking {
+        include_history(db, session, &mut turn)?;
+    }
     let mut edits = HashMap::with_capacity(request.edits.len());
     for edit in &request.edits {
         if edit.message_id.trim().is_empty()
@@ -318,44 +381,90 @@ pub fn edit_turn_context(db: &Database, request: &EditTurnContext) -> Result<Val
             return Err(invalid("blank or duplicate edit messageId"));
         }
     }
+    let prompt_edit = request
+        .exclude_previous_turns
+        .map(|enabled| -> Result<_> {
+            let index = prompt(&turn)
+                .ok_or_else(|| anyhow!("CONFLICT: turn has no top-level user prompt"))?;
+            let previous = &meta(&turn.records[index])[OVERRIDE];
+            let marker = json!({"version":1,"excludePreviousTurns":true});
+            if !previous.is_null() && previous != &marker {
+                return Err(invalid("unsupported user prompt context override"));
+            }
+            Ok((index, if enabled { marker } else { Value::Null }))
+        })
+        .transpose()?;
+    let mut boundary_changed = false;
     let mut replacements = Vec::new();
     let mut updates = Vec::new();
-    for &i in &turn.members {
-        let row = &mut turn.records[i];
-        if !eligible(row) {
+    for (i, row) in turn.records.iter_mut().enumerate() {
+        let selected = turn.members.binary_search(&i).is_ok();
+        let marker = prompt_edit.as_ref().filter(|(index, _)| *index == i);
+        if marker.is_none() && !eligible(row) {
             continue;
         }
-        let overlay = if request.restore {
-            &Value::Null
-        } else if let Some(overlay) = edits.remove(row.id.as_str()) {
-            overlay
+        let edit = if let Some((_, overlay)) = marker {
+            Some(overlay)
+        } else if selected && request.restore {
+            Some(&Value::Null)
+        } else if selected {
+            edits.remove(row.id.as_str())
         } else {
+            None
+        };
+        if let Some(overlay) = edit.filter(|_| marker.is_none()) {
+            validate_override(row, overlay)?;
+        }
+        let base = edit.unwrap_or(&meta(row)[OVERRIDE]);
+        let exclude =
+            request.exclude_history_thinking && i <= turn.anchor && history_thinking(row, base);
+        if edit.is_none() && !exclude {
             continue;
-        };
-        validate_override(row, overlay)?;
-        let previous = meta(row);
-        let clear_legacy = overlay.is_null() && previous.get(LEGACY).is_some();
-        let changed = if overlay.is_null() {
-            previous.get(OVERRIDE).is_some() || clear_legacy
+        }
+        let overlay = if exclude {
+            let mut merged = if base.is_null() {
+                json!({"version": 1})
+            } else {
+                base.clone()
+            };
+            validate_override(row, &merged)?;
+            merged["excludeThinking"] = json!(true);
+            merged
         } else {
-            previous[OVERRIDE] != *overlay
+            base.clone()
         };
+        let previous = meta(row);
+        let clear_legacy =
+            marker.is_none() && edit.is_some_and(Value::is_null) && previous.get(LEGACY).is_some();
+        let changed = clear_legacy
+            || if overlay.is_null() {
+                previous.get(OVERRIDE).is_some()
+            } else {
+                previous[OVERRIDE] != overlay
+            };
         if !changed {
             continue;
         }
+        boundary_changed |= marker.is_some();
         let metadata = row
             .meta
             .get_or_insert_with(|| json!({}))
             .as_object_mut()
             .ok_or_else(|| anyhow!("invalid message metadata"))?;
+        if clear_legacy {
+            metadata.remove(LEGACY);
+        }
         if overlay.is_null() {
             metadata.remove(OVERRIDE);
-            metadata.remove(LEGACY);
         } else {
             metadata.insert(OVERRIDE.to_owned(), overlay.clone());
         }
         if metadata.is_empty() {
             row.meta = None;
+        }
+        replacements.push(i);
+        if !selected {
+            continue;
         }
         let mut update = json!({"messageId": row.id, "contextOverride": overlay});
         if let Some(legacy) = meta(row)[LEGACY]
@@ -365,7 +474,6 @@ pub fn edit_turn_context(db: &Database, request: &EditTurnContext) -> Result<Val
             update[LEGACY] = json!(legacy);
         }
         updates.push(update);
-        replacements.push(i);
     }
     if !edits.is_empty() {
         return Err(invalid(
@@ -384,12 +492,9 @@ pub fn edit_turn_context(db: &Database, request: &EditTurnContext) -> Result<Val
             "the final answer must keep nonblank content in context",
         ));
     }
-    let next_revision = if replacements.is_empty() {
-        prior_revision
-    } else {
-        revision(&turn, session, anchor)?
-    };
-    let snapshot = snapshot(&turn, session, anchor, &next_revision)?;
+    // Project and enforce the byte limit before any write. Revision hashes
+    // have fixed length; only the new generation must wait for the splice.
+    let mut snapshot = snapshot(&turn, session, anchor, &prior_revision)?;
     if let Some(&earliest) = replacements.first() {
         let suffix: HashSet<_> = turn.records[earliest..]
             .iter()
@@ -401,10 +506,17 @@ pub fn edit_turn_context(db: &Database, request: &EditTurnContext) -> Result<Val
             "UPDATE sessions SET updated_at = ?2 WHERE id = ?1",
             params![session, now_ms()],
         )?;
-        if !transcripts::update_message_context_lines(db.data_dir(), session, &rows, &suffix)? {
+        if !transcripts::update_message_context_lines(
+            db.data_dir(),
+            session,
+            &rows,
+            &suffix,
+            boundary_changed,
+        )? {
             return Err(anyhow!("CONFLICT: canonical turn membership has changed"));
         }
         tx.commit()?;
+        snapshot["revision"] = json!(revision(db, &turn, session, anchor)?);
     }
     Ok(json!({"snapshot": snapshot, "updates": updates}))
 }

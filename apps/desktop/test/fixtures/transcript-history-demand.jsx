@@ -6,7 +6,7 @@ import { en, zhCN } from "@pi-desktop/i18n";
 import { ChatTranscript } from "../../src/features/chat/transcript/ChatTranscript";
 import { SessionPane } from "../../src/components/SessionPane";
 import { sessionReadingState } from "../../src/lib/transcript-reading-position";
-import { exerciseTurnContext } from "./turn-context-editor.jsx";
+import { exerciseContextBoundary, exerciseHistoricalTurnContext, exerciseTurnContext } from "./turn-context-editor.jsx";
 import { useAppStore } from "../../src/stores/app-store";
 import "../../src/styles/tokens.css";
 import "../../src/styles/ui-kit.css";
@@ -240,3 +240,5 @@ window.historyDemand = {
 };
 
 window.exerciseTurnContext = () => exerciseTurnContext({ root, i18n, message, frame, until });
+window.exerciseHistoricalTurnContext = () => exerciseHistoricalTurnContext({ root, i18n, message, frame, until });
+window.exerciseContextBoundary = (restarting) => exerciseContextBoundary({ root, i18n, message, frame, until }, restarting);

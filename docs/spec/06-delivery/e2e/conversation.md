@@ -2711,9 +2711,21 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
   exclude-all-thinking, final-only, explicit final exclusion and restore.
   Cancel a draft, inject a save failure and navigate during reads/saves.
   Reopen after each save and capture the next provider request.
-- **Expected**: A historical completed assistant response offers Copy, Fork and
-  Regenerate, but not Delete or in-place Edit context. A local idle child exposes
-  all top-level assistant/tool blocks from its current turn. Defaults preserve
+  9) Edit a historical turn in the idle source without forking. Check that later
+  turns keep their IDs, order and contents. On the latest turn, select the
+  history-wide thinking exclusion; cancel once, then save it without changing
+  the answer. Inspect the next provider request after reload, including history
+  older than the loaded page and previously compacted turns.
+  10) On the second turn, exclude previous turns, save, reload and continue.
+  Verify the request retains the second question, its reply and new messages,
+  not the first turn's question, reply, reasoning, tools or old summary. Repeat
+  with this turn's thinking excluded, then with only its final answer retained.
+  Page back: excluded content is labeled but its Fork action still works. Fork
+  before the cutoff and continue the child: the earlier context is available
+  there without changing the source. Clear the cutoff and verify restoration.
+- **Expected**: A historical eligible response in the idle local source offers
+  Copy, Fork, Regenerate and Edit context, but not Delete. Both source and child
+  expose all top-level assistant/tool blocks from the selected turn. Defaults preserve
   current context; only explicit Save persists overlays. The pencil focuses the
   final answer with the process folded. After Save and after reload, verify the
   chat bubble shows the edited answer and the original is available on demand.
@@ -2723,8 +2735,11 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
   call and result; editing results never executes or undoes tools. Original
   transcript and receipts stay intact, including media represented by editor
   placeholders. An included final answer must be nonblank; it may be excluded.
-  Earlier turns remain untouched. Stale saves fail atomically; cancelled drafts
-  write nothing and failed saves retain inputs. Restoring removes overlays.
+  A per-turn edit preserves other turns. The latest-turn history-wide thinking
+  option excludes reasoning, not earlier prose or tool pairs. In contrast, a
+  prompt boundary excludes earlier turns entirely and keeps the selected turn's
+  thinking unless independently excluded. Restoring only its process leaves
+  the boundary set. Stale saves fail atomically; cancelled drafts write nothing.
   Fork
   activates a separately titled child ending at the selected response; later source
   turns are absent. Completed historical prefixes stay forkable during a later turn;

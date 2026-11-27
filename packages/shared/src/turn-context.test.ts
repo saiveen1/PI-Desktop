@@ -11,6 +11,22 @@ const row: UiMessage = {
 };
 const withOverride = (override: MessageContextOverride) => ({ ...structuredClone(row), contextOverride: override });
 describe("human-authored model context overlays", () => {
+  it("cuts at the latest marked genuine user, not nested, steering, system or display-only rows", () => {
+    const prompt: UiMessage = { id: "prompt", role: "user", content: "keep", createdAt: "now",
+      contextOverride: { version: 1, excludePreviousTurns: true } };
+    const suffix = ([
+      { ...prompt, role: "assistant" }, { ...prompt, role: "tool" }, { ...prompt, role: "system" },
+      { ...prompt, parentToolCallId: "p" }, { ...prompt, nestedParentToolCallId: "n" },
+      { ...prompt, agentName: "child" }, { ...prompt, steering: true }, { ...prompt, toolName: "Task" },
+      { ...prompt, sessionMessage: { sourceSessionId: "other", sourceTitle: "other", targetSessionId: "here", messageId: "m", kind: "message" } },
+      { ...prompt, modelSystem: { version: 1, messageJson: "{}" } },
+      { ...prompt, contextOverride: undefined, excludedByContextBoundary: true },
+    ] satisfies UiMessage[]).map((m, i) => ({ ...m, id: String(i) }));
+    const before = [row, { ...prompt, id: "prior-cut" }, row];
+    expect(historyForModelContext([...before, prompt, ...suffix]).map(m => m.id)).toEqual([prompt, ...suffix].map(m => m.id));
+    expect(historyForModelContext(before).map(m => m.id)).toEqual(["prior-cut", row.id]);
+    expect(historyForModelContext([row, ...suffix]).map(m => m.id)).toEqual([row, ...suffix].map(m => m.id));
+  });
   it("preserves original history and untouched signed channels while changing answer context", () => {
     const original = withOverride({ version: 1, content: "Corrected" });
     const before = structuredClone(original);

@@ -300,17 +300,22 @@ export const MessageRow = memo(function MessageRow({
       }),
     });
   };
+  const exclusionLabel = message.excludedByContextBoundary ? t("turnContext.notSent") : undefined;
   return (
     <div
       className={`message-row ${isSessionMessage ? "session-message" : isUser ? "user" : message.role}`}
       data-minimap-id={message.id}
       data-message-id={message.id}
       data-row-role={isSessionMessage ? undefined : "user"}
+      data-excluded-by-context-boundary={message.excludedByContextBoundary || undefined}
+      data-context-boundary-start={(!exclusionLabel && message.contextOverride?.excludePreviousTurns === true) || undefined}
       onContextMenu={onContextMenu}
       role="article"
       aria-label={isSessionMessage ? t("sessionCollaboration.agentMessage") : isUser ? t("chat.userMessage") : t("chat.assistantMessage")}
+      aria-description={exclusionLabel}
     >
       <div className="message-col">
+        {exclusionLabel && <span className="context-boundary-label" aria-hidden>{exclusionLabel}</span>}
         {message.sessionMessage ? <SessionMessageOrigin origin={message.sessionMessage} /> : null}
         {isUser || displayed ? (
           <div className="message-bubble">

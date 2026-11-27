@@ -377,17 +377,24 @@ export const AssistantTurn = memo(function AssistantTurn({
   // streamed answer takes over the turn.
   const activePart = isActive ? entry.parts.at(-1) : undefined;
   const partContext = { isActive, activePart, runtimeActivity, turnDelegationStatuses, turnDelegationTimings };
+  // Boundaries start on real user prompts, never between parts of a turn.
+  const firstPart = entry.parts[0];
+  const excluded = (firstPart?.kind === "message" ? firstPart.message : firstPart?.items[0]?.message)?.excludedByContextBoundary;
+  const exclusionLabel = excluded ? t("turnContext.notSent") : undefined;
 
   return (
     <div
       className={`message-row assistant assistant-turn${streaming ? " streaming" : ""}`}
       data-minimap-id={entry.anchorId}
       data-row-role="assistant"
+      data-excluded-by-context-boundary={excluded || undefined}
       onContextMenu={onContextMenu}
       role="article"
       aria-label={t("chat.assistantMessage")}
+      aria-description={exclusionLabel}
     >
       <div className="message-col">
+        {exclusionLabel && <span className="context-boundary-label" aria-hidden>{exclusionLabel}</span>}
         {editor.snapshot && editor.signal ? <TurnContextEditor snapshot={editor.snapshot} editable={editor.editable}
           signal={editor.signal} cancel={editor.cancel} /> : <>
         {sections.map((section, index) => {

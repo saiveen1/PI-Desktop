@@ -41,26 +41,11 @@ pub struct EditAssistantReplyResult {
 }
 
 pub(super) fn top_level(record: &MessageRecord) -> bool {
-    let meta = record.meta.as_ref().unwrap_or(&Value::Null);
-    (record.role == "tool" || record.tool_name.is_none())
-        && [
-            "parentToolCallId",
-            "nestedParentToolCallId",
-            "agentName",
-            "modelSystem",
-            "sessionMessage",
-        ]
-        .iter()
-        .all(|key| meta[*key].is_null())
+    record.top_level()
 }
 
 fn user_boundary(record: &MessageRecord) -> bool {
-    record.role == "user"
-        && top_level(record)
-        && record
-            .meta
-            .as_ref()
-            .is_none_or(|meta| meta["steering"] != true)
+    record.user_prompt()
 }
 
 pub(super) fn check_edit_gate(db: &Database, session: &str, anchor: &str) -> Result<()> {
@@ -101,6 +86,7 @@ pub(super) struct EditableTurn {
     pub anchor: usize,
     pub members: Vec<usize>,
     pub owner: Option<String>,
+    pub is_latest: bool,
 }
 
 fn ineligible() -> anyhow::Error {
@@ -110,6 +96,42 @@ fn ineligible() -> anyhow::Error {
 #[derive(Debug, thiserror::Error)]
 #[error("NOT_FOUND: message not found in this session")]
 pub(super) struct MissingAnchor;
+
+/// Ownerless (e.g. forked) rows use the next real prompt as their end.
+/// Never borrow a durable turn's prompt or include its rows in this fallback.
+fn unowned_members(
+    db: &Database,
+    session: &str,
+    records: &[MessageRecord],
+    index: usize,
+) -> Result<Vec<usize>> {
+    let start = records[..index]
+        .iter()
+        .rposition(user_boundary)
+        .ok_or_else(ineligible)?;
+    let end = records[index + 1..]
+        .iter()
+        .position(user_boundary)
+        .map_or(records.len(), |i| index + 1 + i);
+    let candidates: Vec<_> = records[start..end].iter().map(|r| &r.id).collect();
+    let owned: std::collections::HashSet<String> = db
+        .conn()
+        .prepare(
+            "SELECT id FROM messages WHERE session_id=?1 AND turn_id IS NOT NULL
+         AND id IN (SELECT value FROM json_each(?2))",
+        )?
+        .query_map(
+            params![session, serde_json::to_string(&candidates)?],
+            |row| row.get(0),
+        )?
+        .collect::<rusqlite::Result<_>>()?;
+    if records[start..=index].iter().any(|r| owned.contains(&r.id)) {
+        return Err(anyhow!("CONFLICT: no unowned prompt for this turn"));
+    }
+    Ok((start..end)
+        .take_while(|&i| !owned.contains(&records[i].id))
+        .collect())
+}
 
 pub(super) fn load_editable_turn(
     db: &Database,
@@ -150,15 +172,20 @@ pub(super) fn load_editable_turn(
         .transpose()?;
     let suffix = transcripts::read_closed_message_suffix(db.data_dir(), session, |records| {
         if let Some(ids) = &turn_rows {
-            records.iter().any(|r| ids.first() == Some(&r.id))
-        } else {
-            let mut seen = std::collections::HashSet::new();
-            records
-                .iter()
-                .rev()
-                .filter(|r| seen.insert(&r.id))
-                .any(user_boundary)
+            return records.iter().any(|r| ids.first() == Some(&r.id));
         }
+        // Use only canonical prompts preceding the anchor, not a later turn's
+        // prompt or a superseded physical copy of a steering/nested message.
+        let Some(index) = records.iter().position(|r| r.id == anchor) else {
+            return false;
+        };
+        let mut seen: std::collections::HashSet<_> =
+            records[index..].iter().map(|r| &r.id).collect();
+        records[..index]
+            .iter()
+            .rev()
+            .filter(|r| seen.insert(&r.id))
+            .any(user_boundary)
     })?;
     let records = dedupe_records(match suffix {
         Some(records) => records,
@@ -166,11 +193,14 @@ pub(super) fn load_editable_turn(
     });
     let index = records
         .iter()
-        .rposition(|r| r.role != "system" && (legacy || top_level(r)))
-        .ok_or_else(ineligible)?;
+        .position(|r| r.id == anchor)
+        .ok_or(MissingAnchor)?;
+    let is_latest = !records[index + 1..]
+        .iter()
+        .any(|r| r.role != "system" && (legacy || top_level(r)));
     let record = &records[index];
     let meta = record.meta.as_ref().unwrap_or(&Value::Null);
-    if record.id != anchor
+    if (legacy && !is_latest)
         || record.role != "assistant"
         || record.is_error
         || !top_level(record)
@@ -190,18 +220,30 @@ pub(super) fn load_editable_turn(
             return Err(anyhow!("CONFLICT: canonical turn membership has changed"));
         }
         members
+    } else if legacy {
+        let start = records[..index]
+            .iter()
+            .rposition(user_boundary)
+            .unwrap_or(0);
+        (start..=index).collect()
     } else {
-        let start = records[..index].iter().rposition(user_boundary);
-        if start.is_none() && !legacy {
-            return Err(ineligible());
-        }
-        (start.unwrap_or(0)..=index).collect()
+        unowned_members(db, session, &records, index)?
     };
+    if !legacy
+        && members
+            .iter()
+            .any(|&i| i > index && records[i].role != "system" && top_level(&records[i]))
+    {
+        return Err(anyhow!(
+            "CONFLICT: anchor is not the final reply of its turn"
+        ));
+    }
     Ok(EditableTurn {
         records,
         anchor: index,
         members,
         owner,
+        is_latest,
     })
 }
 

@@ -4,7 +4,7 @@
 //! file identity still matches, and every cache failure falls back to a scan.
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fs::{self, File},
     io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
@@ -19,7 +19,7 @@ use super::{sniff_line_kind, swap_into_place, transcript_path};
 const LAYOUT_CACHE_MIN_LEN: u64 = 2 * 1024 * 1024;
 const LAYOUT_CACHE_MAX_LAG: u64 = 4 * 1024 * 1024;
 const LAYOUT_CACHE_MAGIC: &str = "PI-DESKTOP-TRANSCRIPT-LAYOUT";
-const LAYOUT_CACHE_VERSION: &str = "4";
+const LAYOUT_CACHE_VERSION: &str = "5";
 
 #[cfg(test)]
 thread_local! {
@@ -27,7 +27,7 @@ thread_local! {
 }
 
 /// A stable identity available on filesystems that expose one.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize)]
 pub enum FileIdentity {
     Available {
         platform: &'static str,
@@ -85,6 +85,9 @@ pub struct TranscriptLayout {
     /// Parsed identities parallel to message offsets. Invalid rows keep None so
     /// point reads still expose their decoding errors instead of hiding them.
     pub(super) message_ids: Vec<Option<String>>,
+    /// Physical marker rows; canonical order keeps the first slot and last payload per ID.
+    pub(super) marker_rows: Vec<usize>,
+    pub(super) boundary: OnceLock<Option<ContextBoundary>>,
     /// Sorted physical positions of top-level user messages.
     pub(super) user_message_positions: Vec<usize>,
     /// Byte offset of each compaction line, in file order.
@@ -95,6 +98,12 @@ pub struct TranscriptLayout {
     pub file_len: u64,
     pub(crate) identity: FileIdentity,
     pub(super) modification_stamp: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ContextBoundary {
+    pub id: String,
+    pub excluded_ids: HashSet<String>,
 }
 
 #[derive(serde::Deserialize)]
@@ -109,6 +118,7 @@ struct MessageIdentity {
 struct MessageAncestry {
     parent_tool_call_id: Option<serde::de::IgnoredAny>,
     nested_parent_tool_call_id: Option<serde::de::IgnoredAny>,
+    context_override: Option<serde::de::IgnoredAny>,
 }
 
 #[derive(serde::Deserialize)]
@@ -146,6 +156,41 @@ impl TranscriptLayout {
     /// not the deduplicated message positions.
     pub fn message_count(&self) -> usize {
         self.message_offsets.len()
+    }
+
+    pub(crate) fn context_boundary(&self) -> Option<&ContextBoundary> {
+        self.boundary
+            .get_or_init(|| {
+                if self.marker_rows.is_empty() {
+                    return None;
+                }
+                let mut candidates: HashMap<&str, (usize, bool)> = self
+                    .marker_rows
+                    .iter()
+                    .filter_map(|&i| self.message_ids[i].as_deref().map(|id| (id, (i, false))))
+                    .collect();
+                for (i, id) in self.message_ids.iter().enumerate() {
+                    if let Some((first, marked)) =
+                        id.as_deref().and_then(|id| candidates.get_mut(id))
+                    {
+                        *first = (*first).min(i);
+                        *marked = self.marker_rows.binary_search(&i).is_ok();
+                    }
+                }
+                let (id, (start, _)) = candidates
+                    .into_iter()
+                    .filter(|(_, (_, marked))| *marked)
+                    .max_by_key(|(_, (first, _))| *first)?;
+                Some(ContextBoundary {
+                    id: id.to_owned(),
+                    excluded_ids: self.message_ids[..start]
+                        .iter()
+                        .flatten()
+                        .cloned()
+                        .collect(),
+                })
+            })
+            .as_ref()
     }
 
     pub(crate) fn previous_user_message(&self, before: usize) -> Option<usize> {
@@ -432,12 +477,21 @@ fn scan_layout(path: &Path, mut layout: TranscriptLayout) -> Result<TranscriptLa
                 let id = match serde_json::from_str::<MessageIdentity>(&line) {
                     Ok(identity) => {
                         if identity.role.as_deref() == Some("user")
-                            && identity.meta.is_none_or(|meta| {
+                            && identity.meta.as_ref().is_none_or(|meta| {
                                 meta.parent_tool_call_id.is_none()
                                     && meta.nested_parent_tool_call_id.is_none()
                             })
                         {
                             layout.user_message_positions.push(layout.message_count());
+                            if identity
+                                .meta
+                                .as_ref()
+                                .is_some_and(|m| m.context_override.is_some())
+                                && serde_json::from_str::<super::MessageRecord>(&line)
+                                    .is_ok_and(|r| r.marks_context_boundary())
+                            {
+                                layout.marker_rows.push(layout.message_count());
+                            }
                         }
                         Some(identity.id)
                     }
@@ -447,6 +501,17 @@ fn scan_layout(path: &Path, mut layout: TranscriptLayout) -> Result<TranscriptLa
                         .ok()
                         .map(|value| value.id),
                 };
+                // Normal appends cannot move the logical prefix. Recompute only on
+                // a new marker or a replacement for the current winner.
+                if layout.marker_rows.last() == Some(&layout.message_count())
+                    || layout
+                        .boundary
+                        .get()
+                        .and_then(Option::as_ref)
+                        .is_some_and(|b| Some(&b.id) == id.as_ref())
+                {
+                    layout.boundary.take();
+                }
                 layout.message_offsets.push(offset);
                 layout.message_ids.push(id);
             }
@@ -540,6 +605,8 @@ fn load_layout_cache(
         message_offsets: Vec::with_capacity(message_count),
         message_ids: Vec::with_capacity(message_count),
         user_message_positions: Vec::new(),
+        marker_rows: Vec::new(),
+        boundary: OnceLock::new(),
         compaction_offsets: Vec::with_capacity(compaction_count),
         tool_review_state_offsets: Vec::with_capacity(review_state_count),
         file_len,
@@ -558,14 +625,14 @@ fn load_layout_cache(
             layout.tool_review_state_offsets.push(offset);
         }
     }
-    for _ in 0..message_count {
+    for index in 0..message_count {
         let Some(token) = tokens.next() else {
             return Ok(None);
         };
         let id = if token == "-" {
             None
         } else {
-            let Some(encoded) = token.strip_prefix('+') else {
+            let Some(encoded) = token.strip_prefix('+').or_else(|| token.strip_prefix('*')) else {
                 return Ok(None);
             };
             let Some(id) = hex::decode(encoded)
@@ -574,6 +641,9 @@ fn load_layout_cache(
             else {
                 return Ok(None);
             };
+            if token.starts_with('*') {
+                layout.marker_rows.push(index);
+            }
             Some(id)
         };
         layout.message_ids.push(id);
@@ -736,6 +806,9 @@ fn layout_cache_digest(layout: &TranscriptLayout) -> String {
     for &position in &layout.user_message_positions {
         digest.update((position as u64).to_le_bytes());
     }
+    for &position in &layout.marker_rows {
+        digest.update((position as u64).to_le_bytes());
+    }
     hex::encode(digest.finalize())
 }
 
@@ -785,9 +858,18 @@ fn store_layout_cache(data_dir: &Path, session_id: &str, layout: &TranscriptLayo
                 writeln!(writer)?;
             }
         }
-        for id in &layout.message_ids {
+        for (i, id) in layout.message_ids.iter().enumerate() {
             match id {
-                Some(id) => writeln!(writer, "+{}", hex::encode(id))?,
+                Some(id) => writeln!(
+                    writer,
+                    "{}{}",
+                    if layout.marker_rows.binary_search(&i).is_ok() {
+                        '*'
+                    } else {
+                        '+'
+                    },
+                    hex::encode(id)
+                )?,
                 None => writeln!(writer, "-")?,
             }
         }

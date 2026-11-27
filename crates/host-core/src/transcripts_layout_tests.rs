@@ -156,6 +156,7 @@ fn previous_user_message_index_reuses_disk_cache_and_survives_rewrites() {
         message("legacy", "historical metadata"),
     ];
     messages[1].role = "tool".into();
+    messages[2].meta = Some(json!({"contextOverride":{"version":1,"excludePreviousTurns":true}}));
     messages[3].meta = Some(json!("not an ancestry object"));
     write_transcript(dir.path(), id, CREATED_AT, &messages).unwrap();
     let path = transcript_path(dir.path(), id).unwrap();
@@ -174,6 +175,12 @@ fn previous_user_message_index_reuses_disk_cache_and_survives_rewrites() {
         SCANNED_LINES.with(|lines| lines.set(0));
         let disk = session_layout(dir.path(), id).unwrap();
         assert_eq!(disk.previous_user_message(4), Some(2));
+        let boundary = disk.context_boundary().unwrap();
+        assert_eq!(boundary.id, "second");
+        assert_eq!(
+            boundary.excluded_ids,
+            HashSet::from(["first".into(), "tool".into()])
+        );
         SCANNED_LINES.with(|lines| assert_eq!(lines.get(), 0));
         assert!(Arc::ptr_eq(&disk, &session_layout(dir.path(), id).unwrap()));
 
@@ -210,6 +217,10 @@ fn previous_user_message_index_reuses_disk_cache_and_survives_rewrites() {
         Some(0)
     );
     let next = message("new", "new prompt after rewrite");
+    assert!(session_layout(dir.path(), id)
+        .unwrap()
+        .context_boundary()
+        .is_none());
     append_message(dir.path(), id, CREATED_AT, &next).unwrap();
     assert_eq!(
         session_layout(dir.path(), id)

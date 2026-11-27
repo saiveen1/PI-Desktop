@@ -9,6 +9,14 @@ the next assistant reply, including during provider/overflow/silent/progress
 recovery. Recovery stays within the durable turn but never replaces a reply
 located before the steering user row (Refs #1699).
 
+On history rebuild, the latest top-level user prompt marked `excludePreviousTurns`
+is included; earlier turns are not. Apply the boundary before attachment reads,
+delegation recovery, compaction replay, or constructing provider messages. This
+does not change trusted runtime instructions. A post-cut checkpoint records
+`details.contextBoundaryMessageId`; a checkpoint from a different boundary
+cannot supply a summary or retained tail. With no marker, existing unstamped
+checkpoints retain their original behavior.
+
 ## 1. Goal
 
 Applied decisions: **D002/D003/D008/D158/D189/D190/D193/D194/D278/D378**.

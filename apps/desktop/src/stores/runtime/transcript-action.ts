@@ -3,7 +3,7 @@ import type { UiMessage } from "@pi-desktop/shared";
 import { api } from "../../lib/api";
 import { sessionAllows } from "../../lib/remote-session-safety";
 import { getSessionMessageSnapshot, registerSessionMessageReplacements } from "../../lib/session-transcript-updates";
-import { TRANSCRIPT_CONTENT_LIMIT } from "../../lib/transcript-reading";
+import { TRANSCRIPT_CONTENT_LIMIT, TRANSCRIPT_PAGE_SIZE } from "../../lib/transcript-reading";
 import type { AppState } from "../app-state";
 import type { SessionRuntime } from "./session-runtime";
 import type { StoreAccess } from "../slices/types";
@@ -42,22 +42,44 @@ export async function prepareTranscriptAction(
   return get();
 }
 
-function isEditableReply(message: UiMessage) {
+function isTopLevelAssistant(message: UiMessage) {
   return message.role === "assistant" && !message.parentToolCallId && !message.nestedParentToolCallId &&
-    !message.agentName && !message.modelSystem && !message.toolName &&
-    (message.status === undefined || message.status === "complete") &&
-    !message.error && !message.isError && !message.sessionMessage &&
-    !message.attachments?.length && Boolean(message.content.trim());
+    !message.agentName && !message.modelSystem && !message.toolName && !message.sessionMessage;
 }
 
-export function getEditableAssistantReply(state: AppState, sessionId: string): UiMessage | undefined {
+function isEditableReply(message: UiMessage) {
+  return isTopLevelAssistant(message) && (message.status === undefined || message.status === "complete") &&
+    !message.error && !message.isError && !message.attachments?.length && Boolean(message.content.trim());
+}
+
+function canEditTranscript(state: AppState, sessionId: string) {
   if (!sessionId || sessionId.startsWith("native-pi:") || state.activeSessionId !== sessionId ||
     state.selectingSessionId || state.page !== "chat" || state.isRunning || state.runningSessions[sessionId] ||
     state.pendingPlans[sessionId]?.status === "pending" || state.pendingPermissions[sessionId]?.length ||
-    state.pendingAsks[sessionId]?.length || state.queuedPrompts[sessionId]?.length) return;
+    state.pendingAsks[sessionId]?.length || state.queuedPrompts[sessionId]?.length) return false;
   const session = state.sessions.find((item) => item.id === sessionId);
-  if (!session || session.source === "pi-native" || session.scheduledRun || session.readOnlyReason ||
-    !sessionAllows(session, "canEditMessages")) return;
+  return session !== undefined && (!session.source || session.source === "desktop") &&
+    !session.scheduledRun && !session.readOnlyReason && sessionAllows(session, "canEditMessages");
+}
+
+export function getTurnContextAnchor(state: AppState, sessionId: string, anchorId: string) {
+  const view = state.transcriptViews[sessionId];
+  const at = (messages: UiMessage[]) => {
+    const position = getSessionMessageSnapshot(messages).positions.get(anchorId);
+    return position === undefined ? undefined : messages[position];
+  };
+  if (view && (view.focus || (view.restored && view.hasMoreAfter))) return at(view.messages);
+  return at(state.messages) ?? (view && at(view.messages));
+}
+
+export function canEditTurnContext(state: AppState, sessionId: string, anchorId: string) {
+  if (!canEditTranscript(state, sessionId)) return false;
+  const anchor = getTurnContextAnchor(state, sessionId, anchorId);
+  return anchor !== undefined && isEditableReply(anchor);
+}
+
+export function getEditableAssistantReply(state: AppState, sessionId: string): UiMessage | undefined {
+  if (!canEditTranscript(state, sessionId)) return;
   const latest = state.messages.findLast((message) => message.role !== "system");
   return latest && isEditableReply(latest) ? latest : undefined;
 }
@@ -155,12 +177,13 @@ export async function editTurnContext(
   ...[input, signal]: Parameters<AppState["editTurnContext"]>
 ): Promise<boolean> {
   const { sessionId, anchorMessageId } = input;
-  if (signal.aborted || saving.has(sessionId) || getEditableAssistantReply(store.get(), sessionId)?.id !== anchorMessageId) return false;
+  if (signal.aborted || saving.has(sessionId) || !canEditTurnContext(store.get(), sessionId, anchorMessageId)) return false;
   saving.add(sessionId);
   try {
     const { updates } = await api.editTurnContext(input);
     const confirmed = new Map(updates.map((update) => [update.messageId, update]));
-    if (confirmed.size) patchConfirmedTranscriptEdit(store, runtime, sessionId, confirmed.keys(), (message) => {
+    const refreshBoundary = input.excludePreviousTurns !== undefined;
+    if (confirmed.size || input.excludeHistoryThinking || refreshBoundary) patchConfirmedTranscriptEdit(store, runtime, sessionId, confirmed.keys(), (message) => {
       const update = confirmed.get(message.id);
       if (!update) return message;
       const { contextOverride, excludeThinkingFromContext } = update;
@@ -170,9 +193,82 @@ export async function editTurnContext(
         ...(excludeThinkingFromContext === undefined ? {} : { excludeThinkingFromContext }),
       };
     });
+    if (input.excludeHistoryThinking || refreshBoundary) {
+      await refreshTurnContextMetadata(store, runtime, sessionId, confirmed, input.excludeHistoryThinking === true, refreshBoundary);
+    }
     return true;
   } finally {
     saving.delete(sessionId);
+  }
+}
+
+/** Refresh derived metadata on loaded rows without replacing their content or loading the full transcript. */
+async function refreshTurnContextMetadata(
+  store: StoreAccess, runtime: SessionRuntime, sessionId: string, selectedUpdates: ReadonlyMap<string, unknown>,
+  refreshThinking: boolean, refreshBoundary: boolean,
+) {
+  const state = store.get();
+  const version = runtime.confirmedReplyEdits.get(sessionId);
+  const view = state.transcriptViews[sessionId];
+  const windows = new Set([
+    state.activeSessionId === sessionId ? state.messages : undefined,
+    state.retainedTranscripts[sessionId], runtime.sessionTranscriptCache.get(sessionId),
+    view?.messages, view?.parentMessage ? [view.parentMessage] : undefined,
+  ]);
+  const rows = new Set<UiMessage>();
+  const pending = new Set<string>();
+  const needsThinkingRefresh = (message: UiMessage) => refreshThinking && isTopLevelAssistant(message) &&
+    !selectedUpdates.has(message.id) && message.contextOverride?.excludeThinking !== true;
+  for (const window of windows) for (const message of window ?? []) {
+    if (!refreshBoundary && !needsThinkingRefresh(message)) continue;
+    rows.add(message);
+    pending.add(message.id);
+  }
+
+  const metadata = new Map<string, { excludeThinking: boolean; excluded: boolean }>();
+  let refreshFailed = false;
+  for (const messageId of pending) {
+    pending.delete(messageId);
+    try {
+      const { session } = await api.getSession(sessionId, {
+        messageAround: messageId, messageLimit: TRANSCRIPT_PAGE_SIZE, contentLimit: TRANSCRIPT_CONTENT_LIMIT,
+      });
+      if (runtime.confirmedReplyEdits.get(sessionId) !== version) return;
+      if (!session) {
+        refreshFailed = true;
+        continue;
+      }
+      const messages = session.navigationParent ? [...session.messages, session.navigationParent] : session.messages;
+      for (const message of messages) {
+        if (message.id !== messageId && !pending.delete(message.id)) continue;
+        metadata.set(message.id, {
+          excludeThinking: message.contextOverride?.excludeThinking === true,
+          excluded: message.excludedByContextBoundary === true,
+        });
+      }
+    } catch {
+      refreshFailed = true;
+    }
+  }
+  if (runtime.confirmedReplyEdits.get(sessionId) !== version) return;
+  if (metadata.size) patchConfirmedTranscriptEdit(store, runtime, sessionId, metadata.keys(), (message) => {
+    // Skip rows replaced by a newer read or rewrite during the refresh.
+    if (!rows.has(message)) return message;
+    const canonical = metadata.get(message.id);
+    if (!canonical) return message;
+    const thinkingChanged = needsThinkingRefresh(message) && canonical.excludeThinking;
+    const { excluded } = canonical;
+    const boundaryChanged = refreshBoundary && excluded !== (message.excludedByContextBoundary === true);
+    if (!thinkingChanged && !boundaryChanged) return message;
+    return {
+      ...message,
+      ...(thinkingChanged ? { contextOverride: { ...message.contextOverride, version: 1, excludeThinking: true } } : {}),
+      ...(boundaryChanged ? { excludedByContextBoundary: excluded || undefined } : {}),
+    };
+  });
+  const current = store.get();
+  if (refreshFailed && current.activeSessionId === sessionId && current.page === "chat" && !current.selectingSessionId) {
+    current.showToast(i18n.t("turnContext.historyRefreshFailed"), { variant: "error" });
   }
 }
 
@@ -209,6 +305,7 @@ function patchConfirmedTranscriptEdit(
   const updatedActive = active && replace(active);
   const updatedCache = cached && (cached === active ? updatedActive : replace(cached));
   const reading = view && replace(view.messages);
+  const parentMessage = view?.parentMessage && (ids.includes(view.parentMessage.id) ? patch(view.parentMessage) : view.parentMessage);
   const updatedRetained = retained && (retained === active ? updatedActive : retained === cached ? updatedCache : replace(retained));
   const distinctWindow = (cached && cached !== active) || (retained && retained !== active);
   runtime.recordConfirmedReplyEdit(sessionId, distinctWindow && updatedActive !== active ? updatedActive : undefined);
@@ -216,8 +313,8 @@ function patchConfirmedTranscriptEdit(
   set({
     ...(updatedActive && updatedActive !== active ? { messages: updatedActive } : {}),
     ...(updatedRetained && updatedRetained !== retained ? { retainedTranscripts: { ...current.retainedTranscripts, [sessionId]: updatedRetained } } : {}),
-    ...(view && reading && (reading !== view.messages || updatedActive !== active || view.loading) ? {
-      transcriptViews: { ...current.transcriptViews, [sessionId]: { ...view, messages: reading, loading: null } },
+    ...(view && reading && (reading !== view.messages || parentMessage !== view.parentMessage || updatedActive !== active || view.loading) ? {
+      transcriptViews: { ...current.transcriptViews, [sessionId]: { ...view, messages: reading, ...(parentMessage ? { parentMessage } : {}), loading: null } },
     } : {}),
   });
 }

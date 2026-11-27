@@ -1,5 +1,7 @@
 use super::*;
 
+mod boundary;
+
 fn read(db: &Database, session: &str, anchor: &str) -> Result<Value> {
     let request = serde_json::from_value(json!({"sessionId":session,"anchorMessageId":anchor}))?;
     Ok(get_turn_context(db, &request)?["snapshot"].clone())
@@ -61,6 +63,7 @@ fn populate(db: &Database, session: &str) -> String {
     let mut child_prompt = message("child-user", "user", "delegate prompt");
     child_prompt.parent_tool_call_id = Some("call-t1".into());
     let mut child = message("child", "assistant", "delegated answer");
+    child.thinking = Some("nested private reasoning".into());
     child.nested_parent_tool_call_id = Some("call-t1".into());
     let mut child_tool = completed_tool("child-tool", json!({}), json!("delegated result"));
     child_tool.agent_name = Some("fixer".into());
@@ -541,4 +544,239 @@ fn row_and_byte_limits_fail_without_truncation_or_mutation() {
         .unwrap_err()
         .to_string()
         .starts_with("LIMIT_EXCEEDED:"));
+}
+
+fn bulk(db: &Database, snap: &Value, edits: Value) -> Result<Value> {
+    let request = serde_json::from_value(json!({
+        "sessionId": snap["sessionId"], "anchorMessageId": snap["anchorMessageId"],
+        "expectedRevision": snap["revision"], "edits": edits, "excludeHistoryThinking": true,
+    }))?;
+    edit_turn_context(db, &request)
+}
+
+#[test]
+fn historical_anchor_edits_and_restores_only_its_turn_without_forking_the_suffix() {
+    let (_dir, db, session) = fixture();
+    populate(&db, &session);
+    let original = canon(&db, &session);
+    let tail = read(&db, &session, "final").unwrap();
+    let old = read(&db, &session, "old").unwrap();
+    assert_eq!(tail["isLatestTurn"], true);
+    assert_eq!(old["isLatestTurn"], false);
+    assert_eq!(old["messages"].as_array().unwrap().len(), 1);
+    assert_eq!(old["messages"][0]["messageId"], "old");
+    assert!(read(&db, &session, "first").is_err());
+    let legacy = serde_json::from_value(json!({"sessionId":session,"messageId":"old","expectedContent":"old answer","content":"new"})).unwrap();
+    assert!(edit_assistant_reply(&db, &legacy).is_err());
+    let result = save(
+        &db,
+        &old,
+        json!([edit("old", json!({"version":1,"content":"corrected"}))]),
+        false,
+    )
+    .unwrap();
+    assert_eq!(result["updates"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        result["snapshot"]["messages"][0]["override"]["content"],
+        "corrected"
+    );
+    assert_eq!(
+        read(&db, &session, "final").unwrap()["messages"],
+        tail["messages"]
+    );
+    assert!(transcripts::read_compactions(db.data_dir(), &session)
+        .unwrap()
+        .is_empty());
+    assert_eq!(
+        save(&db, &result["snapshot"], json!([]), true).unwrap()["snapshot"],
+        old
+    );
+    assert_eq!(canon(&db, &session), original);
+}
+
+#[test]
+fn bulk_merges_prior_overlays_including_opaque_and_overlay_only_thinking() {
+    let (_dir, db, session) = fixture();
+    let mut signed = message("signed", "assistant", "signed answer");
+    signed.provider_replay = Some(
+        json!({"version":1,"blocks":[{"type":"thinking","length":0,"signature":"sig","redacted":true}]}),
+    );
+    let mut prefix = vec![message("initial", "user", "first prompt"), signed];
+    for i in 0..32 {
+        prefix.push(message(&format!("older-user-{i}"), "user", "prompt"));
+        prefix.push(message(&format!("older-reply-{i}"), "assistant", "answer"));
+    }
+    replace_messages(&db, &session, &prefix).unwrap();
+    checkpoint(&db, &session, "keep", "initial");
+    populate(&db, &session);
+    let original = canon(&db, &session);
+    let old = read(&db, &session, "old").unwrap();
+    let old_overlay = json!({"version":1,"thinking":"edited reasoning","content":"edited answer"});
+    transcripts::take_whole_file_reads();
+    let stale_tail = read(&db, &session, "final").unwrap();
+    assert_eq!(
+        transcripts::take_whole_file_reads(),
+        0,
+        "ordinary open decodes only the suffix"
+    );
+    save(&db, &old, json!([edit("old", old_overlay.clone())]), false).unwrap();
+    let path = transcripts::transcript_path(db.data_dir(), &session).unwrap();
+    let before = std::fs::read(&path).unwrap();
+    transcripts::take_whole_file_reads();
+    assert!(bulk(&db, &stale_tail, json!([]))
+        .unwrap_err()
+        .to_string()
+        .starts_with("CONFLICT:"));
+    assert_eq!(
+        transcripts::take_whole_file_reads(),
+        0,
+        "stale bulk refused before history scan"
+    );
+    assert!(bulk(&db, &old, json!([]))
+        .unwrap_err()
+        .to_string()
+        .starts_with("CONFLICT:"));
+    let tail = read(&db, &session, "final").unwrap();
+    assert!(bulk(&db, &tail, json!([edit("old", Value::Null)])).is_err());
+    assert_eq!(std::fs::read(&path).unwrap(), before);
+    checkpoint(&db, &session, "cover-signed", "signed");
+    checkpoint(&db, &session, "dependent-on-signed", "initial");
+    let tail = read(&db, &session, "final").unwrap();
+    let tool_overlay = json!({"version":1,"toolArgs":{"path":"for context only"}});
+    let result = bulk(
+        &db,
+        &tail,
+        json!([
+            edit("first", Value::Null),
+            edit("t1", tool_overlay.clone()),
+            edit(
+                "final",
+                json!({"version":1,"content":"draft answer","thinking":"draft reasoning"})
+            )
+        ]),
+    )
+    .unwrap();
+    assert_eq!(
+        result["updates"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| r["messageId"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        ["first", "t1", "opaque", "final"]
+    );
+    let after = read(&db, &session, "final").unwrap();
+    assert_eq!(after, result["snapshot"]);
+    assert_eq!(after["messages"][0]["override"]["excludeThinking"], true);
+    assert!(after["messages"][0].get("legacyExcludeThinking").is_none());
+    assert_eq!(after["messages"][1]["override"], tool_overlay);
+    assert_eq!(after["messages"][2]["override"]["excludeThinking"], true);
+    assert_eq!(
+        after["messages"][4]["override"],
+        json!({"version":1,"thinking":"draft reasoning","content":"draft answer","excludeThinking":true})
+    );
+    let signed = read(&db, &session, "signed").unwrap();
+    assert_eq!(
+        signed["messages"][0]["override"],
+        json!({"version":1,"excludeThinking":true})
+    );
+    let old = read(&db, &session, "old").unwrap();
+    let mut excluded = old_overlay.clone();
+    excluded["excludeThinking"] = json!(true);
+    assert_eq!(old["messages"][0]["override"], excluded);
+    let ui = get_session(&db, &session).unwrap().unwrap().messages;
+    assert!(ui
+        .iter()
+        .find(|r| r.id == "child")
+        .unwrap()
+        .context_override
+        .is_none());
+    assert_eq!(
+        transcripts::read_compactions(db.data_dir(), &session)
+            .unwrap()
+            .iter()
+            .map(|c| c.id.as_str())
+            .collect::<Vec<_>>(),
+        ["keep"]
+    );
+    assert_eq!(bulk(&db, &after, json!([])).unwrap()["updates"], json!([]));
+    assert_eq!(canon(&db, &session), original);
+    // Reverse one historical channel without clearing any other draft fields.
+    save(&db, &old, json!([edit("old", old_overlay.clone())]), false).unwrap();
+    assert_eq!(
+        read(&db, &session, "old").unwrap()["messages"][0]["override"],
+        old_overlay
+    );
+    assert_eq!(read(&db, &session, "signed").unwrap(), signed);
+    let stale = read(&db, &session, "final").unwrap();
+    let mut future = message("future", "assistant", "future answer");
+    future.thinking = Some("fresh reasoning".into());
+    for row in [message("future-user", "user", "later prompt"), future] {
+        append_message(&db, &session, &row, None).unwrap();
+    }
+    assert!(bulk(&db, &stale, json!([]))
+        .unwrap_err()
+        .to_string()
+        .starts_with("CONFLICT:"));
+    assert!(save(&db, &stale, json!([]), true).is_err());
+    assert!(read(&db, &session, "future").unwrap()["messages"][0]
+        .get("override")
+        .is_none());
+}
+
+#[test]
+fn ownerless_historical_turn_ends_at_real_prompt_not_steering_or_nested_prompt() {
+    let (_dir, db, session) = fixture();
+    let mut steer = message("steer", "user", "steer");
+    steer.steering = Some(true);
+    let mut sub = message("sub", "user", "delegated");
+    sub.parent_tool_call_id = Some("call".into());
+    for row in [
+        message("u1", "user", "first"),
+        message("step", "assistant", "checking"),
+        steer,
+        sub,
+        message("a1", "assistant", "older answer"),
+        message("u2", "user", "second"),
+        message("a2", "assistant", "new answer"),
+    ] {
+        append_message(&db, &session, &row, None).unwrap();
+    }
+    let old = read(&db, &session, "a1").unwrap();
+    assert_eq!(old["isLatestTurn"], false);
+    assert_eq!(
+        old["messages"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| r["messageId"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        ["step", "a1"]
+    );
+    assert!(read(&db, &session, "step").is_err());
+    assert!(save(
+        &db,
+        &old,
+        json!([edit("a2", json!({"version":1,"content":"wrong turn"}))]),
+        false
+    )
+    .is_err());
+}
+
+#[test]
+fn ownerless_fragments_cannot_take_rows_from_a_completed_durable_turn() {
+    let (_dir, db, session) = fixture();
+    populate(&db, &session);
+    // A lagging index lost the final row's owner; the preceding prompt and
+    // intermediate tool receipts are still owned and must not be editable.
+    db.conn()
+        .execute(
+            "UPDATE messages SET turn_id=NULL WHERE session_id=?1 AND id='final'",
+            [&session],
+        )
+        .unwrap();
+    assert!(read(&db, &session, "final")
+        .unwrap_err()
+        .to_string()
+        .starts_with("CONFLICT:"));
 }

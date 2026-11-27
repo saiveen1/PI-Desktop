@@ -272,3 +272,21 @@ test("a pre-save selection result cannot restore the old reply over a live-origi
   assert.equal(h.runtime.sessionTranscriptCache.get(id)[5].content, replacement);
   assert.equal(h.get().sessionHistory[id], window);
 });
+
+test("legacy reply mutations stay tail-only when an older turn is editable", async t => {
+  const h = setup();
+  const olderReply = history[1];
+  const legacy = t.mock.method(api, "editAssistantReply", () => assert.fail("must not mutate the older answer"));
+  const edit = t.mock.method(api, "editTurnContext", async () => ({
+    updates: [{ messageId: olderReply.id, contextOverride: { version: 1, content: replacement } }],
+  }));
+  assert.equal(await h.transcript.prepareAssistantReplyEdit(id, olderReply.id, signal()), null);
+  assert.equal(await h.transcript.editAssistantReply(id, olderReply.id, olderReply.content, replacement), false);
+  assert.equal(legacy.mock.callCount(), 0);
+  assert.equal(await h.transcript.editTurnContext({ sessionId: id, anchorMessageId: olderReply.id,
+    expectedRevision: "older", edits: [{ messageId: olderReply.id, contextOverride: { version: 1, content: replacement } }],
+  }, signal()), true);
+  assert.equal(edit.mock.callCount(), 1);
+  assert.equal(h.get().messages[1].contextOverride.content, replacement);
+  assert.deepEqual(h.get().messages.slice(2), history.slice(2));
+});
