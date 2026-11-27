@@ -20,6 +20,30 @@ test("personal toolchain uses Desktop's executables and the installed packager's
   assert.strictEqual(asar, packagerRequire("@electron/asar"));
 });
 
+test("Windows personal NSIS never runs its uninstaller generator from the final installer path", { skip: process.platform !== "win32" }, async () => {
+  const builderRequire = createRequire(desktopRequire.resolve("electron-builder/package.json"));
+  builderRequire("app-builder-lib"); // Initialize the packager before its NSIS target.
+  const { NsisTarget } = builderRequire("app-builder-lib/out/targets/nsis/NsisTarget.js");
+  const outDir = join(tmpdir(), "personal NSIS staging");
+  const installer = join(outDir, "Setup.exe");
+  for (const personal of [true, false]) {
+    const finalCommands = { OutFile: `"${installer}"` };
+    const stop = new Error("stop before native compilation");
+    const target = {
+      outDir, options: {},
+      packager: { config: { extraMetadata: { piSelfManaged: personal } }, getResource: async () => null },
+      computeFinalScript: async (script) => script,
+      executeMakensis(defines, commands) {
+        assert.equal(defines.UNINSTALLER_OUT_FILE, join(outDir, "Setup.__uninstaller.exe"));
+        assert.equal(commands.OutFile, personal ? `"${join(outDir, "Setup.__generator.exe")}"` : finalCommands.OutFile);
+        throw stop;
+      },
+    };
+    await assert.rejects(NsisTarget.prototype.computeScriptAndSignUninstaller.call(target, {}, finalCommands, installer, "", new Map()), (error) => error === stop);
+    assert.equal(finalCommands.OutFile, `"${installer}"`);
+  }
+});
+
 test("personal toolchain refuses a builder resolved outside the selected checkout", (t) => {
   const temp = mkdtempSync(join(tmpdir(), "pi-release-toolchain-"));
   t.after(() => rmSync(temp, { recursive: true, force: true }));

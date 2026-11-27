@@ -1,0 +1,16 @@
+diff --git a/out/targets/nsis/NsisTarget.js b/out/targets/nsis/NsisTarget.js
+index 92cac56e79f94f01525dd9ae007d8e866075de1b..0e6fd4fd455af8fe7c1c629cbd3915fbba302f81 100644
+--- a/out/targets/nsis/NsisTarget.js
++++ b/out/targets/nsis/NsisTarget.js
+@@ -348,6 +348,11 @@ class NsisTarget extends core_1.Target {
+         // to support parallel builds, the uninstaller path must be unique to each target and arch combination
+         const uninstallerPath = path.join(this.outDir, `${path.basename(installerPath, "exe")}__uninstaller.exe`);
+         const isWin = process.platform === "win32";
++        if (isWin && packager.config.extraMetadata?.piSelfManaged === true) {
++            // Do not overwrite a recently executed generator when writing the final installer.
++            installerPath = path.join(this.outDir, `${path.basename(installerPath, ".exe")}.__generator.exe`);
++            commands = { ...commands, OutFile: `"${installerPath}"` };
++        }
+         defines.BUILD_UNINSTALLER = null;
+         defines.UNINSTALLER_OUT_FILE = isWin ? uninstallerPath : path.win32.join("Z:", uninstallerPath);
+         await this.executeMakensis(defines, commands, sharedHeader + (await this.computeFinalScript(script, false, archs)));

@@ -115,6 +115,10 @@ the automatic personal-beta fallback.
    The personal config copies the installed Electron distribution directly,
    avoiding the archive extraction's Windows directory rename, and removes
    Electron's stock app and version marker from the copied output only.
+   On Windows, the pinned personal builder patch gives the first-pass NSIS
+   uninstaller generator its own `.__generator.exe` path in `.build`. A lingering
+   lock on that helper cannot block a second pass by sharing the final EXE path.
+   Never deliver or manually run the helper; ordinary cleanup removes it.
 8. Require Main's `photon_rs_bg.wasm` before packaging and validate the copy in
    the final ASAR. Verify resource metadata, version, unique build ID and source commit;
    verify source has not changed, hash the installer, and write its audit files.
