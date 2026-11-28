@@ -1492,6 +1492,16 @@
   display: none;
 }
 
+.sidebar-admin-badge {
+  flex: 0 0 auto;
+  border-radius: var(--radius-sm);
+}
+
+.sidebar-admin-badge:focus-visible {
+  outline: 2px solid var(--ds-text-primary);
+  outline-offset: 2px;
+}
+
 .sidebar-header-actions {
   display: flex;
   flex: 0 0 auto;

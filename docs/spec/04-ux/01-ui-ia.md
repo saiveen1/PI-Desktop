@@ -86,6 +86,11 @@ destination, chat as the home surface, tools and permissions inline.
   and Settings transitions. Its background follows the adjacent titlebar surface
   (dock header when open, conversation surface when closed) in both themes.
   Boot splash, search, and toasts stay above that band.
+  On Windows, the expanded sidebar shows an `Admin` badge beside the app name
+  only when the main process runs at high integrity. Hover or keyboard focus
+  explains that files and folders cannot be dragged in from ordinary Explorer
+  windows and suggests pasting or choosing a file instead. This indicator
+  grants no privileges; it is absent for normal or unknown integrity.
   Preview navigation must also remain above the panel;
   macOS keeps native traffic lights and its existing fullscreen insets.
   Destination history is

@@ -54,6 +54,7 @@ const api = {
   // (traffic lights on macOS vs. controls overlay on Windows/Linux)
   // before first paint, without an IPC round-trip.
   platform: process.platform,
+  windowsElevated: process.platform === "win32" && process.argv.includes("--pi-desktop-windows-elevated"),
   // `app.getLocale()` is resolved in the main process and passed as a renderer
   // creation argument. This keeps the locale available before first paint
   // without importing Electron's main-only `app` module in the sandbox.

@@ -9,6 +9,7 @@ import { en, type EnglishCatalog } from "../en/index.js";
 import { turnContext } from "../turn-context.js";
 import { conversationPersonas } from "../conversation-personas.js";
 export const tr = {
+  sidebarAdmin: { label: "Admin", tooltip: "Yönetici olarak çalışıyor. Normal Dosya Gezgini gibi daha düşük ayrıcalıklı uygulamalar bu pencereye dosya veya klasör sürükleyemez. Bunun yerine yapıştırın veya ek seçiciyi kullanın." },
   personas: conversationPersonas.tr,
   turnContext: turnContext.tr,
   outputGuard: outputGuard.tr,

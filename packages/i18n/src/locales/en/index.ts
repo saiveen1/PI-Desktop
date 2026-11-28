@@ -9,6 +9,7 @@ import { sessionLabels, sessionGroups, sessionDelegation, delegationDetails } fr
 import { turnContext } from "../turn-context.js";
 import { conversationPersonas } from "../conversation-personas.js";
 export const en = {
+  sidebarAdmin: { label: "Admin", tooltip: "Running as administrator. Lower-privilege apps, such as ordinary File Explorer, cannot drag files or folders into this window. Paste them or use the attachment picker instead." },
   personas: conversationPersonas.en,
   turnContext: turnContext.en,
   outputGuard: outputGuard.en,

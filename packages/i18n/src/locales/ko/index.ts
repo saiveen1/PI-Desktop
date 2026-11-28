@@ -9,6 +9,7 @@ import { en, type EnglishCatalog } from "../en/index.js";
 import { turnContext } from "../turn-context.js";
 import { conversationPersonas } from "../conversation-personas.js";
 export const ko = {
+  sidebarAdmin: { label: "Admin", tooltip: "관리자 권한으로 실행 중입니다. 일반 파일 탐색기처럼 권한이 낮은 앱에서는 파일이나 폴더를 이 창으로 끌어올 수 없습니다. 대신 붙여넣거나 첨부 파일 선택기를 사용하세요." },
   personas: conversationPersonas.ko,
   turnContext: turnContext.ko,
   outputGuard: outputGuard.ko,

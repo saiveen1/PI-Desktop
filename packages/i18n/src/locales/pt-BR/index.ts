@@ -9,6 +9,7 @@ import { en, type EnglishCatalog } from "../en/index.js";
 import { turnContext } from "../turn-context.js";
 import { conversationPersonas } from "../conversation-personas.js";
 export const ptBR = {
+  sidebarAdmin: { label: "Admin", tooltip: "Em execução como administrador. Aplicativos com menos privilégios, como o Explorador de Arquivos comum, não podem arrastar arquivos ou pastas para esta janela. Cole-os ou use o seletor de anexos." },
   personas: conversationPersonas["pt-BR"],
   turnContext: turnContext["pt-BR"],
   outputGuard: outputGuard["pt-BR"],

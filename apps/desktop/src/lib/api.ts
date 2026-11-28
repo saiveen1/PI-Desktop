@@ -365,6 +365,8 @@ declare global {
       onLiveVoicePort?: () => () => void;
       channels: typeof IPC;
       platform: NodeJS.Platform;
+      /** Display hint for the Windows main window, not an authorization check. */
+      readonly windowsElevated?: boolean;
       /** Authoritative OS locale passed from the main process at window creation. */
       locale?: string;
       /**

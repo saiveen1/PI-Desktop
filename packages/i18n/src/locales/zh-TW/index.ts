@@ -11,6 +11,7 @@ import { en, type EnglishCatalog } from "../en/index.js";
 import { turnContext } from "../turn-context.js";
 import { conversationPersonas } from "../conversation-personas.js";
 export const zhTW = {
+  sidebarAdmin: { label: "Admin", tooltip: "正在以管理員身分執行。一般檔案總管等權限較低的應用程式無法將檔案或資料夾拖入此視窗。請改用貼上或附件選擇器。" },
   personas: conversationPersonas["zh-TW"],
   turnContext: turnContext["zh-TW"],
   outputGuard: outputGuard["zh-TW"],

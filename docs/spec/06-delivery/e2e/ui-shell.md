@@ -2981,6 +2981,11 @@ PowerShell-launched fixture; activation must not restore the native outline.
 
 ## E2E-170: Shell titlebars use borderless chrome
 
+Windows elevation check: with the sidebar expanded, compare normal and
+administrator launches. Only the elevated window shows `Admin` beside the app
+name. Hover it, then focus it with Tab: both should explain the restriction on
+dragging files from ordinary Explorer and offer paste or the file picker.
+
 - **Preconditions**: PI-Desktop is open in chat, at least one destination page,
   and Settings on a supported light or dark theme. On Windows/Linux, renderer-
   drawn window controls are visible.

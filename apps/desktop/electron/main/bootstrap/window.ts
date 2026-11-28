@@ -60,6 +60,9 @@ import {
 import { recoverRendererAfterGone } from "../renderer-recovery";
 import { installPerformanceIncidentRecorder } from "../performance/incident-recorder";
 import { installWindowStateSync } from "../window-state-sync";
+import { readWindowsElevation } from "../windows-elevation";
+
+let windowsElevated: boolean | undefined;
 
 function windowsIconPath(): string | undefined {
   if (process.platform !== "win32") return undefined;
@@ -223,6 +226,8 @@ export async function createWindow({
     process.platform,
     process.getSystemVersion(),
   );
+  windowsElevated ??= readWindowsElevation(process.platform, process.pid, () => app.getAppMetrics(),
+    () => logger.app("diagnostics", "warn", "Windows integrity level unavailable"));
   windowState.mainWindow = new BrowserWindow({
     ...(restoredBounds ?? { width: 1200, height: 800 }),
     minWidth: initialMinWidth,
@@ -277,6 +282,7 @@ export async function createWindow({
       // available synchronously before the renderer's first paint.
       additionalArguments: [
         `--pi-desktop-locale=${app.getLocale()}`,
+        ...(windowsElevated ? ["--pi-desktop-windows-elevated"] : []),
         // The boot animation has to be on screen in the renderer's first
         // frame, so the descriptor travels as a creation argument like the
         // locale does; an IPC round-trip would land after the first paint.

@@ -1,3 +1,4 @@
+import { SidebarAdminBadge } from "./SidebarAdminBadge";
 import { ColorSwatch, SessionLabelChips, sessionGroupMenu, sessionMarkMenu } from "../features/sessions/SessionLabelControls";
 import { SidebarSessionGroups } from "../features/sessions/SidebarSessionGroups";
 import { ProjectGroupCreateButton } from "../features/sessions/ProjectGroupCreateButton";
@@ -25,7 +26,6 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { Checkbox, TooltipButton, cx } from "./ui";
-
 import { portalToBody } from "../lib/portal-visibility";
 import {
   placeSidebarFloatingMenuTop,
@@ -2439,6 +2439,7 @@ export function Sidebar({
           <BrandLogo size={20} />
           <span>{t("app.shellName")}</span>
         </TooltipButton>
+        <SidebarAdminBadge />
         <div className="sidebar-header-actions no-drag">
           <TooltipButton
             type="button"
@@ -2457,7 +2458,6 @@ export function Sidebar({
           </TooltipButton>
         </div>
       </div>
-
       <div className="sidebar-body no-drag" onScroll={() => closeMenus(false)}>
         {selection.active && <SessionSelectionToolbar count={selectedIds.size} total={flatSessionOrder.length}
           busy={organizationBusy} onSelectAll={selection.selectAll} onExit={selection.exit}
