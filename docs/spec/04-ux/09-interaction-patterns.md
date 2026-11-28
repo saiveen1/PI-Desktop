@@ -292,7 +292,11 @@ may be retained while exactly one workspace supplies the visible shell context.
   error instead of silently disappearing. Archive remains presentation-only.
 - **Recycle bin** has a dedicated sidebar footer entry. Its dialog lists trashed
   sessions with project and deletion time and supports multi-select Restore or
-  Delete permanently. Restore retains the original archive/pin state. There is
+  Delete permanently. The project filter starts at All projects and includes only
+  projects represented in the bin, plus Temporary chats when present. Roots of
+  a known project share one option. Hidden rows lose their selection; when the
+  selected project is emptied the filter returns to All projects. Restore
+  retains the original archive/pin state. There is
   no automatic expiry. Permanent deletion requires an explicit confirmation
   naming the selected count and warning about transcript/worktree loss. The
   confirmed identity set is fixed; Cancel/Escape dismiss confirmation without

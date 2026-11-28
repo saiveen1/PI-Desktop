@@ -177,7 +177,7 @@ This edition strengthens the existing framework rather than replacing it.
   menu; unread markers are saved on this device and clear when you reopen the chat.
 - **Visible selection and reversible deletion.** Extend existing modifier-key
   selection with checkboxes, selection controls, and batch archive/unarchive.
-  Local Desktop sessions gain a recycle bin with restore and separately confirmed
+  Filter the local Desktop recycle bin by project or temporary chats before batch restore or confirmed
   permanent deletion; native Pi and remote sessions are outside this trash flow.
 - **Unified core notification policy.** Bring approvals, questions, failures, and
   completion under shared channel/sound preferences, with pending actions separate

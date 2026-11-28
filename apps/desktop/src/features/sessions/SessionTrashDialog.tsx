@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Button, Checkbox, OverlayBackdrop, TooltipButton } from "../../components/ui";
+import { Button, Checkbox, OverlayBackdrop, Select, TooltipButton } from "../../components/ui";
 import { IconClose } from "../../components/icons";
 import { api } from "../../lib/api";
 import { useBlockingOverlay } from "../../lib/blocking-overlay";
 import { portalToBody } from "../../lib/portal-visibility";
+import { projectGroupForPath } from "../../lib/session-organization";
+import { normalizeProjectPath } from "../../lib/sidebar-session-groups";
 import { useAppStore } from "../../stores/app-store";
 import { useSessionSelection } from "./useSessionSelection";
 import "./session-organization.css";
@@ -19,7 +21,21 @@ export function SessionTrashDialog({ onClose }: { onClose: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [confirmation, setConfirmation] = useState<string[] | null>(null);
-  const ids = useMemo(() => sessions.map((session) => session.id), [sessions]);
+  const projects = useAppStore((state) => state.sidebarProjectGroups);
+  const [projectFilter, setProjectFilter] = useState("*");
+  const byProject = useMemo(() => {
+    const groups = new Map<string, TrashedSession[]>();
+    for (const session of sessions) {
+      const project = projectGroupForPath(session.projectPath, projects);
+      const path = normalizeProjectPath(project?.primaryPath ?? session.projectPath) ?? "";
+      const rows = groups.get(path);
+      if (rows) rows.push(session);
+      else groups.set(path, [session]);
+    }
+    return groups;
+  }, [sessions, projects]);
+  const visibleSessions = byProject.get(projectFilter) ?? sessions;
+  const ids = useMemo(() => visibleSessions.map((session) => session.id), [visibleSessions]);
   const selection = useSessionSelection(ids);
   const dialogRef = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
@@ -59,7 +75,7 @@ export function SessionTrashDialog({ onClose }: { onClose: () => void }) {
         else closeRef.current();
       }
       if (event.key !== "Tab") return;
-      const nodes = dialogRef.current?.querySelectorAll<HTMLElement>("button:not([disabled]), input:not([disabled])");
+      const nodes = dialogRef.current?.querySelectorAll<HTMLElement>("button:not([disabled]), input:not([disabled]), select:not([disabled])");
       if (!nodes?.length) { event.preventDefault(); return; }
       const index = Array.from(nodes).indexOf(document.activeElement as HTMLElement);
       if (event.shiftKey && index <= 0) {
@@ -148,13 +164,20 @@ export function SessionTrashDialog({ onClose }: { onClose: () => void }) {
         {loading ? <p role="status">{t("sessionOrganization.loading")}</p> : sessions.length === 0
           ? <p className="session-trash-empty">{t("sessionOrganization.empty")}</p>
           : <>
+            <Select aria-label={t("project.title")} value={byProject.has(projectFilter) ? projectFilter : "*"}
+              disabled={locked} onChange={(event) => setProjectFilter(event.currentTarget.value)}>
+              <option value="*">{t("project.groupProjects")}</option>
+              {Array.from(byProject.keys()).sort().map((path) => <option key={path} value={path}>
+                {path || t("nav.temporarySessions")}
+              </option>)}
+            </Select>
             <div className="session-trash-heading">
-              <Checkbox label={t("sessionOrganization.selectVisible")} checked={count === sessions.length}
-                indeterminate={count > 0 && count < sessions.length} disabled={locked} onChange={selection.selectAll} />
+              <Checkbox label={t("sessionOrganization.selectVisible")} checked={count === visibleSessions.length}
+                indeterminate={count > 0 && count < visibleSessions.length} disabled={locked} onChange={selection.selectAll} />
               <span role="status">{t("sessionOrganization.selected", { count })}</span>
             </div>
             <div className="session-trash-list">
-              {sessions.map((session) => <div key={session.id} className="session-trash-row">
+              {visibleSessions.map((session) => <div key={session.id} className="session-trash-row">
                 <Checkbox checked={selection.selectedIds.has(session.id)} disabled={locked}
                   onChange={() => selection.toggle(session.id)} label={<>
                     {session.title || t("chat.untitledTask")}

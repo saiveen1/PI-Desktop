@@ -134,6 +134,7 @@ app.whenReady().then(async () => {
       sections: { passed: true },
       sidebarLabelGroupingProbe: { passed: true, uniqueRows: 1, uniqueSelected: 16, layouts: 6, pagination: true },
       organizationProbe: { passed: true, locales: 9, permanentDeletes: 3 },
+      trashProjectFilterProbe: { restored: ["root-a", "root-b"], deleted: ["loose"] },
     }[probe]);
   } finally {
     if (child && child.exitCode === null && child.signalCode === null) child.kill();
@@ -153,5 +154,6 @@ const options = {
   skip: process.platform === "linux" && !process.env.DISPLAY ? "Isolated Electron fixture requires a display" : false,
 };
 test("session organization user path: multiselect archive, trash, restore and confirmed permanent deletion", options, () => runSessionFixture("organizationProbe"));
+test("recycle bin scopes batch restore and permanent deletion to the project filter", options, () => runSessionFixture("trashProjectFilterProbe"));
 test("sidebar project grouping user path: descriptive labels, scoped folding, unique selection and narrow layouts", options, () => runSessionFixture("sidebarLabelGroupingProbe"));
 test("sidebar sections independently fold, resize and remember their heights in a constrained layout", options, () => runSessionFixture("sections"));

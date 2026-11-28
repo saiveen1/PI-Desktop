@@ -649,3 +649,39 @@ window.organizationProbe = async () => {
   flushSync(() => root.unmount());
   return { passed: true, locales: Object.keys(catalogs).length, permanentDeletes: calls.filter(([channel]) => channel === IPC.invoke.sessionTrashDelete).length };
 };
+
+window.trashProjectFilterProbe = async () => {
+  const primary = "D:/closed-project";
+  const secondary = "D:/other-root";
+  const other = "D:/another-project";
+  useAppStore.setState({ sidebarProjectGroups: [{ id: "closed", name: "Closed project", primaryPath: primary,
+    roots: [{ path: primary }, { path: secondary }] }] });
+  for (const [id, path] of [["root-a", primary], ["root-b", "D:\\other-root\\"], ["untouched", other], ["loose", null]]) {
+    database.set(id, { ...session(id, path), deletedAt: stamp });
+  }
+  await openTrash();
+  const filter = dialog().querySelector('select[aria-label="Projects"]');
+  const choose = value => flushSync(() => {
+    filter.value = value;
+    filter.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  const selectVisible = () => click(checkbox("Select visible", dialog()));
+  check([...filter.options].map(option => option.text).join("|") === `All projects|Temporary chats|${other}|${primary}`, "incorrect project choices");
+  check(dialog().querySelectorAll(".session-trash-row").length === 4, "missing unfiltered rows");
+  click(checkbox("untouched", dialog()));
+  choose(primary);
+  check(!button("Restore", dialog()) && !checkbox("untouched", dialog()), "hidden selection remained actionable");
+  selectVisible();
+  click(button("Restore", dialog()));
+  await waitFor(() => dialog().getAttribute("aria-busy") === "false" && !database.get("root-b").deletedAt, "filtered restore completed");
+  check(filter.selectedOptions[0].text === "All projects" && !button("Restore", dialog()), "exhausted filter retained a selection");
+  choose("");
+  selectVisible();
+  click(button("Delete permanently", dialog()));
+  check(filter.disabled, "project filter unlocked during delete confirmation");
+  click(button("Delete permanently", dialog().querySelector(".session-trash-confirmation")));
+  await waitFor(() => dialog().getAttribute("aria-busy") === "false" && !database.has("loose"), "filtered purge completed");
+  check(database.get("untouched")?.deletedAt === stamp && checkbox("untouched", dialog()), "hidden project no longer trashed");
+  return { restored: calls.filter(([channel]) => channel === IPC.invoke.sessionTrashRestore).map(([, id]) => id),
+    deleted: calls.filter(([channel]) => channel === IPC.invoke.sessionTrashDelete).map(([, id]) => id) };
+};

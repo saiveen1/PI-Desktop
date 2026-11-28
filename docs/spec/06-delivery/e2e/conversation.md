@@ -5375,7 +5375,9 @@ Build two actual runtimes with identical configuration and different scratch dir
 - **Steps:** Enter Select sessions from the toolbar and row menu. Toggle rows,
   select a range and Select visible; archive, reveal Show archived, and unarchive
   a batch. Move pinned and archived sessions to the recycle bin, reopen the
-  dialog, select all and restore. Repeat, cancel permanent deletion with Cancel
+  dialog, switch from a selected temporary chat to a multi-root project and
+  restore all visible rows. Verify hidden chats remain trashed and unselected.
+  Repeat in Temporary chats with another project hidden, cancel permanent deletion with Cancel
   and Escape, then explicitly confirm. Inject listing and per-item mutation
   failures and retry. Attempt to trash running/native sessions. Reopen the host
   fixture between trash and restore; inspect transcript/worktree retention.
